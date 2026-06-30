@@ -1,7 +1,9 @@
 name: PR Verification CI
 
 on:
-  pull_request_target:
+  pull_request:
+    branches:
+      - main
     types: [opened, edited, synchronize, reopened]
 
 # Đảm bảo phân quyền chính xác để cập nhật trạng thái tích xanh/đỏ trên PR
@@ -53,9 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify PR Description Length and Content
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          PR_BODY="${{ github.event.pull_request.body }}"
-          
           # Kiểm tra mô tả PR có trống hoặc quá ngắn không (tối thiểu 15 ký tự)
           if [ -z "$PR_BODY" ] || [ ${#PR_BODY} -lt 15 ]; then
             echo "Error: Pull Request description is empty or too short (must be at least 15 characters)."
@@ -64,4 +66,5 @@ jobs:
           fi
           
           echo "PR description is valid."
+
 

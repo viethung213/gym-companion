@@ -44,6 +44,16 @@ Hệ thống được thiết kế xoay quanh 6 nhóm nghiệp vụ cốt lõi:
 * **OB-04 (Form Standardization)**: Điều chỉnh chuẩn tư thế tập luyện cho người mới bắt đầu.
 * **OB-05 (Nutrition Optimization)**: Cung cấp thực đơn dinh dưỡng tối ưu và cá nhân hóa sâu theo thể trạng và mục tiêu.
 
+## 🔧 Cài Đặt Git Hooks Cho Nhà Phát Triển (Developer Setup)
+
+Để đảm bảo các commit và Pull Request của bạn tuân thủ đúng chuẩn định dạng (Gitmoji + Conventional Commits), vui lòng chạy script cài đặt Local Git Hook ngay sau khi clone dự án về máy:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+Lệnh này sẽ tự động đăng ký hook `commit-msg` vào thư mục `.git/hooks/` trên máy của bạn để tự động kiểm tra thông điệp mỗi khi bạn chạy lệnh `git commit`.
+
 ---
 
 ## 📂 Cấu Trúc Thư Mục Dự Án
