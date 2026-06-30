@@ -1,0 +1,67 @@
+name: PR Verification CI
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+# Đảm bảo phân quyền chính xác để cập nhật trạng thái tích xanh/đỏ trên PR
+permissions:
+  pull-requests: read
+  statuses: write
+
+jobs:
+  validate-pr-title:
+    name: Validate PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Semantic PR Title Linter
+        uses: amannn/action-semantic-pull-request@v5.5.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # This regex pattern enforces an emoji prefix followed by Conventional Commit structure
+          headerPattern: '^(?:[^\s\w]+|:\w+:)\s+(\w+)(?:\(([^)]+)\))?!?: (.*)$'
+          headerPatternCorrespondence: type, scope, subject
+
+          # Các loại PR được chấp nhận theo chuẩn Conventional Commits
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          
+          # Đặt false để linh hoạt chấp nhận cả tiêu đề có scope (feat(auth): ...) và không scope (feat: ...) từ pr-creator
+          requireScope: false
+
+          # Bắt buộc phần mô tả sau dấu hai chấm không được bắt đầu bằng chữ viết hoa
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject (description) in the PR title must not start with an uppercase letter to match Conventional Commits.
+
+          # Tránh merge nhầm khi tiêu đề chứa WIP (Work In Progress)
+          wip: true
+
+  validate-pr-description:
+    name: Validate PR Description
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR Description Length and Content
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          
+          # Kiểm tra mô tả PR có trống hoặc quá ngắn không (tối thiểu 15 ký tự)
+          if [ -z "$PR_BODY" ] || [ ${#PR_BODY} -lt 15 ]; then
+            echo "Error: Pull Request description is empty or too short (must be at least 15 characters)."
+            echo "Please provide details on what changes are introduced in this PR."
+            exit 1
+          fi
+          
+          echo "PR description is valid."
+

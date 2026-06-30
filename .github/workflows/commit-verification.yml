@@ -1,0 +1,24 @@
+name: Commit Verification CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  validate-commit-messages:
+    name: Validate Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Make Script Executable
+        run: chmod +x scripts/verify-commit-msg.sh
+
+      - name: Validate Branch Commits
+        run: |
+          git fetch origin main
+          ./scripts/verify-commit-msg.sh "origin/main..HEAD"
