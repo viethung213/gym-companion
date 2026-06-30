@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package contracts.generic.notification.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service;notificationv1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/generic/notification/v1/message/notification_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Notification Service API"
+    version: "1.0"
+    description: "API gửi thông báo đẩy (Push Notifications) và tin nhắn nhắc lịch tập."
+  }
+};
+
+service NotificationService {
+  // Gửi thông báo đẩy đến thiết bị người dùng
+  rpc SendPushNotification (contracts.generic.notification.v1.message.SendPushNotificationRequest) returns (contracts.generic.notification.v1.message.SendPushNotificationResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/notifications/push"
+      body: "*"
+    };
+  }
+}

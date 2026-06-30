@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service;profilev1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/supporting/profile/v1/message/profile_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "User Profile & Health Status API"
+    version: "1.0"
+    description: "API quản lý thông tin sức khỏe và chấn thương của người dùng."
+  }
+};
+
+service ProfileService {
+  // Khai báo hồ sơ sức khỏe ban đầu
+  rpc SaveHealthProfile (contracts.supporting.profile.v1.message.SaveHealthProfileRequest) returns (contracts.supporting.profile.v1.message.SaveHealthProfileResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{userId}/profile"
+      body: "*"
+    };
+  }
+
+  // Cập nhật chỉ số cơ thể định kỳ
+  rpc LogPeriodicMetrics (contracts.supporting.profile.v1.message.LogPeriodicMetricsRequest) returns (contracts.supporting.profile.v1.message.LogPeriodicMetricsResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{userId}/metrics"
+      body: "*"
+    };
+  }
+}

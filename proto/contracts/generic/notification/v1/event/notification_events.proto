@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package contracts.generic.notification.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
+
+// Sự kiện được phát đi khi thông báo được gửi thành công đến người dùng
+message NotificationSent {
+  string eventId = 1;
+  string eventType = 2;
+  string timestamp = 3;
+  
+  string notificationId = 4;
+  string userId = 5;
+  string channel = 6; // PUSH, SMS, EMAIL
+  string sentAt = 7;
+}

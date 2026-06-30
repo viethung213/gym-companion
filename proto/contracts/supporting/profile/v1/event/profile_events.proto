@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
+
+// Sự kiện được phát đi khi hồ sơ sức khỏe người dùng hoàn thành >= 80%
+message ProfileCompleted {
+  string eventId = 1;
+  string eventType = 2;
+  string timestamp = 3;
+  
+  message BiologicalMetrics {
+    float weightKg = 1;
+    float heightCm = 2;
+    int32 age = 3;
+    string gender = 4;
+  }
+  
+  string userId = 4;
+  BiologicalMetrics biologicalMetrics = 5;
+  repeated string goals = 6;
+  repeated string registeredInjuries = 7;
+}
+
+// Sự kiện được phát đi khi người dùng khai báo chấn thương mới
+message InjuryReported {
+  string eventId = 1;
+  string eventType = 2;
+  string timestamp = 3;
+  
+  message Injury {
+    string muscleGroup = 1;
+    string severity = 2;
+    string reportedAt = 3;
+  }
+  
+  string userId = 4;
+  Injury injury = 5;
+}
