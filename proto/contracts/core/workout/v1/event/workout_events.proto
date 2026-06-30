@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package contracts.core.workout.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/event;workoutv1event";
+
+// Sự kiện được phát đi khi buổi tập hoàn thành
+message WorkoutSessionCompleted {
+  string eventId = 1;
+  string eventType = 2;
+  string timestamp = 3;
+  
+  message PerformanceSummary {
+    int32 totalSetsCompleted = 1;
+    float totalVolumeKg = 2;
+    float averageFormScore = 3;
+    float estimatedCaloriesBurned = 4;
+  }
+  
+  message ExercisePerformance {
+    string exerciseId = 1;
+    int32 setsCount = 2;
+    int32 averageRpe = 3;
+  }
+
+  string sessionId = 4;
+  string userId = 5;
+  string completedAt = 6;
+  PerformanceSummary performanceSummary = 7;
+  repeated ExercisePerformance completedExercises = 8;
+}

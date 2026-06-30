@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package contracts.generic.audio.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/audio/v1/service;audiov1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/generic/audio/v1/message/audio_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Audio Integration & Ducking API"
+    version: "1.0"
+    description: "API kiểm soát nhạc nền và điều phối âm lượng (Audio Ducking) khi có phát âm cảnh báo của AI."
+  }
+};
+
+service AudioService {
+  // Yêu cầu giảm âm lượng nhạc nền (Audio Ducking)
+  rpc RequestAudioDucking (contracts.generic.audio.v1.message.RequestAudioDuckingRequest) returns (contracts.generic.audio.v1.message.RequestAudioDuckingResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/audio/duck"
+      body: "*"
+    };
+  }
+}

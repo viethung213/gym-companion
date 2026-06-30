@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package contracts.supporting.workout_log.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/workout_log/v1/event;workoutlogv1event";
+
+// Sự kiện phát đi khi nhật ký tập luyện được cập nhật
+message WorkoutLogUpdated {
+  string eventId = 1;
+  string eventType = 2;
+  string timestamp = 3;
+  
+  string userId = 4;
+  string logId = 5;
+  string exerciseId = 6;
+  int32 actualSets = 7;
+}
