@@ -27,10 +27,10 @@ buf-lint:
 
 # Install Git hooks locally to prevent invalid commits
 install-hooks:
-	@echo "Installing Git commit-msg hook..."
-	@cp scripts/verify-commit-msg.sh .git/hooks/commit-msg
-	@chmod +x .git/hooks/commit-msg
-	@echo "Git commit-msg hook installed successfully!"
+	@echo "Installing Git hooks..."
+	@chmod +x scripts/install-hooks.sh
+	@./scripts/install-hooks.sh
+	@echo "Git hooks installed successfully!"
 
 # Clean: Remove previously generated stubs
 clean:
