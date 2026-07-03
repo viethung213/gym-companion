@@ -55,5 +55,6 @@ Details of verification steps performed before creating the PR to prevent regres
 ```
 
 ### Step 4: Present the Output
-- Display the generated PR title and description directly in the chat.
+- Display the generated PR title and description wrapped inside a markdown code block (fenced with triple backticks) to make it easy for the user to copy.
 - Do NOT create or overwrite files unless explicitly requested by the user.
+

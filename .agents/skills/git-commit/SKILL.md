@@ -12,43 +12,64 @@ source: https://github.com/github/awesome-copilot/blob/main/skills/git-commit/SK
 
 Create standardized, semantic git commits using the Conventional Commits specification. Analyze the actual diff to determine appropriate type, scope, and message.
 
-## Conventional Commit Format
+## Commit Format
+
+Every commit message must begin with a Gitmoji followed by a space, then the conventional commit prefix:
 
 ```
-<type>(scope): <description>
+<emoji> <type>(scope): <description>
 
 [optional body]
 
 [optional footer(s)]
 ```
 
-## Commit Types
+### Examples:
 
-| Type       | Purpose                        |
-| ---------- | ------------------------------ |
-| `feat`     | New feature                    |
-| `fix`      | Bug fix                        |
-| `docs`     | Documentation only             |
-| `style`    | Formatting/style (no logic)    |
-| `refactor` | Code refactor (no feature/fix) |
-| `perf`     | Performance improvement        |
-| `test`     | Add/update tests               |
-| `build`    | Build system/dependencies      |
-| `ci`       | CI/config changes              |
-| `chore`    | Maintenance/misc               |
-| `revert`   | Revert commit                  |
+- Single-line commit:
+  `✨ feat(auth): add google login`
+- Multi-line commit with body and footer:
+  ```
+  🐛 fix(db): resolve deadlock on transaction
 
-## Breaking Changes
+  The database was experiencing deadlocks when concurrent transactions tried to update the user balance. Wrapping the update query in a row lock resolves this issue.
 
-```
-# Exclamation mark after type/scope
-feat!: remove deprecated endpoint
+  ```
+- Reference commit (no conventional emoji matched, or emoji not used):
+  `docs(readme): update installation steps`
 
-# BREAKING CHANGE footer
-feat: allow config to extend other configs
+## Conventional Commit Types and Gitmojis
 
-BREAKING CHANGE: `extends` key behavior changed
-```
+Below is the mapping for conventional types. If one of these types is used, prepend the primary emoji:
+
+| Type | Emoji | Description |
+| :--- | :---: | :--- |
+| `feat` | `✨` | New feature |
+| `fix` | `🐛` | Bug fix |
+| `docs` | `📝` | Documentation changes |
+| `style` | `🎨` | Formatting, UI, style changes (no logic changes) |
+| `refactor` | `♻️` | Code refactoring |
+| `perf` | `⚡️` | Performance improvements |
+| `test` | `✅` | Adding or updating tests |
+| `build` | `📦️` | Build system or external dependencies |
+| `ci` | `👷` | CI configuration and scripts |
+| `chore` | `🔧` | General maintenance, chores, config changes |
+| `revert` | `⏪️` | Reverting a previous commit |
+
+### Specific Scopes/Use-cases (Optional but Recommended)
+
+For more specific scenarios, use these combinations:
+
+| Type | Emoji | Description |
+| :--- | :---: | :--- |
+| `chore(deps)` | `➕` / `➖` / `⬆️` | Add, remove, or upgrade dependencies |
+| `fix(security)` | `🔒️` | Fix security issues / secrets management |
+| `chore(db)` | `🗃️` | Database migrations / database related changes |
+| `chore(release)` | `🔖` | Release / Version tags |
+| `chore(wip)` | `🚧` | Work in progress |
+| `style(ui)` | `💄` | UI layout, CSS, and aesthetic design changes |
+| `refactor(cleanup)` | `🔥` | Remove dead code or files |
+| `chore(locales)` | `🌐` | Internationalization / translation updates |
 
 ## Workflow
 
@@ -87,19 +108,25 @@ git add -p
 
 Analyze the diff to determine:
 
-- **Type**: What kind of change is this?
+- **Gitmoji**: Select the most appropriate emoji or shortcode representing the change.
+- **Type**: What kind of change is this (must map to Conventional Commits)?
 - **Scope**: What area/module is affected? (Mandatory)
 - **Description**: One-line summary of what changed (present tense, imperative mood, <72 chars)
+
+Prepend the chosen Gitmoji to the conventional commit message (e.g. `✨ feat(auth): add login`).
 
 ### 4. Execute Commit
 
 ```bash
-# Single line
-git commit -m "<type>(scope): <description>"
+# Single line (using Unicode Emoji)
+git commit -m "✨ feat(scope): <description>"
+
+# Single line (using shortcode if preferred or terminal issues)
+git commit -m ":sparkles: feat(scope): <description>"
 
 # Multi-line with body/footer
 git commit -m "$(cat <<'EOF'
-<type>(scope): <description>
+✨ feat(scope): <description>
 
 <optional body>
 
@@ -111,6 +138,7 @@ EOF
 ## Best Practices
 
 - One logical change per commit
+- **Gitmoji is mandatory**: Every commit must begin with an emoji or shortcode.
 - **Scope is mandatory**: Always provide a scope in parentheses, e.g., `feat(auth): add login`
 - Present tense: "add" not "added"
 - Imperative mood: "fix bug" not "fixes bug"

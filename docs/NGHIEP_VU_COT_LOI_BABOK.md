@@ -1,220 +1,179 @@
-# ĐẶC TẢ YÊU CẦU NGHIỆP VỤ CỐT LÕI (CORE REQUIREMENTS SPECIFICATION)
-## DỰ ÁN: AI FITNESS SOCIAL PLATFORM (FITAI)
-### TIÊU CHUẨN ĐẶC TẢ: BABOK® GUIDE V3.0 Compliant
+# ĐẶC TẢ YÊU CẦU NGHIỆP VỤ CỐT LÕI (CORE BRD) - FITAI
+### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.7.0-OPT (Tối ưu Token)
 
 ---
 
-## KIỂM SOÁT TÀI LIỆU (DOCUMENT CONTROL)
-
-| Thông tin | Chi tiết |
-|---|---|
-| **Mã tài liệu** | FITAI-BRD-CORE-001 |
-| **Phiên bản** | 1.2.0 |
-| **Ngày hiệu lực** | 29/06/2026 |
-| **Tác giả** | Senior Business Analyst |
-| **Trạng thái** | Approved |
-| **Phân loại bảo mật** | Internal Confidential |
-
-### Lịch sử thay đổi tài liệu
-| Phiên bản | Ngày | Mô tả thay đổi | Người thực hiện |
-|---|---|---|---|
-| 0.1 | 25/06/2026 | Khởi tạo cấu trúc theo chuẩn BABOK v3 | Senior BA |
-| 1.0 | 27/06/2026 | Hoàn thiện đặc tả chi tiết 7 nhóm nghiệp vụ cốt lõi | Senior BA |
-| 1.1 | 28/06/2026 | Loại bỏ Module Gamification, tính năng BPM Sync và bổ sung quy tắc loại bỏ nhóm cơ chấn thương | Antigravity AI |
-| 1.2 | 29/06/2026 | Bổ sung mục tiêu nghiệp vụ điều chỉnh tư thế (form) cho người mới tập và tối ưu thực đơn dinh dưỡng | Antigravity AI |
+## KIỂM SOÁT TÀI LIỆU
+- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 03/07/2026
+- **Trạng thái**: Approved | **Phân loại**: Internal Confidential
+- **Lịch sử đổi mới chính**:
+  * v1.0 (27/06/2026): Hoàn thiện 7 module nghiệp vụ gốc.
+  * v1.3 (01/07/2026): Chuyển sang cơ chế sinh lộ trình tổng quan & sinh giáo án chi tiết theo buổi.
+  * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
+  * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn), cơ chế điểm XP cơ bản/thưởng, và tư vấn món ăn ngoài.
 
 ---
 
-## 1. BỐI CẢNH & MỤC TIÊU NGHIỆP VỤ (BUSINESS CONTEXT & OBJECTIVES)
-
-### 1.1 Khái quát giải pháp (Solution Scope)
-Giải pháp cốt lõi cung cấp nền tảng số hỗ trợ tập luyện cá nhân hóa tự động dựa trên Trí tuệ nhân tạo (AI) và Thị giác máy tính (Computer Vision), kết hợp Dinh dưỡng cá nhân hóa nhằm giải quyết rào cản chi phí huấn luyện viên cá nhân (PT) và động lực tập luyện của người mới bắt đầu.
-
-### 1.2 Mục tiêu nghiệp vụ (Business Objectives)
-Theo khung phân tích BABOK, các yêu cầu cốt lõi phải liên kết trực tiếp với các mục tiêu kinh doanh sau:
-* **OB-01 (Accessibility)**: Giảm chi phí tiếp cận hướng dẫn tập luyện chuyên nghiệp xuống 90% so với thuê PT truyền thống.
-* **OB-02 (Safety)**: Giảm tỷ lệ chấn thương do tập sai kỹ thuật của người dùng thông qua phân tích góc khớp thời gian thực.
-* **OB-03 (Retention)**: Duy trì tỷ lệ người dùng tiếp tục luyện tập sau 30 ngày đạt $\ge 40\%$ nhờ AI Coach đồng hành.
-* **OB-04 (Form Standardization)**: Điều chỉnh chuẩn tư thế (form) tập luyện cho người mới tập thông qua hướng dẫn chi tiết và phản hồi sửa lỗi thời gian thực từ AI Camera.
-* **OB-05 (Nutrition Optimization)**: Cung cấp thực đơn dinh dưỡng tối ưu và cá nhân hóa sâu theo thể trạng, ngân sách và mục tiêu luyện tập của từng người dùng.
+## 1. BỐI CẢNH & MỤC TIÊU NGHIỆP VỤ
+- **Bối cảnh**: Nền tảng số hỗ trợ tập luyện + dinh dưỡng cá nhân hóa tự động bằng AI & Computer Vision, giúp giải quyết rào cản chi phí PT và duy trì động lực cho người mới tập.
+- **Mục tiêu**:
+  * **OB-01 (Chi phí)**: Giảm 90% chi phí hướng dẫn so với thuê PT truyền thống.
+  * **OB-02 (An toàn)**: Giảm chấn thương nhờ phân tích góc khớp sửa lỗi tư thế thời gian thực.
+  * **OB-03 (Duy trì)**: Tỷ lệ người dùng tiếp tục tập luyện sau 30 ngày đạt $\ge 40\%$.
+  * **OB-04 (Tư thế)**: Chuẩn hóa tư thế cho người mới qua camera phản hồi tức thì.
+  * **OB-05 (Dinh dưỡng)**: Cá nhân hóa sâu thực đơn theo thể trạng, ngân sách và mục tiêu.
 
 ---
 
-## 2. PHÂN TÍCH TÁC NHÂN (STAKEHOLDER ANALYSIS)
-
-Đặc tả các tác nhân tương tác trực tiếp hoặc gián tiếp với hệ thống cốt lõi:
-
-| Mã tác nhân | Tên tác nhân | Mô tả vai trò | Mức độ ảnh hưởng |
-|---|---|---|---|
-| **ACT-01** | End User (Người tập) | Người sử dụng ứng dụng để lên lịch, tập luyện dưới camera, theo dõi sức khỏe và dinh dưỡng. | High |
-| **ACT-02** | AI Coach Engine | Tác nhân hệ thống: Phân tích dữ liệu người dùng, lên lịch, động viên và điều chỉnh giáo án. | High |
-| **ACT-03** | AI Camera Engine | Tác nhân hệ thống: Xử lý luồng hình ảnh camera, đếm rep, ước lượng cân nặng, phát hiện lỗi tư thế. | High |
-| **ACT-04** | AI Nutrition Engine | Tác nhân hệ thống: Tính toán calo cá nhân hóa và luân chuyển thực đơn không trùng lặp. | Medium |
-| **ACT-05** | System Administrator | Quản trị viên hệ thống: Quản lý cấu hình bài tập, kiểm tra dữ liệu và bảo mật. | Low |
+## 2. PHÂN TÍCH TÁC NHÂN (STAKEHOLDERS)
+- **ACT-01 (User)**: Người tập. Nhập chỉ số, check-in, tập dưới camera, theo dõi sức khỏe & ăn uống. (High)
+- **ACT-02 (AI Coach)**: Hệ thống. Phân tích hiệu suất, sinh lộ trình/lịch tập, động viên, chỉnh giáo án. (High)
+- **ACT-03 (AI Camera)**: Hệ thống. Xử lý video, tracking khớp (33 điểm), đếm rep, đo ROM, phát hiện lỗi tư thế. (High)
+- **ACT-04 (AI Nutrition)**: Hệ thống. Tính calo/macro cá nhân hóa, gợi ý & luân chuyển thực đơn không trùng. (Medium)
+- **ACT-05 (Admin)**: Quản trị viên. Quản lý thư viện bài tập, thực đơn, kiểm tra dữ liệu và bảo mật. (Low)
 
 ---
 
-## 3. BẢN ĐỒ QUY TRÌNH NGHIỆP VỤ (BUSINESS PROCESS MODELING)
+## 3. BẢN ĐỒ QUY TRÌNH NGHIỆP VỤ
 
-### 3.1 Quy trình Thiết lập Hồ sơ & Khởi tạo Lịch tập (Onboarding & Planning)
+### 3.1 Quy trình Khởi tạo (Onboarding & Planning)
+1. User nhập thông tin cơ bản, chỉ số cơ thể, mục tiêu (Tăng cơ/Giảm mỡ) & khung giờ tập cố định.
+2. User khai báo chấn thương cũ hoặc bệnh lý mãn tính.
+3. AI Coach tính toán `User Fitness Score` & khởi tạo Lộ trình tổng quan 4 tuần, Lịch tập tuần và Gợi ý dinh dưỡng.
 
-```
-[Người dùng] ──► Nhập Thông tin Cơ bản & Chỉ số Cơ thể (Cân nặng, Chiều cao)
-     │
-     ▼
-[Người dùng] ──► Chọn Mục tiêu (Tăng cơ/Giảm mỡ) & Khung giờ tập cố định
-     │
-     ▼
-[Người dùng] ──► Khai báo Sức khỏe (Chấn thương cũ, Bệnh lý mãn tính)
-     │
-     ▼
-[AI Coach] ─────► Tính toán User Fitness Score & Thiết lập lịch tuần
-     │
-     ▼
-[AI Coach] ─────► Xuất Kế hoạch tập 4 tuần đầu & Gợi ý thực đơn cá nhân hóa
-```
+### 3.2 Quy trình Luyện tập (Workout Execution)
+1. User check-in & cấu hình playlist âm nhạc.
+2. Đối với bài tập có hỗ trợ AI Camera (Nhánh AI):
+   - User bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng.
+   - AI Camera tracking khung xương, ước lượng tạ thực tế, đếm rep, tính % hoàn thiện chuyển động (ROM %).
+   - Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms).
+   - Nếu đúng tư thế: Cộng rep, tính Form Score.
+   - User xác nhận kết quả Set (AI điền tự động).
+3. Đối với bài tập phi AI (Nhánh tự ghi nhận):
+   - Giao diện hiển thị trình bấm giờ (timer) đếm ngược theo set hoặc thời gian nghỉ, kết hợp phát nhạc nền.
+   - Hiển thị video/hướng dẫn bài tập để người dùng tập theo.
+   - User tự thực hiện và xác nhận kết quả set thủ công.
+4. Nghỉ ngơi → Lặp lại cho đến khi hết giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
 
-### 3.2 Quy trình Luyện tập dưới AI Camera (Workout Execution)
+### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
+1. Trigger: Đến ngày tập / User mở app.
+2. AI Coach hỏi/nhận trạng thái sức khỏe (chấn thương mới, độ phục hồi) & phân tích dữ liệu RPE/Form buổi trước.
+3. AI Coach tự động sinh giáo án chi tiết hôm nay (bài tập, set, rep, tạ gợi ý).
+4. User nhận giáo án và chuẩn bị thực hiện (chuyển sang Quy trình 3.2).
 
-```
-[Người dùng] ──► Check-in buổi tập & Thiết lập Audio/Playlist nhạc mong muốn
-     │
-     ▼
-[Người dùng] ──► Bật Camera & Điều chỉnh khoảng cách/Ánh sáng theo chỉ dẫn
-     │
-     ▼
-[AI Camera] ────► Tracking skeleton (Khung xương) & Ước lượng cân nặng tạ thực tế
-     │
-     ▼
-[AI Camera] ────► Đếm số rep, đo lường % hoàn thiện rep (ROM %)
-     ├── (Lỗi tư thế phát hiện) ─► [Hệ thống] ──► Audio Ducking & Voice alert sửa lỗi
-     └── (Rep hoàn thành đạt chuẩn) ─► [Hệ thống] ──► Cộng dồn rep và tính điểm Form
-     │
-     ▼
-[Người dùng] ──► Xác nhận kết quả Set (AI tự động điền) → Nghỉ ngơi
-     │
-     ▼
-[Người dùng] ──► Kết thúc buổi tập → Nhận Post-session Report
-```
+### 3.4 Quy trình Đánh giá & Điều chỉnh Lộ trình (Adaptive Review Cycle)
+1. **Trigger A (Cuối chu kỳ 4 tuần)**: AI Coach tính Completion Rate (CR) để tự động nâng/hạ hoặc cấu hình lại lộ trình 4 tuần kế tiếp theo quy tắc **BR-AC-04**.
+2. **Trigger B (Giữa chu kỳ - Event-driven)**: Hệ thống liên tục quét 4 tín hiệu hành vi độc lập (Không hoạt động, Lịch không tương thích, Tập quá tải, Tiến bộ đình trệ) để đề xuất điều chỉnh nhanh giáo án theo các quy tắc **BR-AC-05** -> **BR-AC-08**.
 
 ---
 
-## 4. YÊU CẦU CHỨC NĂNG CHI TIẾT (FUNCTIONAL REQUIREMENTS - FR)
+## 4. YÊU CẦU CHỨC NĂNG CHI TIẾT (FR)
 
-Các yêu cầu chức năng được phân loại theo tiêu chuẩn BABOK v3.0, ký hiệu bằng mã: **FR-[Module]-[Số thứ tự]**. Độ ưu tiên phân loại theo MoSCoW: Must have (M), Should have (S), Could have (C), Won't have (W).
+### Module 1: Quản lý Người dùng & Hồ sơ
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-UM-01** | **Đăng ký/Đăng nhập**: Qua Email, SĐT (xác thực OTP) và liên kết MXH (Google, Apple, Facebook). | M |
+| **FR-UM-02** | **Hồ sơ sức khỏe**: Khai báo tuổi, giới tính, chiều cao, cân nặng, mục tiêu, chấn thương/bệnh lý. | M |
+| **FR-UM-03** | **Khung giờ cố định**: Bắt buộc chọn tối thiểu 1 khung giờ tập cố định trong ngày để nhắc lịch. | M |
+| **FR-UM-04** | **Nhắc lịch tự động**: Push Notification trước 15 phút theo phong cách AI Coach đã chọn. | S |
 
----
+### Module 2: AI Coach cá nhân
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (mốc định hướng) & Lịch tập tuần (phân bổ cơ). Không sinh chi tiết bài ở bước này. | M |
+| **FR-AC-02** | **Tự động điều chỉnh**: Phân tích hiệu suất tập để tăng/giảm tạ, thay bài tập hoặc chèn Deload Week. | M |
+| **FR-AC-03** | **Bài tập thay thế**: Loại bỏ bài tác động vào vùng chấn thương đột xuất cho đến khi báo phục hồi. | S |
+| **FR-AC-04** | **Đồng hành**: Gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thực tế (PR, quay lại sau nghỉ dài). | S |
+| **FR-AC-05** | **Phong cách Coach**: Cho chọn Drill Sergeant (nghiêm khắc), Best Friend (thân thiện), Data Analyst (khoa học). | C |
+| **FR-AC-06** | **Sinh giáo án theo buổi**: Sinh bài tập, set, rep, tạ gợi ý trước buổi tập. AI Coach hỏi 1-2 câu ngắn về thiết bị & dị ứng thực phẩm theo ngữ cảnh nếu chưa có thông tin. | M |
+| **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án. | M |
 
-### Module 1: Quản lý Người dùng & Hồ sơ (User & Profile Management)
+### Module 3: AI Camera Coach (Phân tích tư thế)
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-CC-01** | **Tracking khung xương**: Phân tích video xác định 33 điểm khớp chính trên cơ thể. | M |
+| **FR-CC-02** | **Đo lường góc ROM**: Tính toán biên độ chuyển động (ROM) khớp & tỷ lệ hoàn thiện rep. | M |
+| **FR-CC-03** | **Phát hiện lỗi**: So so sánh tọa độ khớp với mô hình chuẩn để phát hiện lỗi kỹ thuật (võng lưng, gối chụm...). | M |
+| **FR-CC-04** | **Cảnh báo real-time**: Overlay hình ảnh & âm thanh hướng dẫn sửa lỗi tức thì với độ trễ <500ms. | M |
+| **FR-CC-05** | **Chấm điểm Form**: Tính điểm Form Score (0-100) cho mỗi rep dựa trên ROM, căn chỉnh khớp, tốc độ. | S |
 
-| Mã yêu cầu | Tên yêu cầu | Mô tả nghiệp vụ chi tiết | Tác nhân | Độ ưu tiên |
-|---|---|---|---|---|
-| **FR-UM-01** | Đăng ký & Đăng nhập | Hệ thống phải hỗ trợ đăng ký/đăng nhập thông qua Email, Số điện thoại (xác thực OTP) và liên kết tài khoản định danh mạng xã hội (Google, Apple, Facebook). | ACT-01 | M |
-| **FR-UM-02** | Khai báo Hồ sơ Sức khỏe | Hệ thống cho phép người dùng nhập thông số cơ thể (tuổi, giới tính, chiều cao, cân nặng), mục tiêu luyện tập và tiền sử bệnh lý/chấn thương. | ACT-01 | M |
-| **FR-UM-03** | Thiết lập Khung giờ Cố định | Người dùng bắt buộc phải chọn tối thiểu 1 khung giờ tập luyện cố định trong ngày tại luồng Onboarding để làm cơ sở nhắc nhở lịch tập. | ACT-01 | M |
-| **FR-UM-04** | Nhắc nhở lịch tập tự động | Hệ thống tự động quét và gửi Push Notification trước khung giờ tập cố định 15 phút, nội dung thông báo được cá nhân hóa theo phong cách AI Coach đã thiết lập. | ACT-02 | S |
+### Module 4: Quản lý Buổi tập (Workout Logging)
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-WL-01** | **Ghi chép tự động**: Điền rep, % hoàn thiện và ước lượng tạ thực tế (qua kích thước đĩa tạ & tốc độ nâng). | M |
+| **FR-WL-02** | **Ghi chép thủ công**: Cho phép sửa kết quả set. Hỗ trợ luồng tập phi AI tích hợp trình bấm giờ (timer), âm nhạc và hướng dẫn trực quan. | M |
+| **FR-WL-03** | **Tương tác âm thanh**: Audio Ducking tự giảm nhạc nền khi AI phát giọng nói cảnh báo tư thế. | S |
+| **FR-WL-04** | **Ghi nhận PR**: Tính 1RM ước tính (Epley Formula) sau buổi và vinh danh ăn mừng nếu đạt PR mới. | S |
 
----
+### Module 5: Dinh dưỡng AI
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-NU-01** | **Tính kcal cá nhân**: Tính TDEE/macro hàng ngày theo công thức Mifflin-St Jeor & mức vận động thực tế. | M |
+| **FR-NU-02** | **Đa lựa chọn**: Gợi ý bữa ăn linh hoạt (tự chuẩn bị, ăn ngoài) chia theo 3 mức giá; ưu tiên đề xuất sản phẩm/gói ăn sẵn có hoặc đối tác. | S |
+| **FR-NU-03** | **Anti-Repetition**: Không lặp lại nguồn protein chính trong 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày. | M |
+| **FR-NU-04** | **Nhật ký ăn uống**: Log bữa ăn thực tế bằng cách tìm kiếm món ăn hoặc quét mã vạch sản phẩm. | S |
 
-### Module 2: AI Coach Cá nhân (Huấn luyện viên ảo)
+### Module 6: Theo dõi Tiến trình
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-PT-01** | **Ghi nhận chỉ số**: Cập nhật cân nặng, % mỡ cơ thể, số đo các vòng cơ bắp & lưu ảnh tiến trình. | M |
+| **FR-PT-02** | **Phân tích xu hướng**: Vẽ biểu đồ xu hướng biến động cân nặng, sức mạnh (1RM) và điểm Form trung bình. | S |
+| **FR-PT-03** | **AI phân tích sâu**: Gửi báo cáo định kỳ đánh giá tiến trình kèm lời khuyên tối ưu hóa. | S |
 
-| Mã yêu cầu | Tên yêu cầu | Mô tả nghiệp vụ chi tiết | Tác nhân | Độ ưu tiên |
-|---|---|---|---|---|
-| **FR-AC-01** | Khởi tạo Lịch tập 4 tuần | AI Coach phân tích chỉ số cơ thể, mục tiêu và hạn chế chấn thương để tự động sinh giáo án 4 tuần đầu bao gồm bài tập, số set, rep và cân nặng gợi ý. | ACT-02 | M |
-| **FR-AC-02** | Tự động điều chỉnh kế hoạch | AI Coach tự động phân tích dữ liệu hiệu năng sau mỗi 2 tuần để tinh chỉnh: tăng/giảm cường độ, thay thế bài tập hoặc chèn Deload Week (tuần giảm tải). | ACT-02 | M |
-| **FR-AC-03** | Đề xuất bài tập thay thế | Khi người dùng báo chấn thương đột xuất hệ thống sẽ loại bỏ các bài tập tác động trực tiếp vào nhóm cơ bị chấn thương đó cho đến khi nhận được thông báo đã hồi phục từ người dùng. | ACT-02, ACT-01 | S |
-| **FR-AC-04** | Đồng hành & Cổ vũ | AI Coach gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thật (VD: khi người dùng vượt PR hoặc khi nghỉ dài ngày quay trở lại). | ACT-02 | S |
-| **FR-AC-05** | Thiết lập phong cách Coach | Người dùng có quyền lựa chọn phong cách tương tác của Coach: Drill Sergeant (nghiêm khắc), Best Friend (thân thiện), hoặc Data Analyst (khoa học). | ACT-01 | C |
-
----
-
-### Module 3: AI Camera Coach (Phân tích tư thế thời gian thực)
-
-| Mã yêu cầu | Tên yêu cầu | Mô tả nghiệp vụ chi tiết | Tác nhân | Độ ưu tiên |
-|---|---|---|---|---|
-| **FR-CC-01** | Tracking Khung xương | Phân tích luồng video camera trước/sau để xác định 33 điểm khớp chính trên cơ thể người tập. | ACT-03 | M |
-| **FR-CC-02** | Đo lường góc ROM % | AI Camera tính toán biên độ chuyển động (ROM) của các khớp và đưa ra tỷ lệ % hoàn thiện của mỗi lần lặp (rep). | ACT-03 | M |
-| **FR-CC-03** | Phát hiện lỗi tư thế | Tự động so sánh tọa độ các khớp với mô hình chuyển động chuẩn để phát hiện lỗi kỹ thuật (VD: võng lưng, gối chụm...). | ACT-03 | M |
-| **FR-CC-04** | Cảnh báo thời gian thực | Hệ thống hiển thị visual overlay và phát tín hiệu giọng nói hướng dẫn sửa lỗi tức thì với độ trễ tối đa < 500ms. | ACT-03 | M |
-| **FR-CC-05** | Chấm điểm kỹ thuật | Tính điểm kỹ thuật (Form Score từ 0-100) cho từng rep dựa trên sự kết hợp giữa ROM %, căn chỉnh khớp và tốc độ thực hiện. | ACT-03 | S |
-
----
-
-### Module 4: Quản lý Buổi tập (Workout Logging & Audio)
-
-| Mã yêu cầu | Tên yêu cầu | Mô tả nghiệp vụ chi tiết | Tác nhân | Độ ưu tiên |
-|---|---|---|---|---|
-| **FR-WL-01** | Ghi chép buổi tập tự động | AI tự động điền số rep đã đếm được và % hoàn thiện. AI ước lượng cân nặng tạ thực tế thông qua việc nhận dạng đĩa tạ và tốc độ nâng của người dùng để tránh nhập khống dữ liệu. | ACT-03 | M |
-| **FR-WL-02** | Ghi chép thủ công | Cho phép người dùng chỉnh sửa số rep và cân nặng thực tế nếu AI ước lượng hoặc đếm chưa chính xác trước khi bấm lưu set. | ACT-01 | M |
-| **FR-WL-03** | Tương tác âm thanh thông minh | Hệ thống cho phép người dùng chọn nhạc nền buổi tập (EDM/Lo-fi). Hệ thống tự giảm âm lượng nhạc nền (Audio Ducking) khi AI phát âm thanh sửa lỗi kỹ thuật. | ACT-01 | S |
-| **FR-WL-04** | Ghi nhận Kỷ lục Cá nhân (PR) | Tự động tính toán 1RM ước tính (Epley Formula) sau mỗi buổi tập và vinh danh bằng ăn mừng nếu đạt PR mới. | ACT-02 | S |
-
----
-
-### Module 5: Dinh dưỡng AI (Anti-Repetition & Budget)
-
-| Mã yêu cầu | Tên yêu cầu | Mô tả nghiệp vụ chi tiết | Tác nhân | Độ ưu tiên |
-|---|---|---|---|---|
-| **FR-NU-01** | Tính toán kcal cá nhân hóa | Tính toán TDEE và macronutrients hàng ngày riêng biệt cho từng cá nhân, dựa theo công thức Mifflin-St Jeor và khối lượng vận động thực tế. | ACT-04 | M |
-| **FR-NU-02** | Đa lựa chọn theo ngân sách | Mỗi bữa ăn (Sáng, Trưa, Tối) gợi ý tối thiểu 3 lựa chọn món ăn đạt chuẩn macro, chia theo mức giá: Tiết kiệm, Phổ thông, và Thoải mái. | ACT-04 | S |
-| **FR-NU-03** | Thuật toán Anti-Repetition | Loại trừ các nguồn protein chính đã dùng trong 7 ngày, tinh bột trong 5 ngày và chủ đề món trong 3 ngày để chống lặp lại món ăn gây ngán. | ACT-04 | M |
-| **FR-NU-04** | Nhật ký dinh dưỡng | Người dùng ghi lại bữa ăn thực tế bằng cách tìm kiếm món ăn hoặc quét mã vạch sản phẩm. | ACT-01 | S |
-
----
-
-### Module 6: Theo dõi Tiến trình (Progress Tracking)
-
-| Mã yêu cầu | Tên yêu cầu | Mô tả nghiệp vụ chi tiết | Tác nhân | Độ ưu tiên |
-|---|---|---|---|---|
-| **FR-PT-01** | Ghi nhận chỉ số cơ thể | Cho phép người dùng cập nhật cân nặng, tỷ lệ mỡ cơ thể (Body Fat %), số đo các vòng cơ bắp và lưu trữ ảnh tiến trình. | ACT-01 | M |
-| **FR-PT-02** | Phân tích xu hướng (Analytics) | Vẽ biểu đồ xu hướng biến động cân nặng (moving average), xu hướng tăng sức mạnh (1RM) và biểu đồ điểm kỹ thuật trung bình. | ACT-02 | S |
-| **FR-PT-03** | AI phân tích chuyên sâu | Định kỳ gửi báo cáo phân tích chuyên sâu về tiến độ đạt mục tiêu của người dùng kèm lời khuyên tối ưu. | ACT-02 | S |
+### Module 7: Quản trị Hệ thống (Admin)
+| Mã | Nghiệp vụ chi tiết | MoSCoW |
+|---|---|---|
+| **FR-SM-01** | **Thư viện bài tập**: CRUD bài tập (nhóm cơ, video hướng dẫn, tọa độ khớp chuẩn, dụng cụ, bài thay thế). Cần Admin duyệt mới kích hoạt. | M |
+| **FR-SM-02** | **Thư viện dinh dưỡng**: CRUD thực phẩm (kcal, macro, phân loại chay/Halal, nhãn dị ứng). | M |
+| **FR-SM-03** | **Dashboard giám sát**: Theo dõi tỉ lệ tracking thành công, độ trễ cảnh báo (<500ms), tỉ lệ lỗi hệ thống. | S |
 
 ---
-
-
 
 ## 5. QUY TẮC NGHIỆP VỤ (BUSINESS RULES - BR)
 
-Theo chuẩn BABOK, quy tắc nghiệp vụ định nghĩa các chính sách, công thức và ràng buộc mang tính bắt buộc:
-
-| Mã quy tắc | Module | Nội dung quy tắc nghiệp vụ |
+| Mã | Module | Nội dung quy tắc nghiệp vụ |
 |---|---|---|
-| **BR-UM-01** | Hồ sơ | Hồ sơ sức khỏe của người dùng phải đạt tỷ lệ hoàn thiện **$\ge 80\%$** trước khi hệ thống cho phép kích hoạt AI Coach và tạo kế hoạch luyện tập đầu tiên. |
-| **BR-AC-01** | Tập luyện | AI Coach không được phép lên lịch tập vượt quá **6 buổi/tuần** và bắt buộc phải có tối thiểu **1 ngày nghỉ hoàn toàn** trong tuần để đảm bảo cơ bắp phục hồi. |
-| **BR-AC-02** | Tiến độ | Tốc độ tăng tiến khối lượng tập luyện (Progressive Overload) do AI đề xuất không được vượt quá **10% tổng volume** của tuần trước đó nhằm tránh quá tải. |
-| **BR-CC-01** | AI Camera | Một rep chỉ được tính là hợp lệ (Valid Rep) để đếm số khi và chỉ khi biên độ chuyển động của khớp (ROM) đạt tối thiểu **$\ge 70\%$** so với biên độ tiêu chuẩn. |
-| **BR-CC-02** | Chống gian lận | Nếu tỷ lệ số khung hình video phát hiện khung xương hợp lệ < 50% trong buổi tập dưới camera, hệ thống sẽ đánh dấu buổi tập là "Không đạt chuẩn xác thực" và không ghi nhận kết quả buổi tập tự động. |
-| **BR-NU-01** | Dinh dưỡng | AI Nutrition tuyệt đối không gợi ý chế độ ăn uống có tổng năng lượng dưới **1,200 kcal/ngày** cho bất kỳ đối tượng nào nhằm đảm bảo an toàn sinh học cơ bản. |
-| **BR-NU-02** | Dinh dưỡng | Nguồn protein chính đã sử dụng trong bữa ăn được lưu trong Meal History sẽ bị khóa và **không xuất hiện lại trong thực đơn gợi ý trong vòng 7 ngày tiếp theo**. |
+| **BR-UM-01** | Hồ sơ | Hồ sơ sức khỏe phải hoàn thiện **$\ge 80\%$** trước khi kích hoạt AI Coach và sinh lộ trình tập đầu tiên. |
+| **BR-AC-01** | Tập luyện | Lịch tập tối đa **6 buổi/tuần**; bắt buộc có ít nhất **1 ngày nghỉ hoàn toàn** trong tuần để phục hồi cơ bắp. |
+| **BR-AC-02** | Tiến độ | Tăng tiến Progressive Overload do AI đề xuất không vượt quá **10% tổng volume** của tuần trước đó. |
+| **BR-CC-01** | AI Camera | Rep hợp lệ để đếm số khi biên độ chuyển động (ROM) khớp đạt ít nhất **$\ge 70\%$** so với biên độ tiêu chuẩn. |
+| **BR-CC-02** | Chống gian lận | Tỷ lệ frame nhận diện khớp hợp lệ < 50% trong buổi tập dưới camera → Đánh dấu "Không đạt chuẩn xác thực" (Chỉ áp dụng khi sử dụng AI Camera, trừ bài nằm sàn/phòng tối được chuyển sang ghi nhận thủ công). |
+| **BR-NU-01** | Dinh dưỡng | AI Nutrition tuyệt đối không gợi ý thực đơn tổng năng lượng dưới **1,200 kcal/ngày** cho bất kỳ đối tượng nào. |
+| **BR-NU-02** | Dinh dưỡng | Nguồn protein chính đã ăn trong Meal History sẽ bị khóa không gợi ý lại trong vòng **7 ngày tiếp theo**. |
+| **BR-AC-03** | Tập luyện | Giáo án các buổi bỏ tập đánh dấu là "Bỏ qua", **không tự động dồn/bù** vào ngày tiếp theo nếu chưa có xác nhận từ người dùng. |
+| **BR-AC-04** | Lộ trình | **Quy tắc điều chỉnh CR cuối chu kỳ (Trigger A)**:<br>- **CR < 40%**: Hỏi lý do bỏ tập, chờ phản hồi mới đề xuất giảm số buổi/tuần và rút ngắn thời lượng giáo án.<br>- **40% <= CR < 70%**: Giữ nguyên số buổi, giảm tải lượng 10-15%, chèn xen kẽ buổi Express 30 phút. Tự động sinh lộ trình mới.<br>- **70% <= CR < 90%**: Giữ nguyên cấu trúc, tăng Progressive Overload <= 10% theo BR-AC-02. Tự sinh lộ trình.<br>- **CR >= 90%**: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". |
+| **BR-AC-05** | Lộ trình | **Signal B1 (Không hoạt động 7 ngày liên tiếp)**: AI Coach gửi tin nhắn check-in theo phong cách đã chọn, đề xuất 3 phương án: (a) tập tiếp từ buổi bỏ gần nhất, (b) đặt lại lịch tuần này, (c) tạm dừng lộ trình (Pause tối đa 4 tuần). Không tự chỉnh lịch nếu user chưa phản hồi. |
+| **BR-AC-06** | Lịch tập | **Signal B2 (Lịch không tương thích)**: User bỏ tập cùng 1 ngày trong tuần $\ge 3$ lần liên tiếp → AI đề xuất dời slot ngày đó sang ngày khác. Nếu đồng ý thì cập nhật lịch tuần, nếu từ chối thì giữ nguyên và không hỏi lại. |
+| **BR-AC-07** | Tập luyện | **Signal B3 (Tập quá tải - Overtraining)**: Kích hoạt khi user tập $\ge 2$ buổi/ngày hoặc RPE trung bình $\ge 8.5$ liên tục $\ge 5$ buổi → Cảnh báo quá tải, bắt buộc chèn 1 ngày nghỉ trong lịch kế tiếp, gợi ý Active Recovery. |
+| **BR-AC-08** | Lộ trình | **Signal B4 (Tiến bộ đình trệ - Plateau)**: Sức mạnh (1RM) và Form trung bình không tăng trong 3 tuần liên tiếp (chỉ tính tuần có CR $\ge 70\%$) → AI Coach gợi ý chọn: (a) Deload Week (giảm 40% tải lượng 1 tuần), (b) Đổi biến thể bài tập tương đương, (c) Tăng set giữ tạ. |
+| **BR-WL-01** | Buổi tập | **Giới hạn thời gian**: Cảnh báo kết thúc sau 90 phút (người mới) hoặc 180 phút (người cũ). Đạt 240 phút không tương tác → Tự động đóng buổi tập, lưu nhãn `Anomalous Session`, loại dữ liệu khỏi tính Overload, buổi sau bắt buộc Recovery. |
+| **BR-WL-02** | Buổi tập | **Phát hiện tải lượng luyện tập (Training Load) bất thường**: Tải lượng buổi tập > 250% trung bình 5 buổi gần nhất có cùng nhóm cơ/mục tiêu → Yêu cầu xác nhận trước khi lưu; bắt buộc chèn $\ge 1$ ngày nghỉ hoàn toàn cho nhóm cơ đó. |
+| **BR-WL-03** | Buổi tập | **Ghi nhận bài tập phi AI**: Đảm bảo tính liên tục của dữ liệu hiệu suất tổng thể. Các bài tập phi AI không ghi nhận điểm Form Score (báo N/A/Trống), chỉ ghi nhận số set, rep/thời gian thực tế và mức tạ (do người dùng tự nhập) để làm cơ sở tính Tải lượng tập luyện (Training Load) và Overload. |
+| **BR-NU-03** | Dinh dưỡng | **Tư vấn Dinh dưỡng**: AI Coach hỗ trợ tư vấn chi tiết định lượng cho đồ ăn tự chuẩn bị hoặc quán ngoài tiệm, nhưng luôn kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có. |
 
 ---
 
-## 6. YÊU CẦU DỮ LIỆU NGHIỆP VỤ (DATA REQUIREMENTS)
-
-Mô tả các luồng thông tin nghiệp vụ vào/ra (Inputs/Outputs) cốt lõi cần quản lý:
-
-### 6.1 Dữ liệu Đầu vào chính (Inputs)
-- **User Health Profile**: Họ tên, ngày sinh, chiều cao, cân nặng, tỷ lệ mỡ, danh sách vùng chấn thương, phân loại bệnh lý mãn tính, mục tiêu, trình độ, khung giờ tập cố định.
-- **Real-time Video Stream**: Luồng dữ liệu video camera độ phân giải tối thiểu 720p, tốc độ 30fps.
-- **RPE (Rate of Perceived Exertion)**: Đánh giá độ gắng sức chủ quan của người tập sau mỗi set (thang điểm từ 1-10).
-- **Meal Logs**: Tên thực phẩm, khối lượng (gram) hoặc số khẩu phần ăn thực tế.
-
-### 6.2 Dữ liệu Đầu ra chính (Outputs)
-- **4-Week Workout Plan**: Giáo án gồm ngày tập, bài tập, set, reps tiêu chuẩn, cân nặng gợi ý, video hướng dẫn kỹ thuật.
-- **Daily Meal Plan**: Thực đơn 3 bữa chính + 1 bữa phụ cá nhân hóa gồm 3 lựa chọn (tiết kiệm, phổ thông, thoải mái) kèm chi tiết macronutrients (Carbs, Protein, Fat, Calories).
-- **Posture Correction Alert**: Nhãn cảnh báo lỗi (Visual Overlay) trên màn hình và tệp âm thanh hướng dẫn sửa tư thế.
-- **Post-session Report**: Bảng thống kê tổng thể buổi tập bao gồm: tổng thời gian, tổng volume nâng (kg), điểm Form trung bình, lượng calo tiêu thụ ước tính, lỗi tư thế phổ biến và lời khuyên phục hồi từ AI.
+## 6. YÊU CẦU DỮ LIỆU NGHIỆP VỤ (DATA)
+- **Đầu vào (Inputs)**:
+  * Profile: Chỉ số cơ thể, mục tiêu, chấn thương/bệnh lý, `experience_level`, khung giờ cố định. (`equipment_list` & `food_restrictions` thu thập dần qua chatbot).
+  * Video: Luồng video $\ge 720\text{p}$, $30\text{fps}$.
+  * RPE: Đánh giá gắng sức (1-10) sau set/buổi.
+  * Nhật ký ăn uống (Meal Logs).
+- **Đầu ra (Outputs)**:
+  * Lộ trình 4 tuần & Lịch tập tuần (phân bổ cơ).
+  * Giáo án buổi: Bài tập, set, rep, tạ gợi ý, video demo.
+  * Thực đơn ngày: 3 bữa chính + 1 bữa phụ (3 mức giá, chi tiết macro/calo).
+  * Cảnh báo sửa tư thế (Visual Overlay + Audio Alert).
+  * Báo cáo buổi tập: Tổng time, volume, calo, Form trung bình, lỗi phổ biến, lời khuyên phục hồi.
 
 ---
 
-## 7. GIẢ DỊNH & RÀNG BUỘC (ASSUMPTIONS & CONSTRAINTS)
-
-- **Assumption-01 (Môi trường tập)**: Giả định người dùng tập luyện trong không gian đủ rộng (tối thiểu cách camera 1.5m - 2m) và có đủ ánh sáng để camera nhận diện chính xác khung xương.
-- **Assumption-02 (Thiết bị phần cứng)**: Thiết bị di động của người dùng hỗ trợ tối thiểu hệ điều hành iOS 14 hoặc Android 8.0 với camera trước/sau hoạt động bình thường.
-- **Constraint-01 (Y tế)**: AI Coach và AI Nutrition **không đưa ra lời khuyên hoặc chẩn đoán y khoa**. Mọi cảnh báo hoặc thực đơn chỉ mang tính chất hỗ trợ thể thao nâng cao sức khỏe thông thường.
-- **Constraint-02 (Bảo mật)**: Luồng video trực tiếp từ camera của người dùng phải được xử lý on-device (Edge AI) để bảo vệ quyền riêng tư cá nhân tuyệt đối; chỉ gửi các thông số keypoint được trích xuất (tọa độ khớp dạng số) về máy chủ để phân tích dữ liệu lớn.
+## 7. GIẢ ĐỊNH & RÀNG BUỘC (CONSTRAINTS)
+- **Assumption-01**: Khoảng cách tập cách camera 1.5m - 2m, đủ sáng.
+- **Assumption-02**: Thiết bị tối thiểu iOS 14 / Android 8.0, camera hoạt động bình thường.
+- **Assumption-03 (Thu thập thông tin dần)**: Thông tin không bắt buộc trong Onboarding được hỏi dần qua hội thoại ngữ cảnh. Hệ thống luôn có phương án dự phòng (bài không dụng cụ, thực đơn phổ thông) khi thiếu dữ liệu.
+- **Constraint-01 (Y tế)**: Không đưa ra lời khuyên hoặc chẩn đoán y khoa.
+- **Constraint-02 (Bảo mật)**: Xử lý video on-device (Edge AI); chỉ gửi tọa độ khớp dạng số về server.
 
 ---
-
-*Tài liệu Đặc tả Yêu cầu Nghiệp vụ Cốt lõi theo chuẩn BABOK v3.0 – Phê duyệt ngày 29/06/2026*
+*Tài liệu Đặc tả Yêu cầu Nghiệp vụ Cốt lõi theo chuẩn BABOK v3.0 – Cập nhật lần cuối ngày 02/07/2026*
