@@ -1,15 +1,16 @@
 # ĐẶC TẢ YÊU CẦU NGHIỆP VỤ CỐT LÕI (CORE BRD) - FITAI
-### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.6.0-OPT (Tối ưu Token)
+### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.7.0-OPT (Tối ưu Token)
 
 ---
 
 ## KIỂM SOÁT TÀI LIỆU
-- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 02/07/2026
+- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 03/07/2026
 - **Trạng thái**: Approved | **Phân loại**: Internal Confidential
 - **Lịch sử đổi mới chính**:
   * v1.0 (27/06/2026): Hoàn thiện 7 module nghiệp vụ gốc.
   * v1.3 (01/07/2026): Chuyển sang cơ chế sinh lộ trình tổng quan & sinh giáo án chi tiết theo buổi.
   * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
+  * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn), cơ chế điểm XP cơ bản/thưởng, và tư vấn món ăn ngoài.
 
 ---
 
@@ -42,11 +43,17 @@
 
 ### 3.2 Quy trình Luyện tập (Workout Execution)
 1. User check-in & cấu hình playlist âm nhạc.
-2. User bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng.
-3. AI Camera tracking khung xương, ước lượng tạ thực tế, đếm rep, tính % hoàn thiện chuyển động (ROM %).
-4. Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms).
-5. Nếu đúng tư thế: Cộng rep, tính Form Score.
-6. User xác nhận kết quả Set (AI điền tự động) → Nghỉ ngơi → Lặp lại → Nhận Post-session Report sau khi kết thúc.
+2. Đối với bài tập có hỗ trợ AI Camera (Nhánh AI):
+   - User bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng.
+   - AI Camera tracking khung xương, ước lượng tạ thực tế, đếm rep, tính % hoàn thiện chuyển động (ROM %).
+   - Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms).
+   - Nếu đúng tư thế: Cộng rep, tính Form Score.
+   - User xác nhận kết quả Set (AI điền tự động).
+3. Đối với bài tập phi AI (Nhánh tự ghi nhận):
+   - Giao diện hiển thị trình bấm giờ (timer) đếm ngược theo set hoặc thời gian nghỉ, kết hợp phát nhạc nền.
+   - Hiển thị video/hướng dẫn bài tập để người dùng tập theo.
+   - User tự thực hiện và xác nhận kết quả set thủ công.
+4. Nghỉ ngơi → Lặp lại cho đến khi hết giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
 
 ### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
 1. Trigger: Đến ngày tập / User mở app.
@@ -94,7 +101,7 @@
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
 | **FR-WL-01** | **Ghi chép tự động**: Điền rep, % hoàn thiện và ước lượng tạ thực tế (qua kích thước đĩa tạ & tốc độ nâng). | M |
-| **FR-WL-02** | **Ghi chép thủ công**: Cho phép người dùng sửa lại số rep, tạ thực tế trước khi lưu set. | M |
+| **FR-WL-02** | **Ghi chép thủ công**: Cho phép sửa kết quả set. Hỗ trợ luồng tập phi AI tích hợp trình bấm giờ (timer), âm nhạc và hướng dẫn trực quan. | M |
 | **FR-WL-03** | **Tương tác âm thanh**: Audio Ducking tự giảm nhạc nền khi AI phát giọng nói cảnh báo tư thế. | S |
 | **FR-WL-04** | **Ghi nhận PR**: Tính 1RM ước tính (Epley Formula) sau buổi và vinh danh ăn mừng nếu đạt PR mới. | S |
 
@@ -102,7 +109,7 @@
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
 | **FR-NU-01** | **Tính kcal cá nhân**: Tính TDEE/macro hàng ngày theo công thức Mifflin-St Jeor & mức vận động thực tế. | M |
-| **FR-NU-02** | **Đa lựa chọn**: Mỗi bữa ăn gợi ý 3 phương án đạt chuẩn chia theo mức giá: Tiết kiệm, Phổ thông, Thoải mái. | S |
+| **FR-NU-02** | **Đa lựa chọn**: Gợi ý bữa ăn linh hoạt (tự chuẩn bị, ăn ngoài) chia theo 3 mức giá; ưu tiên đề xuất sản phẩm/gói ăn sẵn có hoặc đối tác. | S |
 | **FR-NU-03** | **Anti-Repetition**: Không lặp lại nguồn protein chính trong 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày. | M |
 | **FR-NU-04** | **Nhật ký ăn uống**: Log bữa ăn thực tế bằng cách tìm kiếm món ăn hoặc quét mã vạch sản phẩm. | S |
 
@@ -130,7 +137,7 @@
 | **BR-AC-01** | Tập luyện | Lịch tập tối đa **6 buổi/tuần**; bắt buộc có ít nhất **1 ngày nghỉ hoàn toàn** trong tuần để phục hồi cơ bắp. |
 | **BR-AC-02** | Tiến độ | Tăng tiến Progressive Overload do AI đề xuất không vượt quá **10% tổng volume** của tuần trước đó. |
 | **BR-CC-01** | AI Camera | Rep hợp lệ để đếm số khi biên độ chuyển động (ROM) khớp đạt ít nhất **$\ge 70\%$** so với biên độ tiêu chuẩn. |
-| **BR-CC-02** | Chống gian lận | Tỷ lệ frame nhận diện khớp hợp lệ < 50% trong buổi tập dưới camera → Đánh dấu "Không đạt chuẩn xác thực" (Trừ bài nằm sàn/phòng tối được chuyển sang ghi nhận thủ công). |
+| **BR-CC-02** | Chống gian lận | Tỷ lệ frame nhận diện khớp hợp lệ < 50% trong buổi tập dưới camera → Đánh dấu "Không đạt chuẩn xác thực" (Chỉ áp dụng khi sử dụng AI Camera, trừ bài nằm sàn/phòng tối được chuyển sang ghi nhận thủ công). |
 | **BR-NU-01** | Dinh dưỡng | AI Nutrition tuyệt đối không gợi ý thực đơn tổng năng lượng dưới **1,200 kcal/ngày** cho bất kỳ đối tượng nào. |
 | **BR-NU-02** | Dinh dưỡng | Nguồn protein chính đã ăn trong Meal History sẽ bị khóa không gợi ý lại trong vòng **7 ngày tiếp theo**. |
 | **BR-AC-03** | Tập luyện | Giáo án các buổi bỏ tập đánh dấu là "Bỏ qua", **không tự động dồn/bù** vào ngày tiếp theo nếu chưa có xác nhận từ người dùng. |
@@ -141,6 +148,8 @@
 | **BR-AC-08** | Lộ trình | **Signal B4 (Tiến bộ đình trệ - Plateau)**: Sức mạnh (1RM) và Form trung bình không tăng trong 3 tuần liên tiếp (chỉ tính tuần có CR $\ge 70\%$) → AI Coach gợi ý chọn: (a) Deload Week (giảm 40% tải lượng 1 tuần), (b) Đổi biến thể bài tập tương đương, (c) Tăng set giữ tạ. |
 | **BR-WL-01** | Buổi tập | **Giới hạn thời gian**: Cảnh báo kết thúc sau 90 phút (người mới) hoặc 180 phút (người cũ). Đạt 240 phút không tương tác → Tự động đóng buổi tập, lưu nhãn `Anomalous Session`, loại dữ liệu khỏi tính Overload, buổi sau bắt buộc Recovery. |
 | **BR-WL-02** | Buổi tập | **Phát hiện tải lượng luyện tập (Training Load) bất thường**: Tải lượng buổi tập > 250% trung bình 5 buổi gần nhất có cùng nhóm cơ/mục tiêu → Yêu cầu xác nhận trước khi lưu; bắt buộc chèn $\ge 1$ ngày nghỉ hoàn toàn cho nhóm cơ đó. |
+| **BR-WL-03** | Buổi tập | **Ghi nhận bài tập phi AI**: Đảm bảo tính liên tục của dữ liệu hiệu suất tổng thể. Các bài tập phi AI không ghi nhận điểm Form Score (báo N/A/Trống), chỉ ghi nhận số set, rep/thời gian thực tế và mức tạ (do người dùng tự nhập) để làm cơ sở tính Tải lượng tập luyện (Training Load) và Overload. |
+| **BR-NU-03** | Dinh dưỡng | **Tư vấn Dinh dưỡng**: AI Coach hỗ trợ tư vấn chi tiết định lượng cho đồ ăn tự chuẩn bị hoặc quán ngoài tiệm, nhưng luôn kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có. |
 
 ---
 
