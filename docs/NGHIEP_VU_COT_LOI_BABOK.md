@@ -43,17 +43,17 @@
 
 ### 3.2 Quy trình Luyện tập (Workout Execution)
 1. User check-in & cấu hình playlist âm nhạc.
-2. Nếu bài tập có hỗ trợ AI Camera:
+2. Đối với bài tập có hỗ trợ AI Camera (Nhánh AI):
    - User bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng.
    - AI Camera tracking khung xương, ước lượng tạ thực tế, đếm rep, tính % hoàn thiện chuyển động (ROM %).
    - Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms).
    - Nếu đúng tư thế: Cộng rep, tính Form Score.
    - User xác nhận kết quả Set (AI điền tự động).
-3. Nếu bài tập phi AI (không có AI Camera hỗ trợ):
+3. Đối với bài tập phi AI (Nhánh tự ghi nhận):
    - Giao diện hiển thị trình bấm giờ (timer) đếm ngược theo set hoặc thời gian nghỉ, kết hợp phát nhạc nền.
    - Hiển thị video/hướng dẫn bài tập để người dùng tập theo.
    - User tự thực hiện và xác nhận kết quả set thủ công.
-4. Nghỉ ngơi → Lặp lại → Nhận Post-session Report sau khi kết thúc.
+4. Nghỉ ngơi → Lặp lại cho đến khi hết giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
 
 ### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
 1. Trigger: Đến ngày tập / User mở app.
@@ -148,7 +148,7 @@
 | **BR-AC-08** | Lộ trình | **Signal B4 (Tiến bộ đình trệ - Plateau)**: Sức mạnh (1RM) và Form trung bình không tăng trong 3 tuần liên tiếp (chỉ tính tuần có CR $\ge 70\%$) → AI Coach gợi ý chọn: (a) Deload Week (giảm 40% tải lượng 1 tuần), (b) Đổi biến thể bài tập tương đương, (c) Tăng set giữ tạ. |
 | **BR-WL-01** | Buổi tập | **Giới hạn thời gian**: Cảnh báo kết thúc sau 90 phút (người mới) hoặc 180 phút (người cũ). Đạt 240 phút không tương tác → Tự động đóng buổi tập, lưu nhãn `Anomalous Session`, loại dữ liệu khỏi tính Overload, buổi sau bắt buộc Recovery. |
 | **BR-WL-02** | Buổi tập | **Phát hiện tải lượng luyện tập (Training Load) bất thường**: Tải lượng buổi tập > 250% trung bình 5 buổi gần nhất có cùng nhóm cơ/mục tiêu → Yêu cầu xác nhận trước khi lưu; bắt buộc chèn $\ge 1$ ngày nghỉ hoàn toàn cho nhóm cơ đó. |
-| **BR-WL-03** | Buổi tập | **Hiệu suất phi AI**: Bài tập phi AI không ghi nhận điểm Form Score (báo N/A), chỉ ghi nhận số set, rep/thời gian thực hiện và mức tạ do người dùng tự khai báo để tính Training Volume. |
+| **BR-WL-03** | Buổi tập | **Ghi nhận bài tập phi AI**: Đảm bảo tính liên tục của dữ liệu hiệu suất tổng thể. Các bài tập phi AI không ghi nhận điểm Form Score (báo N/A/Trống), chỉ ghi nhận số set, rep/thời gian thực tế và mức tạ (do người dùng tự nhập) để làm cơ sở tính Tải lượng tập luyện (Training Load) và Overload. |
 | **BR-NU-03** | Dinh dưỡng | **Tư vấn Dinh dưỡng**: AI Coach hỗ trợ tư vấn chi tiết định lượng cho đồ ăn tự chuẩn bị hoặc quán ngoài tiệm, nhưng luôn kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có. |
 
 ---
