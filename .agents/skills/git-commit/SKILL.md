@@ -34,7 +34,6 @@ Every commit message must begin with a Gitmoji followed by a space, then the con
 
   The database was experiencing deadlocks when concurrent transactions tried to update the user balance. Wrapping the update query in a row lock resolves this issue.
 
-  Closes #42
   ```
 - Reference commit (no conventional emoji matched, or emoji not used):
   `docs(readme): update installation steps`
