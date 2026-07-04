@@ -1,12 +1,12 @@
 # FITAI — Kiến trúc Hệ thống
 
-> Nguồn: [Đặc tả Nghiệp vụ Cốt lõi BABOK](./NGHIEP_VU_COT_LOI_BABOK.md)
+> Nguồn: [Đặc tả Yêu cầu Nghiệp vụ Cốt lõi BABOK](./NGHIEP_VU_COT_LOI_BABOK.md)
 
 ---
 
 ## 1. Tổng quan
 
-Hệ thống FITAI là nền tảng hỗ trợ tập luyện và dinh dưỡng cá nhân hóa bằng AI & Computer Vision. Kiến trúc theo mô hình **Client → Gateway → Backend Services → Storage / External**, kết hợp xử lý AI trên thiết bị (Edge AI) để đảm bảo tốc độ phản hồi tư thế thời gian thực.
+Hệ thống FITAI là nền tảng hỗ trợ tập luyện và dinh dưỡng cá nhân hóa bằng AI & Computer Vision. Kiến trúc theo mô hình **Client → Gateway → Backend Services → Infrastructure**, kết hợp xử lý AI trên thiết bị (Edge AI) để đảm bảo tốc độ phản hồi tư thế thời gian thực.
 
 ---
 
@@ -17,7 +17,7 @@ graph TB
     subgraph "Layer 1 · Clients"
         Mobile["Mobile App"]
         Web["Web Client"]
-        Edge["AI Edge Camera"]
+        Edge["AI Edge Camera<br/>(Edge AI Running on Device)"]
     end
 
     subgraph "Layer 2 · Gateway"
@@ -25,17 +25,14 @@ graph TB
     end
 
     subgraph "Layer 3 · Backend Services"
-        Core["Core Services"]
-        Support["Supporting Services"]
+        Core["Core Services<br/>(Coaching · Workout & Motion · Nutrition)"]
+        Support["Supporting Services<br/>(User Profile · Catalog)"]
         GenAI["Generative AI Service"]
     end
 
-    subgraph "Lưu trữ"
-        DB["Databases · Storage"]
-    end
-
-    subgraph "Dịch vụ bên thứ 3"
-        Ext["OAuth · CDN · Push"]
+    subgraph "Layer 4 · Infrastructure"
+        DB["Databases · Storage<br/>(PostgreSQL · Redis)"]
+        Ext["External / Shared Services<br/>(OAuth · CDN · Blob Storage · Push Notification)"]
     end
 
     Mobile --> GW
@@ -48,14 +45,17 @@ graph TB
 
     Core --> DB
     Support --> DB
+    
     Core --> Ext
+    Support --> Ext
 ```
 
 ---
 
-## 3. Nguyên tắc
+## 3. Nguyên tắc vận hành
 
-- **AI Edge xử lý trên máy**: Video không rời thiết bị. Chỉ gửi kết quả số về server.
-- **Não hỏng, tay chân vẫn hoạt động**: Coach Service sập → User vẫn tự tập, ghi log bình thường.
-- **Mỗi Service = 1 Bounded Context**: Sửa Service này không ảnh hưởng Service khác.
-- **Phân luồng dữ liệu**: Data tóm tắt đi qua API. Data thô (toạ độ khớp) upload ngầm vào Blob Storage.
+- **AI Edge xử lý trên máy**: Video không rời thiết bị. Chỉ gửi kết quả số (MotionResult) về server.
+- **Não hỏng, tay chân vẫn hoạt động**: Coaching Service sập → User vẫn tự tập bằng timer và ghi log thủ công bình thường.
+- **Mỗi Service = 1 Bounded Context**: Thiết kế modular monolith giúp cô lập thay đổi, dễ dàng tách thành microservices độc lập.
+- **Phân luồng dữ liệu**: Data tóm tắt đi qua API chính. Data thô (toạ độ khớp thô) upload ngầm vào Blob Storage qua luồng chạy nền của Client, không nghẽn API.
+- **Thiết kế vì sự thay đổi (Change Propagation)**: Tách dữ liệu nghiệp vụ (Catalog) và cấu hình thuật toán AI (Workout & Motion) qua ID bài tập. Nâng cấp model AI không ảnh hưởng đến database nghiệp vụ.
