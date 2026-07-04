@@ -52,6 +52,7 @@
 **Alternative Flow**
 - A1: User mở app và hỏi trạng thái hôm nay qua chatbot — System hỏi 1–2 câu về thiết bị, dị ứng nếu chưa có trong `ChatbotContext`.
 - A2: Ngày hôm nay là ngày nghỉ theo lịch → không sinh giáo án, thông báo "Hôm nay nghỉ phục hồi".
+- A3: Buổi tập gần nhất là `AnomalousSession` (tự động đóng do quá thời gian không tương tác) → System bắt buộc sinh giáo án phục hồi nhẹ (active recovery), không tập nặng (BR-WL-01).
 
 **Error / Edge Cases**
 - E1: Không tìm thấy `WeeklySchedule` cho ngày hôm nay → báo lỗi, đề xuất tạo lịch mới.
@@ -62,3 +63,29 @@
 > *`CoachingService.GenerateDailyPlan()` gọi `DailyWorkoutPlanRepository.Save()` và `WorkoutPerformanceRepository.GetLatest1RM()`.*
 
 **Domain Events**: `DailyWorkoutPlanGenerated`
+
+---
+
+### UC-02.3 GenerateNextWeeklySchedule
+
+| | |
+|---|---|
+| **Actor** | System (AI Coach) |
+| **Precondition** | Lịch tuần hiện tại chuẩn bị kết thúc (hoặc kết thúc). `WorkoutRoadmap` đang ở trạng thái `Active`. |
+
+**Main Flow**
+1. System đọc lịch sử tập luyện thực tế của tuần vừa rồi (tổng volume thực tế).
+2. System sinh `WeeklySchedule` tiếp theo (tuần 2, 3, hoặc 4) của lộ trình hiện tại.
+3. System gọi `OverloadValidator` để kiểm tra Progressive Overload của lịch tuần mới không vượt quá 10% volume thực tế của tuần trước (BR-AC-02).
+4. System lưu `WeeklySchedule` mới và phát `WeeklyScheduleGenerated`.
+
+**Alternative Flow**
+- A1: `OverloadValidator` từ chối volume tuần mới (vượt 10%) → AI Coach tự động điều chỉnh tải trọng (giảm volume/cường độ tạ) xuống ngưỡng hợp lệ và kiểm tra lại.
+
+**Error / Edge Cases**
+- E1: Không tìm thấy volume tuần trước (dữ liệu bị lỗi hoặc tuần trước bị bỏ qua hoàn toàn) → Dùng volume mặc định theo thiết lập ban đầu của lộ trình.
+
+**Postcondition**: `WeeklySchedule` tuần tiếp theo được tạo sẵn sàng để sinh giáo án hàng ngày.
+> *`CoachingService.GenerateWeeklySchedule()` gọi `WeeklyScheduleRepository.Save()` và phát `WeeklyScheduleGenerated`.*
+
+**Domain Events**: `WeeklyScheduleGenerated`

@@ -15,9 +15,9 @@
 | **Precondition** | `UserProfileCompleted`. Chưa có `NutritionPlan` cho ngày hôm nay. |
 
 **Main Flow**
-1. System đọc `BiologicalMetrics` (cân nặng, mục tiêu, mức vận động từ `WorkoutSession` hôm nay).
+1. System đọc `BiologicalMetrics` (cân nặng, mục tiêu, mức vận động từ `WorkoutSession` hôm nay) từ `User`.
 2. System tính TDEE theo công thức Mifflin-St Jeor, tính `CalorieAllocation` (Protein/Carb/Fat).
-3. System kiểm tra `LockoutRegistry` của `MealHistory` để lọc nguyên liệu bị khóa.
+3. System đọc `ChatbotContext.food_restrictions` của `User` để lọc bỏ các thực phẩm gây dị ứng/ăn kiêng, đồng thời kiểm tra `LockoutRegistry` của `MealHistory` để lọc nguyên liệu bị khóa.
 4. System sinh `DailyMealOption` cho 3 bữa chính + 1 bữa phụ theo `BudgetTier` user đã chọn.
 5. System phát `NutritionPlanGenerated`.
 
@@ -29,9 +29,10 @@
 - E1: `CalorieAllocation.target` < 1200 kcal sau tính toán → buộc giữ nguyên 1200 kcal (BR-NU-01).
 - E2: Tất cả nguyên liệu protein bị `LockoutRegistry` khóa → System tự giải phóng nguyên liệu ít bị khóa nhất (unlock sớm nhất) để đảm bảo có thực đơn.
 - E3: `BiologicalMetrics` chưa cập nhật cân nặng > 7 ngày → dùng giá trị cuối cùng và hiển thị cảnh báo.
+- E4: Tất cả các nguồn đạm (protein) đều bị loại bỏ do kết hợp giữa dị ứng (`food_restrictions`) và danh sách khóa (`LockoutRegistry`) → System giữ nguyên việc lọc dị ứng bắt buộc, tự động giải phóng sớm các nguyên liệu bị khóa trong `LockoutRegistry` để đảm bảo sinh được thực đơn.
 
 **Postcondition**: `NutritionPlan` với `DailyMealOption` đầy đủ sẵn sàng hiển thị.  
-> *`NutritionService.GenerateDailyPlan()` gọi `NutritionPlanRepository.Save()` và `MealHistoryRepository.GetLockouts()`.*
+> *`NutritionService.GenerateDailyPlan()` gọi `NutritionPlanRepository.Save()`, `UserRepository.GetChatbotContext()`, và `MealHistoryRepository.GetLockouts()`.*
 
 **Domain Events**: `NutritionPlanGenerated`
 

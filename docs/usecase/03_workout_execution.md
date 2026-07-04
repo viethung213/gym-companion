@@ -100,6 +100,7 @@
 **Alternative Flow**
 - A1: Buổi tập vượt 240 phút không tương tác → System tự đóng, ghi nhãn `AnomalousSession`, loại khỏi tính Overload.
 - A2: Buổi tập vượt 90 phút (người mới) hoặc 180 phút (người cũ) → cảnh báo, user có thể tiếp tục hoặc kết thúc.
+- A3: User cập nhật cân nặng hiện tại của mình lúc kết thúc buổi tập → System ghi nhận chỉ số cơ thể mới, phát event `BodyMetricUpdated`.
 
 **Error / Edge Cases**
 - E1: Không có `WorkoutSetLog` nào → không lưu, hỏi user có muốn huỷ buổi tập không.
@@ -108,7 +109,7 @@
 **Postcondition**: `WorkoutSession` = `Completed`. `SessionSummary` sẵn sàng để `Coaching Context` xử lý adaptive.  
 > *`WorkoutService.CompleteSession()` gọi `TrainingLoadGuard`, `WorkoutSessionRepository.Save()`, publish `WorkoutSessionCompleted`.*
 
-**Domain Events**: `WorkoutSessionCompleted` | `WorkoutSessionAborted`
+**Domain Events**: `WorkoutSessionCompleted` | `WorkoutSessionAborted` | `BodyMetricUpdated`
 
 ---
 
