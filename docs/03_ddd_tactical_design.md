@@ -4,184 +4,184 @@
 
 ---
 
-## 1. Đặc Tả Chi Tiết Từng Aggregate
-
-### 1.1 Ngữ cảnh User Profile & Health
+## 1. Context User Profile & Health
 
 #### Aggregate Root: `User`
-- **Nhiệm vụ**: Quản lý định danh người dùng và kiểm soát hồ sơ sức khỏe.
+- **Nhiệm vụ**: Quản lý định danh, hồ sơ sức khỏe và cấu hình tập luyện.
 - **Entities**:
-  - `Injury`: Vùng cơ bị thương (ví dụ: `Shoulder`, `Knee`), ngày báo chấn thương, trạng thái (`Active`, `Healed`). (Theo dõi vòng đời chấn thương).
+  - `Injury`: Vùng cơ bị thương, ngày báo, trạng thái (`Active` | `Recovered`).
 - **Value Objects**:
-  - `BiologicalMetrics`: Tuổi, giới tính, chiều cao, cân nặng hiện tại, tỷ lệ mỡ hiện tại. (Bất biến, thay thế toàn bộ đối tượng).
-  - `TrainingScheduleSlot`: Khung giờ tập cố định [FR-UM-03].
-  - `ChatbotContext`: Thiết bị có sẵn, dị ứng thức ăn [Assumption-03].
-- **Repository**: `UserRepository` (CRUD thông tin User và Injury).
+  - `BiologicalMetrics`: Tuổi, giới tính, chiều cao, cân nặng hiện tại, tỷ lệ mỡ.
+  - `TrainingScheduleSlot`: Khung giờ tập cố định.
+  - `ChatbotContext`: Thiết bị có sẵn, dị ứng thức ăn.
+  - `CoachPersonality`: Phong cách Coach (`DrillSergeant` | `BestFriend` | `DataAnalyst`).
+- **Repository**: `UserRepository`
 - **Domain Events**:
   - `UserProfileCompleted`: Kích hoạt tạo lộ trình khi hồ sơ đạt ≥ 80%.
-  - `InjuryReported`: Kích hoạt đổi giáo án khi có chấn thương mới.
-- **Invariants (Quy tắc bất biến tại ranh giới)**:
-  - Trạng thái `User` chỉ có thể chuyển sang `ActiveCoachEnabled = true` khi hồ sơ đạt ≥ 80% độ hoàn thiện.
-- **Chia sẻ (Ubiquitous Language)**:
-  - `BiologicalMetrics` (Shared VO) ──► Tiêu thụ bởi `Nutrition`, `Coaching`.
-  - `Injury` (Shared Entity) ──► Tiêu thụ bởi `Coaching`.
+  - `InjuryReported`: Kích hoạt đổi giáo án.
+  - `InjuryRecovered`: Cho phép phục hồi bài tập đã loại bỏ.
+- **Invariants**:
+  - `ActiveCoachEnabled = true` chỉ khi hồ sơ đạt ≥ 80% độ hoàn thiện.
 
 #### Aggregate Root: `BodyMetricsHistory`
-- **Nhiệm vụ**: Theo dõi tiến trình thay đổi hình thể theo thời gian.
-- **Entities**: Không có.
-- **Value Objects**:
-  - `MetricsLogEntry`: Ghi nhận cân nặng, tỷ lệ mỡ (body fat %), số đo các vòng, ảnh tiến trình tại một thời điểm (ngày ghi nhận). (Snapshot dữ liệu bất biến).
-- **Repository**: `BodyMetricsHistoryRepository` (Thêm mới MetricsLogEntry, truy vấn lịch sử).
+- **Nhiệm vụ**: Lưu lịch sử thay đổi hình thể theo thời gian.
+- **Entities**:
+  - `MetricsLogEntry`: Cân nặng, tỷ lệ mỡ, số đo các vòng, ảnh tiến trình, ngày ghi nhận.
+- **Repository**: `BodyMetricsHistoryRepository`
 - **Domain Events**:
-  - `UserMetricsUpdated`: Phát đi khi có `MetricsLogEntry` mới được thêm vào.
-- **Invariants (Quy tắc bất biến tại ranh giới)**:
-  - Thêm bản ghi `MetricsLogEntry` mới sẽ tự động trigger Event `UserMetricsUpdated` mang giá trị mới nhất để đồng bộ.
-- **Chia sẻ (Ubiquitous Language)**:
-  - `MetricsLogEntry` (Shared VO) ──► Event `UserMetricsUpdated` ──► Đồng bộ `BiologicalMetrics` (`User`), điều chỉnh calo (`Nutrition`), điều chỉnh lộ trình (`Coaching`).
+  - `UserMetricsUpdated`: Phát đi kèm giá trị mới nhất khi có `MetricsLogEntry` được thêm.
+- **Invariants**:
+  - `MetricsLogEntry.weight > 0`.
+  - `MetricsLogEntry.recordedAt <= today`.
 
 ---
 
-### 1.2 Ngữ cảnh AI Coaching & Planning
+## 2. Context AI Coaching & Planning
 
 #### Aggregate Root: `WorkoutRoadmap`
-- **Nhiệm vụ**: Kiểm soát lộ trình tập luyện 4 tuần và lịch tuần.
-- **Entities**:
-  - `WeeklySchedule`: Lịch các ngày tập/nghỉ trong tuần.
+- **Nhiệm vụ**: Kiểm soát lộ trình tập luyện 4 tuần và trạng thái chu kỳ.
 - **Value Objects**:
-  - `MuscleSplit`: Nhóm cơ chính được phân bổ cho ngày tập cụ thể.
-  - `WorkoutPlanIds`: Danh sách ID của các `DailyWorkoutPlan` con trong tuần (ID-based reference để tránh lock dữ liệu khi tập).
-- **Repository**: `WorkoutRoadmapRepository` (Lưu lộ trình và lịch tuần).
-- **Invariants (Quy tắc bất biến tại ranh giới)**:
-  - Một `WeeklySchedule` bắt buộc chứa tối thiểu 1 ngày nghỉ hoàn toàn và tối đa 6 ngày tập (BR-AC-01).
-  - Giáo án các buổi bỏ tập đánh dấu là "Bỏ qua", không tự động dồn/bù nếu chưa có xác nhận (BR-AC-03).
-- **Chia sẻ (Ubiquitous Language)**:
-  - `WorkoutRoadmap` (Shared Aggregate) ──► Tiêu thụ bởi `Workout Session` (quét lộ trình).
+  - `RoadmapPhase`: Giai đoạn hiện tại và Progressive Overload target.
+  - `CompletionRate`: Tỷ lệ hoàn thành tính cuối chu kỳ (CR).
+- **Repository**: `WorkoutRoadmapRepository`
+- **Domain Events**:
+  - `RoadmapInitiated`: Khởi tạo lộ trình đầu tiên.
+  - `RoadmapAdjusted`: Điều chỉnh lộ trình (Trigger A).
+  - `RoadmapPaused`: Tạm dừng lộ trình (Signal B1, tối đa 4 tuần).
+  - `RoadmapResumed`: Tiếp tục lộ trình sau khi tạm dừng.
+- **Invariants**:
+  - Lifecycle: `Active` → `Paused` → `Resumed` → `Completed`.
+  - `RoadmapPaused` tối đa 4 tuần, sau đó tự chuyển về `Active` hoặc hỏi lại user.
+
+#### Aggregate Root: `WeeklySchedule`
+- **Nhiệm vụ**: Lịch tập/nghỉ của một tuần cụ thể, tham chiếu `WorkoutRoadmapId` bằng ID.
+- **Value Objects**:
+  - `MuscleSplit`: Nhóm cơ phân bổ cho từng ngày tập.
+  - `DailyPlanIds`: Danh sách ID tham chiếu tới các `DailyWorkoutPlan`.
+- **Repository**: `WeeklyScheduleRepository`
+- **Domain Events**:
+  - `WeeklyScheduleGenerated`: Tạo lịch tuần mới.
+  - `ScheduleDayRescheduled`: Dời ngày tập (Signal B2).
+- **Invariants**:
+  - Tối thiểu 1 ngày nghỉ hoàn toàn, tối đa 6 ngày tập trong tuần (BR-AC-01).
+  - Buổi bỏ tập đánh dấu "Bỏ qua", không tự dồn bù chưa có xác nhận (BR-AC-03).
 
 #### Aggregate Root: `DailyWorkoutPlan`
-- **Nhiệm vụ**: Giáo án chi tiết một ngày tập, được sinh JIT dưới dạng Specification riêng biệt tại thời điểm tập để tránh lock `WeeklySchedule`.
-- **Entities**: Không có.
+- **Nhiệm vụ**: Giáo án chi tiết một buổi tập, sinh JIT để tránh lock `WeeklySchedule`.
 - **Value Objects**:
-  - `WorkoutPrescription`: Bài tập, set, rep, mức tạ gợi ý cho từng bài, bao gồm warm-up/cool-down.
-- **Repository**: `DailyWorkoutPlanRepository` (Lưu giáo án JIT chi tiết của từng ngày).
+  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, warm-up/cool-down.
+- **Repository**: `DailyWorkoutPlanRepository`
 - **Domain Events**:
-  - `DailyWorkoutPlanGenerated`: Giáo án chi tiết ngày đã được sinh (JIT).
-- **Chia sẻ (Ubiquitous Language)**:
-  - `WorkoutPrescription` (Shared VO) ──► Tiêu thụ bởi `Workout Session` (thực thi buổi tập).
+  - `DailyWorkoutPlanGenerated`: Giáo án đã được sinh.
 
-#### Aggregate Root: `CoachConfig`
-- **Nhiệm vụ**: Quản lý tương tác và phong cách huấn luyện viên ảo.
-- **Entities**: Không có.
-- **Value Objects**:
-  - `CoachPersonality`: Phong cách (`DrillSergeant`, `BestFriend`, `DataAnalyst`).
-- **Repository**: `CoachConfigRepository` (Lưu cấu hình Coach của user).
-- **Chia sẻ (Ubiquitous Language)**:
-  - `CoachPersonality` (Shared VO) ──► Tiêu thụ bởi `Notification` (Hạ tầng gửi tin).
+#### [Domain Service] `AdaptiveCoachEngine`
+- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4) và đánh giá CR cuối chu kỳ (BR-AC-04).
+- **Input**: `WorkoutRoadmap`, `WeeklySchedule`, lịch sử `WorkoutSession`.
+- **Signal B1** (BR-AC-05): Không hoạt động 7 ngày → Đề xuất 3 phương án (tiếp tục / đặt lại / tạm dừng).
+- **Signal B2** (BR-AC-06): Bỏ tập cùng ngày ≥ 3 lần liên tiếp → Đề xuất dời slot.
+- **Signal B3** (BR-AC-07): ≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi → Cảnh báo, chèn nghỉ bắt buộc.
+- **Signal B4** (BR-AC-08): 1RM + Form không tăng 3 tuần liên tiếp (CR ≥ 70%) → Đề xuất Deload / đổi bài / tăng set.
 
-#### [Domain Service] OverloadValidator
-- **Nhiệm vụ**: Kiểm tra volume của `WeeklySchedule` tiếp theo do AI sinh JIT không được vượt quá 10% volume của tuần trước đó (BR-AC-02).
+#### [Domain Service] `OverloadValidator`
+- **Nhiệm vụ**: Kiểm tra volume `WeeklySchedule` mới không vượt 10% volume thực tế tuần trước (BR-AC-02).
 
 ---
 
-### 1.3 Ngữ cảnh Workout Execution
+## 3. Context Workout Execution & Motion
 
 #### Aggregate Root: `WorkoutSession`
-- **Nhiệm vụ**: Kiểm soát một buổi tập đang diễn ra thực tế (cả AI Camera và Phi AI) và áp dụng các quy tắc an toàn/chống gian lận.
+- **Nhiệm vụ**: Kiểm soát buổi tập thực tế, áp dụng quy tắc an toàn.
 - **Entities**:
-  - `WorkoutSetLog`: Kết quả thực nâng của từng Set (rep, tạ, Form trung bình của Set, RPE).
+  - `WorkoutSetLog`: Kết quả thực nâng của từng Set (rep, tạ, Form trung bình, RPE).
 - **Value Objects**:
-  - `SessionSummary`: Tổng set, tổng volume nâng thực tế, điểm Form trung bình buổi tập (= N/A nếu tập Phi AI).
-  - `RepLog` (Chỉ dùng cho AI): Ghi nhận tọa độ skeleton thô, ROM% và trạng thái lỗi của từng rep.
-  - `SessionTimer`: Cấu hình giới hạn thời gian (90/180/240 phút) [BR-WL-01].
-- **Repository**: `WorkoutSessionRepository` (Lưu nhật ký buổi tập đang diễn ra hoặc đã hoàn thành).
+  - `SessionSummary`: Tổng set, tổng volume, điểm Form trung bình (N/A nếu Phi AI).
+  - `RepLog`: Tọa độ skeleton thô, ROM%, trạng thái lỗi của từng rep (chỉ nhánh AI).
+  - `SessionTimer`: Giới hạn thời gian.
+- **Repository**: `WorkoutSessionRepository`
 - **Domain Events**:
   - `WorkoutSessionStarted`: Bắt đầu buổi tập.
-  - `WorkoutSessionCompleted`: Kết thúc buổi tập (mang theo `SessionSummary`).
-  - `WorkoutSessionAborted`: Tự động đóng do quá thời gian.
-  - `BodyMetricUpdated`: User log cân nặng mới trong buổi tập.
-- **Invariants (Quy tắc bất biến tại ranh giới)**:
-  - [Nhánh AI] repCount++ chỉ được tính khi ROM% >= 70% (BR-CC-01).
-  - [Nhánh AI] Cảnh báo gian lận khi tỷ lệ khung hình skeleton hợp lệ / tổng thời gian quay < 50% (BR-CC-02).
-  - Giới hạn thời gian (BR-WL-01): Vượt quá 240 phút không tương tác → tự động đóng, lưu Anomalous Session và loại bỏ khỏi Overload tuần sau.
-  - Tải lượng bất thường (BR-WL-02): Volume buổi tập vượt 250% trung bình 5 buổi gần nhất của cùng nhóm cơ → yêu cầu xác nhận và tự động chèn ít nhất 1 ngày nghỉ cho nhóm cơ đó.
-- **Chia sẻ (Ubiquitous Language)**:
-  - `SessionSummary` (Shared VO) ──► Event `WorkoutSessionCompleted` ──► Tiêu thụ bởi `Coaching` (thuật toán thích ứng).
-  - `BodyMetricUpdated` (Shared Event) ──► Tiêu thụ bởi `User Profile` (ghi nhận cân nặng mới).
+  - `WorkoutSessionCompleted`: Kết thúc buổi tập (mang `SessionSummary`).
+  - `WorkoutSessionAborted`: Tự động đóng do quá thời gian → lưu `AnomalousSession`.
+  - `BodyMetricUpdated`: User log cân nặng trong buổi tập.
+- **Invariants**:
+  - `repCount++` chỉ tính khi ROM% ≥ 70% (BR-CC-01).
+  - Tỷ lệ frame skeleton hợp lệ < 50% → gắn cờ gian lận (BR-CC-02).
+  - Lifecycle: `Scheduled` → `InProgress` → `Completed` | `Aborted (Anomalous)`.
+  - Quá 240 phút không tương tác → tự đóng, loại khỏi tính Overload tuần sau (BR-WL-01).
+
+#### [Domain Service] `TrainingLoadGuard`
+- **Nhiệm vụ**: Kiểm tra volume buổi tập hiện tại > 250% trung bình 5 buổi gần nhất cùng nhóm cơ — nếu vượt thì yêu cầu xác nhận và chèn ngày nghỉ (BR-WL-02).
+- **Lý do tách**: Cần đọc lịch sử nhiều `WorkoutSession` — không thể nằm trong một Aggregate.
 
 #### Aggregate Root: `WorkoutPerformance`
-- **Nhiệm vụ**: Lưu trữ kỷ lục cá nhân phục vụ CQRS Read Model.
+- **Nhiệm vụ**: Lưu kỷ lục cá nhân 1RM, cập nhật qua Eventual Consistency.
 - **Entities**:
-  - `PersonalRecord`: Kỷ lục 1RM ước tính theo Epley Formula cho từng bài tập.
-- **Repository**: `WorkoutPerformanceRepository` (CRUD kỷ lục 1RM).
+  - `PersonalRecord`: Kỷ lục 1RM theo Epley Formula cho từng bài tập.
+- **Repository**: `WorkoutPerformanceRepository`
 - **Domain Events**:
-  - `NewPersonalRecordAchieved`: Đạt kỷ lục 1RM mới (Vinh danh PR).
-- **Hoạt động Consistency**: Cập nhật PR thông qua **Eventual Consistency** bằng cách lắng nghe sự kiện `WorkoutSessionCompleted`.
-- **Chia sẻ (Ubiquitous Language)**:
-  - `PersonalRecord` (Shared Entity) ──► Tiêu thụ bởi `Coaching` (tính overload và giới hạn tạ).
+  - `NewPersonalRecordAchieved`: Đạt kỷ lục 1RM mới.
 
 #### Aggregate Root: `MotionSpecification`
-- **Nhiệm vụ**: Cấu hình AI và Pose mẫu chuẩn cho từng bài tập (được package `motion` tiêu thụ và phân phối cho Client).
-- **Entities**: Không có.
+- **Nhiệm vụ**: Cấu hình AI và Pose mẫu chuẩn cho từng bài tập.
 - **Value Objects**:
-  - `PoseTemplate`: Tọa độ khớp chuẩn (33 điểm MediaPipe hoặc 17 điểm YOLO).
-  - `CalibrationConfig`: Ngưỡng khoảng cách, góc nghiêng điện thoại.
-  - `RepCountingRules`: Ngưỡng góc ROM% tối thiểu (≥ 70%) để đếm rep [BR-CC-01].
-  - `FormScoringRules`: Tiêu chí phát hiện lỗi tư thế (võng lưng, gối chụm...).
-- **Repository**: `MotionSpecificationRepository` (CRUD cấu hình AI bài tập).
-- **Chia sẻ (Ubiquitous Language)**:
-  - `PoseTemplate` / `CalibrationConfig` (Shared VO) ──► Tiêu thụ bởi `Edge AI` (Client tracking).
+  - `PoseTemplate`: Tọa độ khớp chuẩn (33 điểm MediaPipe / 17 điểm YOLO).
+  - `CalibrationConfig`: Ngưỡng khoảng cách, góc nghiêng thiết bị.
+  - `RepCountingRules`: Ngưỡng ROM% tối thiểu ≥ 70%.
+  - `FormScoringRules`: Tiêu chí phát hiện lỗi tư thế.
+- **Repository**: `MotionSpecificationRepository`
 
 ---
 
-### 1.4 Ngữ cảnh AI Nutrition
+## 4. Context AI Nutrition
 
 #### Aggregate Root: `NutritionPlan`
-- **Nhiệm vụ**: Quản lý kế hoạch calo nạp vào và đề xuất thực đơn linh hoạt cho người dùng.
-- **Entities**: Không có.
+- **Nhiệm vụ**: Quản lý mục tiêu calo và thực đơn gợi ý trong ngày.
 - **Value Objects**:
-  - `DailyMealOption`: Gợi ý món ăn cho Sáng, Trưa, Tối, Phụ (hỗ trợ cờ tự nấu hoặc ăn ngoài). (Bất biến, thay thế khi đổi món).
-  - `CalorieAllocation`: Calo tiêu chuẩn nạp vào cơ thể, chỉ số dinh dưỡng đa lượng (Protein/Carb/Fat).
-  - `BudgetTier`: Phân khúc giá (Tiết kiệm, Phổ thông, Thoải mái).
-- **Repository**: `NutritionPlanRepository` (Lưu thực đơn gợi ý trong ngày).
+  - `DailyMealOption`: Gợi ý món ăn cho Sáng, Trưa, Tối, Phụ (tự nấu hoặc ăn ngoài).
+  - `CalorieAllocation`: Calo target, tỷ lệ đa lượng Protein/Carb/Fat.
+  - `BudgetTier`: Phân khúc giá (Tiết kiệm / Phổ thông / Thoải mái).
+- **Repository**: `NutritionPlanRepository`
 - **Domain Events**:
   - `NutritionPlanGenerated`: Thực đơn ngày đã được sinh.
-- **Invariants (Quy tắc bất biến tại ranh giới)**:
-  - Năng lượng mục tiêu của `CalorieAllocation` tuyệt đối không được nhỏ hơn 1200 kcal/ngày (BR-NU-01).
+- **Invariants**:
+  - `CalorieAllocation.target >= 1200 kcal/ngày` (BR-NU-01).
 
 #### Aggregate Root: `MealHistory`
-- **Nhiệm vụ**: Theo dõi lịch sử ăn uống thực tế và áp dụng luật chống lặp món.
-- **Entities**: Không có.
+- **Nhiệm vụ**: Theo dõi lịch sử ăn uống và kiểm soát chống lặp món.
+- **Entities**:
+  - `MealLog`: Món ăn thực tế đã ghi, có thể sửa/xóa (có lifecycle riêng).
 - **Value Objects**:
-  - `MealLog`: Các món ăn thực tế đã ghi chép. (Dòng ghi nhận lịch sử bất biến).
-  - `LockoutRegistry`: Danh sách các nguyên liệu (Protein, Carb, Chủ đề món) đang bị khóa và ngày mở khóa tương ứng.
-- **Repository**: `MealHistoryRepository` (Thêm log ăn uống, truy vấn danh sách lockout).
+  - `LockoutRegistry`: Nguyên liệu đang bị khóa và ngày mở khóa.
+- **Repository**: `MealHistoryRepository`
 - **Domain Events**:
   - `MealLogged`: Ghi nhận bữa ăn thành công.
-  - `LockoutApplied`: Khóa thực phẩm thành công.
-- **Invariants (Quy tắc bất biến tại ranh giới)**:
-  - Thêm món ăn mới vào `MealLog` → tự động cập nhật `LockoutRegistry` để khóa nguyên liệu Protein chính trong 7 ngày, Carb trong 5 ngày và Chủ đề món trong 3 ngày (BR-NU-02).
+  - `LockoutApplied`: Khóa nguyên liệu thành công.
+- **Invariants**:
+  - Thêm `MealLog` mới → tự động cập nhật `LockoutRegistry`: Protein 7 ngày, Carb 5 ngày, Chủ đề món 3 ngày (BR-NU-02).
 
 ---
 
-### 1.5 Ngữ cảnh Catalog
+## 5. Context Catalog
 
 #### Aggregate Root: `Exercise`
-- **Nhiệm vụ**: Thư viện bài tập chuẩn (chỉ chứa thông tin nghiệp vụ và nội dung).
-- **Entities**: Không có.
+- **Nhiệm vụ**: Thư viện bài tập chuẩn, quản lý vòng đời phê duyệt.
 - **Value Objects**:
   - `ExerciseInfo`: Tên bài, nhóm cơ chính/phụ, video hướng dẫn URL, dụng cụ, bài thay thế.
-- **Repository**: `ExerciseRepository` (CRUD danh mục bài tập chuẩn).
+- **Repository**: `ExerciseRepository`
 - **Domain Events**:
-  - `ExerciseCreated`: Bài tập mới được thêm vào thư viện.
-- **Chia sẻ (Ubiquitous Language)**:
-  - `Exercise` (Shared Aggregate) ──► Tiêu thụ bởi `Coaching`, `Workout`, `MotionSpecification` (qua ID).
+  - `ExerciseCreated`: Bài tập tạo mới (trạng thái `Draft`).
+  - `ExerciseApproved`: Admin phê duyệt → trạng thái `Active`.
+- **Invariants**:
+  - Lifecycle: `Draft` → `PendingApproval` → `Active`.
+  - Chỉ bài tập `Active` mới được tham chiếu bởi các Context khác.
 
 #### Aggregate Root: `FoodItem`
-- **Nhiệm vụ**: Thư viện thực phẩm và nguyên liệu chuẩn.
-- **Entities**: Không có.
+- **Nhiệm vụ**: Thư viện thực phẩm chuẩn, quản lý vòng đời phê duyệt.
 - **Value Objects**:
   - `FoodNutrient`: Tên, calo, macro trên 100g, nhãn chay/Halal, nhãn dị ứng.
-- **Repository**: `FoodItemRepository` (CRUD danh mục thực phẩm chuẩn).
+- **Repository**: `FoodItemRepository`
 - **Domain Events**:
-  - `FoodItemCreated`: Thực phẩm mới được thêm vào thư viện.
-- **Chia sẻ (Ubiquitous Language)**:
-  - `FoodItem` (Shared Aggregate) ──► Tiêu thụ bởi `Nutrition` (qua ID).
+  - `FoodItemCreated`: Thực phẩm tạo mới (trạng thái `Draft`).
+  - `FoodItemApproved`: Admin phê duyệt → trạng thái `Active`.
+- **Invariants**:
+  - Lifecycle: `Draft` → `PendingApproval` → `Active`.
