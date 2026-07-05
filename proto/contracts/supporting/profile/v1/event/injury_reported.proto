@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
+
+message Injury {
+  string muscleGroup = 1;
+  string severity = 2;
+  string reportedAt = 3;
+}
+
+message InjuryReported {
+  string userId = 1;
+  Injury injury = 2;
+}

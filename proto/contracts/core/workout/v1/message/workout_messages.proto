@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package contracts.core.workout.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/message;workoutv1message";
+
+message StartWorkoutSessionRequest {
+  string userId = 1;
+  string audioPreference = 2;
+}
+
+message StartWorkoutSessionResponse {
+  string sessionId = 1;
+  string startTime = 2;
+  
+  message ExercisePlan {
+    string exerciseId = 1;
+    int32 targetSets = 2;
+    int32 targetReps = 3;
+    float targetWeight = 4;
+  }
+  repeated ExercisePlan exercisesToday = 3;
+}
+
+message LogWorkoutSetRequest {
+  string sessionId = 1;
+  int32 setIndex = 2;
+  string exerciseId = 3;
+  float actualWeight = 4;
+  int32 actualReps = 5;
+  float averageFormScore = 6;
+  int32 rpe = 7;
+}
+
+message LogWorkoutSetResponse {
+  string status = 1;
+  int64 setLoggedId = 2;
+  bool isPr = 3;
+  float estimated1rm = 4;
+}
+
+message CompleteWorkoutSessionRequest {
+  string sessionId = 1;
+}
+
+message CompleteWorkoutSessionResponse {
+  string sessionId = 1;
+  bool isCompleted = 2;
+  bool isAntiCheatVerified = 3;
+  
+  message PoseError {
+    string errorType = 1;
+    int32 occurrences = 2;
+    string advice = 3;
+  }
+  
+  message Report {
+    float totalVolumeLifted = 1;
+    float averageFormScore = 2;
+    float estimatedCaloriesBurned = 3;
+    repeated PoseError commonPoseErrors = 4;
+  }
+  Report report = 4;
+}

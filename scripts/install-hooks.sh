@@ -2,7 +2,8 @@
 
 # Thư mục chứa hooks của Git
 HOOK_DIR=".git/hooks"
-HOOK_FILE="$HOOK_DIR/commit-msg"
+HOOK_COMMIT_MSG="$HOOK_DIR/commit-msg"
+HOOK_PREPARE_MSG="$HOOK_DIR/prepare-commit-msg"
 
 # Kiểm tra thư mục .git có tồn tại không
 if [ ! -d ".git" ]; then
@@ -10,13 +11,13 @@ if [ ! -d ".git" ]; then
   exit 1
 fi
 
-echo "🔧 Đang thiết lập Local Git Hook cho Commit Message..."
+echo "🔧 Đang thiết lập Local Git Hooks cho dự án..."
 
 # Tạo thư mục hooks nếu chưa tồn tại
 mkdir -p "$HOOK_DIR"
 
-# Tạo file commit-msg hook
-cat << 'EOF' > "$HOOK_FILE"
+# 1. Tạo file commit-msg hook (Xác thực thông điệp commit)
+cat << 'EOF' > "$HOOK_COMMIT_MSG"
 #!/usr/bin/env bash
 
 # Chạy script kiểm tra commit message từ thư mục scripts
@@ -27,9 +28,24 @@ else
 fi
 EOF
 
-# Cấp quyền thực thi cho hook và script kiểm tra
-chmod +x "$HOOK_FILE"
+# 2. Tạo file prepare-commit-msg hook (Tự động chèn emoji cho merge commit)
+cat << 'EOF' > "$HOOK_PREPARE_MSG"
+#!/bin/sh
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+if [ "$COMMIT_SOURCE" = "merge" ]; then
+  ORIGINAL_MSG=$(cat "$COMMIT_MSG_FILE")
+  echo ":twisted_rightwards_arrows: chore(merge): $ORIGINAL_MSG" > "$COMMIT_MSG_FILE"
+fi
+EOF
+
+# Cấp quyền thực thi cho các hooks và script kiểm tra
+chmod +x "$HOOK_COMMIT_MSG"
+chmod +x "$HOOK_PREPARE_MSG"
 chmod +x ./scripts/verify-commit-msg.sh
 
-echo "✅ Đã cài đặt thành công Git Hook tại: $HOOK_FILE"
-echo "💡 Kể từ bây giờ, mỗi khi bạn chạy 'git commit', tin nhắn commit sẽ tự động được kiểm tra chuẩn Gitmoji + Conventional Commits."
+echo "✅ Đã cài đặt thành công Git Hooks tại: $HOOK_DIR"
+echo "💡 Kể từ bây giờ:"
+echo "   - Mỗi khi bạn commit, tin nhắn sẽ được kiểm tra chuẩn Gitmoji + Conventional Commits."
+echo "   - Mỗi khi bạn merge, tin nhắn merge sẽ tự động được thêm emoji và kiểu tương thích."

@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/message;nutritionv1message";
+
+message GetTodayMenuRequest {
+  string userId = 1;
+}
+
+message GetTodayMenuResponse {
+  float targetCalories = 1;
+  
+  message Macros {
+    float proteinGrams = 1;
+    float carbGrams = 2;
+    float fatGrams = 3;
+  }
+  
+  message MealOption {
+    string mealName = 1;
+    string priceTier = 2;
+    float calories = 3;
+    float protein = 4;
+    float carbs = 5;
+    float fat = 6;
+  }
+  
+  message DailyMeals {
+    repeated MealOption breakfast = 1;
+    repeated MealOption lunch = 2;
+    repeated MealOption dinner = 3;
+  }
+  
+  Macros macros = 2;
+  DailyMeals meals = 3;
+}

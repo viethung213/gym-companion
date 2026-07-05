@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package contracts.core.workout.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/event;workoutv1event";
+
+message PerformanceSummary {
+  int32 totalSetsCompleted = 1;
+  float totalVolumeKg = 2;
+  float averageFormScore = 3;
+  float estimatedCaloriesBurned = 4;
+}
+
+message ExercisePerformance {
+  string exerciseId = 1;
+  int32 setsCount = 2;
+  int32 averageRpe = 3;
+}
+
+message PoseError {
+  string errorType = 1;
+  int32 occurrences = 2;
+  string advice = 3;
+}
+
+message WorkoutSessionCompleted {
+  string sessionId = 1;
+  string userId = 2;
+  string completedAt = 3;
+  int32 totalDurationSeconds = 4;
+  PerformanceSummary performanceSummary = 5;
+  repeated ExercisePerformance completedExercises = 6;
+  repeated PoseError commonPoseErrors = 7;
+  bool isAntiCheatVerified = 8;
+  bool isAnomalous = 9;
+  float trainingLoad = 10;
+}

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
+
+message MealDetails {
+  string proteinSource = 1;
+  string carbSource = 2;
+  string theme = 3;
+}
+
+message MealLogged {
+  string userId = 1;
+  string mealId = 2;
+  MealDetails mealDetails = 3;
+}
