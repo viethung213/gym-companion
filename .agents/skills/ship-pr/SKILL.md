@@ -7,7 +7,7 @@ description: Automatically pushes the current branch and creates/opens a Pull Re
 
 This skill guides the agent to push the current branch and open a Pull Request (PR) on GitHub using the GitHub CLI (`gh`).
 
-## Predefined Labels for Monolith Web App
+## Predefined Labels for FITAI Project
 When creating the PR, select the most relevant labels from this list to apply via `--label` (or `-l`):
 - **Type**:
   - `✨ feature`
@@ -19,11 +19,17 @@ When creating the PR, select the most relevant labels from this list to apply vi
   - `💻 frontend`
   - `⚙️ backend`
   - `🗄️ database`
-  - `🔌 api`
-  - `🔑 auth`
 - **Priority**:
   - `🔥 high-priority`
   - `💤 low-priority`
+- **Status**:
+  - `🚧 status/draft`
+  - `🚀 ready-merge`
+- **Technology**:
+  - `🐹 lang/go`
+  - `🔌 protocol/api`
+  - `📷 ai/vision-camera`
+  - `🧠 ai/agent-coach`
 
 ## Workflow
 

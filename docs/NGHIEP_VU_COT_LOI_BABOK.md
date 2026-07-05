@@ -10,7 +10,7 @@
   * v1.0 (27/06/2026): Hoàn thiện 7 module nghiệp vụ gốc.
   * v1.3 (01/07/2026): Chuyển sang cơ chế sinh lộ trình tổng quan & sinh giáo án chi tiết theo buổi.
   * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
-  * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn), cơ chế điểm XP cơ bản/thưởng, và tư vấn món ăn ngoài.
+  * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn) và tư vấn món ăn ngoài.
 
 ---
 
@@ -42,18 +42,13 @@
 3. AI Coach tính toán `User Fitness Score` & khởi tạo Lộ trình tổng quan 4 tuần, Lịch tập tuần và Gợi ý dinh dưỡng.
 
 ### 3.2 Quy trình Luyện tập (Workout Execution)
-1. User check-in & cấu hình playlist âm nhạc.
-2. Đối với bài tập có hỗ trợ AI Camera (Nhánh AI):
-   - User bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng.
-   - AI Camera tracking khung xương, ước lượng tạ thực tế, đếm rep, tính % hoàn thiện chuyển động (ROM %).
-   - Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms).
-   - Nếu đúng tư thế: Cộng rep, tính Form Score.
-   - User xác nhận kết quả Set (AI điền tự động).
-3. Đối với bài tập phi AI (Nhánh tự ghi nhận):
-   - Giao diện hiển thị trình bấm giờ (timer) đếm ngược theo set hoặc thời gian nghỉ, kết hợp phát nhạc nền.
-   - Hiển thị video/hướng dẫn bài tập để người dùng tập theo.
-   - User tự thực hiện và xác nhận kết quả set thủ công.
-4. Nghỉ ngơi → Lặp lại cho đến khi hết giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
+1. User check-in & cấu hình playlist âm nhạc (phát chạy ngầm xuyên suốt buổi tập).
+2. **Khởi động (Warm-up)**: Nếu giáo án có Warm-up, hệ thống hiển thị bài tập khởi động (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Warm-up** để bỏ qua.
+3. **Thực hiện bài tập chính**: Cả hai nhánh AI và Phi AI đều được thiết kế đồng nhất (cùng có nhạc nền chạy ngầm, timer đếm ngược, tuỳ chọn xem/nghe hướng dẫn on-demand). Sự khác biệt duy nhất là việc kích hoạt module AI Camera:
+   - **Đối với bài tập có hỗ trợ AI Camera (Nhánh AI)**: Bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng. AI Camera tracking khung xương (33 điểm), ước lượng tạ thực tế, đếm rep, tính ROM %, chấm Form Score. Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms). User xác nhận kết quả set (hệ thống tự động điền rep, tạ, Form Score).
+   - **Đối với bài tập phi AI (Nhánh tự ghi nhận)**: Tắt camera. User tự thực hiện theo nhịp của mình và tự nhập kết quả set thủ công khi hoàn thành (Form Score ghi nhận N/A).
+4. **Dãn cơ (Cooldown)**: Trước khi kết thúc buổi tập, nếu giáo án có Cooldown, hệ thống hiển thị bài tập dãn cơ (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Cooldown** để bỏ qua.
+5. Nghỉ ngơi → Lặp lại cho đến khi hoàn thành giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
 
 ### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
 1. Trigger: Đến ngày tập / User mở app.
@@ -86,7 +81,7 @@
 | **FR-AC-04** | **Đồng hành**: Gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thực tế (PR, quay lại sau nghỉ dài). | S |
 | **FR-AC-05** | **Phong cách Coach**: Cho chọn Drill Sergeant (nghiêm khắc), Best Friend (thân thiện), Data Analyst (khoa học). | C |
 | **FR-AC-06** | **Sinh giáo án theo buổi**: Sinh bài tập, set, rep, tạ gợi ý trước buổi tập. AI Coach hỏi 1-2 câu ngắn về thiết bị & dị ứng thực phẩm theo ngữ cảnh nếu chưa có thông tin. | M |
-| **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án. | M |
+| **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án (hỗ trợ cả AI và Phi AI, cho phép user bỏ qua/Skip). | M |
 
 ### Module 3: AI Camera Coach (Phân tích tư thế)
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
@@ -101,7 +96,7 @@
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
 | **FR-WL-01** | **Ghi chép tự động**: Điền rep, % hoàn thiện và ước lượng tạ thực tế (qua kích thước đĩa tạ & tốc độ nâng). | M |
-| **FR-WL-02** | **Ghi chép thủ công**: Cho phép sửa kết quả set. Hỗ trợ luồng tập phi AI tích hợp trình bấm giờ (timer), âm nhạc và hướng dẫn trực quan. | M |
+| **FR-WL-02** | **Ghi chép thủ công**: Cho phép sửa kết quả set. Hỗ trợ luồng tập phi AI tích hợp trình bấm giờ (timer), âm nhạc chạy ngầm và hướng dẫn xem/nghe trực quan tùy chọn. | M |
 | **FR-WL-03** | **Tương tác âm thanh**: Audio Ducking tự giảm nhạc nền khi AI phát giọng nói cảnh báo tư thế. | S |
 | **FR-WL-04** | **Ghi nhận PR**: Tính 1RM ước tính (Epley Formula) sau buổi và vinh danh ăn mừng nếu đạt PR mới. | S |
 
