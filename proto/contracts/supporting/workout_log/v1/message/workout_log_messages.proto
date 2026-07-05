@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package contracts.supporting.workout_log.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/workout_log/v1/message;workoutlogv1message";
+
+message GetWorkoutHistoryRequest {
+  string userId = 1;
+  int32 limit = 2;
+}
+
+message GetWorkoutHistoryResponse {
+  message LogEntry {
+    string logId = 1;
+    string date = 2;
+    string exerciseId = 3;
+    int32 sets = 4;
+    float oneRepMax = 5;
+  }
+  repeated LogEntry entries = 1;
+}

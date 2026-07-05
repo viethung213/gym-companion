@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message;profilev1message";
+
+message SaveHealthProfileRequest {
+  string userId = 1;
+  float weightKg = 2;
+  float heightCm = 3;
+  int32 age = 4;
+  string gender = 5;
+  repeated string goals = 6;
+  
+  message InjuryInput {
+    string muscleGroup = 1;
+    string severity = 2;
+  }
+  repeated InjuryInput injuries = 7;
+}
+
+message SaveHealthProfileResponse {
+  string userId = 1;
+  float completionRate = 2;
+  bool aiCoachActivated = 3;
+  string message = 4;
+}
+
+message LogPeriodicMetricsRequest {
+  string userId = 1;
+  float weightKg = 2;
+  float bodyFatPercent = 3;
+  string progressPhotoUrl = 4;
+}
+
+message LogPeriodicMetricsResponse {
+  string logId = 1;
+  string userId = 2;
+  float weightKg = 3;
+  float bodyFatPercent = 4;
+  string syncStatus = 5;
+  string message = 6;
+}

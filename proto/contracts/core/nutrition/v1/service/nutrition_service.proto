@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service;nutritionv1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/core/nutrition/v1/message/get_today_menu.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "AI Nutrition Engine API"
+    version: "1.0"
+    description: "API tính toán calo/macros và đề xuất thực đơn cá nhân hóa."
+  }
+};
+
+service NutritionService {
+  // Lấy thực đơn gợi ý trong ngày
+  rpc GetTodayMenu (contracts.core.nutrition.v1.message.GetTodayMenuRequest) returns (contracts.core.nutrition.v1.message.GetTodayMenuResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{userId}/nutrition/today"
+    };
+  }
+}

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
+
+message BiologicalMetrics {
+  float weightKg = 1;
+  float heightCm = 2;
+  int32 age = 3;
+  string gender = 4;
+}
+
+message ProfileCompleted {
+  string userId = 1;
+  BiologicalMetrics biologicalMetrics = 2;
+  repeated string goals = 3;
+  repeated string registeredInjuries = 4;
+  repeated string preferredWorkoutTimes = 5;
+  string experienceLevel = 6;
+}
