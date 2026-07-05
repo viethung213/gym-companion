@@ -21,7 +21,7 @@
   - `InjuryReported`: Kích hoạt đổi giáo án.
   - `InjuryRecovered`: Cho phép phục hồi bài tập đã loại bỏ.
 - **Invariants**:
-  - `ActiveCoachEnabled = true` chỉ khi hồ sơ đạt ≥ 80% độ hoàn thiện.
+  - `ActiveCoachEnabled = true` chỉ khi hồ sơ đạt ≥ 80% độ hoàn thiện (gồm các chỉ số sinh học bắt buộc và mục tiêu).
 
 #### Aggregate Root: `BodyMetricsHistory`
 - **Nhiệm vụ**: Lưu lịch sử thay đổi hình thể theo thời gian.

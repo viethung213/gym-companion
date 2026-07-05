@@ -17,11 +17,14 @@
 **Main Flow**
 1. System tính `CompletionRate` (CR) = số buổi hoàn thành / tổng số buổi đã lên lịch (loại trừ `AnomalousSession`).
 2. System áp dụng quy tắc BR-AC-04:
-   - CR < 40%: Hỏi lý do, chờ phản hồi, đề xuất giảm số buổi/tuần và rút ngắn thời lượng.
+   - CR < 40%: Hỏi lý do, chờ phản hồi, đề xuất giảm số buổi/tuần và rút ngắn thời lượng. Nếu user đồng ý → cấu hình lại; nếu từ chối → chuyển sang **A1**.
    - 40% ≤ CR < 70%: Giảm tải lượng 10–15%, chèn xen kẽ buổi Express 30 phút. Tự sinh lộ trình mới.
-   - 70% ≤ CR < 90%: Giữ cấu trúc, tăng Progressive Overload ≤ 10%.  Tự sinh lộ trình mới.
-   - CR ≥ 90%: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc".
+   - 70% ≤ CR < 90%: Giữ cấu trúc, tăng Progressive Overload ≤ 10%. Tự sinh lộ trình mới.
+   - CR ≥ 90%: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". Nếu user đồng ý → thêm buổi; nếu từ chối → chuyển sang **A1**.
 3. System tạo `WorkoutRoadmap` mới, phát `RoadmapInitiated`.
+
+**Alternative Flow**
+- A1: User từ chối đề xuất thay đổi số buổi tập (khi CR < 40% hoặc CR ≥ 90%) → System giữ nguyên cấu trúc số buổi/tuần cũ của lộ trình, nhưng tự động điều chỉnh Progressive Overload (tăng/giảm mức tạ hoặc volume tạ gợi ý) tương ứng để đảm bảo tính an toàn và thích ứng.
 
 **Error / Edge Cases**
 - E1: CR < 40% và user không phản hồi sau 48h → tự áp dụng phương án giảm tải mặc định.
@@ -71,7 +74,7 @@
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B2.
 2. System đề xuất dời slot ngày đó sang ngày khác còn trống trong tuần.
-3. Nếu user đồng ý → cập nhật `WeeklySchedule`, phát `ScheduleDayRescheduled`.
+3. If user đồng ý → cập nhật `WeeklySchedule`, phát `ScheduleDayRescheduled`.
 4. Nếu user từ chối → giữ nguyên, không hỏi lại về vấn đề này.
 
 **Error / Edge Cases**
@@ -86,7 +89,7 @@
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | User tập ≥ 2 buổi/ngày hoặc RPE trung bình ≥ 8.5 liên tục ≥ 5 buổi. |
+| **Precondition** | User tập ≥ 2 buổi/ngày hoặc Session RPE (điểm đánh giá nỗ lực cả buổi tập do người dùng khai báo) trung bình ≥ 8.5 liên tục ≥ 5 buổi. |
 
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B3.

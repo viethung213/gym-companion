@@ -42,18 +42,20 @@
 | **Precondition** | User đã đăng nhập. Hồ sơ chưa hoàn thiện ≥ 80%. |
 
 **Main Flow**
-1. User nhập tuổi, giới tính, chiều cao, cân nặng, mục tiêu (Tăng cơ / Giảm mỡ), khung giờ tập cố định.
-2. System tính `ProfileCompletionRate` dựa trên các trường bắt buộc của `BiologicalMetrics`.
-3. Khi tỷ lệ ≥ 80%, System kích hoạt `ActiveCoachEnabled = true`.
+1. User nhập tuổi, giới tính, chiều cao, cân nặng, mục tiêu (Tăng cơ / Giảm mỡ).
+2. User chọn khung giờ tập cố định mong muốn (hệ thống hỗ trợ gán giá trị mặc định và cho phép thay đổi bất kỳ lúc nào).
+3. System tính `ProfileCompletionRate` dựa trên các trường bắt buộc (các chỉ số sinh học và mục tiêu).
+4. Khi tỷ lệ ≥ 80%, System kích hoạt `ActiveCoachEnabled = true`.
 
 **Alternative Flow**
-- A1: User bỏ qua bước nhập — System lưu trạng thái hiện tại, nhắc lại ở lần mở app tiếp theo.
+- A1: User bỏ qua việc thiết lập khung giờ tập cố định — System tự động áp dụng khung giờ mặc định (hoặc để trống) và cho phép cập nhật sau này trong Profile settings.
+- A2: User khai báo chấn thương cũ hoặc bệnh lý mãn tính — Chuyển tiếp thực hiện **UC-01.3 ReportInjury** để ghi nhận vào hồ sơ.
 
 **Error / Edge Cases**
 - E1: Giá trị cân nặng / chiều cao không hợp lệ (≤ 0) → từ chối lưu, hiển thị lỗi inline.
-- E2: Hoàn thiện < 80% → `ActiveCoachEnabled` giữ `false`, không sinh lộ trình.
+- E2: Hoàn thiện < 80% (thiếu các trường chỉ số sinh học hoặc mục tiêu) → `ActiveCoachEnabled` giữ `false`, không sinh lộ trình.
 
-**Postcondition**: `User.BiologicalMetrics` được cập nhật. Nếu đủ điều kiện, `UserProfileCompleted` được phát.  
+**Postcondition**: `User.BiologicalMetrics` được cập nhật. Nếu đủ điều kiện (≥ 80%), `UserProfileCompleted` được phát.  
 > *`UserService.CompleteProfile()` gọi `UserRepository.Save()` và publish `UserProfileCompleted`.*
 
 **Domain Events**: `UserProfileCompleted`

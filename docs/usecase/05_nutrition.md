@@ -18,7 +18,7 @@
 1. System đọc `BiologicalMetrics` (cân nặng, mục tiêu, mức vận động từ `WorkoutSession` hôm nay) từ `User`.
 2. System tính TDEE theo công thức Mifflin-St Jeor, tính `CalorieAllocation` (Protein/Carb/Fat).
 3. System đọc `ChatbotContext.food_restrictions` của `User` để lọc bỏ các thực phẩm gây dị ứng/ăn kiêng, đồng thời kiểm tra `LockoutRegistry` của `MealHistory` để lọc nguyên liệu bị khóa.
-4. System sinh `DailyMealOption` cho 3 bữa chính + 1 bữa phụ theo `BudgetTier` user đã chọn.
+4. System sinh `DailyMealOption` cho 3 bữa chính + 1 bữa phụ theo `BudgetTier` user đã chọn. Đối với mỗi bữa ăn, System ưu tiên đính kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có sẵn trong cơ sở dữ liệu; nếu không có, hệ thống hiển thị hướng dẫn định lượng để người dùng tự chuẩn bị hoặc mua ngoài tiệm bình thường (BR-NU-03).
 5. System phát `NutritionPlanGenerated`.
 
 **Alternative Flow**
@@ -49,7 +49,7 @@
 1. User tìm kiếm món ăn theo tên hoặc quét mã vạch.
 2. System trả về `FoodItem` phù hợp từ Catalog.
 3. User xác nhận khẩu phần (gram).
-4. System tạo `MealLog`, cập nhật `LockoutRegistry` (Protein 7 ngày, Carb 5 ngày, Chủ đề 3 ngày).
+4. System tạo `MealLog`, đọc siêu dữ liệu dinh dưỡng (metadata) của `FoodItem` từ Catalog để xác định nguồn Protein chính, nguồn tinh bột (Carb) chính và Category/chủ đề món ăn, sau đó cập nhật `LockoutRegistry` (khóa Protein chính 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày) (BR-NU-02).
 5. System phát `MealLogged` và `LockoutApplied`.
 
 **Alternative Flow**

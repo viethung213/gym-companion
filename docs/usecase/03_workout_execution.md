@@ -15,9 +15,12 @@
 | **Precondition** | `DailyWorkoutPlan` đã tồn tại. Không có `WorkoutSession` nào đang `InProgress` cho User. |
 
 **Main Flow**
-1. User check-in, chọn playlist âm nhạc.
+1. User check-in, chọn playlist âm nhạc (phát chạy ngầm xuyên suốt session).
 2. System tạo `WorkoutSession` với trạng thái `InProgress`, khởi động `SessionTimer`.
 3. System phát `WorkoutSessionStarted`.
+4. **[Bước chuyển tiếp]** System kiểm tra giáo án:
+   - Nếu giáo án có bài khởi động (`Warm-up`), hệ thống chuyển sang giao diện Khởi động (chạy qua UC-03.2 hoặc UC-03.3 tùy cấu hình bài tập) kèm nút **Skip Warm-up**.
+   - Nếu không có Warm-up hoặc User nhấn Skip, chuyển sang bài tập chính đầu tiên.
 
 **Error / Edge Cases**
 - E1: Đã có session `InProgress` → từ chối, hiển thị tuỳ chọn tiếp tục hoặc đóng session cũ.
@@ -39,18 +42,21 @@
 **Main Flow**
 1. User bật camera, System hiệu chỉnh khoảng cách (1.5m–2m) qua `CalibrationConfig`.
 2. System tải `PoseTemplate` và `RepCountingRules` từ `MotionSpecification` của bài tập.
-3. System tracking 33 điểm khớp theo thời gian thực.
-4. Mỗi rep: Nếu ROM% ≥ 70% → `repCount++`, tính `FormScore`. Nếu ROM% < 70% → rep không hợp lệ.
-5. Nếu phát hiện lỗi tư thế → Audio Ducking + phát cảnh báo giọng nói (độ trễ < 500ms).
-6. User xác nhận kết quả set. System tạo `WorkoutSetLog` (rep, tạ, FormScore trung bình, RPE).
-7. System bắt đầu đếm ngược nghỉ.
+3. System tracking 33 điểm khớp theo thời gian thực. Nhạc nền phát chạy ngầm.
+4. User có thể chọn **Xem/Nghe hướng dẫn kỹ thuật** (on-demand):
+   - **Xem**: Bật/tắt overlay video demo kỹ thuật ở góc màn hình (mặc định thu gọn).
+   - **Nghe**: Bật/tắt giọng nói của AI Coach hướng dẫn động tác.
+5. Mỗi rep: Nếu ROM% ≥ 70% → `repCount++`, tính `FormScore`. Nếu ROM% < 70% → rep không hợp lệ.
+6. Nếu phát hiện lỗi tư thế hoặc khi phát audio hướng dẫn → Audio Ducking (giảm 70% âm lượng nhạc nền) + phát cảnh báo/hướng dẫn giọng nói (độ trễ < 500ms).
+7. User xác nhận kết quả set (hệ thống tự động điền rep, tạ, FormScore). System tạo `WorkoutSetLog` (rep, tạ, FormScore trung bình, RPE).
+8. System bắt đầu đếm ngược nghỉ.
 
 **Alternative Flow**
 - A1: User tự sửa kết quả set trước khi xác nhận.
 - A2: Ánh sáng không đủ / bài nằm sàn → System tự động chuyển sang nhánh Phi AI (UC-03.3).
 
 **Error / Edge Cases**
-- E1: Tỷ lệ frame skeleton hợp lệ < 50% toàn buổi → gắn cờ `AntiCheat`, thông báo "Không đạt chuẩn xác thực" khi kết thúc.
+- E1: Tỷ lệ frame skeleton hợp lệ < 50% toàn buổi → gắn cờ `AntiCheat`, thông báo "Không đạt chuẩn xác thực" khi kết thúc. (Chỉ áp dụng cho bài tập chính có camera, không áp dụng cho khởi động/dãn cơ).
 - E2: Camera bị mất kết nối giữa chừng → tạm dừng, chờ user kết nối lại hoặc chuyển Phi AI.
 - E3: 0 rep hợp lệ sau khi hết thời gian set → `WorkoutSetLog` ghi nhận 0 rep, không tính volume.
 
@@ -68,12 +74,15 @@
 | **Precondition** | `WorkoutSession` đang `InProgress`. |
 
 **Main Flow**
-1. System hiển thị video/hướng dẫn bài tập và bắt đầu timer đếm ngược theo set.
-2. User thực hiện, tự nhập số rep và mức tạ khi xong.
-3. System tạo `WorkoutSetLog` (rep, tạ, FormScore = N/A, RPE do user nhập).
+1. System bắt đầu timer đếm ngược theo set. Nhạc nền phát chạy ngầm.
+2. User có thể chọn **Xem/Nghe hướng dẫn kỹ thuật** (on-demand):
+   - **Xem**: Màn hình mặc định hiển thị video hướng dẫn nhưng cho phép ẩn/thu nhỏ để tập trung vào timer và nhạc nền.
+   - **Nghe**: Cho phép bật/tắt thuyết minh giọng nói hướng dẫn kỹ thuật (có hỗ trợ Audio Ducking giảm nhạc nền khi phát tiếng).
+3. User thực hiện, tự nhập số rep và mức tạ khi xong.
+4. System tạo `WorkoutSetLog` (rep, tạ, FormScore = N/A, RPE do user nhập).
 
 **Error / Edge Cases**
-- E1: User nhập tạ = 0 và rep = 0 → cảnh báo, không tạo log.
+- E1: User nhập tạ = 0 và rep = 0 → cảnh báo, không tạo log (trừ các bài bodyweight/khởi động/dãn cơ không dùng tạ).
 - E2: RPE không được nhập → mặc định N/A.
 
 **Postcondition**: `WorkoutSetLog` được thêm vào `WorkoutSession`. FormScore = N/A, không tính vào điểm kỹ thuật buổi.  
@@ -91,11 +100,14 @@
 
 **Main Flow**
 1. User nhấn kết thúc buổi tập.
-2. System gọi `TrainingLoadGuard`: so sánh tổng volume buổi này với trung bình 5 buổi gần nhất cùng nhóm cơ.
+2. **[Bước chuyển tiếp]** System kiểm tra giáo án:
+   - Nếu giáo án có bài dãn cơ (`Cooldown`), hệ thống hiển thị giao diện dãn cơ (chạy qua UC-03.2 hoặc UC-03.3) kèm nút **Skip Cooldown**.
+   - Nếu không có Cooldown hoặc User nhấn Skip, tiếp tục luồng hoàn thành.
+3. System gọi `TrainingLoadGuard`: so sánh tổng volume buổi này với trung bình 5 buổi gần nhất cùng nhóm cơ.
    - Nếu vượt 250% → yêu cầu user xác nhận trước khi lưu, chèn ≥ 1 ngày nghỉ vào `WeeklySchedule`.
-3. System tính `SessionSummary` (tổng set, volume, FormScore trung bình).
-4. System cập nhật `WorkoutSession` sang `Completed`, phát `WorkoutSessionCompleted`.
-5. System hiển thị Post-session Report.
+4. System tính `SessionSummary` (tổng set, volume, FormScore trung bình).
+5. System cập nhật `WorkoutSession` sang `Completed`, phát `WorkoutSessionCompleted`.
+6. System hiển thị Post-session Report.
 
 **Alternative Flow**
 - A1: Buổi tập vượt 240 phút không tương tác → System tự đóng, ghi nhãn `AnomalousSession`, loại khỏi tính Overload.
