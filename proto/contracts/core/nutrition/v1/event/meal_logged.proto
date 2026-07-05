@@ -4,19 +4,14 @@ package contracts.core.nutrition.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
 
-// Sự kiện được phát đi khi người dùng ghi nhận món ăn đã dùng
+message MealDetails {
+  string proteinSource = 1;
+  string carbSource = 2;
+  string theme = 3;
+}
+
 message MealLogged {
-  string eventId = 1;
-  string eventType = 2;
-  string timestamp = 3;
-  
-  message MealDetails {
-    string proteinSource = 1;
-    string carbSource = 2;
-    string theme = 3;
-  }
-  
-  string userId = 4;
-  string mealId = 5;
-  MealDetails mealDetails = 6;
+  string userId = 1;
+  string mealId = 2;
+  MealDetails mealDetails = 3;
 }
