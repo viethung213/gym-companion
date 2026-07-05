@@ -4,26 +4,23 @@
 # Pattern: <emoji> <type>(scope): <description>
 # Or: :shortcode: <type>(scope): <description>
 
-# Exit on any error
 set -e
 
 # Regex pattern:
-# - ^([^[:space:][:alnum:]]+|:[a-zA-Z0-9_-]+:) matches the emoji character or a shortcode like :sparkles:
-# - [[:space:]]+ matches the whitespace between emoji and conventional commit type
-# - [a-zA-Z0-9_-]+ matches type (feat, fix, etc.)
+# - ^(:[a-zA-Z0-9_-]+:|[^a-zA-Z[:space:]][^[:space:]]*) matches any shortcode or unicode icon/emoji
+# - [[:space:]]+ matches whitespace between emoji and type
+# - [a-zA-Z0-9_-]+ matches type (feat, fix, docs, style, etc.)
 # - (\([^)]+\))? matches optional scope
 # - !? matches optional breaking change indicator
-# - :[[:space:]]+ matches the colon and whitespace
-# - .+$ matches the description
-REGEX="^([^[:space:][:alnum:]]+|:[a-zA-Z0-9_-]+:)[[:space:]]+[a-zA-Z0-9_-]+(\([^)]+\))?!?:[[:space:]]+.+$"
+# - :[[:space:]]+ matches colon and whitespace
+# - .+$ matches description
+REGEX="^(:[a-zA-Z0-9_-]+:|[^a-zA-Z[:space:]][^[:space:]]*)[[:space:]]+[a-zA-Z0-9_-]+(\([^)]+\))?!?:[[:space:]]+.+$"
 
 validate_msg() {
   local msg="$1"
-  # Trim leading/trailing whitespace
-  msg=$(echo "$msg" | xargs)
+  # Trim leading/trailing whitespace safely without breaking on quotes/apostrophes
+  msg=$(echo "$msg" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
-  # Check if message matches the regex
-  # We use grep with ERE (Extended Regular Expressions)
   if echo "$msg" | grep -Eq "$REGEX"; then
     return 0
   else
@@ -36,10 +33,10 @@ validate_msg() {
   fi
 }
 
-# Mode 1: Check a single commit message file (Git commit-msg hook)
+# Mode 1: Check a commit message file (Git commit-msg hook)
 if [ -n "$1" ] && [ -f "$1" ]; then
-  COMMIT_MSG=$(cat "$1")
-  # Ignore empty messages
+  # Extract first non-comment, non-empty line (the commit subject)
+  COMMIT_MSG=$(grep -v '^[[:space:]]*#' "$1" | sed '/^[[:space:]]*$/d' | head -n 1 || echo "")
   if [ -z "$COMMIT_MSG" ]; then
     exit 0
   fi
@@ -47,8 +44,7 @@ if [ -n "$1" ] && [ -f "$1" ]; then
   exit $?
 fi
 
-# Mode 2: Check range of commits (CI environment or manual run)
-# Use BASE_REF or check HEAD by default
+# Mode 2: Check range of commits or HEAD
 RANGE=""
 if [ -n "$COMMIT_RANGE" ]; then
   RANGE="$COMMIT_RANGE"
@@ -58,10 +54,8 @@ fi
 
 if [ -n "$RANGE" ]; then
   echo "Checking commits in range: $RANGE"
-  # Get commit subjects in range
   FAILED=0
   while IFS= read -r msg; do
-    # Skip empty lines
     [ -z "$msg" ] && continue
     if ! validate_msg "$msg"; then
       FAILED=1
@@ -76,7 +70,6 @@ if [ -n "$RANGE" ]; then
     exit 0
   fi
 else
-  # Default: Check the last commit (HEAD)
   LAST_COMMIT_MSG=$(git log -1 --format=%s HEAD 2>/dev/null || echo "")
   if [ -z "$LAST_COMMIT_MSG" ]; then
     echo "No commits found to validate."
