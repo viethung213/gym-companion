@@ -28,9 +28,22 @@ This skill generates a professional Pull Request title and description based on 
 ### Step 3: Format PR Title and Description
 Generate the PR title and description in the user's preferred language (defaulting to Vietnamese if the user prompts in Vietnamese) using this exact template:
 
+> [!IMPORTANT]
+> The PR Title MUST be prefixed with an appropriate emoji/icon matching the PR Type:
+> - `feat` (Features): ✨
+> - `fix` (Bug Fixes): 🐛
+> - `docs` (Documentation): 📝
+> - `style` (Formatting, CSS, visual): 🎨
+> - `refactor` (Code refactoring): ♻️
+> - `perf` (Performance): ⚡
+> - `test` (Adding/fixing tests): ✅
+> - `chore` (Build, dependencies, tooling): 🔧
+> - `ci` (CI configuration): 👷
+> - `revert` (Reversion): ⏪
+
 ```markdown
 ## Proposed PR Title
-[PR Type]: [Short summary of changes, e.g., "feat: add user login validation" or "fix: resolve memory leak in API"]
+[Emoji] [PR Type]: [Short summary of changes, e.g., "✨ feat: add user login validation" or "🐛 fix: resolve memory leak in API"]
 
 ---
 
