@@ -32,7 +32,7 @@
   - All test suites must be fully automated, executable, and verifiable to confirm implementation correctness.
   - Always maintain or improve statement coverage (recommended targets: >80% for core business logic, >90% for critical middleware/helpers). Never regress test coverage when modifying or refactoring code.
 - **Go Coding Rules**:
-  - **Uber Go Style**: Tuân thủ nghiêm ngặt chuẩn lập trình Go theo skill **uber-go-style** (.agents/skills/uber-go-style/SKILL.md) khi viết, sửa đổi, hoặc review code Go.
+  - **Go Style Rules**: Tuân thủ nghiêm ngặt chuẩn lập trình Go theo skill **go-style-rules** (.agents/skills/go-style-rules/SKILL.md) khi viết, sửa đổi, hoặc review code Go.
   - Kiến trúc: **Hexagonal (Ports & Adapters)**. Mỗi Bounded Context = 1 module tại `/internal/<module_name>/`.
   - Cấu trúc thư mục chuẩn mỗi module: `/internal/<module>/` gồm `domain/` (aggregate, entity, value_object, event, repository, service), `application/` (commands, queries), `infrastructure/` (persistence, ai, transport).
   - Domain layer không import thư viện ngoài (không GORM, không Gin, không ORM tag). Domain structs không chứa JSON/DB tag; mapping do Infrastructure qua `ToDomain()` / `ToPersistence()`.
