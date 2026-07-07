@@ -6,6 +6,10 @@
 
 set -e
 
+# Force C locale to run grep in raw byte mode, avoiding multibyte surrogate pair bugs in Git Bash on Windows
+export LC_ALL=C
+export LANG=C
+
 # Regex pattern:
 # - ^(:[a-zA-Z0-9_-]+:|[^a-zA-Z[:space:]][^[:space:]]*) matches any shortcode or unicode icon/emoji
 # - [[:space:]]+ matches whitespace between emoji and type
@@ -15,6 +19,9 @@ set -e
 # - :[[:space:]]+ matches colon and whitespace
 # - .+$ matches description
 REGEX="^(:[a-zA-Z0-9_-]+:|[^a-zA-Z[:space:]][^[:space:]]*)[[:space:]]+[a-zA-Z0-9_-]+(\([^)]+\))?!?:[[:space:]]+.+$"
+
+# Clean carriage return from REGEX variable in case the script file is saved with CRLF line endings on Windows
+REGEX=$(echo "$REGEX" | tr -d '\r')
 
 validate_msg() {
   local msg="$1"
@@ -35,8 +42,8 @@ validate_msg() {
 
 # Mode 1: Check a commit message file (Git commit-msg hook)
 if [ -n "$1" ] && [ -f "$1" ]; then
-  # Extract first non-comment, non-empty line (the commit subject)
-  COMMIT_MSG=$(grep -v '^[[:space:]]*#' "$1" | sed '/^[[:space:]]*$/d' | head -n 1 || echo "")
+  # Extract first non-comment, non-empty line (the commit subject) and strip CR character
+  COMMIT_MSG=$(grep -v '^[[:space:]]*#' "$1" | tr -d '\r' | sed '/^[[:space:]]*$/d' | head -n 1 || echo "")
   if [ -z "$COMMIT_MSG" ]; then
     exit 0
   fi
