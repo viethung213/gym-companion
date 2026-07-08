@@ -6,9 +6,9 @@
 
 | Người | Việc |
 |---|---|
-| **Nguyên** | Định nghĩa proto `auth/v1`, `profile/v1`, `nutrition/v1` · Tạo Docker Compose, Makefile (`make proto-gen`) |
-| **Chiến** | Định nghĩa proto `workout/v1`: Exercise, MotionSpec, Coaching messages, sự kiện `UserProfileCompleted`, `RoadmapInitiated` |
-| **Hùng** | Định nghĩa proto `workout_log/v1`, **message `MotionResult`** (dữ liệu AI Camera trả về), sự kiện `WorkoutSessionCompleted`, `BodyMetricUpdated` |
+| **Nguyên** | Định nghĩa proto cho các domain Auth (`generic/auth/v1`), User Profile (`supporting/profile/v1`), Nutrition (`core/nutrition/v1`) · Tạo Docker Compose, Makefile (`make proto-gen`) |
+| **Chiến** | Định nghĩa proto cho các domain Exercise Catalog (`supporting/exercise/v1`) và AI Coaching / Lập lịch (`core/workout/v1`) |
+| **Hùng** | Định nghĩa proto cho domain Workout Execution & AI Motion (`core/workout_execution/v1`): Thực thi buổi tập, đo lường 1RM và cấu hình/kết quả chuyển động AI |
 | **Cả 3** | Review chéo proto · `buf lint` + `buf breaking` · Thống nhất PostgreSQL schema isolation (`auth` / `profile` / `workout` / `nutrition`) · Thiết kế bảng `outbox_events` |
 
 ---
@@ -25,8 +25,8 @@
 | Người | Mảng | Xây dựng gì |
 |---|---|---|
 | **Nguyên** | Auth + Food Catalog | **Hệ thống tài khoản**: Đăng ký email/SĐT (gửi OTP xác thực), đăng nhập trả JWT, refresh/revoke token, khóa tài khoản 15 phút sau 3 lần nhập sai, phân quyền Admin vs User<br/>**Kho thực phẩm** (Admin): Thêm/sửa/xóa thực phẩm (calo, macro, nhãn chay/Halal, dị ứng thực phẩm), Admin phê duyệt kích hoạt · Tìm kiếm thực phẩm theo tên |
-| **Chiến** | Kho bài tập + Domain Coaching | **Thư viện bài tập** (Admin): Thêm/sửa/xóa bài tập, gửi duyệt, Admin phê duyệt kích hoạt · Tìm kiếm theo tên/nhóm cơ · Quản lý cấu hình AI cho từng bài (PoseTemplate, quy tắc đếm rep, tiêu chí chấm điểm tư thế)<br/>**Domain Coaching** (pure Go, chưa có DB/HTTP): Xây dựng aggregate `WorkoutRoadmap`, `WeeklySchedule`, `DailyWorkoutPlan` và `OverloadValidator` với unit test ≥ 90% |
-| **Hùng** | Hạ tầng chung + Domain Execution | **Hạ tầng chung**: Kết nối DB (Postgres, Redis, MongoDB), Eventbus + bảng Outbox, JWT middleware, rate limiter, logger<br/>**Domain Workout Execution** (pure Go, chưa có DB/HTTP): Xây dựng aggregate `WorkoutSession`, `WorkoutSetLog`, `WorkoutPerformance` / `PersonalRecord`, domain service `TrainingLoadGuard` với unit test ≥ 90% |
+| **Chiến** | Kho bài tập + Domain Coaching | **Thư viện bài tập** (Admin): Thêm/sửa/xóa bài tập, gửi duyệt, Admin phê duyệt kích hoạt · Tìm kiếm theo tên/nhóm cơ<br/>**Domain Coaching** (pure Go, chưa có DB/HTTP): Xây dựng aggregate `WorkoutRoadmap`, `WeeklySchedule`, `DailyWorkoutPlan` và `OverloadValidator` với unit test ≥ 90% |
+| **Hùng** | Hạ tầng chung + Domain Execution & AI Config | **Hạ tầng chung**: Kết nối DB (Postgres, Redis, MongoDB), Eventbus + bảng Outbox, JWT middleware, rate limiter, logger<br/>**Domain Workout Execution & AI Config** (pure Go, chưa có DB/HTTP): Xây dựng aggregate `WorkoutSession`, `WorkoutSetLog`, `WorkoutPerformance` / `PersonalRecord`, domain service `TrainingLoadGuard` với unit test ≥ 90% · **Quản lý cấu hình AI cho từng bài** (PoseTemplate, quy tắc đếm rep, tiêu chí chấm điểm tư thế) |
 
 ---
 
@@ -84,7 +84,7 @@
 
 | # | Rủi ro | Mức | Hành động |
 |---|---|---|---|
-| R-01 | **`MotionResult` chưa có đặc tả**: AI Camera trả về định dạng gì (ROM%, góc khớp, rep count)? | 🔴 Cao | Hùng viết proto trong Pre-Sprint 0. Thiếu sẽ block LogSet AI Sprint 2. |
+| R-01 | **`MotionResult` & `MotionSpec` chưa có đặc tả**: AI Camera cấu hình và trả về định dạng gì (ROM%, góc khớp, rep count, PoseTemplate)? | 🔴 Cao | Hùng viết proto trong Pre-Sprint 0. Thiếu sẽ block LogSet AI Sprint 2 và Exercise Catalog của Chiến. |
 | R-02 | **Đặc tả AI Agent (ADR-02) chưa hoàn thành**: AI Coach gọi tool-call tìm kiếm món ăn thế nào? Định dạng JSON trả về? | 🔴 Cao | Cần ADR-03 trước Sprint 3. Thiếu sẽ block tính năng Dinh dưỡng của Nguyên. |
 | R-03 | **WorkoutTemplate chưa có schema**: Backend tính set/rep/tạ từ 1RM dựa trên template nào? | 🟡 Trung | Chiến thiết kế trong Sprint 1, dùng Sprint 3. |
 | R-04 | **Tránh xung đột cấu trúc module `workout/`**: Chiến và Hùng cùng làm việc chung trong folder `workout/` | 🟡 Trung | Thống nhất ranh giới thư mục `coaching/` và `execution/` trong Pre-Sprint 0. |
