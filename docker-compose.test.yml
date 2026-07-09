@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+    container_name: fitai-app-test
+    ports:
+      - "${APP_PORT:-8080}:8080"
+      - "${GRPC_PORT:-9090}:9090"
+    env_file:
+      - .env
+    networks:
+      - fitai-network
+
+networks:
+  fitai-network:
+    name: fitai-network
+    external: true
