@@ -5,8 +5,8 @@ package contracts.generic.notification.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
 
 message NotificationSent {
-  string notificationId = 1;
-  string userId = 2;
+  string notification_id = 1;
+  string user_id = 2;
   string channel = 3; // PUSH, SMS, EMAIL
-  string sentAt = 4;
+  string sent_at = 4;
 }

@@ -5,7 +5,7 @@ package contracts.generic.audio.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/audio/v1/event;audiov1event";
 
 message AudioDucked {
-  string sessionId = 1;
-  float duckedVolumePercent = 2;
+  string session_id = 1;
+  float ducked_volume_percent = 2;
   string reason = 3;
 }

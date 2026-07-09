@@ -20,7 +20,7 @@ service WorkoutLogService {
   // Lấy lịch sử các set tập gần đây
   rpc GetWorkoutHistory (contracts.supporting.workout_log.v1.message.GetWorkoutHistoryRequest) returns (contracts.supporting.workout_log.v1.message.GetWorkoutHistoryResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{userId}/logs"
+      get: "/api/v1/users/{user_id}/logs"
     };
   }
 }

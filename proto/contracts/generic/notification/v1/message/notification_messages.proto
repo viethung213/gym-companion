@@ -5,14 +5,14 @@ package contracts.generic.notification.v1.message;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/message;notificationv1message";
 
 message SendPushNotificationRequest {
-  string userId = 1;
+  string user_id = 1;
   string title = 2;
   string body = 3;
   map<string, string> data = 4;
 }
 
 message SendPushNotificationResponse {
-  string notificationId = 1;
+  string notification_id = 1;
   string status = 2;
   string message = 3;
 }

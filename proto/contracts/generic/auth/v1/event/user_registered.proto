@@ -5,8 +5,8 @@ package contracts.generic.auth.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event;authv1event";
 
 message UserRegistered {
-  string userId = 1;
+  string user_id = 1;
   string email = 2;
   string phone = 3;
-  string registeredAt = 4;
+  string registered_at = 4;
 }

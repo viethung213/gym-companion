@@ -5,7 +5,7 @@ package contracts.generic.auth.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event;authv1event";
 
 message UserLoggedIn {
-  string userId = 1;
-  string loginIp = 2;
-  string loggedInAt = 3;
+  string user_id = 1;
+  string login_ip = 2;
+  string logged_in_at = 3;
 }
