@@ -5,60 +5,60 @@ package contracts.core.workout.v1.message;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/message;workoutv1message";
 
 message StartWorkoutSessionRequest {
-  string userId = 1;
-  string audioPreference = 2;
+  string user_id = 1;
+  string audio_preference = 2;
 }
 
 message StartWorkoutSessionResponse {
-  string sessionId = 1;
-  string startTime = 2;
+  string session_id = 1;
+  string start_time = 2;
   
   message ExercisePlan {
-    string exerciseId = 1;
-    int32 targetSets = 2;
-    int32 targetReps = 3;
-    float targetWeight = 4;
+    string exercise_id = 1;
+    int32 target_sets = 2;
+    int32 target_reps = 3;
+    float target_weight = 4;
   }
-  repeated ExercisePlan exercisesToday = 3;
+  repeated ExercisePlan exercises_today = 3;
 }
 
 message LogWorkoutSetRequest {
-  string sessionId = 1;
-  int32 setIndex = 2;
-  string exerciseId = 3;
-  float actualWeight = 4;
-  int32 actualReps = 5;
-  float averageFormScore = 6;
+  string session_id = 1;
+  int32 set_index = 2;
+  string exercise_id = 3;
+  float actual_weight = 4;
+  int32 actual_reps = 5;
+  float average_form_score = 6;
   int32 rpe = 7;
 }
 
 message LogWorkoutSetResponse {
   string status = 1;
-  int64 setLoggedId = 2;
-  bool isPr = 3;
+  int64 set_logged_id = 2;
+  bool is_pr = 3;
   float estimated1rm = 4;
 }
 
 message CompleteWorkoutSessionRequest {
-  string sessionId = 1;
+  string session_id = 1;
 }
 
 message CompleteWorkoutSessionResponse {
-  string sessionId = 1;
-  bool isCompleted = 2;
-  bool isAntiCheatVerified = 3;
+  string session_id = 1;
+  bool is_completed = 2;
+  bool is_anti_cheat_verified = 3;
   
   message PoseError {
-    string errorType = 1;
+    string error_type = 1;
     int32 occurrences = 2;
     string advice = 3;
   }
   
   message Report {
-    float totalVolumeLifted = 1;
-    float averageFormScore = 2;
-    float estimatedCaloriesBurned = 3;
-    repeated PoseError commonPoseErrors = 4;
+    float total_volume_lifted = 1;
+    float average_form_score = 2;
+    float estimated_calories_burned = 3;
+    repeated PoseError common_pose_errors = 4;
   }
   Report report = 4;
 }

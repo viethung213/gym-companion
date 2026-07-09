@@ -1,29 +1,29 @@
-.PHONY: install-deps buf-update buf-gen buf-lint clean
+.PHONY: buf-docker-build buf-update buf-gen buf-lint clean install-hooks
 
-# Step 1: Install required protoc/buf plugins into GOPATH/bin
-install-deps:
-	@echo "Installing Go protobuf, gRPC-gateway and Buf plugins..."
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
-	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@latest
-	go install github.com/bufbuild/buf/cmd/buf@latest
-	@echo "Dependencies installed successfully. Ensure your GOPATH/bin is in your system PATH."
+DOCKER_IMAGE = fitai-buf-gen
+# $(CURDIR) works portably on Windows, Linux, and macOS in Makefiles
+DOCKER_RUN = docker run --rm -v "$(CURDIR):/workspace" -w /workspace $(DOCKER_IMAGE)
 
-# Step 2: Update Buf dependencies (googleapis, grpc-gateway)
-buf-update:
-	@echo "Updating Buf schema dependencies..."
-	cd proto && buf dep update
+# Step 1: Build the custom Docker image containing Buf and the Go plugins
+buf-docker-build:
+	@echo "Building Buf custom Docker image..."
+	docker build -t $(DOCKER_IMAGE) -f buf.Dockerfile .
 
-# Step 3: Generate Go stubs and Swagger OpenAPI specifications
+# Step 2: Generate Go stubs and Swagger OpenAPI specifications
 buf-gen: clean
-	@echo "Generating API contracts via Buf..."
-	cd proto && buf generate
+	@echo "Generating API contracts via Buf using Docker..."
+	$(DOCKER_RUN) generate proto --template proto/buf.gen.yaml
+
+
+# Update Buf dependencies (googleapis, grpc-gateway) when buf.lock changes
+buf-update:
+	@echo "Updating Buf schema dependencies using Docker..."
+	$(DOCKER_RUN) dep update proto
 
 # Verify: Lint proto schemas to ensure they match style guides
 buf-lint:
-	@echo "Linting Protobuf files..."
-	@cd proto && buf lint
+	@echo "Linting Protobuf files using Docker..."
+	$(DOCKER_RUN) lint proto
 
 # Install Git hooks locally to prevent invalid commits
 install-hooks:
@@ -35,6 +35,5 @@ install-hooks:
 # Clean: Remove previously generated stubs
 clean:
 	@echo "Cleaning up generated stubs..."
-	@rm -rf internal/gen/go
-	@rm -rf docs/swagger
+	-docker run --rm --entrypoint rm -v "$(CURDIR):/workspace" -w /workspace $(DOCKER_IMAGE) -rf internal/gen/go docs/swagger
 	@echo "Cleanup completed."

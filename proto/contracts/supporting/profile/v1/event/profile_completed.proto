@@ -5,17 +5,17 @@ package contracts.supporting.profile.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
 
 message BiologicalMetrics {
-  float weightKg = 1;
-  float heightCm = 2;
+  float weight_kg = 1;
+  float height_cm = 2;
   int32 age = 3;
   string gender = 4;
 }
 
 message ProfileCompleted {
-  string userId = 1;
-  BiologicalMetrics biologicalMetrics = 2;
+  string user_id = 1;
+  BiologicalMetrics biological_metrics = 2;
   repeated string goals = 3;
-  repeated string registeredInjuries = 4;
-  repeated string preferredWorkoutTimes = 5;
-  string experienceLevel = 6;
+  repeated string registered_injuries = 4;
+  repeated string preferred_workout_times = 5;
+  string experience_level = 6;
 }

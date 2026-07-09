@@ -20,7 +20,7 @@ service NutritionService {
   // Lấy thực đơn gợi ý trong ngày
   rpc GetTodayMenu (contracts.core.nutrition.v1.message.GetTodayMenuRequest) returns (contracts.core.nutrition.v1.message.GetTodayMenuResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{userId}/nutrition/today"
+      get: "/api/v1/users/{user_id}/nutrition/today"
     };
   }
 }

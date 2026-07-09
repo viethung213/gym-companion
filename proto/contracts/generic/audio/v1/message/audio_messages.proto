@@ -5,10 +5,10 @@ package contracts.generic.audio.v1.message;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/audio/v1/message;audiov1message";
 
 message RequestAudioDuckingRequest {
-  string sessionId = 1;
-  float targetVolumePercent = 2; // Ví dụ: 20% âm lượng nhạc nền
-  int32 durationMs = 3;            // Thời gian giảm âm lượng (mili giây)
-  string alertAudioUrl = 4;       // File âm thanh cảnh báo cần phát xen kẽ
+  string session_id = 1;
+  float target_volume_percent = 2; // Ví dụ: 20% âm lượng nhạc nền
+  int32 duration_ms = 3;            // Thời gian giảm âm lượng (mili giây)
+  string alert_audio_url = 4;       // File âm thanh cảnh báo cần phát xen kẽ
 }
 
 message RequestAudioDuckingResponse {

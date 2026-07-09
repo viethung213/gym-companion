@@ -1,20 +1,37 @@
 version: v2
 plugins:
+  # Plugin Go Stubs
   - local: protoc-gen-go
     out: internal/gen/go
     opt:
       - paths=source_relative
+
+  # Plugin Go gRPC
   - local: protoc-gen-go-grpc
     out: internal/gen/go
     opt:
       - paths=source_relative
+
+  # Plugin REST Gateway (gRPC-Gateway)
   - local: protoc-gen-grpc-gateway
     out: internal/gen/go
     opt:
       - paths=source_relative
       - generate_unbound_methods=true
+
+  # Plugin OpenAPI v2 for Swagger docs
   - local: protoc-gen-openapiv2
     out: docs/swagger
+    strategy: all
     opt:
       - json_names_for_fields=true
       - logtostderr=true
+      - allow_merge=true
+      - merge_file_name=unified_api
+      - output_format=yaml
+      - use_allof_for_refs=true
+      - omit_array_item_type_when_ref_sibling=true
+
+
+
+

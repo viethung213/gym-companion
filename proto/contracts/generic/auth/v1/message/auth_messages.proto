@@ -9,10 +9,10 @@ message ValidateTokenRequest {
 }
 
 message ValidateTokenResponse {
-  bool isValid = 1;
-  string userId = 2;
+  bool is_valid = 1;
+  string user_id = 2;
   repeated string roles = 3;
-  string expiresAt = 4;
+  string expires_at = 4;
 }
 
 message LoginRequest {
@@ -21,7 +21,7 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  string accessToken = 1;
-  string refreshToken = 2;
-  string userId = 3;
+  string access_token = 1;
+  string refresh_token = 2;
+  string user_id = 3;
 }

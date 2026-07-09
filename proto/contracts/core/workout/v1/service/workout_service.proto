@@ -28,7 +28,7 @@ service WorkoutService {
   // Lưu kết quả của một set tập
   rpc LogWorkoutSet (contracts.core.workout.v1.message.LogWorkoutSetRequest) returns (contracts.core.workout.v1.message.LogWorkoutSetResponse) {
     option (google.api.http) = {
-      post: "/api/v1/workouts/sessions/{sessionId}/sets"
+      post: "/api/v1/workouts/sessions/{session_id}/sets"
       body: "*"
     };
   }
@@ -36,7 +36,7 @@ service WorkoutService {
   // Kết thúc buổi tập và xuất báo cáo
   rpc CompleteWorkoutSession (contracts.core.workout.v1.message.CompleteWorkoutSessionRequest) returns (contracts.core.workout.v1.message.CompleteWorkoutSessionResponse) {
     option (google.api.http) = {
-      post: "/api/v1/workouts/sessions/{sessionId}/complete"
+      post: "/api/v1/workouts/sessions/{session_id}/complete"
       body: "*"
     };
   }

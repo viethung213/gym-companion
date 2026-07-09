@@ -20,7 +20,7 @@ service ProfileService {
   // Khai báo hồ sơ sức khỏe ban đầu
   rpc SaveHealthProfile (contracts.supporting.profile.v1.message.SaveHealthProfileRequest) returns (contracts.supporting.profile.v1.message.SaveHealthProfileResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{userId}/profile"
+      post: "/api/v1/users/{user_id}/profile"
       body: "*"
     };
   }
@@ -28,7 +28,7 @@ service ProfileService {
   // Cập nhật chỉ số cơ thể định kỳ
   rpc LogPeriodicMetrics (contracts.supporting.profile.v1.message.LogPeriodicMetricsRequest) returns (contracts.supporting.profile.v1.message.LogPeriodicMetricsResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{userId}/metrics"
+      post: "/api/v1/users/{user_id}/metrics"
       body: "*"
     };
   }
