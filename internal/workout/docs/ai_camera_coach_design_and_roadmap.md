@@ -142,33 +142,29 @@ Các bài tập được giám sát dựa trên cấu hình 17 điểm khớp ch
 
 ---
 
-## IV. LỘ TRÌNH THỰC HIỆN CHI TIẾT (MILESTONES)
+## IV. LỘ TRÌNH THỰC HIỆN CHI TIẾT (6 TUẦN)
 
-### Phase 1: Nghiên cứu dữ liệu, Xây dựng Rule & Model (Python) - Tuần 1-2
-*   Viết script Python tải video chuẩn và video lỗi bằng `yt-dlp`.
-*   Sử dụng MMPose (17 điểm) trích xuất tọa độ xương và làm mượt bằng Kalman Filter.
-*   Xây dựng các quy tắc toán học tính góc khớp và gán nhãn tự động mức độ lỗi.
-*   Huấn luyện mô hình RandomForest Classifier phân loại lỗi bằng Python và xuất sang `.onnx`.
-*   Chuẩn bị ngân hàng câu thoại hướng dẫn theo nhiều phong cách cho từng lỗi bài tập.
+### Tuần 1: Thu thập Dữ liệu & Thiết kế Database Core
+*   **Python**: Viết script tải video chuẩn/lỗi bằng `yt-dlp`, trích xuất tọa độ xương 17 điểm bằng MMPose và làm mượt bằng Kalman Filter.
+*   **Golang**: Thiết kế Database Schema SQLite/PostgreSQL quản lý thông tin bài tập, kịch bản câu thoại, và lịch sử buổi tập (`Coach Memory`). Khởi tạo khung dự án Go và sinh mã nguồn từ proto stubs.
 
-### Phase 2: Phát triển Backend Core & Database (Golang) - Tuần 3-4
-*   Thiết kế database SQLite/PostgreSQL quản lý thông tin bài tập, kịch bản câu thoại, và lịch sử buổi tập (`Coach Memory`).
-*   Viết các REST API cung cấp dữ liệu cấu hình khởi tạo bài tập (`MotionSpecification`: công thức, rules, góc quay, video hướng dẫn và file `.onnx`).
-*   Viết API lưu nhật ký buổi tập (`WorkoutSession`, `RepLog`, `ErrorLog`) khi người dùng kết thúc tập.
+### Tuần 2: Huấn luyện Mô hình AI (ONNX) & Phát triển REST API Backend
+*   **Python**: Xây dựng công thức tính góc khớp, gán nhãn tự động mức độ lỗi. Huấn luyện mô hình RandomForest Classifier phân loại lỗi bằng Python và xuất sang định dạng `.onnx`. Chuẩn bị ngân hàng câu thoại hướng dẫn.
+*   **Golang**: Phát triển các REST API cung cấp dữ liệu cấu hình khởi tạo bài tập (`MotionSpecification`: công thức, rules, góc quay, video hướng dẫn và URL tải file `.onnx` tương ứng).
 
-### Phase 3: Phát triển WebSocket Server & Dialogue Engine (Golang) - Tuần 5
-*   Xây dựng WebSocket Server bằng Go để tiếp nhận các gói tin báo lỗi thời gian thực từ Client.
-*   Phát triển Dialogue Engine tự động ánh xạ lỗi (`error_id` + `severity`) và phong cách giọng nói (`CoachPersonality`) thành câu thoại/audio tương ứng.
-*   Tích hợp bộ điều khiển tần suất (Frequency Control) để chống spam nhắc nhở.
+### Tuần 3: WebSocket Server, Dialogue Engine & Khởi động Client
+*   **Golang**: Xây dựng WebSocket Server tiếp nhận gói tin báo lỗi từ Client. Phát triển Dialogue Engine ánh xạ (`error_id` + `severity` + `CoachPersonality` -> audio/thoại) và tích hợp bộ điều khiển tần suất nhắc (Frequency Control).
+*   **Client**: Khởi tạo dự án Web (React/Vite) / Android (Kotlin), cấu hình luồng camera trực tiếp và tích hợp MMPose nhận diện 17 điểm khớp xương.
 
-### Phase 4: Phát triển Client UI & Tích hợp MMPose (Web/Android) - Tuần 6-7
-*   **Web App**: Xây dựng giao diện React/Vite, tích hợp camera, chạy MMPose (17 điểm) và ONNX Runtime Web để chạy file `.onnx` nhận diện lỗi cục bộ.
-*   **Android App**: Tạo ứng dụng Kotlin chạy MMPose và ONNX Runtime Mobile cho việc nhận diện cục bộ.
-*   Lập trình State Machine tính góc và đếm reps trực tiếp trên client.
-*   Thiết lập luồng tải cấu hình bài tập khi bắt đầu và kết nối WebSocket để nhận câu thoại/phát âm thanh hướng dẫn khi có lỗi xảy ra.
+### Tuần 4: Đếm Rep & Suy luận Lỗi cục bộ trên Client (Local Inference)
+*   **Client**: Lập trình State Machine tính góc khớp và đếm Reps trực tiếp trên thiết bị.
+*   **Client**: Tải mô hình `.onnx` phân loại lỗi từ Backend, tích hợp ONNX Runtime Web/Mobile để chạy suy luận lỗi cục bộ thời gian thực từ tọa độ MMPose.
 
-### Phase 5: Kiểm thử, Tối ưu hóa & Hoàn thiện báo cáo - Tuần 8
-*   Kiểm tra tính riêng tư (không có dữ liệu hình ảnh/tọa độ gửi lên server thông qua log/network tab).
-*   Đo lường độ trễ phản hồi âm thanh khi phát hiện lỗi (mục tiêu dưới 150ms).
-*   Đo độ ổn định FPS trên nhiều cấu hình thiết bị khác nhau của Client.
-*   Hoàn thiện tài liệu báo cáo đồ án, thiết lập môi trường chạy cục bộ thông qua Docker.
+### Tuần 5: Liên thông Hệ thống (End-to-End) & Lưu trữ Nhật ký tập luyện
+*   **Tích hợp**: Kết nối WebSocket giữa Client và Server để truyền tin báo lỗi thời gian thực, nhận phản hồi câu thoại/audio và phát âm thanh hướng dẫn tương ứng trên thiết bị.
+*   **Golang & Client**: Phát triển luồng kết thúc buổi tập, Client tổng hợp dữ liệu và gọi API HTTP POST gửi báo cáo tổng kết để Backend lưu vào cơ sở dữ liệu (`WorkoutSession`, `RepLog`, `ErrorLog`).
+
+### Tuần 6: Kiểm thử, Tối ưu hóa & Đóng gói Báo cáo
+*   **Kiểm thử**: Đo đạc độ trễ phản hồi âm thanh (yêu cầu dưới 150ms) và đo độ ổn định FPS trên nhiều thiết bị Client.
+*   **Privacy Audit**: Xác minh tính riêng tư tuyệt đối (không truyền video/hình ảnh hay tọa độ thô của khớp xương lên Server).
+*   **Hoàn thiện**: Viết tài liệu báo cáo đồ án chi tiết và cấu hình Docker Compose để khởi chạy hệ thống cục bộ dễ dàng.
