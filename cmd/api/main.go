@@ -1,3 +1,4 @@
+// Package main provides the entrypoint for the API server.
 package main
 
 import (
@@ -11,6 +12,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("fatal error: %v", err) //nolint:forbidigo // Only allowed once in main
+	}
+}
+
+func run() error {
 	httpPort := os.Getenv("APP_PORT")
 	if httpPort == "" {
 		httpPort = "8080"
@@ -24,13 +31,15 @@ func main() {
 	// 1. Start gRPC Server in a goroutine
 	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
-		log.Fatalf("failed to listen for gRPC on port %s: %v", grpcPort, err)
+		return fmt.Errorf("grpc listen on port %s: %w", grpcPort, err)
 	}
 	grpcServer := grpc.NewServer()
 	fmt.Printf("Starting gRPC server on port %s...\n", grpcPort)
+
+	errChan := make(chan error, 2)
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("gRPC server failed: %v", err)
+			errChan <- fmt.Errorf("grpc server serve: %w", err)
 		}
 	}()
 
@@ -41,7 +50,11 @@ func main() {
 		_, _ = w.Write([]byte("OK"))
 	})
 
-	if err := http.ListenAndServe(":"+httpPort, nil); err != nil {
-		log.Fatalf("HTTP server failed to start: %v", err)
-	}
+	go func() {
+		if err := http.ListenAndServe(":"+httpPort, nil); err != nil {
+			errChan <- fmt.Errorf("http server listen and serve: %w", err)
+		}
+	}()
+
+	return <-errChan
 }

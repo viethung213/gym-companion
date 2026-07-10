@@ -4,9 +4,10 @@ run:
   timeout: 5m
   issues-exit-code: 1
   tests: true
+  go: '1.25'
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - govet
     - errcheck
@@ -25,29 +26,28 @@ linters:
     - revive
     - goprintffuncname
     - paralleltest
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # Tắt cảnh báo sắp xếp trường struct để tránh tối ưu hoá mù quáng
+    lll:
+      line-length: 99 # Giới hạn 99 ký tự theo Rule 38
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    forbidigo:
+      forbid:
+        - pattern: '^os\.Exit$'
+          msg: 'Chỉ cho phép os.Exit trong main() của package main'
+        - pattern: '^log\.Fatal$'
+          msg: 'Chỉ cho phép log.Fatal trong main() của package main'
+        - pattern: '^log\.Fatalf$'
+          msg: 'Chỉ cho phép log.Fatalf trong main() của package main'
 
 formatters:
   enable:
     - gofmt
     - gci
-
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment # Tắt cảnh báo sắp xếp trường struct để tránh tối ưu hoá mù quáng
-  lll:
-    line-length: 99 # Giới hạn 99 ký tự theo Rule 38
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-  forbidigo:
-    forbid:
-      - pattern: '^os\.Exit$'
-        msg: 'Chỉ cho phép os.Exit trong main() của package main'
-      - pattern: '^log\.Fatal$'
-        msg: 'Chỉ cho phép log.Fatal trong main() của package main'
-      - pattern: '^log\.Fatalf$'
-        msg: 'Chỉ cho phép log.Fatalf trong main() của package main'
