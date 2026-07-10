@@ -34,58 +34,8 @@ jobs:
           go-version: '1.25'
           cache: false
 
-      - name: Generate golangci-lint Config
-        run: |
-          cat << 'EOF' > .golangci.yml
-          run:
-            timeout: 5m
-            issues-exit-code: 1
-            tests: true
-
-          linters:
-            disable-all: true
-            enable:
-              - govet
-              - errcheck
-              - gocritic
-              - errorlint
-              - errname
-              - forcetypeassert
-              - gochecknoglobals
-              - gochecknoinits
-              - forbidigo
-              - musttag
-              - perfsprint
-              - prealloc
-              - lll
-              - decorder
-              - gci
-              - revive
-              - gofmt
-              - goprintffuncname
-              - paralleltest
-
-          linters-settings:
-            govet:
-              enable-all: true
-              disable:
-                - fieldalignment # Tắt cảnh báo sắp xếp trường struct để tránh tối ưu hoá mù quáng
-            lll:
-              line-length: 99 # Giới hạn 99 ký tự theo Rule 38
-            gocritic:
-              enabled-tags:
-                - diagnostic
-                - style
-                - performance
-            forbidigo:
-              forbid:
-                - '^os\.Exit$#Chỉ cho phép os.Exit trong main() của package main'
-                - '^log\.Fatal$#Chỉ cho phép log.Fatal trong main() của package main'
-                - '^log\.Fatalf$#Chỉ cho phép log.Fatalf trong main() của package main'
-          EOF
-
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.5
           install-mode: goinstall
