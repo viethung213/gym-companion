@@ -46,7 +46,7 @@
   - Tên event type: `contracts.<domain_type>.<service_name>.<version>.<eventName>` (camelCase). JSON field dùng **camelCase**. REST URL dùng danh từ số nhiều: `POST /api/v1/users/{userId}/profile`.
   - Event envelope bắt buộc: `specversion`, `id`, `source`, `type`, `time`, `datacontenttype`, `data`. Event payload tối thiểu.
 - **Database & Persistence Convention**:
-  - **Polyglot Persistence**: PostgreSQL (ACID) · MongoDB (skeleton 3D raw) · Redis (session, lockout cache, rate limit).
+  - **Database Persistence**: PostgreSQL (ACID, raw coordinates JSONB, sessions, lockout cache, rate limit).
   - Schema isolation: mỗi module có PostgreSQL schema riêng. Cấm `JOIN` chéo schema.
   - **Outbox Pattern** bắt buộc: lưu event vào `outbox_events` trong cùng transaction, CDC/publisher đẩy sang Kafka sau (partition key = `userId`).
   - Rate limit: 100 req/phút Onboarding API, 10 req/phút CompleteSession API.

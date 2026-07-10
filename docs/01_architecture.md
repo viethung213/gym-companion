@@ -33,7 +33,7 @@ graph TB
     end
 
     subgraph "Layer 4 · Infrastructure"
-        DB["Databases · Storage<br/>(PostgreSQL · Redis · MongoDB)"]
+        DB["Databases · Storage<br/>(PostgreSQL)"]
         Ext["External / Shared Services<br/>(OAuth · CDN · Blob Storage · Push Notification)"]
     end
 
@@ -102,7 +102,7 @@ graph TB
 │   │           ├── supporting/
 │   │           └── generic/
 │   ├── shared/                 # Shared Kernel (Thư viện dùng chung)
-│   │   ├── database/           # Bộ Helper kết nối DB vật lý (Postgres, Mongo, Redis)
+│   │   ├── database/           # Bộ Helper kết nối DB vật lý (Postgres)
 │   │   └── eventbus/           # Bộ điều phối sự kiện in-memory hoặc Kafka wrapper
 │   │
 │   ├── workout/                # Module AI Workout Coaching & Execution (Core)

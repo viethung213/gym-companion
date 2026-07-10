@@ -1,4 +1,4 @@
-.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-mongodb db-init-go db-init-all
+.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
 
 # Lệnh chạy docker compose của Buf CLI
 BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
@@ -48,8 +48,6 @@ test-env-up:
 	docker network create fitai-network || true
 	cp -n .env.example .env || true
 	docker compose -f infra/db/postgres/docker-compose.yml up -d
-	docker compose -f infra/db/mongodb/docker-compose.yml up -d
-	docker compose -f infra/redis/docker-compose.yml up -d
 	docker compose -f infra/kafka/docker-compose.yml up -d
 	docker compose -f docker-compose.test.yml up -d --build
 
@@ -59,10 +57,6 @@ test-env-down:
 	docker compose -f docker-compose.test.yml down -v || true
 	@echo "Stopping postgres container..."
 	docker compose -f infra/db/postgres/docker-compose.yml down -v || true
-	@echo "Stopping mongodb container..."
-	docker compose -f infra/db/mongodb/docker-compose.yml down -v || true
-	@echo "Stopping redis container..."
-	docker compose -f infra/redis/docker-compose.yml down -v || true
 	@echo "Stopping kafka container..."
 	docker compose -f infra/kafka/docker-compose.yml down -v || true
 	@echo "Removing shared network..."
@@ -136,14 +130,6 @@ db-init-postgres:
 		docker exec -i fitai-postgres-test psql -U postgres -d fitai < $$file; \
 	done
 
-# Tìm và chạy tất cả các file JS khởi tạo dữ liệu (*init*.js) ở các module trong internal/ vào MongoDB
-db-init-mongodb:
-	@echo "Running MongoDB init scripts found in internal/..."
-	@for file in $$(find internal -name "*init*.js" 2>/dev/null); do \
-		echo "Executing $$file in MongoDB..."; \
-		docker exec -i fitai-mongodb-test mongosh fitai < $$file; \
-	done
-
 # Tìm và chạy tất cả các file Go khởi tạo dữ liệu (*init*.go) ở các module trong internal/
 db-init-go:
 	@echo "Running Go init scripts found in internal/..."
@@ -153,7 +139,7 @@ db-init-go:
 	done
 
 # Chạy tất cả các loại script khởi tạo dữ liệu trong dự án
-db-init-all: db-init-postgres db-init-mongodb db-init-go
+db-init-all: db-init-postgres db-init-go
 	@echo "All database initialization scripts completed."
 
 # =====================================================================
