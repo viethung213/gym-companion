@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package contracts.core.workout_execution.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service;workoutexecutionv1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/core/workout_execution/v1/message/workout_execution_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "AI Workout Execution & Tracking API"
+    version: "1.0"
+    description: "API thực thi buổi tập, tracking camera đếm rep chấm điểm AI và lưu trữ lịch sử."
+  }
+};
+
+service WorkoutExecutionService {
+  // Bắt đầu một buổi tập mới
+  rpc StartWorkoutSession (contracts.core.workout_execution.v1.message.StartWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.StartWorkoutSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/start"
+      body: "*"
+    };
+  }
+
+  // Lưu kết quả của một set tập kèm tracking AI
+  rpc LogWorkoutSet (contracts.core.workout_execution.v1.message.LogWorkoutSetRequest) returns (contracts.core.workout_execution.v1.message.LogWorkoutSetResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/{session_id}/sets"
+      body: "*"
+    };
+  }
+
+  // Kết thúc buổi tập và xuất báo cáo
+  rpc CompleteWorkoutSession (contracts.core.workout_execution.v1.message.CompleteWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.CompleteWorkoutSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/{session_id}/complete"
+      body: "*"
+    };
+  }
+
+  // Lấy lịch sử các buổi tập của người dùng
+  rpc GetWorkoutHistory (contracts.core.workout_execution.v1.message.GetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/execution/users/{user_id}/history"
+    };
+  }
+}
