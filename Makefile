@@ -72,10 +72,10 @@ test-env-down:
 # 3. Code Quality & Testing (Local commands wrapping Docker)
 # =====================================================================
 
-# Chạy golangci-lint tĩnh bên trong Docker container để kiểm tra chất lượng mã nguồn (sử dụng tag latest để hỗ trợ Go 1.25+)
+# Chạy golangci-lint tĩnh cục bộ để kiểm tra chất lượng mã nguồn (sử dụng go run để biên dịch tự động bằng phiên bản Go của máy host, hỗ trợ Go 1.25+ và đồng bộ với CI)
 lint:
-	@echo "Linting Go source files inside Docker..."
-	docker run --rm -v "$(CURDIR):/app" -w /app golangci/golangci-lint:latest golangci-lint run -v
+	@echo "Linting Go source files..."
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5 run -v
 
 # --- Lệnh Chạy Toàn Bộ Dự Án ---
 
