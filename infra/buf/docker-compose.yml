@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  buf:
+    build:
+      context: ../../
+      dockerfile: infra/buf/buf.Dockerfile
+    image: fitai-buf-gen
+    volumes:
+      - ../../:/workspace
+    working_dir: /workspace
