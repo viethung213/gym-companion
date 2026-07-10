@@ -31,7 +31,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
           cache: false
 
       - name: Generate golangci-lint Config
@@ -54,7 +54,6 @@ jobs:
               - gochecknoglobals
               - gochecknoinits
               - forbidigo
-              - sigchanyzer
               - musttag
               - perfsprint
               - prealloc
@@ -88,4 +87,4 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.59
+          version: latest

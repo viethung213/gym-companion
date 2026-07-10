@@ -38,7 +38,7 @@ func main() {
 	fmt.Printf("Starting HTTP API server on port %s...\n", httpPort)
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	if err := http.ListenAndServe(":"+httpPort, nil); err != nil {
