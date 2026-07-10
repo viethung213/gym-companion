@@ -124,7 +124,7 @@
 #### Aggregate Root: `MotionSpecification`
 - **Nhiệm vụ**: Cấu hình AI và Pose mẫu chuẩn cho từng bài tập.
 - **Value Objects**:
-  - `PoseTemplate`: Tọa độ khớp chuẩn (33 điểm MediaPipe / 17 điểm YOLO).
+  - `PoseTemplate`: Tọa độ khớp chuẩn (17 điểm MMPose).
   - `CalibrationConfig`: Ngưỡng khoảng cách, góc nghiêng thiết bị.
   - `RepCountingRules`: Ngưỡng ROM% tối thiểu ≥ 70%.
   - `FormScoringRules`: Tiêu chí phát hiện lỗi tư thế.
