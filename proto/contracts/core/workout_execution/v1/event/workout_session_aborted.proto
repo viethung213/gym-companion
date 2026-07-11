@@ -4,12 +4,9 @@ package contracts.core.workout_execution.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
 
-message WorkoutSessionCompleted {
+message WorkoutSessionAborted {
   string session_id = 1;
   string user_id = 2;
-  string completed_at = 3;
-  int32 total_sets = 4;
-  float total_volume = 5;
-  optional float average_form_score = 6; // optional hỗ trợ N/A cho bài tập Phi AI
-  float average_rpe = 7;
+  string aborted_at = 3; // Định dạng ISO8601
+  string reason = 4; // e.g. "timeout", "user_cancelled"
 }
