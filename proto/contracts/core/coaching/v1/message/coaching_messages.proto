@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package contracts.core.workout.v1.message;
+package contracts.core.coaching.v1.message;
 
-option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/message;workoutv1message";
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message;coachingv1message";
 
 import "google/protobuf/timestamp.proto";
 import "google/type/date.proto";

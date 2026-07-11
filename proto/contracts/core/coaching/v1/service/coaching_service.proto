@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package contracts.core.workout.v1.service;
+package contracts.core.coaching.v1.service;
 
-option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/service;workoutv1service";
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service;coachingv1service";
 
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "contracts/core/workout/v1/message/coaching_messages.proto";
+import "contracts/core/coaching/v1/message/coaching_messages.proto";
 
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
@@ -35,7 +35,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 
 service CoachingService {
   // Create the initial four-week roadmap and first weekly schedule.
-  rpc InitiateRoadmap (contracts.core.workout.v1.message.InitiateRoadmapRequest) returns (contracts.core.workout.v1.message.InitiateRoadmapResponse) {
+  rpc InitiateRoadmap (contracts.core.coaching.v1.message.InitiateRoadmapRequest) returns (contracts.core.coaching.v1.message.InitiateRoadmapResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/workout-roadmaps"
       body: "payload"
@@ -43,21 +43,21 @@ service CoachingService {
   }
 
   // List roadmaps for a user, optionally filtered by status.
-  rpc ListWorkoutRoadmaps (contracts.core.workout.v1.message.ListWorkoutRoadmapsRequest) returns (contracts.core.workout.v1.message.ListWorkoutRoadmapsResponse) {
+  rpc ListWorkoutRoadmaps (contracts.core.coaching.v1.message.ListWorkoutRoadmapsRequest) returns (contracts.core.coaching.v1.message.ListWorkoutRoadmapsResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/workout-roadmaps"
     };
   }
 
   // Get one roadmap by id.
-  rpc GetWorkoutRoadmap (contracts.core.workout.v1.message.GetWorkoutRoadmapRequest) returns (contracts.core.workout.v1.message.GetWorkoutRoadmapResponse) {
+  rpc GetWorkoutRoadmap (contracts.core.coaching.v1.message.GetWorkoutRoadmapRequest) returns (contracts.core.coaching.v1.message.GetWorkoutRoadmapResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}"
     };
   }
 
   // Generate the next weekly schedule for a roadmap.
-  rpc GenerateNextWeeklySchedule (contracts.core.workout.v1.message.GenerateNextWeeklyScheduleRequest) returns (contracts.core.workout.v1.message.GenerateNextWeeklyScheduleResponse) {
+  rpc GenerateNextWeeklySchedule (contracts.core.coaching.v1.message.GenerateNextWeeklyScheduleRequest) returns (contracts.core.coaching.v1.message.GenerateNextWeeklyScheduleResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/weekly-schedules:generate-next"
       body: "payload"
@@ -65,21 +65,21 @@ service CoachingService {
   }
 
   // List weekly schedules in a roadmap.
-  rpc ListWeeklySchedules (contracts.core.workout.v1.message.ListWeeklySchedulesRequest) returns (contracts.core.workout.v1.message.ListWeeklySchedulesResponse) {
+  rpc ListWeeklySchedules (contracts.core.coaching.v1.message.ListWeeklySchedulesRequest) returns (contracts.core.coaching.v1.message.ListWeeklySchedulesResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/weekly-schedules"
     };
   }
 
   // Get one weekly schedule by id.
-  rpc GetWeeklySchedule (contracts.core.workout.v1.message.GetWeeklyScheduleRequest) returns (contracts.core.workout.v1.message.GetWeeklyScheduleResponse) {
+  rpc GetWeeklySchedule (contracts.core.coaching.v1.message.GetWeeklyScheduleRequest) returns (contracts.core.coaching.v1.message.GetWeeklyScheduleResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/weekly-schedules/{weekly_schedule_id}"
     };
   }
 
   // Generate the detailed just-in-time workout plan for a scheduled day.
-  rpc GenerateDailyWorkoutPlan (contracts.core.workout.v1.message.GenerateDailyWorkoutPlanRequest) returns (contracts.core.workout.v1.message.GenerateDailyWorkoutPlanResponse) {
+  rpc GenerateDailyWorkoutPlan (contracts.core.coaching.v1.message.GenerateDailyWorkoutPlanRequest) returns (contracts.core.coaching.v1.message.GenerateDailyWorkoutPlanResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/weekly-schedules/{weekly_schedule_id}/daily-workout-plans:generate"
       body: "payload"
@@ -87,14 +87,14 @@ service CoachingService {
   }
 
   // Get one daily workout plan by id.
-  rpc GetDailyWorkoutPlan (contracts.core.workout.v1.message.GetDailyWorkoutPlanRequest) returns (contracts.core.workout.v1.message.GetDailyWorkoutPlanResponse) {
+  rpc GetDailyWorkoutPlan (contracts.core.coaching.v1.message.GetDailyWorkoutPlanRequest) returns (contracts.core.coaching.v1.message.GetDailyWorkoutPlanResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/daily-workout-plans/{daily_workout_plan_id}"
     };
   }
 
   // Run BR-AC-04..08 adaptive review for a roadmap.
-  rpc RunAdaptiveReview (contracts.core.workout.v1.message.RunAdaptiveReviewRequest) returns (contracts.core.workout.v1.message.RunAdaptiveReviewResponse) {
+  rpc RunAdaptiveReview (contracts.core.coaching.v1.message.RunAdaptiveReviewRequest) returns (contracts.core.coaching.v1.message.RunAdaptiveReviewResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-reviews:run"
       body: "payload"
@@ -102,14 +102,14 @@ service CoachingService {
   }
 
   // List pending or historical adaptive recommendations.
-  rpc ListAdaptiveRecommendations (contracts.core.workout.v1.message.ListAdaptiveRecommendationsRequest) returns (contracts.core.workout.v1.message.ListAdaptiveRecommendationsResponse) {
+  rpc ListAdaptiveRecommendations (contracts.core.coaching.v1.message.ListAdaptiveRecommendationsRequest) returns (contracts.core.coaching.v1.message.ListAdaptiveRecommendationsResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-recommendations"
     };
   }
 
   // Apply or reject a user-facing adaptive recommendation.
-  rpc RespondAdaptiveRecommendation (contracts.core.workout.v1.message.RespondAdaptiveRecommendationRequest) returns (contracts.core.workout.v1.message.RespondAdaptiveRecommendationResponse) {
+  rpc RespondAdaptiveRecommendation (contracts.core.coaching.v1.message.RespondAdaptiveRecommendationRequest) returns (contracts.core.coaching.v1.message.RespondAdaptiveRecommendationResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/adaptive-recommendations/{recommendation_id}:respond"
       body: "payload"
