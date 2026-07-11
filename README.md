@@ -21,7 +21,7 @@ Hệ thống được thiết kế xoay quanh 6 nhóm nghiệp vụ cốt lõi:
    * Tự động điều chỉnh cường độ tập luyện định kỳ mỗi 2 tuần (Progressive Overload giới hạn $\le 10\%$ volume).
    * Đề xuất bài tập thay thế ngay lập tức khi phát hiện chấn thương của người dùng.
 3. **Giám sát tư thế thời gian thực (`AI Camera Coach`)**:
-   * Tracking khung xương 33 điểm khớp thông qua camera (Edge AI - xử lý trên thiết bị để đảm bảo quyền riêng tư).
+   * Tracking khung xương 17 điểm khớp thông qua camera (Edge AI - xử lý trên thiết bị để đảm bảo quyền riêng tư).
    * Đo lường biên độ chuyển động (ROM) và phát hiện lỗi tư thế (võng lưng, gối chụm,...) với độ trễ $< 500$ms.
    * Cảnh báo âm thanh (Audio Ducking) và hình ảnh (Visual Overlay) thời gian thực.
 4. **Ghi nhận tập luyện & Tương tác âm thanh (`Workout Logging & Smart Audio`)**:

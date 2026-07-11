@@ -55,11 +55,11 @@ CREATE TABLE IF NOT EXISTS profile.outbox_log (
 );
 
 -- ------------------------------------------
--- 3. SCHEMA: workout
+-- 3. SCHEMA: coaching
 -- ------------------------------------------
-CREATE SCHEMA IF NOT EXISTS workout;
+CREATE SCHEMA IF NOT EXISTS coaching;
 
-CREATE TABLE IF NOT EXISTS workout.outbox (
+CREATE TABLE IF NOT EXISTS coaching.outbox (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS workout.outbox (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS workout.outbox_log (
+CREATE TABLE IF NOT EXISTS coaching.outbox_log (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL,
     event_type VARCHAR(255) NOT NULL,
@@ -80,11 +80,11 @@ CREATE TABLE IF NOT EXISTS workout.outbox_log (
 );
 
 -- ------------------------------------------
--- 4. SCHEMA: workout_log
+-- 4. SCHEMA: workout_execution
 -- ------------------------------------------
-CREATE SCHEMA IF NOT EXISTS workout_log;
+CREATE SCHEMA IF NOT EXISTS workout_execution;
 
-CREATE TABLE IF NOT EXISTS workout_log.outbox (
+CREATE TABLE IF NOT EXISTS workout_execution.outbox (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS workout_log.outbox (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS workout_log.outbox_log (
+CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL,
     event_type VARCHAR(255) NOT NULL,
@@ -178,3 +178,28 @@ CREATE TABLE IF NOT EXISTS audio.outbox_log (
     status VARCHAR(50) NOT NULL,
     error_message TEXT
 );
+
+-- 8. SCHEMA: exercise
+-- ------------------------------------------
+CREATE SCHEMA IF NOT EXISTS exercise;
+
+CREATE TABLE IF NOT EXISTS exercise.outbox (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS exercise.outbox_log (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT
+);
+

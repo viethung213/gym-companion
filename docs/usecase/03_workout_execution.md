@@ -42,7 +42,7 @@
 **Main Flow**
 1. User bật camera, System hiệu chỉnh khoảng cách (1.5m–2m) qua `CalibrationConfig`.
 2. System tải `PoseTemplate` và `RepCountingRules` từ `MotionSpecification` của bài tập.
-3. System tracking 33 điểm khớp theo thời gian thực. Nhạc nền phát chạy ngầm.
+3. System tracking 17 điểm khớp theo thời gian thực. Nhạc nền phát chạy ngầm.
 4. User có thể chọn **Xem/Nghe hướng dẫn kỹ thuật** (on-demand):
    - **Xem**: Bật/tắt overlay video demo kỹ thuật ở góc màn hình (mặc định thu gọn).
    - **Nghe**: Bật/tắt giọng nói của AI Coach hướng dẫn động tác.

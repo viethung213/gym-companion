@@ -28,7 +28,7 @@
 ## 2. PHÂN TÍCH TÁC NHÂN (STAKEHOLDERS)
 - **ACT-01 (User)**: Người tập. Nhập chỉ số, check-in, tập dưới camera, theo dõi sức khỏe & ăn uống. (High)
 - **ACT-02 (AI Coach)**: Hệ thống. Phân tích hiệu suất, sinh lộ trình/lịch tập, động viên, chỉnh giáo án. (High)
-- **ACT-03 (AI Camera)**: Hệ thống. Xử lý video, tracking khớp (33 điểm), đếm rep, đo ROM, phát hiện lỗi tư thế. (High)
+- **ACT-03 (AI Camera)**: Hệ thống. Xử lý video, tracking khớp (17 điểm), đếm rep, đo ROM, phát hiện lỗi tư thế. (High)
 - **ACT-04 (AI Nutrition)**: Hệ thống. Tính calo/macro cá nhân hóa, gợi ý & luân chuyển thực đơn không trùng. (Medium)
 - **ACT-05 (Admin)**: Quản trị viên. Quản lý thư viện bài tập, thực đơn, kiểm tra dữ liệu và bảo mật. (Low)
 
@@ -45,7 +45,7 @@
 1. User check-in & cấu hình playlist âm nhạc (phát chạy ngầm xuyên suốt buổi tập).
 2. **Khởi động (Warm-up)**: Nếu giáo án có Warm-up, hệ thống hiển thị bài tập khởi động (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Warm-up** để bỏ qua.
 3. **Thực hiện bài tập chính**: Cả hai nhánh AI và Phi AI đều được thiết kế đồng nhất (cùng có nhạc nền chạy ngầm, timer đếm ngược, tuỳ chọn xem/nghe hướng dẫn on-demand). Sự khác biệt duy nhất là việc kích hoạt module AI Camera:
-   - **Đối với bài tập có hỗ trợ AI Camera (Nhánh AI)**: Bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng. AI Camera tracking khung xương (33 điểm), ước lượng tạ thực tế, đếm rep, tính ROM %, chấm Form Score. Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms). User xác nhận kết quả set (hệ thống tự động điền rep, tạ, Form Score).
+   - **Đối với bài tập có hỗ trợ AI Camera (Nhánh AI)**: Bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng. AI Camera tracking khung xương (17 điểm), ước lượng tạ thực tế, đếm rep, tính ROM %, chấm Form Score. Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms). User xác nhận kết quả set (hệ thống tự động điền rep, tạ, Form Score).
    - **Đối với bài tập phi AI (Nhánh tự ghi nhận)**: Tắt camera. User tự thực hiện theo nhịp của mình và tự nhập kết quả set thủ công khi hoàn thành (Form Score ghi nhận N/A).
 4. **Dãn cơ (Cooldown)**: Trước khi kết thúc buổi tập, nếu giáo án có Cooldown, hệ thống hiển thị bài tập dãn cơ (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Cooldown** để bỏ qua.
 5. Nghỉ ngơi → Lặp lại cho đến khi hoàn thành giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
@@ -86,7 +86,7 @@
 ### Module 3: AI Camera Coach (Phân tích tư thế)
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
-| **FR-CC-01** | **Tracking khung xương**: Phân tích video xác định 33 điểm khớp chính trên cơ thể. | M |
+| **FR-CC-01** | **Tracking khung xương**: Phân tích video xác định 17 điểm khớp chính trên cơ thể. | M |
 | **FR-CC-02** | **Đo lường góc ROM**: Tính toán biên độ chuyển động (ROM) khớp & tỷ lệ hoàn thiện rep. | M |
 | **FR-CC-03** | **Phát hiện lỗi**: So so sánh tọa độ khớp với mô hình chuẩn để phát hiện lỗi kỹ thuật (võng lưng, gối chụm...). | M |
 | **FR-CC-04** | **Cảnh báo real-time**: Overlay hình ảnh & âm thanh hướng dẫn sửa lỗi tức thì với độ trễ <500ms. | M |

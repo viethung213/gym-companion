@@ -159,9 +159,20 @@
 - **Invariants**:
   - Thêm `MealLog` mới → tự động cập nhật `LockoutRegistry`: Protein 7 ngày, Carb 5 ngày, Chủ đề món 3 ngày (BR-NU-02).
 
+#### Aggregate Root: `FoodItem`
+- **Nhiệm vụ**: Thư viện thực phẩm chuẩn, quản lý vòng đời phê duyệt.
+- **Value Objects**:
+  - `FoodNutrient`: Tên, calo, macro trên 100g, nhãn chay/Halal, nhãn dị ứng.
+- **Repository**: `FoodItemRepository`
+- **Domain Events**:
+  - `FoodItemCreated`: Thực phẩm tạo mới (trạng thái `Draft`).
+  - `FoodItemApproved`: Admin phê duyệt → trạng thái `Active`.
+- **Invariants**:
+  - Lifecycle: `Draft` → `PendingApproval` → `Active`.
+
 ---
 
-## 5. Context Catalog
+## 5. Context Exercise
 
 #### Aggregate Root: `Exercise`
 - **Nhiệm vụ**: Thư viện bài tập chuẩn, quản lý vòng đời phê duyệt.
@@ -174,14 +185,3 @@
 - **Invariants**:
   - Lifecycle: `Draft` → `PendingApproval` → `Active`.
   - Chỉ bài tập `Active` mới được tham chiếu bởi các Context khác.
-
-#### Aggregate Root: `FoodItem`
-- **Nhiệm vụ**: Thư viện thực phẩm chuẩn, quản lý vòng đời phê duyệt.
-- **Value Objects**:
-  - `FoodNutrient`: Tên, calo, macro trên 100g, nhãn chay/Halal, nhãn dị ứng.
-- **Repository**: `FoodItemRepository`
-- **Domain Events**:
-  - `FoodItemCreated`: Thực phẩm tạo mới (trạng thái `Draft`).
-  - `FoodItemApproved`: Admin phê duyệt → trạng thái `Active`.
-- **Invariants**:
-  - Lifecycle: `Draft` → `PendingApproval` → `Active`.

@@ -47,13 +47,13 @@
 
 **Main Flow**
 1. User tìm kiếm món ăn theo tên hoặc quét mã vạch.
-2. System trả về `FoodItem` phù hợp từ Catalog.
+2. System trả về `FoodItem` phù hợp từ thư viện thực phẩm.
 3. User xác nhận khẩu phần (gram).
-4. System tạo `MealLog`, đọc siêu dữ liệu dinh dưỡng (metadata) của `FoodItem` từ Catalog để xác định nguồn Protein chính, nguồn tinh bột (Carb) chính và Category/chủ đề món ăn, sau đó cập nhật `LockoutRegistry` (khóa Protein chính 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày) (BR-NU-02).
+4. System tạo `MealLog`, đọc siêu dữ liệu dinh dưỡng (metadata) của `FoodItem` để xác định nguồn Protein chính, nguồn tinh bột (Carb) chính và Category/chủ đề món ăn, sau đó cập nhật `LockoutRegistry` (khóa Protein chính 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày) (BR-NU-02).
 5. System phát `MealLogged` và `LockoutApplied`.
 
 **Alternative Flow**
-- A1: Không tìm thấy món trong Catalog → User nhập thủ công tên + calo/macro ước tính.
+- A1: Không tìm thấy món trong thư viện → User nhập thủ công tên + calo/macro ước tính.
 
 **Error / Edge Cases**
 - E1: Quét mã vạch thất bại / sản phẩm không có trong database → fallback sang nhập thủ công.

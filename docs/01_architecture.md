@@ -28,7 +28,7 @@ graph TB
 
     subgraph "Layer 3 · Backend Services (Golang Modular Monolith)"
         Core["Core Bounded Contexts<br/>(Coaching & Planning · Workout Execution & Motion · Nutrition)"]
-        Support["Supporting Bounded Contexts<br/>(User Profile · Catalog)"]
+        Support["Supporting Bounded Contexts<br/>(User Profile · Exercise)"]
         Generic["Generic Services<br/>(Auth · Notification · Audio)"]
     end
 
@@ -62,12 +62,11 @@ graph TB
 
 | Bounded Context (Logic) | Phân loại | Thư mục Vật lý (`internal/`) | Lý do thiết kế & Trách nhiệm triển khai |
 | :--- | :--- | :--- | :--- |
-| **User Profile** | Supporting | [profile/](file:///e:/LEARN/a/gym-companion/internal/profile) | Quản lý thông tin thể trạng, lịch sử chỉ số cơ thể và hồ sơ người dùng. |
-| **Coaching & Planning** | Core | [workout/](file:///e:/LEARN/a/gym-companion/internal/workout) | Chịu trách nhiệm lập lộ trình (Roadmap) và giáo án tập luyện chi tiết (Daily Plan). |
-| **Workout Execution & Motion** | Core | [workout/](file:///e:/LEARN/a/gym-companion/internal/workout) & [workout_log/](file:///e:/LEARN/a/gym-companion/internal/workout_log) | - `workout/`: Core AI Engine xử lý ROM/Form Score từ AI Camera thời gian thực.<br>- `workout_log/`: Lưu trữ lịch sử tập luyện thực tế (Workout Log) và tiến trình tập, giúp giảm tải logic cho core engine. |
-| **Nutrition** | Core | [nutrition/](file:///e:/LEARN/a/gym-companion/internal/nutrition) | Quản lý chế độ ăn uống, calo/macro và thực đơn gợi ý. |
-| **Catalog** | Supporting | Nằm trong [workout/](file:///e:/LEARN/a/gym-companion/internal/workout) & [nutrition/](file:///e:/LEARN/a/gym-companion/internal/nutrition) | Danh mục bài tập và thực phẩm chuẩn được tích hợp trực tiếp làm Sub-context trong các module tương ứng để tối giản hóa kiến trúc (không tạo module riêng biệt). |
-| *Không có (Generic)* | Generic | [auth/](file:///e:/LEARN/a/gym-companion/internal/auth) · [notification/](file:///e:/LEARN/a/gym-companion/internal/notification) · [audio/](file:///e:/LEARN/a/gym-companion/internal/audio) | Các dịch vụ kỹ thuật dùng chung cho toàn bộ hệ thống (Xác thực, Thông báo, Tích hợp Âm thanh). |
+| **User Profile** | Supporting | [profile/](file:///e:/LEAN/TTTN/internal/profile) | Quản lý thông tin thể trạng, lịch sử chỉ số cơ thể và hồ sơ người dùng. |
+| **Coaching & Planning** | Core | [coaching/](file:///e:/LEAN/TTTN/internal/coaching) | Chịu trách nhiệm sinh lộ trình tập (Roadmap), sinh giáo án ngày và thích ứng giáo án tập luyện. |
+| **Workout Execution & Motion** | Core | [workout_execution/](file:///e:/LEAN/TTTN/internal/workout_execution) | Chấm điểm tập đúng/sai thông qua AI Camera (Form Score), đếm rep/set và lưu trữ nhật ký tập thực tế. |
+| **Nutrition** | Core | [nutrition/](file:///e:/LEAN/TTTN/internal/nutrition) | Quản lý chế độ ăn uống, calo/macro, gợi ý thực đơn và danh mục thực phẩm chuẩn. |
+| *Không có (Generic)* | Generic | [auth/](file:///e:/LEAN/TTTN/internal/auth) · [notification/](file:///e:/LEAN/TTTN/internal/notification) · [audio/](file:///e:/LEAN/TTTN/internal/audio) | Các dịch vụ kỹ thuật dùng chung cho toàn bộ hệ thống (Xác thực, Thông báo, Tích hợp Âm thanh). |
 
 ---
 
@@ -77,7 +76,7 @@ graph TB
 - **Không gián đoạn khi offline**: Khi Coaching Service gặp sự cố, người dùng vẫn tự tập luyện bằng timer và ghi log thủ công bình thường.
 - **Mỗi Service = 1 Bounded Context**: Thiết kế modular monolith giúp cô lập thay đổi, dễ dàng tách thành microservices độc lập.
 - **Phân luồng dữ liệu**: Dữ liệu tóm tắt đi qua API chính. Dữ liệu thô (tọa độ khớp xương) upload ngầm vào Blob Storage qua luồng chạy nền của Client để tránh gây nghẽn API.
-- **Thiết kế thích ứng thay đổi (Change Propagation)**: Tách biệt dữ liệu nghiệp vụ (Catalog) và cấu hình thuật toán AI (Workout & Motion) qua ID bài tập. Nâng cấp model AI không ảnh hưởng đến database nghiệp vụ.
+- **Thiết kế thích ứng thay đổi (Change Propagation)**: Tách biệt dữ liệu nghiệp vụ (Exercise) và cấu hình thuật toán AI (Workout & Motion) qua ID bài tập. Nâng cấp model AI không ảnh hưởng đến database nghiệp vụ.
 
 ---
 
@@ -105,22 +104,23 @@ graph TB
 │   │   ├── database/           # Bộ Helper kết nối DB vật lý (Postgres)
 │   │   └── eventbus/           # Bộ điều phối sự kiện in-memory hoặc Kafka wrapper
 │   │
-│   ├── workout/                # Module AI Workout Coaching & Execution (Core)
+│   ├── coaching/               # Module AI Coaching & Planning (Core)
 │   │   ├── domain/             # Lõi: Thực thể, Value Objects, Ports (Interfaces)
 │   │   ├── application/        # Lõi: CQRS Use Cases, Command/Query Handlers
 │   │   ├── infrastructure/     # Ngoài: DB Repositories, API handlers, AI Clients (Adapters)
 │   │   └── docs/               # Lưu trữ tài liệu phân tích nghiệp vụ & kỹ thuật của module
+│   ├── workout_execution/      # Module Workout Execution & Motion (Core)
+│   │   ├── domain/
+│   │   ├── application/
+│   │   ├── infrastructure/
+│   │   └── docs/
+
 │   ├── nutrition/              # Module AI Nutrition Engine (Core)
 │   │   ├── domain/
 │   │   ├── application/
 │   │   ├── infrastructure/
 │   │   └── docs/
 │   ├── profile/                # Module User Profile & Onboarding (Supporting)
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── infrastructure/
-│   │   └── docs/
-│   ├── workout_log/            # Module Workout Logging & Progress (Supporting)
 │   │   ├── domain/
 │   │   ├── application/
 │   │   ├── infrastructure/
@@ -145,11 +145,11 @@ graph TB
     ├── buf.gen.yaml            # Cấu hình plugins sinh mã stubs (Go & Swagger)
     └── contracts/              # Thư mục chứa các tệp Protocol Buffers gốc
         ├── core/
-        │   ├── workout/v1/
+        │   ├── coaching/v1/
+        │   ├── workout_execution/v1/
         │   └── nutrition/v1/
         ├── supporting/
-        │   ├── profile/v1/
-        │   └── workout_log/v1/
+        │   └── profile/v1/
         └── generic/
             ├── auth/v1/
             ├── notification/v1/

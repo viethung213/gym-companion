@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package contracts.core.workout_execution.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message;workoutexecutionv1message";
+
+message StartWorkoutSessionRequest {
+  string user_id = 1;
+  string plan_id = 2;
+}
+
+message StartWorkoutSessionResponse {
+  string session_id = 1;
+  string started_at = 2;
+}
+
+message Keypoint3D {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+  float score = 4;
+}
+
+message RepLog {
+  int32 rep_number = 1;
+  float rom_percentage = 2;
+  string error_status = 3;
+  repeated Keypoint3D skeleton_coords = 4;
+}
+
+message LogWorkoutSetRequest {
+  string session_id = 1;
+  int32 set_number = 2;
+  string exercise_id = 3;
+  int32 target_reps = 4;
+  int32 actual_reps = 5;
+  float weight = 6;
+  float form_score = 7;
+  float rpe = 8;
+  repeated RepLog reps = 9;
+}
+
+message LogWorkoutSetResponse {
+  string set_log_id = 1;
+  bool is_successful = 2;
+}
+
+message CompleteWorkoutSessionRequest {
+  string session_id = 1;
+}
+
+message CompleteWorkoutSessionResponse {
+  string session_id = 1;
+  string completed_at = 2;
+  int32 total_sets = 3;
+  float total_volume = 4;
+  float average_form_score = 5;
+  float average_rpe = 6;
+}
+
+message GetWorkoutHistoryRequest {
+  string user_id = 1;
+  int32 limit = 2;
+}
+
+message WorkoutSessionSummary {
+  string session_id = 1;
+  string date = 2;
+  int32 total_sets = 3;
+  float total_volume = 4;
+  float average_form_score = 5;
+}
+
+message GetWorkoutHistoryResponse {
+  repeated WorkoutSessionSummary sessions = 1;
+}
