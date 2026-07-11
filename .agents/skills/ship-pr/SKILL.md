@@ -8,7 +8,13 @@ description: Automatically pushes the current branch and creates/opens a Pull Re
 This skill guides the agent to push the current branch and open a Pull Request (PR) on GitHub using the GitHub CLI (`gh`).
 
 ## Predefined Labels for FITAI Project
-When creating the PR, select the most relevant labels from this list to apply via `--label` (or `-l`):
+When creating the PR, select the most relevant labels from this list to apply via `--label` (or `-l`).
+
+> [!IMPORTANT]
+> - **Chỉ gán label khi thực sự cần thiết** hoặc có đặc thù đặc biệt.
+> - **Giới hạn số lượng**: Chỉ chọn **tối đa 1 đến 2 labels** quan trọng nhất (ví dụ: 1 label chỉ Type và 1 label chỉ Scope/Technology nổi bật). Tránh gán tràn lan nhiều nhãn nếu không cần thiết.
+
+Available labels:
 - **Type**:
   - `✨ feature`
   - `🐛 bug`
