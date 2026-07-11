@@ -2,11 +2,13 @@ syntax = "proto3";
 
 package contracts.core.workout_execution.v1.event;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
 
 message WorkoutSessionAborted {
   string session_id = 1;
   string user_id = 2;
-  string aborted_at = 3; // Định dạng ISO8601
+  google.protobuf.Timestamp aborted_at = 3;
   string reason = 4; // e.g. "timeout", "user_cancelled"
 }

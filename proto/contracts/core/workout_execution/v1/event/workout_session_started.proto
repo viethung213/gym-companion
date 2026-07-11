@@ -2,11 +2,13 @@ syntax = "proto3";
 
 package contracts.core.workout_execution.v1.event;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
 
 message WorkoutSessionStarted {
   string session_id = 1;
   string user_id = 2;
   string plan_id = 3;
-  string started_at = 4; // Định dạng ISO8601
+  google.protobuf.Timestamp started_at = 4;
 }

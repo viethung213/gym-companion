@@ -4,6 +4,8 @@ package contracts.core.workout_execution.v1.message;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message;workoutexecutionv1message";
 
+import "google/protobuf/timestamp.proto";
+
 // Request/Response cho StartWorkoutSession
 message StartWorkoutSessionRequest {
   string user_id = 1;
@@ -12,7 +14,7 @@ message StartWorkoutSessionRequest {
 
 message StartWorkoutSessionResponse {
   string session_id = 1;
-  string started_at = 2;
+  google.protobuf.Timestamp started_at = 2;
 }
 
 // Log cho từng rep (được tính toán từ Client và gửi lên Server)
@@ -49,7 +51,7 @@ message AbortWorkoutSessionRequest {
 
 message AbortWorkoutSessionResponse {
   string session_id = 1;
-  string aborted_at = 2;
+  google.protobuf.Timestamp aborted_at = 2;
 }
 
 // Request/Response cho CompleteWorkoutSession
@@ -59,7 +61,7 @@ message CompleteWorkoutSessionRequest {
 
 message CompleteWorkoutSessionResponse {
   string session_id = 1;
-  string completed_at = 2;
+  google.protobuf.Timestamp completed_at = 2;
   int32 total_sets = 3;
   float total_volume = 4;
   optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
@@ -70,7 +72,7 @@ message CompleteWorkoutSessionResponse {
 message ErrorLog {
   string error_code = 1;
   string severity = 2; // "severity_1" hoặc "severity_2"
-  string timestamp = 3; // Định dạng ISO8601 hoặc epoch
+  google.protobuf.Timestamp timestamp = 3;
   int32 set_number = 4;
   int32 rep_number = 5; // Có thể bằng -1 nếu không gắn với rep cụ thể (ví dụ: tập Plank bị võng lưng)
   string exercise_id = 6; // Mã bài tập phát sinh lỗi
@@ -123,7 +125,7 @@ message PersonalRecord {
   float one_rep_max = 2;
   float weight = 3;
   int32 reps = 4;
-  string achieved_at = 5;
+  google.protobuf.Timestamp achieved_at = 5;
 }
 
 message GetPersonalRecordsRequest {
@@ -156,7 +158,7 @@ message GetWorkoutHistoryRequest {
 
 message WorkoutSessionSummary {
   string session_id = 1;
-  string date = 2;
+  google.protobuf.Timestamp date = 2;
   int32 total_sets = 3;
   float total_volume = 4;
   optional float average_form_score = 5; // Dạng optional (N/A nếu buổi tập phi AI)
