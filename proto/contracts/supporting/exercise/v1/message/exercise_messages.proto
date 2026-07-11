@@ -4,66 +4,130 @@ package contracts.supporting.exercise.v1.message;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message;exercisev1message";
 
-message ExerciseInfo {
-  string name = 1;
-  string main_muscle_group = 2;
-  repeated string secondary_muscle_groups = 3;
-  string video_instruction_url = 4;
-  repeated string equipment = 5;
-  repeated string alternative_exercises = 6;
+enum ExerciseStatus {
+  EXERCISE_STATUS_UNSPECIFIED = 0;
+  EXERCISE_STATUS_DRAFT = 1;
+  EXERCISE_STATUS_PENDING_APPROVAL = 2;
+  EXERCISE_STATUS_ACTIVE = 3;
 }
 
-message Exercise {
+message ExerciseInfo {
   string id = 1;
   string name = 2;
-  string main_muscle_group = 3;
-  repeated string secondary_muscle_groups = 4;
-  string video_instruction_url = 5;
-  repeated string equipment = 6;
-  repeated string alternative_exercises = 7;
-  string status = 8; // "DRAFT", "PENDING_APPROVAL", "ACTIVE"
-  string created_at = 9;
-  string updated_at = 10;
+  string body_part_id = 3;
+  string equipment_id = 4;
+  string target_muscle_id = 5;
+  string instructions = 6;
+  repeated string secondary_muscle_ids = 7;
+  string thumbnail_url = 8;
+  string media_url = 9;
+  string video_url = 10;
+  string difficulty = 11;
+  int32 default_rest_seconds = 12;
+  repeated string tag_ids = 13;
+  ExerciseStatus status = 14;
 }
-
-// Request and Response message types for Exercise CRUD
 
 message CreateExerciseRequest {
   string name = 1;
-  string main_muscle_group = 2;
-  repeated string secondary_muscle_groups = 3;
-  string video_instruction_url = 4;
-  repeated string equipment = 5;
-  repeated string alternative_exercises = 6;
+  string body_part_id = 2;
+  string equipment_id = 3;
+  string target_muscle_id = 4;
+  string instructions = 5;
+  repeated string secondary_muscle_ids = 6;
+  string thumbnail_url = 7;
+  string media_url = 8;
+  string video_url = 9;
+  string difficulty = 10;
+  int32 default_rest_seconds = 11;
+  repeated string tag_ids = 12;
 }
 
 message CreateExerciseResponse {
-  Exercise exercise = 1;
+  ExerciseInfo exercise = 1;
 }
 
-message ApproveExerciseRequest {
-  string exercise_id = 1;
+message UpdateExerciseRequest {
+  string id = 1;
+  string name = 2;
+  string body_part_id = 3;
+  string equipment_id = 4;
+  string target_muscle_id = 5;
+  string instructions = 6;
+  repeated string secondary_muscle_ids = 7;
+  string thumbnail_url = 8;
+  string media_url = 9;
+  string video_url = 10;
+  string difficulty = 11;
+  int32 default_rest_seconds = 12;
+  repeated string tag_ids = 13;
+  ExerciseStatus status = 14;
 }
 
-message ApproveExerciseResponse {
-  Exercise exercise = 1;
+message UpdateExerciseResponse {
+  ExerciseInfo exercise = 1;
+}
+
+message DeleteExerciseRequest {
+  string id = 1;
+}
+
+message DeleteExerciseResponse {
+  bool success = 1;
 }
 
 message GetExerciseRequest {
-  string exercise_id = 1;
+  string id = 1;
 }
 
 message GetExerciseResponse {
-  Exercise exercise = 1;
+  ExerciseInfo exercise = 1;
 }
 
-message ListExercisesRequest {
-  string status = 1; // Filter by status e.g. "ACTIVE"
-  int32 limit = 2;
-  int32 offset = 3;
+message SearchExercisesRequest {
+  string body_part_id = 1;
+  string equipment_id = 2;
+  repeated string avoid_injury_areas = 3;
+  repeated string tag_ids = 4;
+  string target_muscle_id = 5;
+  repeated string secondary_muscle_ids = 6;
+  string keyword = 7;
+  string difficulty = 8;
+  int32 limit = 9;
+  int32 offset = 10;
 }
 
-message ListExercisesResponse {
-  repeated Exercise exercises = 1;
-  int32 total = 2;
+message SearchExercisesResponse {
+  repeated ExerciseInfo exercises = 1;
+}
+
+// Lookup metadata definitions
+message BodyPart {
+  string id = 1;
+  string name = 2;
+}
+
+message Equipment {
+  string id = 1;
+  string name = 2;
+}
+
+message Muscle {
+  string id = 1;
+  string name = 2;
+  string body_part_id = 3;
+}
+
+message Tag {
+  string id = 1;
+  string name = 2;
+}
+
+message GetCatalogMetadataRequest {}
+
+message GetCatalogMetadataResponse {
+  repeated BodyPart body_parts = 1;
+  repeated Equipment equipments = 2;
+  repeated Muscle muscles = 3;
+  repeated Tag tags = 4;
 }
