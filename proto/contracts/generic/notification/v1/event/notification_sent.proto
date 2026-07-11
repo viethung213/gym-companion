@@ -7,6 +7,8 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 message NotificationSent {
   string notification_id = 1;
   string user_id = 2;
-  string channel = 3; // PUSH, SMS, EMAIL
-  string sent_at = 4;
+  string channel = 3; // "PUSH", "EMAIL", "SMS"
+  string title = 4;
+  string body = 5;
+  string sent_at = 6;
 }

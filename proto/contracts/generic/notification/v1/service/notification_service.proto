@@ -12,15 +12,73 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
     title: "Notification Service API"
     version: "1.0"
-    description: "API gửi thông báo đẩy (Push Notifications) và tin nhắn nhắc lịch tập."
+    description: "API gửi thông báo đẩy (Push Notifications), quản lý token thiết bị và cấu hình nhận thông báo."
+  }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
   }
 };
 
 service NotificationService {
-  // Gửi thông báo đẩy đến thiết bị người dùng
+  // Gửi thông báo đẩy đến thiết bị (Chỉ sử dụng nội bộ bởi hệ thống hoặc Background workers)
   rpc SendPushNotification (contracts.generic.notification.v1.message.SendPushNotificationRequest) returns (contracts.generic.notification.v1.message.SendPushNotificationResponse) {
     option (google.api.http) = {
       post: "/api/v1/notifications/push"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Hệ thống gọi, bỏ qua BearerAuth người dùng
+    };
+  }
+
+  // Đăng ký FCM / APNs device token của thiết bị người dùng
+  rpc RegisterDeviceToken (contracts.generic.notification.v1.message.RegisterDeviceTokenRequest) returns (contracts.generic.notification.v1.message.RegisterDeviceTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/devices"
+      body: "*"
+    };
+  }
+
+  // Lấy cấu hình nhận thông báo (Bật/tắt các kênh)
+  rpc GetNotificationSettings (contracts.generic.notification.v1.message.GetNotificationSettingsRequest) returns (contracts.generic.notification.v1.message.GetNotificationSettingsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/notifications/settings"
+    };
+  }
+
+  // Cập nhật cấu hình nhận thông báo
+  rpc UpdateNotificationSettings (contracts.generic.notification.v1.message.UpdateNotificationSettingsRequest) returns (contracts.generic.notification.v1.message.UpdateNotificationSettingsResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/users/{user_id}/notifications/settings"
+      body: "*"
+    };
+  }
+
+  // Lấy danh sách lịch sử thông báo in-app của người dùng
+  rpc ListNotifications (contracts.generic.notification.v1.message.ListNotificationsRequest) returns (contracts.generic.notification.v1.message.ListNotificationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/notifications"
+    };
+  }
+
+  // Đánh dấu thông báo là đã đọc
+  rpc MarkNotificationAsRead (contracts.generic.notification.v1.message.MarkNotificationAsReadRequest) returns (contracts.generic.notification.v1.message.MarkNotificationAsReadResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/notifications/{notification_id}/read"
       body: "*"
     };
   }

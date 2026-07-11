@@ -4,13 +4,15 @@ package contracts.supporting.profile.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
 
-message Injury {
-  string muscle_group = 1;
-  string severity = 2;
-  string reported_at = 3;
+message InjuryDetails {
+  string injury_id = 1;
+  string muscle_group = 2;
+  string severity = 3;
+  string notes = 4;
+  string reported_at = 5;
 }
 
 message InjuryReported {
   string user_id = 1;
-  Injury injury = 2;
+  InjuryDetails injury = 2;
 }

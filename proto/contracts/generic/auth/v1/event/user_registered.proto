@@ -7,6 +7,7 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 message UserRegistered {
   string user_id = 1;
   string email = 2;
-  string phone = 3;
-  string registered_at = 4;
+  string full_name = 3;
+  string phone = 4;
+  string registered_at = 5;
 }

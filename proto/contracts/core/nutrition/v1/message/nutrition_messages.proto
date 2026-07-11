@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/message;nutritionv1message";
+
+message Macros {
+  float protein_grams = 1;
+  float carb_grams = 2;
+  float fat_grams = 3;
+}
+
+message MealOption {
+  string meal_name = 1;
+  string price_tier = 2; // "LOW", "MEDIUM", "HIGH"
+  float calories = 3;
+  float protein = 4;
+  float carbs = 5;
+  float fat = 6;
+  string description = 7;
+  repeated string recipe_steps = 8;
+}
+
+message DailyMeals {
+  repeated MealOption breakfast = 1;
+  repeated MealOption lunch = 2;
+  repeated MealOption dinner = 3;
+  repeated MealOption snack = 4;
+}
+
+message GetTodayMenuRequest {
+  string user_id = 1;
+}
+
+message GetTodayMenuResponse {
+  float target_calories = 1;
+  Macros macros = 2;
+  DailyMeals meals = 3;
+}
+
+message LogMealRequest {
+  string user_id = 1;
+  string meal_name = 2;
+  string meal_type = 3; // "BREAKFAST", "LUNCH", "DINNER", "SNACK"
+  float calories = 4;
+  float protein = 5;
+  float carbs = 6;
+  float fat = 7;
+  string logged_at = 8;
+}
+
+message LogMealResponse {
+  string meal_log_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message MealLogItem {
+  string meal_log_id = 1;
+  string meal_name = 2;
+  string meal_type = 3;
+  float calories = 4;
+  float protein = 5;
+  float carbs = 6;
+  float fat = 7;
+  string logged_at = 8;
+}
+
+message GetNutritionHistoryRequest {
+  string user_id = 1;
+  string start_date = 2; // YYYY-MM-DD
+  string end_date = 3;   // YYYY-MM-DD
+}
+
+message GetNutritionHistoryResponse {
+  repeated MealLogItem meals = 1;
+}
+
+message GetNutritionSummaryRequest {
+  string user_id = 1;
+}
+
+message GetNutritionSummaryResponse {
+  float target_calories = 1;
+  Macros target_macros = 2;
+  float consumed_calories = 3;
+  Macros consumed_macros = 4;
+}

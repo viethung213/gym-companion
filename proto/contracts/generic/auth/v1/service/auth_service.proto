@@ -14,14 +14,45 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     version: "1.0"
     description: "API xác thực người dùng, đăng ký, đăng nhập và xử lý OTP."
   }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
 };
 
 service AuthService {
-  // Xác thực token và lấy thông tin phiên làm việc
+  // Xác thực token và lấy thông tin phiên (Sử dụng nội bộ hoặc Gateway)
   rpc ValidateToken (contracts.generic.auth.v1.message.ValidateTokenRequest) returns (contracts.generic.auth.v1.message.ValidateTokenResponse) {
     option (google.api.http) = {
       post: "/api/v1/auth/validate"
       body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
+    };
+  }
+
+  // Đăng ký tài khoản mới
+  rpc Register (contracts.generic.auth.v1.message.RegisterRequest) returns (contracts.generic.auth.v1.message.RegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/register"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
     };
   }
 
@@ -30,6 +61,62 @@ service AuthService {
     option (google.api.http) = {
       post: "/api/v1/auth/login"
       body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
+    };
+  }
+
+  // Làm mới access token bằng refresh token
+  rpc RefreshToken (contracts.generic.auth.v1.message.RefreshTokenRequest) returns (contracts.generic.auth.v1.message.RefreshTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/refresh"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
+    };
+  }
+
+  // Đăng xuất và hủy phiên làm việc
+  rpc Logout (contracts.generic.auth.v1.message.LogoutRequest) returns (contracts.generic.auth.v1.message.LogoutResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/logout"
+      body: "*"
+    };
+    // Sử dụng BearerAuth mặc định
+  }
+
+  // Gửi mã OTP xác thực (Đăng ký/Quên mật khẩu)
+  rpc SendOTP (contracts.generic.auth.v1.message.SendOTPRequest) returns (contracts.generic.auth.v1.message.SendOTPResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/otp/send"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
+    };
+  }
+
+  // Xác nhận OTP để lấy token reset mật khẩu hoặc kích hoạt tài khoản
+  rpc VerifyOTP (contracts.generic.auth.v1.message.VerifyOTPRequest) returns (contracts.generic.auth.v1.message.VerifyOTPResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/otp/verify"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
+    };
+  }
+
+  // Đặt lại mật khẩu mới
+  rpc ResetPassword (contracts.generic.auth.v1.message.ResetPasswordRequest) returns (contracts.generic.auth.v1.message.ResetPasswordResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/password/reset"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {} // Public bypass
     };
   }
 }
