@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package contracts.supporting.exercise.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/event;exercisev1event";
+
+import "contracts/supporting/exercise/v1/message/exercise_messages.proto";
+
+// Event payload when a new exercise is created in Draft state
+message ExerciseCreatedEvent {
+  string exercise_id = 1;
+  contracts.supporting.exercise.v1.message.Exercise exercise = 2;
+}
+
+// Event payload when an exercise is approved and goes Active
+message ExerciseApprovedEvent {
+  string exercise_id = 1;
+  contracts.supporting.exercise.v1.message.Exercise exercise = 2;
+}

@@ -179,12 +179,11 @@ CREATE TABLE IF NOT EXISTS audio.outbox_log (
     error_message TEXT
 );
 
+-- 8. SCHEMA: exercise
 -- ------------------------------------------
--- 8. SCHEMA: catalog
--- ------------------------------------------
-CREATE SCHEMA IF NOT EXISTS catalog;
+CREATE SCHEMA IF NOT EXISTS exercise;
 
-CREATE TABLE IF NOT EXISTS catalog.outbox (
+CREATE TABLE IF NOT EXISTS exercise.outbox (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
@@ -193,7 +192,7 @@ CREATE TABLE IF NOT EXISTS catalog.outbox (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS catalog.outbox_log (
+CREATE TABLE IF NOT EXISTS exercise.outbox_log (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL,
     event_type VARCHAR(255) NOT NULL,

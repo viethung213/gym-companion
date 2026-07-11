@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package contracts.supporting.exercise.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service;exercisev1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/supporting/exercise/v1/message/exercise_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Exercise API"
+    version: "1.0"
+    description: "API quản lý danh mục bài tập chuẩn (Exercise Library) trong hệ thống."
+  }
+};
+
+service ExerciseService {
+  // --- EXERCISE ENDPOINTS ---
+
+  // Tạo một bài tập mới (Trạng thái Draft)
+  rpc CreateExercise (contracts.supporting.exercise.v1.message.CreateExerciseRequest) returns (contracts.supporting.exercise.v1.message.CreateExerciseResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/exercises"
+      body: "*"
+    };
+  }
+
+  // Duyệt bài tập (Chuyển sang Active)
+  rpc ApproveExercise (contracts.supporting.exercise.v1.message.ApproveExerciseRequest) returns (contracts.supporting.exercise.v1.message.ApproveExerciseResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/exercises/{exercise_id}/approve"
+      body: "*"
+    };
+  }
+
+  // Lấy chi tiết bài tập theo ID
+  rpc GetExercise (contracts.supporting.exercise.v1.message.GetExerciseRequest) returns (contracts.supporting.exercise.v1.message.GetExerciseResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/exercises/{exercise_id}"
+    };
+  }
+
+  // Lấy danh sách các bài tập
+  rpc ListExercises (contracts.supporting.exercise.v1.message.ListExercisesRequest) returns (contracts.supporting.exercise.v1.message.ListExercisesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/exercises"
+    };
+  }
+}

@@ -28,7 +28,7 @@ graph TB
 
     subgraph "Layer 3 · Backend Services (Golang Modular Monolith)"
         Core["Core Bounded Contexts<br/>(Coaching & Planning · Workout Execution & Motion · Nutrition)"]
-        Support["Supporting Bounded Contexts<br/>(User Profile · Catalog)"]
+        Support["Supporting Bounded Contexts<br/>(User Profile · Exercise)"]
         Generic["Generic Services<br/>(Auth · Notification · Audio)"]
     end
 
@@ -76,7 +76,7 @@ graph TB
 - **Không gián đoạn khi offline**: Khi Coaching Service gặp sự cố, người dùng vẫn tự tập luyện bằng timer và ghi log thủ công bình thường.
 - **Mỗi Service = 1 Bounded Context**: Thiết kế modular monolith giúp cô lập thay đổi, dễ dàng tách thành microservices độc lập.
 - **Phân luồng dữ liệu**: Dữ liệu tóm tắt đi qua API chính. Dữ liệu thô (tọa độ khớp xương) upload ngầm vào Blob Storage qua luồng chạy nền của Client để tránh gây nghẽn API.
-- **Thiết kế thích ứng thay đổi (Change Propagation)**: Tách biệt dữ liệu nghiệp vụ (Catalog) và cấu hình thuật toán AI (Workout & Motion) qua ID bài tập. Nâng cấp model AI không ảnh hưởng đến database nghiệp vụ.
+- **Thiết kế thích ứng thay đổi (Change Propagation)**: Tách biệt dữ liệu nghiệp vụ (Exercise) và cấu hình thuật toán AI (Workout & Motion) qua ID bài tập. Nâng cấp model AI không ảnh hưởng đến database nghiệp vụ.
 
 ---
 
