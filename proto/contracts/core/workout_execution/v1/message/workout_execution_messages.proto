@@ -18,13 +18,17 @@ message StartWorkoutSessionResponse {
 }
 
 // Log cho từng rep (được tính toán từ Client và gửi lên Server)
+// Log cho từng rep (được tính toán từ Client và gửi lên Server)
 message RepLog {
   int32 rep_number = 1;
   float rom_percentage = 2;
   repeated string error_codes = 3; // Ví dụ: ["ERR_BACK_ARCH", "ERR_KNEE_OVER_TOE"]
   map<string, float> joint_angles = 4; // Map các góc khớp đã tính toán (ví dụ: {"knee_angle": 120.5})
+  repeated string error_codes = 3; // Ví dụ: ["ERR_BACK_ARCH", "ERR_KNEE_OVER_TOE"]
+  map<string, float> joint_angles = 4; // Map các góc khớp đã tính toán (ví dụ: {"knee_angle": 120.5})
 }
 
+// Request/Response cho LogWorkoutSet
 // Request/Response cho LogWorkoutSet
 message LogWorkoutSetRequest {
   string session_id = 1;
@@ -35,7 +39,10 @@ message LogWorkoutSetRequest {
   float weight = 6;
   optional float form_score = 7; // Sử dụng optional để hỗ trợ N/A cho bài tập Phi AI
   float rpe = 8; // Độ gắng sức (Rate of Perceived Exertion)
+  optional float form_score = 7; // Sử dụng optional để hỗ trợ N/A cho bài tập Phi AI
+  float rpe = 8; // Độ gắng sức (Rate of Perceived Exertion)
   repeated RepLog reps = 9;
+  string camera_angle = 10; // Góc quay camera thực tế lúc tập (ví dụ: "side", "front")
   string camera_angle = 10; // Góc quay camera thực tế lúc tập (ví dụ: "side", "front")
 }
 
@@ -55,6 +62,7 @@ message AbortWorkoutSessionResponse {
 }
 
 // Request/Response cho CompleteWorkoutSession
+// Request/Response cho CompleteWorkoutSession
 message CompleteWorkoutSessionRequest {
   string session_id = 1;
 }
@@ -64,6 +72,7 @@ message CompleteWorkoutSessionResponse {
   google.protobuf.Timestamp completed_at = 2;
   int32 total_sets = 3;
   float total_volume = 4;
+  optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
   optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
   float average_rpe = 6;
 }
@@ -154,6 +163,7 @@ message GetWorkoutHistoryRequest {
   string user_id = 1;
   int32 limit = 2;
   int32 offset = 3; // Vị trí bắt đầu lấy bản ghi (mặc định là 0 nếu để trống)
+  int32 offset = 3; // Vị trí bắt đầu lấy bản ghi (mặc định là 0 nếu để trống)
 }
 
 message WorkoutSessionSummary {
@@ -161,6 +171,7 @@ message WorkoutSessionSummary {
   google.protobuf.Timestamp date = 2;
   int32 total_sets = 3;
   float total_volume = 4;
+  optional float average_form_score = 5; // Dạng optional (N/A nếu buổi tập phi AI)
   optional float average_form_score = 5; // Dạng optional (N/A nếu buổi tập phi AI)
 }
 
