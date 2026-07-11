@@ -33,11 +33,48 @@ service WorkoutExecutionService {
     };
   }
 
+  // Hủy/Dừng đột xuất buổi tập (Anomalous Session)
+  rpc AbortWorkoutSession (contracts.core.workout_execution.v1.message.AbortWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.AbortWorkoutSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/{session_id}/abort"
+      body: "*"
+    };
+  }
+
   // Kết thúc buổi tập và xuất báo cáo
   rpc CompleteWorkoutSession (contracts.core.workout_execution.v1.message.CompleteWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.CompleteWorkoutSessionResponse) {
     option (google.api.http) = {
       post: "/api/v1/execution/sessions/{session_id}/complete"
       body: "*"
+    };
+  }
+
+  // Đồng bộ batch log lỗi và reps trong quá trình tập
+  rpc SyncWorkoutLogs (contracts.core.workout_execution.v1.message.SyncWorkoutLogsRequest) returns (contracts.core.workout_execution.v1.message.SyncWorkoutLogsResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/{session_id}/logs"
+      body: "*"
+    };
+  }
+
+  // Lấy cấu hình thuật toán và kịch bản thoại AI cho một bài tập
+  rpc GetMotionSpecification (contracts.core.workout_execution.v1.message.GetMotionSpecificationRequest) returns (contracts.core.workout_execution.v1.message.GetMotionSpecificationResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/execution/exercises/{exercise_id}/motion-spec"
+    };
+  }
+
+  // Lấy danh sách kỷ lục cá nhân (1RM) của người dùng
+  rpc GetPersonalRecords (contracts.core.workout_execution.v1.message.GetPersonalRecordsRequest) returns (contracts.core.workout_execution.v1.message.GetPersonalRecordsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/execution/users/{user_id}/personal-records"
+    };
+  }
+
+  // Lấy danh sách chi tiết các lỗi sai tư thế trong một buổi tập chỉ định
+  rpc GetWorkoutSessionErrors (contracts.core.workout_execution.v1.message.GetWorkoutSessionErrorsRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutSessionErrorsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/execution/sessions/{session_id}/errors"
     };
   }
 

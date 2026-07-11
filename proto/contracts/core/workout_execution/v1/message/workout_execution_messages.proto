@@ -4,6 +4,9 @@ package contracts.core.workout_execution.v1.message;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message;workoutexecutionv1message";
 
+import "google/protobuf/timestamp.proto";
+
+// Request/Response cho StartWorkoutSession
 message StartWorkoutSessionRequest {
   string user_id = 1;
   string plan_id = 2;
@@ -11,23 +14,22 @@ message StartWorkoutSessionRequest {
 
 message StartWorkoutSessionResponse {
   string session_id = 1;
-  string started_at = 2;
+  google.protobuf.Timestamp started_at = 2;
 }
 
-message Keypoint3D {
-  float x = 1;
-  float y = 2;
-  float z = 3;
-  float score = 4;
-}
-
+// Log cho từng rep (được tính toán từ Client và gửi lên Server)
+// Log cho từng rep (được tính toán từ Client và gửi lên Server)
 message RepLog {
   int32 rep_number = 1;
   float rom_percentage = 2;
-  string error_status = 3;
-  repeated Keypoint3D skeleton_coords = 4;
+  repeated string error_codes = 3; // Ví dụ: ["ERR_BACK_ARCH", "ERR_KNEE_OVER_TOE"]
+  map<string, float> joint_angles = 4; // Map các góc khớp đã tính toán (ví dụ: {"knee_angle": 120.5})
+  repeated string error_codes = 3; // Ví dụ: ["ERR_BACK_ARCH", "ERR_KNEE_OVER_TOE"]
+  map<string, float> joint_angles = 4; // Map các góc khớp đã tính toán (ví dụ: {"knee_angle": 120.5})
 }
 
+// Request/Response cho LogWorkoutSet
+// Request/Response cho LogWorkoutSet
 message LogWorkoutSetRequest {
   string session_id = 1;
   int32 set_number = 2;
@@ -35,40 +37,142 @@ message LogWorkoutSetRequest {
   int32 target_reps = 4;
   int32 actual_reps = 5;
   float weight = 6;
-  float form_score = 7;
-  float rpe = 8;
+  optional float form_score = 7; // Sử dụng optional để hỗ trợ N/A cho bài tập Phi AI
+  float rpe = 8; // Độ gắng sức (Rate of Perceived Exertion)
+  optional float form_score = 7; // Sử dụng optional để hỗ trợ N/A cho bài tập Phi AI
+  float rpe = 8; // Độ gắng sức (Rate of Perceived Exertion)
   repeated RepLog reps = 9;
+  string camera_angle = 10; // Góc quay camera thực tế lúc tập (ví dụ: "side", "front")
+  string camera_angle = 10; // Góc quay camera thực tế lúc tập (ví dụ: "side", "front")
 }
 
 message LogWorkoutSetResponse {
   string set_log_id = 1;
-  bool is_successful = 2;
 }
 
+// Request/Response cho AbortWorkoutSession
+message AbortWorkoutSessionRequest {
+  string session_id = 1;
+  string reason = 2; // e.g. "timeout", "user_cancelled"
+}
+
+message AbortWorkoutSessionResponse {
+  string session_id = 1;
+  google.protobuf.Timestamp aborted_at = 2;
+}
+
+// Request/Response cho CompleteWorkoutSession
+// Request/Response cho CompleteWorkoutSession
 message CompleteWorkoutSessionRequest {
   string session_id = 1;
 }
 
 message CompleteWorkoutSessionResponse {
   string session_id = 1;
-  string completed_at = 2;
+  google.protobuf.Timestamp completed_at = 2;
   int32 total_sets = 3;
   float total_volume = 4;
-  float average_form_score = 5;
+  optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
+  optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
   float average_rpe = 6;
 }
 
+// Nhật ký lỗi tư thế (được gom batch gửi định kỳ trong buổi tập)
+message ErrorLog {
+  string error_code = 1;
+  string severity = 2; // "severity_1" hoặc "severity_2"
+  google.protobuf.Timestamp timestamp = 3;
+  int32 set_number = 4;
+  int32 rep_number = 5; // Có thể bằng -1 nếu không gắn với rep cụ thể (ví dụ: tập Plank bị võng lưng)
+  string exercise_id = 6; // Mã bài tập phát sinh lỗi
+}
+
+// Request/Response cho SyncWorkoutLogs (Batch Async Sync)
+message SyncWorkoutLogsRequest {
+  string session_id = 1;
+  repeated ErrorLog errors = 2;
+}
+
+message SyncWorkoutLogsResponse {}
+
+
+
+// Cấu hình thoại tương thích HLV và lỗi tư thế
+message DialogueOption {
+  string text = 1;
+  string audio_url = 2;
+}
+
+message DialogueSeverities {
+  repeated DialogueOption severity_1 = 1;
+  repeated DialogueOption severity_2 = 2;
+}
+
+message DialogueEngineConfig {
+  string personality_id = 1;
+  map<string, float> cooldowns = 2; // Ví dụ: {"severity_2": 3.0}
+  map<string, DialogueSeverities> dialogue_map = 3; // key là error_code (ví dụ: "ERR_BACK_ARCH")
+}
+
+// Request/Response cho GetMotionSpecification
+message GetMotionSpecificationRequest {
+  string exercise_id = 1;
+  string coach_personality = 2; // drill_sergeant, best_friend, data_analyst
+}
+
+message GetMotionSpecificationResponse {
+  string exercise_id = 1;
+  string onnx_model_url = 2;
+  string local_rules_url = 3; // URL tải file JSON cấu hình luật (ví dụ: keypoint confidence, filters, priorities)
+  DialogueEngineConfig dialogue_engine = 4;
+  string recommended_camera_angle = 5; // Góc quay camera khuyến nghị (ví dụ: "side", "front")
+}
+
+// Cấu trúc và Request/Response cho GetPersonalRecords
+message PersonalRecord {
+  string exercise_id = 1;
+  float one_rep_max = 2;
+  float weight = 3;
+  int32 reps = 4;
+  google.protobuf.Timestamp achieved_at = 5;
+}
+
+message GetPersonalRecordsRequest {
+  string user_id = 1;
+  repeated string exercise_ids = 2; // Để trống để lấy tất cả bài tập
+}
+
+message GetPersonalRecordsResponse {
+  repeated PersonalRecord records = 1;
+}
+
+
+
+// Request/Response cho GetWorkoutSessionErrors
+message GetWorkoutSessionErrorsRequest {
+  string session_id = 1;
+}
+
+message GetWorkoutSessionErrorsResponse {
+  string session_id = 1;
+  repeated ErrorLog errors = 2;
+}
+
+// Request/Response cho GetWorkoutHistory
 message GetWorkoutHistoryRequest {
   string user_id = 1;
   int32 limit = 2;
+  int32 offset = 3; // Vị trí bắt đầu lấy bản ghi (mặc định là 0 nếu để trống)
+  int32 offset = 3; // Vị trí bắt đầu lấy bản ghi (mặc định là 0 nếu để trống)
 }
 
 message WorkoutSessionSummary {
   string session_id = 1;
-  string date = 2;
+  google.protobuf.Timestamp date = 2;
   int32 total_sets = 3;
   float total_volume = 4;
-  float average_form_score = 5;
+  optional float average_form_score = 5; // Dạng optional (N/A nếu buổi tập phi AI)
+  optional float average_form_score = 5; // Dạng optional (N/A nếu buổi tập phi AI)
 }
 
 message GetWorkoutHistoryResponse {
