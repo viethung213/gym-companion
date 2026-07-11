@@ -73,6 +73,7 @@ message ErrorLog {
   string timestamp = 3; // Định dạng ISO8601 hoặc epoch
   int32 set_number = 4;
   int32 rep_number = 5; // Có thể bằng -1 nếu không gắn với rep cụ thể (ví dụ: tập Plank bị võng lưng)
+  string exercise_id = 6; // Mã bài tập phát sinh lỗi
 }
 
 // Request/Response cho SyncWorkoutLogs (Batch Async Sync)
@@ -135,6 +136,16 @@ message GetPersonalRecordsResponse {
 }
 
 
+
+// Request/Response cho GetWorkoutSessionErrors
+message GetWorkoutSessionErrorsRequest {
+  string session_id = 1;
+}
+
+message GetWorkoutSessionErrorsResponse {
+  string session_id = 1;
+  repeated ErrorLog errors = 2;
+}
 
 // Request/Response cho GetWorkoutHistory
 message GetWorkoutHistoryRequest {
