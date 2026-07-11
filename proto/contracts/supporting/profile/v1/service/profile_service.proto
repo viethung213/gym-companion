@@ -14,10 +14,27 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     version: "1.0"
     description: "API quản lý thông tin sức khỏe và chấn thương của người dùng."
   }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
 };
 
 service ProfileService {
-  // Khai báo hồ sơ sức khỏe ban đầu
+  // Khai báo hồ sơ sức khỏe ban đầu (Onboarding)
   rpc SaveHealthProfile (contracts.supporting.profile.v1.message.SaveHealthProfileRequest) returns (contracts.supporting.profile.v1.message.SaveHealthProfileResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/profile"
@@ -25,10 +42,41 @@ service ProfileService {
     };
   }
 
-  // Cập nhật chỉ số cơ thể định kỳ
+  // Lấy thông tin hồ sơ chi tiết của người dùng
+  rpc GetProfile (contracts.supporting.profile.v1.message.GetProfileRequest) returns (contracts.supporting.profile.v1.message.GetProfileResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/profile"
+    };
+  }
+
+  // Cập nhật thông tin hồ sơ
+  rpc UpdateProfile (contracts.supporting.profile.v1.message.UpdateProfileRequest) returns (contracts.supporting.profile.v1.message.UpdateProfileResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/users/{user_id}/profile"
+      body: "*"
+    };
+  }
+
+  // Cập nhật chỉ số cơ thể định kỳ (Cân nặng, Body Fat, ảnh tiến trình)
   rpc LogPeriodicMetrics (contracts.supporting.profile.v1.message.LogPeriodicMetricsRequest) returns (contracts.supporting.profile.v1.message.LogPeriodicMetricsResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/metrics"
+      body: "*"
+    };
+  }
+
+  // Báo cáo chấn thương mới gặp phải
+  rpc ReportInjury (contracts.supporting.profile.v1.message.ReportInjuryRequest) returns (contracts.supporting.profile.v1.message.ReportInjuryResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/injuries"
+      body: "*"
+    };
+  }
+
+  // Khai báo đã phục hồi chấn thương
+  rpc RecoverInjury (contracts.supporting.profile.v1.message.RecoverInjuryRequest) returns (contracts.supporting.profile.v1.message.RecoverInjuryResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/injuries/{injury_id}/recover"
       body: "*"
     };
   }

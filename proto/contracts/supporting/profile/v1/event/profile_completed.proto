@@ -18,4 +18,5 @@ message ProfileCompleted {
   repeated string registered_injuries = 4;
   repeated string preferred_workout_times = 5;
   string experience_level = 6;
+  string completed_at = 7;
 }

@@ -4,14 +4,14 @@ package contracts.core.nutrition.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
 
-message MealDetails {
-  string protein_source = 1;
-  string carb_source = 2;
-  string theme = 3;
-}
-
 message MealLogged {
   string user_id = 1;
-  string meal_id = 2;
-  MealDetails meal_details = 3;
+  string meal_log_id = 2;
+  string meal_name = 3;
+  string meal_type = 4;
+  float calories = 5;
+  float protein = 6;
+  float carbs = 7;
+  float fat = 8;
+  string logged_at = 9;
 }

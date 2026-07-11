@@ -7,5 +7,6 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 message UserLoggedIn {
   string user_id = 1;
   string login_ip = 2;
-  string logged_in_at = 3;
+  string user_agent = 3;
+  string logged_in_at = 4;
 }

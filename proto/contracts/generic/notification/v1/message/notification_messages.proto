@@ -13,6 +13,74 @@ message SendPushNotificationRequest {
 
 message SendPushNotificationResponse {
   string notification_id = 1;
-  string status = 2;
+  string status = 2; // "SENT", "FAILED"
   string message = 3;
+}
+
+message RegisterDeviceTokenRequest {
+  string user_id = 1;
+  string device_token = 2;
+  string device_type = 3; // "IOS", "ANDROID", "WEB"
+}
+
+message RegisterDeviceTokenResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetNotificationSettingsRequest {
+  string user_id = 1;
+}
+
+message GetNotificationSettingsResponse {
+  string user_id = 1;
+  bool enable_push = 2;
+  bool enable_email = 3;
+  bool enable_sms = 4;
+  string quiet_hours_start = 5; // Định dạng HH:MM
+  string quiet_hours_end = 6;   // Định dạng HH:MM
+}
+
+message UpdateNotificationSettingsRequest {
+  string user_id = 1;
+  bool enable_push = 2;
+  bool enable_email = 3;
+  bool enable_sms = 4;
+  string quiet_hours_start = 5;
+  string quiet_hours_end = 6;
+}
+
+message UpdateNotificationSettingsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message NotificationItem {
+  string notification_id = 1;
+  string title = 2;
+  string body = 3;
+  map<string, string> data = 4;
+  bool is_read = 5;
+  string created_at = 6;
+}
+
+message ListNotificationsRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListNotificationsResponse {
+  repeated NotificationItem notifications = 1;
+  int32 total_count = 2;
+}
+
+message MarkNotificationAsReadRequest {
+  string user_id = 1;
+  string notification_id = 2; // Để trống hoặc "all" để đánh dấu đọc hết
+}
+
+message MarkNotificationAsReadResponse {
+  bool success = 1;
+  string message = 2;
 }

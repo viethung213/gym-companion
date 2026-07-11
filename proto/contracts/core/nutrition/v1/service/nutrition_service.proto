@@ -6,7 +6,7 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "contracts/core/nutrition/v1/message/get_today_menu.proto";
+import "contracts/core/nutrition/v1/message/nutrition_messages.proto";
 
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
@@ -14,13 +14,52 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     version: "1.0"
     description: "API tính toán calo/macros và đề xuất thực đơn cá nhân hóa."
   }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
 };
 
 service NutritionService {
-  // Lấy thực đơn gợi ý trong ngày
+  // Lấy thực đơn gợi ý trong ngày dựa theo TDEE và mục tiêu người dùng
   rpc GetTodayMenu (contracts.core.nutrition.v1.message.GetTodayMenuRequest) returns (contracts.core.nutrition.v1.message.GetTodayMenuResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/nutrition/today"
+    };
+  }
+
+  // Ghi chép bữa ăn thực tế đã tiêu thụ
+  rpc LogMeal (contracts.core.nutrition.v1.message.LogMealRequest) returns (contracts.core.nutrition.v1.message.LogMealResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/nutrition/meals"
+      body: "*"
+    };
+  }
+
+  // Lấy lịch sử log bữa ăn theo dải ngày
+  rpc GetNutritionHistory (contracts.core.nutrition.v1.message.GetNutritionHistoryRequest) returns (contracts.core.nutrition.v1.message.GetNutritionHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/nutrition/history"
+    };
+  }
+
+  // Lấy tổng quan lượng Calo/Macros hấp thụ trong ngày hôm nay so với chỉ tiêu
+  rpc GetNutritionSummary (contracts.core.nutrition.v1.message.GetNutritionSummaryRequest) returns (contracts.core.nutrition.v1.message.GetNutritionSummaryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/nutrition/summary"
     };
   }
 }
