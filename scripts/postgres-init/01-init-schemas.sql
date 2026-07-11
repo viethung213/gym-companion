@@ -178,3 +178,29 @@ CREATE TABLE IF NOT EXISTS audio.outbox_log (
     status VARCHAR(50) NOT NULL,
     error_message TEXT
 );
+
+-- ------------------------------------------
+-- 8. SCHEMA: catalog
+-- ------------------------------------------
+CREATE SCHEMA IF NOT EXISTS catalog;
+
+CREATE TABLE IF NOT EXISTS catalog.outbox (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS catalog.outbox_log (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT
+);
+

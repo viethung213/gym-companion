@@ -12,6 +12,7 @@
 | 2 | Coaching & Planning | "Tôi nên tập gì? Khi nào điều chỉnh?" | Core |
 | 3 | Workout Execution & Motion | "Tôi tập thế nào? Tư thế đúng/sai và lịch sử tập?" | Core |
 | 4 | Nutrition | "Tôi ăn gì hôm nay?" | Core |
+| 5 | Catalog | "Danh mục bài tập và thực phẩm chuẩn gồm những gì?" | Supporting |
 
 > Notification và Auth là Shared Infrastructure Services, không phải Bounded Context nghiệp vụ.
 
@@ -54,9 +55,9 @@
 ---
 
 ### 3. Workout Execution & Motion Context
-- **Trách nhiệm**: Quản lý danh mục bài tập chuẩn (Exercise Library), thực thi buổi tập (timer, nhạc, video hướng dẫn), đếm rep/ROM/Form Score bằng AI Camera, chấm điểm đúng/sai của tư thế, ghi log tập luyện thực tế (AI/Phi AI), quản lý cấu hình AI bài tập (PoseTemplate, RepCountingRules), lưu dữ liệu thô và đo PR (1RM). [FR-WL-01 → FR-WL-04, FR-CC-01 → FR-CC-05, FR-PT-02]
-- **Không trách nhiệm**: Không sinh giáo án tập luyện tuần/ngày, không quản lý lịch sử chỉ số cơ thể của profile, không chạy logic thích ứng lộ trình.
-- **Aggregates**: `WorkoutSession`, `WorkoutPerformance`, `MotionSpecification`, `Exercise`
+- **Trách nhiệm**: Thực thi buổi tập (timer, nhạc, video hướng dẫn), đếm rep/ROM/Form Score bằng AI Camera, chấm điểm đúng/sai của tư thế, ghi log tập luyện thực tế (AI/Phi AI), quản lý cấu hình AI bài tập (PoseTemplate, RepCountingRules), lưu dữ liệu thô và đo PR (1RM). [FR-WL-01 → FR-WL-03, FR-CC-01 → FR-CC-05, FR-PT-02]
+- **Không trách nhiệm**: Không sinh giáo án tập luyện tuần/ngày, không quản lý lịch sử chỉ số cơ thể của profile, không chạy logic thích ứng lộ trình, không quản lý danh mục bài tập chuẩn.
+- **Aggregates**: `WorkoutSession`, `WorkoutPerformance`, `MotionSpecification`
 - **Domain Services**: `TrainingLoadGuard`
 - **Quy tắc nghiệp vụ**:
   - BR-CC-01: Rep hợp lệ khi ROM ≥ 70%.
@@ -64,24 +65,37 @@
   - BR-WL-01: Cảnh báo 90'/180', tự đóng sau 240' không tương tác → Anomalous Session.
   - BR-WL-02: Tải lượng > 250% trung bình 5 buổi gần nhất → yêu cầu xác nhận (xử lý bởi `TrainingLoadGuard`).
   - BR-WL-03: Bài phi AI không ghi Form Score (N/A).
-  - BR-WL-04: Bài tập mới phải qua trạng thái `PendingApproval` → Admin duyệt → `Active`.
 - **Context liên quan**:
   - Lấy `WorkoutPrescription` từ `Coaching`.
+  - Tham chiếu danh mục bài tập từ `Catalog`.
   - Phát `WorkoutSessionCompleted` cho `Coaching` và `BodyMetricUpdated` cho `User Profile`.
 
 ---
 
 ### 4. Nutrition Context
-- **Trách nhiệm**: Quản lý danh mục thực phẩm chuẩn (Food Library), tính calo/macro (Mifflin-St Jeor), gợi ý thực đơn ngày theo 3 mức ngân sách, chống lặp thực phẩm, tư vấn định lượng tự nấu/ăn ngoài và ghi nhật ký bữa ăn. [FR-NU-01 → FR-NU-04]
-- **Không trách nhiệm**: Không gợi ý giáo án hay lịch tập luyện.
-- **Aggregates**: `NutritionPlan`, `MealHistory`, `FoodItem`
+- **Trách nhiệm**: Tính calo/macro (Mifflin-St Jeor), gợi ý thực đơn ngày theo 3 mức ngân sách, chống lặp thực phẩm, tư vấn định lượng tự nấu/ăn ngoài và ghi nhật ký bữa ăn. [FR-NU-01 → FR-NU-03]
+- **Không trách nhiệm**: Không gợi ý giáo án hay lịch tập luyện, không quản lý danh mục thực phẩm chuẩn.
+- **Aggregates**: `NutritionPlan`, `MealHistory`
 - **Quy tắc nghiệp vụ**:
   - BR-NU-01: Thực đơn tối thiểu 1,200 kcal/ngày.
   - BR-NU-02: Khóa protein 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày.
   - BR-NU-03: Luôn kèm đề xuất sản phẩm đối tác nếu có.
-  - BR-NU-04: Thực phẩm mới phải qua trạng thái `PendingApproval` → Admin duyệt → `Active`.
 - **Context liên quan**:
   - Đọc `BiologicalMetrics` từ `User Profile` để tính TDEE.
+  - Tham chiếu danh mục thực phẩm từ `Catalog`.
+
+---
+
+### 5. Catalog Context
+- **Trách nhiệm**: Quản lý danh mục bài tập chuẩn (Exercise Library) và thực phẩm chuẩn (Food Library), kiểm soát vòng đời của bài tập và thực phẩm mới từ khi tạo nháp đến khi phê duyệt để đưa vào sử dụng trong toàn hệ thống. [FR-WL-04, FR-NU-04]
+- **Không trách nhiệm**: Không đếm rep, không ghi log buổi tập, không tính TDEE, không gợi ý thực đơn hay kế hoạch tập luyện.
+- **Aggregates**: `Exercise`, `FoodItem`
+- **Quy tắc nghiệp vụ**:
+  - BR-CAT-01: Bài tập mới phải qua trạng thái `PendingApproval` → Admin duyệt → `Active` mới được sử dụng.
+  - BR-CAT-02: Thực phẩm mới phải qua trạng thái `PendingApproval` → Admin duyệt → `Active` mới được sử dụng.
+- **Context liên quan**:
+  - Cung cấp dữ liệu bài tập cho `Coaching` để lên kế hoạch và cho `Workout Execution` để tham chiếu.
+  - Cung cấp dữ liệu thực phẩm cho `Nutrition` để lên thực đơn.
 
 ---
 
@@ -93,11 +107,14 @@ graph TD
     CP["Coaching & Planning"]
     WEM["Workout Execution & Motion"]
     NU["Nutrition"]
+    CAT["Catalog"]
 
     UP -- "BiologicalMetrics, Injury" --> CP
     UP -- "BiologicalMetrics" --> NU
 
-    WEM -- "Exercise (ID ref)" --> CP
+    CAT -- "Exercise (ID ref)" --> CP
+    CAT -- "Exercise (ID ref)" --> WEM
+    CAT -- "FoodItem (ID ref)" --> NU
 
     CP -- "WorkoutPrescription" --> WEM
 
@@ -108,4 +125,5 @@ graph TD
     style WEM fill:#e6ffe6,stroke:#4a9d4a
     style NU fill:#fff3e6,stroke:#d9904a
     style UP fill:#ffe6e6,stroke:#d94a4a
+    style CAT fill:#f9f9f9,stroke:#999
 ```

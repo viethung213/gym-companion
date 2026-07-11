@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package contracts.supporting.catalog.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/catalog/v1/event;catalogv1event";
+
+import "contracts/supporting/catalog/v1/message/catalog_messages.proto";
+
+// Event payload when a new exercise is created in Draft state
+message ExerciseCreatedEvent {
+  string exercise_id = 1;
+  contracts.supporting.catalog.v1.message.Exercise exercise = 2;
+}
+
+// Event payload when an exercise is approved and goes Active
+message ExerciseApprovedEvent {
+  string exercise_id = 1;
+  contracts.supporting.catalog.v1.message.Exercise exercise = 2;
+}
+
+// Event payload when a new food item is created in Draft state
+message FoodItemCreatedEvent {
+  string food_id = 1;
+  contracts.supporting.catalog.v1.message.FoodItem food_item = 2;
+}
+
+// Event payload when a food item is approved and goes Active
+message FoodItemApprovedEvent {
+  string food_id = 1;
+  contracts.supporting.catalog.v1.message.FoodItem food_item = 2;
+}

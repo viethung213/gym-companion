@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package contracts.supporting.catalog.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/catalog/v1/message;catalogv1message";
+
+message ExerciseInfo {
+  string name = 1;
+  string main_muscle_group = 2;
+  repeated string secondary_muscle_groups = 3;
+  string video_instruction_url = 4;
+  repeated string equipment = 5;
+  repeated string alternative_exercises = 6;
+}
+
+message Exercise {
+  string id = 1;
+  string name = 2;
+  string main_muscle_group = 3;
+  repeated string secondary_muscle_groups = 4;
+  string video_instruction_url = 5;
+  repeated string equipment = 6;
+  repeated string alternative_exercises = 7;
+  string status = 8; // "DRAFT", "PENDING_APPROVAL", "ACTIVE"
+  string created_at = 9;
+  string updated_at = 10;
+}
+
+message FoodNutrient {
+  string name = 1;
+  float calories_per_100g = 2;
+  float protein_g = 3;
+  float carb_g = 4;
+  float fat_g = 5;
+  bool is_vegetarian = 6;
+  bool is_halal = 7;
+  repeated string allergens = 8;
+}
+
+message FoodItem {
+  string id = 1;
+  string name = 2;
+  FoodNutrient nutrients = 3;
+  string status = 4; // "DRAFT", "PENDING_APPROVAL", "ACTIVE"
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+// Request and Response message types for Exercise CRUD
+
+message CreateExerciseRequest {
+  string name = 1;
+  string main_muscle_group = 2;
+  repeated string secondary_muscle_groups = 3;
+  string video_instruction_url = 4;
+  repeated string equipment = 5;
+  repeated string alternative_exercises = 6;
+}
+
+message CreateExerciseResponse {
+  Exercise exercise = 1;
+}
+
+message ApproveExerciseRequest {
+  string exercise_id = 1;
+}
+
+message ApproveExerciseResponse {
+  Exercise exercise = 1;
+}
+
+message GetExerciseRequest {
+  string exercise_id = 1;
+}
+
+message GetExerciseResponse {
+  Exercise exercise = 1;
+}
+
+message ListExercisesRequest {
+  string status = 1; // Filter by status e.g. "ACTIVE"
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListExercisesResponse {
+  repeated Exercise exercises = 1;
+  int32 total = 2;
+}
+
+// Request and Response message types for Food CRUD
+
+message CreateFoodItemRequest {
+  string name = 1;
+  FoodNutrient nutrients = 2;
+}
+
+message CreateFoodItemResponse {
+  FoodItem food_item = 1;
+}
+
+message ApproveFoodItemRequest {
+  string food_id = 1;
+}
+
+message ApproveFoodItemResponse {
+  FoodItem food_item = 1;
+}
+
+message GetFoodItemRequest {
+  string food_id = 1;
+}
+
+message GetFoodItemResponse {
+  FoodItem food_item = 1;
+}
+
+message ListFoodItemsRequest {
+  string status = 1; // Filter by status
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListFoodItemsResponse {
+  repeated FoodItem food_items = 1;
+  int32 total = 2;
+}
