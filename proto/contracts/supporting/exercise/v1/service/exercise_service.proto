@@ -5,7 +5,33 @@ package contracts.supporting.exercise.v1.service;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service;exercisev1service";
 
 import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
 import "contracts/supporting/exercise/v1/message/exercise_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Exercise Catalog API"
+    version: "1.0"
+    description: "API quản lý thư viện bài tập và luồng phê duyệt bài tập."
+  }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
+};
 
 service ExerciseService {
   // Tìm kiếm bài tập trong thư viện (User & Coach)
@@ -40,6 +66,20 @@ service ExerciseService {
   rpc UpdateExercise (contracts.supporting.exercise.v1.message.UpdateExerciseRequest) returns (contracts.supporting.exercise.v1.message.UpdateExerciseResponse) {
     option (google.api.http) = {
       put: "/api/v1/admin/exercises/{id}"
+      body: "*"
+    };
+  }
+
+  rpc SubmitExerciseForApproval (contracts.supporting.exercise.v1.message.SubmitExerciseForApprovalRequest) returns (contracts.supporting.exercise.v1.message.SubmitExerciseForApprovalResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/exercises/{id}/submit"
+      body: "*"
+    };
+  }
+
+  rpc ApproveExercise (contracts.supporting.exercise.v1.message.ApproveExerciseRequest) returns (contracts.supporting.exercise.v1.message.ApproveExerciseResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/exercises/{id}/approve"
       body: "*"
     };
   }
