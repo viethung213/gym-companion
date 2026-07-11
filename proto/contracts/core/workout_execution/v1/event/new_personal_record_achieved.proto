@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package contracts.core.workout_execution.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
+
+message NewPersonalRecordAchieved {
+  string user_id = 1;
+  string exercise_id = 2;
+  float one_rep_max = 3;
+  float weight = 4;
+  int32 reps = 5;
+  string achieved_at = 6; // Định dạng ISO8601
+}
