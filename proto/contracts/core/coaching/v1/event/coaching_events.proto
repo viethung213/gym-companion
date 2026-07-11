@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package contracts.core.coaching.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event;coachingv1event";
+
+import "google/protobuf/timestamp.proto";
+import "google/type/date.proto";
+
+message RoadmapInitiated {
+  string roadmap_id = 1;
+  google.type.Date start_date = 2;
+  google.type.Date end_date = 3;
+  google.protobuf.Timestamp initiated_at = 4;
+}
+
+message WeeklyScheduleGenerated {
+  string weekly_schedule_id = 1;
+  string roadmap_id = 2;
+  int32 week_number = 3;
+  google.type.Date start_date = 4;
+  google.type.Date end_date = 5;
+  google.protobuf.Timestamp generated_at = 6;
+}
+
+message DailyWorkoutPlanGenerated {
+  string daily_workout_plan_id = 1;
+  string weekly_schedule_id = 2;
+  string roadmap_id = 3;
+  google.type.Date scheduled_date = 4;
+  google.protobuf.Timestamp generated_at = 5;
+}
+
+message RoadmapCycleEvaluated {
+  string roadmap_id = 1;
+  float completion_rate = 2;
+  google.type.Date cycle_start_date = 3;
+  google.type.Date cycle_end_date = 4;
+  google.protobuf.Timestamp evaluated_at = 5;
+}
+
+message AdaptiveRecommendationCreated {
+  string recommendation_id = 1;
+  string roadmap_id = 2;
+  string recommendation_type = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message AdaptiveRecommendationResponded {
+  string recommendation_id = 1;
+  string selected_option_id = 2;
+  bool accepted = 3;
+  google.protobuf.Timestamp responded_at = 4;
+}
+
+message RoadmapAdjusted {
+  string roadmap_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp adjusted_at = 3;
+}
+
+message RoadmapPaused {
+  string roadmap_id = 1;
+  google.type.Date pause_start_date = 2;
+  google.type.Date pause_end_date = 3;
+  google.protobuf.Timestamp paused_at = 4;
+}
+
+message RoadmapResumed {
+  string roadmap_id = 1;
+  google.protobuf.Timestamp resumed_at = 2;
+}
+
+message ScheduleDayRescheduled {
+  string weekly_schedule_id = 1;
+  google.type.Date from_date = 2;
+  google.type.Date to_date = 3;
+  google.protobuf.Timestamp rescheduled_at = 4;
+}

@@ -1,34 +1,118 @@
 syntax = "proto3";
 
-package contracts.core.coaching.v1.service;
+package contracts.core.workout.v1.service;
 
-option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service;coachingv1service";
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout/v1/service;workoutv1service";
 
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "contracts/core/coaching/v1/message/coaching_messages.proto";
+import "contracts/core/workout/v1/message/coaching_messages.proto";
 
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
-    title: "AI Coaching & Workout Planning API"
+    title: "AI Workout Coaching API"
     version: "1.0"
-    description: "API lập lịch tập luyện tuần và sinh giáo án tập thích ứng hàng ngày."
+    description: "API for workout roadmap planning, weekly scheduling, daily workout plans, and adaptive coaching review."
+  }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
   }
 };
 
 service CoachingService {
-  // Lấy giáo án tập chi tiết hôm nay cho người dùng
-  rpc GetWorkoutPlan (contracts.core.coaching.v1.message.GetWorkoutPlanRequest) returns (contracts.core.coaching.v1.message.GetWorkoutPlanResponse) {
+  // Create the initial four-week roadmap and first weekly schedule.
+  rpc InitiateRoadmap (contracts.core.workout.v1.message.InitiateRoadmapRequest) returns (contracts.core.workout.v1.message.InitiateRoadmapResponse) {
     option (google.api.http) = {
-      get: "/api/v1/coaching/users/{user_id}/plans"
+      post: "/api/v1/users/{user_id}/workout-roadmaps"
+      body: "payload"
     };
   }
 
-  // Khởi tạo/Sinh lịch tập tuần mới
-  rpc GenerateWeeklySchedule (contracts.core.coaching.v1.message.GenerateWeeklyScheduleRequest) returns (contracts.core.coaching.v1.message.GenerateWeeklyScheduleResponse) {
+  // List roadmaps for a user, optionally filtered by status.
+  rpc ListWorkoutRoadmaps (contracts.core.workout.v1.message.ListWorkoutRoadmapsRequest) returns (contracts.core.workout.v1.message.ListWorkoutRoadmapsResponse) {
     option (google.api.http) = {
-      post: "/api/v1/coaching/users/{user_id}/schedules"
-      body: "*"
+      get: "/api/v1/users/{user_id}/workout-roadmaps"
+    };
+  }
+
+  // Get one roadmap by id.
+  rpc GetWorkoutRoadmap (contracts.core.workout.v1.message.GetWorkoutRoadmapRequest) returns (contracts.core.workout.v1.message.GetWorkoutRoadmapResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}"
+    };
+  }
+
+  // Generate the next weekly schedule for a roadmap.
+  rpc GenerateNextWeeklySchedule (contracts.core.workout.v1.message.GenerateNextWeeklyScheduleRequest) returns (contracts.core.workout.v1.message.GenerateNextWeeklyScheduleResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/weekly-schedules:generate-next"
+      body: "payload"
+    };
+  }
+
+  // List weekly schedules in a roadmap.
+  rpc ListWeeklySchedules (contracts.core.workout.v1.message.ListWeeklySchedulesRequest) returns (contracts.core.workout.v1.message.ListWeeklySchedulesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/weekly-schedules"
+    };
+  }
+
+  // Get one weekly schedule by id.
+  rpc GetWeeklySchedule (contracts.core.workout.v1.message.GetWeeklyScheduleRequest) returns (contracts.core.workout.v1.message.GetWeeklyScheduleResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/weekly-schedules/{weekly_schedule_id}"
+    };
+  }
+
+  // Generate the detailed just-in-time workout plan for a scheduled day.
+  rpc GenerateDailyWorkoutPlan (contracts.core.workout.v1.message.GenerateDailyWorkoutPlanRequest) returns (contracts.core.workout.v1.message.GenerateDailyWorkoutPlanResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/weekly-schedules/{weekly_schedule_id}/daily-workout-plans:generate"
+      body: "payload"
+    };
+  }
+
+  // Get one daily workout plan by id.
+  rpc GetDailyWorkoutPlan (contracts.core.workout.v1.message.GetDailyWorkoutPlanRequest) returns (contracts.core.workout.v1.message.GetDailyWorkoutPlanResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/daily-workout-plans/{daily_workout_plan_id}"
+    };
+  }
+
+  // Run BR-AC-04..08 adaptive review for a roadmap.
+  rpc RunAdaptiveReview (contracts.core.workout.v1.message.RunAdaptiveReviewRequest) returns (contracts.core.workout.v1.message.RunAdaptiveReviewResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-reviews:run"
+      body: "payload"
+    };
+  }
+
+  // List pending or historical adaptive recommendations.
+  rpc ListAdaptiveRecommendations (contracts.core.workout.v1.message.ListAdaptiveRecommendationsRequest) returns (contracts.core.workout.v1.message.ListAdaptiveRecommendationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-recommendations"
+    };
+  }
+
+  // Apply or reject a user-facing adaptive recommendation.
+  rpc RespondAdaptiveRecommendation (contracts.core.workout.v1.message.RespondAdaptiveRecommendationRequest) returns (contracts.core.workout.v1.message.RespondAdaptiveRecommendationResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/adaptive-recommendations/{recommendation_id}:respond"
+      body: "payload"
     };
   }
 }
