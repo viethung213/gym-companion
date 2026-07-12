@@ -10,7 +10,6 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/exercise/application"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -20,7 +19,7 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
 
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := InitDB(databaseURL)
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}

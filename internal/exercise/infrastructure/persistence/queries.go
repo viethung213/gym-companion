@@ -10,35 +10,106 @@ import (
 )
 
 func replaceSecondaryMuscles(tx *gorm.DB, info *domain.Info) error {
-	err := tx.Where("exercise_id = ?", info.ID).
-		Delete(&exerciseSecondaryMuscleRecord{}).
+	var currentIDs []string
+	err := tx.Model(&exerciseSecondaryMuscleRecord{}).
+		Where("exercise_id = ?", info.ID).
+		Pluck("muscle_id", &currentIDs).
 		Error
 	if err != nil {
-		return fmt.Errorf("delete secondary muscles: %w", err)
+		return fmt.Errorf("load current secondary muscles for diff: %w", err)
 	}
 
-	records := newSecondaryMuscleRecords(info.ID, info.SecondaryMuscleIDs)
-	if len(records) == 0 {
-		return nil
+	currentMap := make(map[string]bool, len(currentIDs))
+	for _, id := range currentIDs {
+		currentMap[id] = true
 	}
-	if err := tx.Create(&records).Error; err != nil {
-		return fmt.Errorf("insert secondary muscles: %w", err)
+
+	newMap := make(map[string]bool, len(info.SecondaryMuscleIDs))
+	for _, id := range info.SecondaryMuscleIDs {
+		newMap[id] = true
+	}
+
+	var toAdd []string
+	for _, id := range info.SecondaryMuscleIDs {
+		if !currentMap[id] {
+			toAdd = append(toAdd, id)
+		}
+	}
+
+	var toDelete []string
+	for _, id := range currentIDs {
+		if !newMap[id] {
+			toDelete = append(toDelete, id)
+		}
+	}
+
+	if len(toDelete) > 0 {
+		err := tx.Where("exercise_id = ? AND muscle_id IN ?", info.ID, toDelete).
+			Delete(&exerciseSecondaryMuscleRecord{}).
+			Error
+		if err != nil {
+			return fmt.Errorf("delete secondary muscles: %w", err)
+		}
+	}
+
+	if len(toAdd) > 0 {
+		records := newSecondaryMuscleRecords(info.ID, toAdd)
+		if err := tx.Create(&records).Error; err != nil {
+			return fmt.Errorf("insert secondary muscles: %w", err)
+		}
 	}
 
 	return nil
 }
 
 func replaceTags(tx *gorm.DB, info *domain.Info) error {
-	if err := tx.Where("exercise_id = ?", info.ID).Delete(&exerciseTagRecord{}).Error; err != nil {
-		return fmt.Errorf("delete exercise tags: %w", err)
+	var currentIDs []string
+	err := tx.Model(&exerciseTagRecord{}).
+		Where("exercise_id = ?", info.ID).
+		Pluck("tag_id", &currentIDs).
+		Error
+	if err != nil {
+		return fmt.Errorf("load current exercise tags for diff: %w", err)
 	}
 
-	records := newTagRecords(info.ID, info.TagIDs)
-	if len(records) == 0 {
-		return nil
+	currentMap := make(map[string]bool, len(currentIDs))
+	for _, id := range currentIDs {
+		currentMap[id] = true
 	}
-	if err := tx.Create(&records).Error; err != nil {
-		return fmt.Errorf("insert exercise tags: %w", err)
+
+	newMap := make(map[string]bool, len(info.TagIDs))
+	for _, id := range info.TagIDs {
+		newMap[id] = true
+	}
+
+	var toAdd []string
+	for _, id := range info.TagIDs {
+		if !currentMap[id] {
+			toAdd = append(toAdd, id)
+		}
+	}
+
+	var toDelete []string
+	for _, id := range currentIDs {
+		if !newMap[id] {
+			toDelete = append(toDelete, id)
+		}
+	}
+
+	if len(toDelete) > 0 {
+		err := tx.Where("exercise_id = ? AND tag_id IN ?", info.ID, toDelete).
+			Delete(&exerciseTagRecord{}).
+			Error
+		if err != nil {
+			return fmt.Errorf("delete exercise tags: %w", err)
+		}
+	}
+
+	if len(toAdd) > 0 {
+		records := newTagRecords(info.ID, toAdd)
+		if err := tx.Create(&records).Error; err != nil {
+			return fmt.Errorf("insert exercise tags: %w", err)
+		}
 	}
 
 	return nil
