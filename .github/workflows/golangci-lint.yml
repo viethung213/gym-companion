@@ -34,6 +34,9 @@ jobs:
           go-version: '1.25'
           cache: false
 
+      - name: Generate Protobuf Stubs
+        run: make proto-gen
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
