@@ -130,7 +130,7 @@
 |---|---|---|
 | **BR-UM-01** | Hồ sơ | Hồ sơ sức khỏe phải hoàn thiện **$\ge 80\%$** trước khi kích hoạt AI Coach và sinh lộ trình tập đầu tiên. |
 | **BR-AC-01** | Tập luyện | Lịch tập tối đa **6 buổi/tuần**; bắt buộc có ít nhất **1 ngày nghỉ hoàn toàn** trong tuần để phục hồi cơ bắp. |
-| **BR-AC-02** | Tiến độ | Tăng tiến Progressive Overload do AI đề xuất không vượt quá **10% tổng volume** của tuần trước đó. |
+| **BR-AC-02** | Tiến độ | Giới hạn thay đổi tải lượng do AI đề xuất:<br>- **Progressive Overload định kỳ**: Tăng không quá **10%** tổng volume tuần trước đó.<br>- **Fast-Track (Tăng tải nhanh)**: Tăng tối đa **30%** volume/mức tạ cao nhất lịch sử bài tập đó (kích hoạt khi baseline chưa ổn định, RPE $\le 6$, Form $\ge 80\%$, và volume thực tế vượt gợi ý $> 15\%$).<br>- **Down-Track (Giảm tải nhanh)**: Giảm từ **10-15%** volume/mức tạ gợi ý cho buổi tập tiếp theo của nhóm cơ đó (kích hoạt khi RPE trung bình của buổi tập $\ge 9$ hoặc Form Score trung bình $< 70\%$). |
 | **BR-CC-01** | AI Camera | Rep hợp lệ để đếm số khi biên độ chuyển động (ROM) khớp đạt ít nhất **$\ge 70\%$** so với biên độ tiêu chuẩn. |
 | **BR-CC-02** | Chống gian lận | Tỷ lệ frame nhận diện khớp hợp lệ < 50% trong buổi tập dưới camera → Đánh dấu "Không đạt chuẩn xác thực" (Chỉ áp dụng khi sử dụng AI Camera, trừ bài nằm sàn/phòng tối được chuyển sang ghi nhận thủ công). |
 | **BR-NU-01** | Dinh dưỡng | AI Nutrition tuyệt đối không gợi ý thực đơn tổng năng lượng dưới **1,200 kcal/ngày** cho bất kỳ đối tượng nào. |
