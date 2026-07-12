@@ -9,8 +9,11 @@ import (
 	"gorm.io/gorm"
 )
 
-func replaceSecondaryMuscles(tx *gorm.DB, info domain.Info) error {
-	if err := tx.Where("exercise_id = ?", info.ID).Delete(&exerciseSecondaryMuscleRecord{}).Error; err != nil {
+func replaceSecondaryMuscles(tx *gorm.DB, info *domain.Info) error {
+	err := tx.Where("exercise_id = ?", info.ID).
+		Delete(&exerciseSecondaryMuscleRecord{}).
+		Error
+	if err != nil {
 		return fmt.Errorf("delete secondary muscles: %w", err)
 	}
 
@@ -25,7 +28,7 @@ func replaceSecondaryMuscles(tx *gorm.DB, info domain.Info) error {
 	return nil
 }
 
-func replaceTags(tx *gorm.DB, info domain.Info) error {
+func replaceTags(tx *gorm.DB, info *domain.Info) error {
 	if err := tx.Where("exercise_id = ?", info.ID).Delete(&exerciseTagRecord{}).Error; err != nil {
 		return fmt.Errorf("delete exercise tags: %w", err)
 	}
@@ -43,7 +46,7 @@ func replaceTags(tx *gorm.DB, info domain.Info) error {
 
 func (r *PostgresRepository) searchActiveRecords(
 	ctx context.Context,
-	filters application.SearchFilters,
+	filters *application.SearchFilters,
 ) ([]exerciseRecord, error) {
 	query := r.db.WithContext(ctx).
 		Table("exercise.exercises AS e").
@@ -105,7 +108,11 @@ func (r *PostgresRepository) searchActiveRecords(
 	return records, nil
 }
 
-func querySecondaryMuscleIDs(ctx context.Context, db *gorm.DB, exerciseID string) ([]string, error) {
+func querySecondaryMuscleIDs(
+	ctx context.Context,
+	db *gorm.DB,
+	exerciseID string,
+) ([]string, error) {
 	var ids []string
 	err := db.WithContext(ctx).
 		Model(&exerciseSecondaryMuscleRecord{}).

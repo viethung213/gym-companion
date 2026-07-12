@@ -7,6 +7,7 @@ import (
 )
 
 func TestExerciseTransitions(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
 	exercise := newValidExercise(t, now)
 
@@ -37,6 +38,7 @@ func TestExerciseTransitions(t *testing.T) {
 }
 
 func TestExerciseInvalidTransitions(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -65,7 +67,9 @@ func TestExerciseInvalidTransitions(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			exercise := newValidExercise(t, now)
 			err := tt.give(exercise)
 			if !errors.Is(err, ErrInvalidTransition) {
@@ -76,6 +80,7 @@ func TestExerciseInvalidTransitions(t *testing.T) {
 }
 
 func TestArchivedExerciseCannotBeUpdated(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
 	exercise := newValidExercise(t, now)
 	if err := exercise.Archive(now); err != nil {
@@ -91,6 +96,7 @@ func TestArchivedExerciseCannotBeUpdated(t *testing.T) {
 }
 
 func TestRehydrateRejectsUnspecifiedStatus(t *testing.T) {
+	t.Parallel()
 	info := validInfo()
 	info.Status = ""
 

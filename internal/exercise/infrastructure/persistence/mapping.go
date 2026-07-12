@@ -2,7 +2,7 @@ package persistence
 
 import "github.com/viethung213/gym-companion/internal/exercise/domain"
 
-func newExerciseRecord(info domain.Info) exerciseRecord {
+func newExerciseRecord(info *domain.Info) exerciseRecord {
 	return exerciseRecord{
 		ID:                 info.ID,
 		Name:               info.Name,
@@ -22,7 +22,7 @@ func newExerciseRecord(info domain.Info) exerciseRecord {
 	}
 }
 
-func (r exerciseRecord) toDomainInfo(secondaryMuscleIDs []string, tagIDs []string) domain.Info {
+func (r *exerciseRecord) toDomainInfo(secondaryMuscleIDs, tagIDs []string) domain.Info {
 	return domain.Info{
 		ID:                 r.ID,
 		Name:               r.Name,
@@ -44,7 +44,10 @@ func (r exerciseRecord) toDomainInfo(secondaryMuscleIDs []string, tagIDs []strin
 	}
 }
 
-func newSecondaryMuscleRecords(exerciseID string, muscleIDs []string) []exerciseSecondaryMuscleRecord {
+func newSecondaryMuscleRecords(
+	exerciseID string,
+	muscleIDs []string,
+) []exerciseSecondaryMuscleRecord {
 	records := make([]exerciseSecondaryMuscleRecord, 0, len(muscleIDs))
 	for _, muscleID := range muscleIDs {
 		records = append(records, exerciseSecondaryMuscleRecord{

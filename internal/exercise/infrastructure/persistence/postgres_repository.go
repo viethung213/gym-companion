@@ -29,13 +29,13 @@ func (r *PostgresRepository) Save(
 ) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		info := exercise.Info()
-		if err := saveExercise(tx, info); err != nil {
+		if err := saveExercise(tx, &info); err != nil {
 			return err
 		}
-		if err := replaceSecondaryMuscles(tx, info); err != nil {
+		if err := replaceSecondaryMuscles(tx, &info); err != nil {
 			return err
 		}
-		if err := replaceTags(tx, info); err != nil {
+		if err := replaceTags(tx, &info); err != nil {
 			return err
 		}
 		if err := insertOutbox(tx, event); err != nil {
@@ -59,7 +59,7 @@ func (r *PostgresRepository) FindByID(
 		return nil, fmt.Errorf("find exercise: %w", err)
 	}
 
-	exercise, err := r.rehydrate(ctx, record)
+	exercise, err := r.rehydrate(ctx, &record)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (r *PostgresRepository) FindByID(
 
 func (r *PostgresRepository) SearchActive(
 	ctx context.Context,
-	filters application.SearchFilters,
+	filters *application.SearchFilters,
 ) ([]*domain.Exercise, error) {
 	records, err := r.searchActiveRecords(ctx, filters)
 	if err != nil {
@@ -77,8 +77,8 @@ func (r *PostgresRepository) SearchActive(
 	}
 
 	exercises := make([]*domain.Exercise, 0, len(records))
-	for _, record := range records {
-		exercise, err := r.rehydrate(ctx, record)
+	for i := range records {
+		exercise, err := r.rehydrate(ctx, &records[i])
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +114,7 @@ func (r *PostgresRepository) GetMetadata(ctx context.Context) (application.Metad
 	}, nil
 }
 
-func saveExercise(tx *gorm.DB, info domain.Info) error {
+func saveExercise(tx *gorm.DB, info *domain.Info) error {
 	record := newExerciseRecord(info)
 	err := tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
@@ -141,7 +141,10 @@ func saveExercise(tx *gorm.DB, info domain.Info) error {
 	return nil
 }
 
-func (r *PostgresRepository) rehydrate(ctx context.Context, record exerciseRecord) (*domain.Exercise, error) {
+func (r *PostgresRepository) rehydrate(
+	ctx context.Context,
+	record *exerciseRecord,
+) (*domain.Exercise, error) {
 	secondaryMuscleIDs, err := querySecondaryMuscleIDs(ctx, r.db, record.ID)
 	if err != nil {
 		return nil, err

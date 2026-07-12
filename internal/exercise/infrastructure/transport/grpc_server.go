@@ -29,7 +29,7 @@ func (s *ExerciseServer) SearchExercises(
 	ctx context.Context,
 	req *exercisemsg.SearchExercisesRequest,
 ) (*exercisemsg.SearchExercisesResponse, error) {
-	exercises, err := s.service.SearchExercises(ctx, application.SearchFilters{
+	exercises, err := s.service.SearchExercises(ctx, &application.SearchFilters{
 		BodyPartID:         req.GetBodyPartId(),
 		EquipmentID:        req.GetEquipmentId(),
 		TargetMuscleID:     req.GetTargetMuscleId(),
@@ -63,7 +63,7 @@ func (s *ExerciseServer) GetCatalogMetadata(
 		return nil, rpcError(err)
 	}
 
-	return toProtoMetadata(metadata), nil
+	return toProtoMetadata(&metadata), nil
 }
 
 func (s *ExerciseServer) GetExercise(
@@ -173,6 +173,7 @@ func (s *ExerciseServer) DeleteExercise(
 	return &exercisemsg.DeleteExerciseResponse{Success: true}, nil
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func toProtoExercise(info domain.Info) *exercisemsg.ExerciseInfo {
 	return &exercisemsg.ExerciseInfo{
 		Id:                 info.ID,
@@ -192,7 +193,7 @@ func toProtoExercise(info domain.Info) *exercisemsg.ExerciseInfo {
 	}
 }
 
-func toProtoMetadata(metadata application.Metadata) *exercisemsg.GetCatalogMetadataResponse {
+func toProtoMetadata(metadata *application.Metadata) *exercisemsg.GetCatalogMetadataResponse {
 	response := &exercisemsg.GetCatalogMetadataResponse{
 		BodyParts:  make([]*exercisemsg.BodyPart, 0, len(metadata.BodyParts)),
 		Equipments: make([]*exercisemsg.Equipment, 0, len(metadata.Equipments)),

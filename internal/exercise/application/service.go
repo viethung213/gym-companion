@@ -14,7 +14,7 @@ import (
 type Repository interface {
 	Save(ctx context.Context, exercise *domain.Exercise, event *domain.Event) error
 	FindByID(ctx context.Context, id string) (*domain.Exercise, error)
-	SearchActive(ctx context.Context, filters SearchFilters) ([]*domain.Exercise, error)
+	SearchActive(ctx context.Context, filters *SearchFilters) ([]*domain.Exercise, error)
 	GetMetadata(ctx context.Context) (Metadata, error)
 }
 
@@ -80,6 +80,7 @@ func NewService(repository Repository, clock Clock, ids IDGenerator) *Service {
 	}
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func (s *Service) CreateExercise(ctx context.Context, info domain.Info) (*domain.Exercise, error) {
 	if _, err := RequireAdmin(ctx); err != nil {
 		return nil, err
@@ -108,6 +109,7 @@ func (s *Service) CreateExercise(ctx context.Context, info domain.Info) (*domain
 	return exercise, nil
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func (s *Service) UpdateExercise(
 	ctx context.Context,
 	id string,
@@ -146,8 +148,8 @@ func (s *Service) SubmitExerciseForApproval(
 	}
 
 	now := s.clock.Now()
-	if err := exercise.SubmitForApproval(now); err != nil {
-		return nil, err
+	if submitErr := exercise.SubmitForApproval(now); submitErr != nil {
+		return nil, submitErr
 	}
 
 	event, err := s.newEvent(domain.EventTypeExerciseSubmittedForApproval, exercise, now)
@@ -172,8 +174,8 @@ func (s *Service) ApproveExercise(ctx context.Context, id string) (*domain.Exerc
 	}
 
 	now := s.clock.Now()
-	if err := exercise.Approve(now); err != nil {
-		return nil, err
+	if approveErr := exercise.Approve(now); approveErr != nil {
+		return nil, approveErr
 	}
 
 	event, err := s.newEvent(domain.EventTypeExerciseApproved, exercise, now)
@@ -198,8 +200,8 @@ func (s *Service) ArchiveExercise(ctx context.Context, id string) error {
 	}
 
 	now := s.clock.Now()
-	if err := exercise.Archive(now); err != nil {
-		return err
+	if archiveErr := exercise.Archive(now); archiveErr != nil {
+		return archiveErr
 	}
 
 	event, err := s.newEvent(domain.EventTypeExerciseArchived, exercise, now)
@@ -231,7 +233,7 @@ func (s *Service) GetExercise(ctx context.Context, id string) (*domain.Exercise,
 
 func (s *Service) SearchExercises(
 	ctx context.Context,
-	filters SearchFilters,
+	filters *SearchFilters,
 ) ([]*domain.Exercise, error) {
 	if _, err := RequireAuthenticated(ctx); err != nil {
 		return nil, err
@@ -265,7 +267,7 @@ func (s *Service) newEvent(
 ) (*domain.Event, error) {
 	payload, err := json.Marshal(newExerciseEventPayload(exercise.Info()))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidOutboxPayload, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidOutboxPayload, err)
 	}
 
 	id, err := s.ids.NewID()
@@ -299,6 +301,7 @@ type exerciseEventPayload struct {
 	Status             string   `json:"status"`
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func newExerciseEventPayload(info domain.Info) exerciseEventPayload {
 	return exerciseEventPayload{
 		ID:                 info.ID,

@@ -52,6 +52,7 @@ type Exercise struct {
 	info Info
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func NewExercise(info Info, now time.Time) (*Exercise, error) {
 	info.ID = strings.TrimSpace(info.ID)
 	info.Status = StatusDraft
@@ -67,6 +68,7 @@ func NewExercise(info Info, now time.Time) (*Exercise, error) {
 	return exercise, nil
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func RehydrateExercise(info Info) (*Exercise, error) {
 	info = normalizeInfo(info)
 	if !info.Status.Valid() {
@@ -89,6 +91,7 @@ func (e *Exercise) Info() Info {
 	return info
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func (e *Exercise) UpdateInfo(info Info, now time.Time) error {
 	if e.info.Status == StatusArchived {
 		return ErrArchivedExercise
@@ -186,6 +189,7 @@ func (e *Exercise) validateRequired() error {
 	return nil
 }
 
+//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func normalizeInfo(info Info) Info {
 	info.ID = strings.TrimSpace(info.ID)
 	info.Name = strings.TrimSpace(info.Name)

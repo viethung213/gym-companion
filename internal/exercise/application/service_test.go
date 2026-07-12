@@ -11,6 +11,7 @@ import (
 )
 
 func TestCreateExerciseReturnsDraft(t *testing.T) {
+	t.Parallel()
 	service, repo := newTestService()
 	ctx := adminContext()
 
@@ -28,6 +29,7 @@ func TestCreateExerciseReturnsDraft(t *testing.T) {
 }
 
 func TestUpdateExerciseDoesNotChangeStatus(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService()
 	ctx := adminContext()
 
@@ -50,6 +52,7 @@ func TestUpdateExerciseDoesNotChangeStatus(t *testing.T) {
 }
 
 func TestArchiveExercise(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService()
 	ctx := adminContext()
 
@@ -58,8 +61,8 @@ func TestArchiveExercise(t *testing.T) {
 		t.Fatalf("create exercise: %v", err)
 	}
 
-	if err := service.ArchiveExercise(ctx, exercise.Info().ID); err != nil {
-		t.Fatalf("archive exercise: %v", err)
+	if archiveErr := service.ArchiveExercise(ctx, exercise.Info().ID); archiveErr != nil {
+		t.Fatalf("archive exercise: %v", archiveErr)
 	}
 
 	_, err = service.GetExercise(userContext(), exercise.Info().ID)
@@ -69,6 +72,7 @@ func TestArchiveExercise(t *testing.T) {
 }
 
 func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService()
 	adminCtx := adminContext()
 	userCtx := userContext()
@@ -77,11 +81,13 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create active exercise: %v", err)
 	}
-	if _, err := service.SubmitExerciseForApproval(adminCtx, active.Info().ID); err != nil {
-		t.Fatalf("submit exercise: %v", err)
+	_, submitErr := service.SubmitExerciseForApproval(adminCtx, active.Info().ID)
+	if submitErr != nil {
+		t.Fatalf("submit exercise: %v", submitErr)
 	}
-	if _, err := service.ApproveExercise(adminCtx, active.Info().ID); err != nil {
-		t.Fatalf("approve exercise: %v", err)
+	_, approveErr := service.ApproveExercise(adminCtx, active.Info().ID)
+	if approveErr != nil {
+		t.Fatalf("approve exercise: %v", approveErr)
 	}
 
 	draft, err := service.CreateExercise(adminCtx, validInfo())
@@ -89,7 +95,7 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 		t.Fatalf("create draft exercise: %v", err)
 	}
 
-	exercises, err := service.SearchExercises(userCtx, SearchFilters{})
+	exercises, err := service.SearchExercises(userCtx, &SearchFilters{})
 	if err != nil {
 		t.Fatalf("search exercises: %v", err)
 	}
@@ -104,6 +110,7 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 }
 
 func TestAdminMutationRejectsNonAdmin(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService()
 
 	_, err := service.CreateExercise(userContext(), validInfo())
@@ -141,7 +148,7 @@ func (r *fakeRepository) FindByID(_ context.Context, id string) (*domain.Exercis
 
 func (r *fakeRepository) SearchActive(
 	_ context.Context,
-	_ SearchFilters,
+	_ *SearchFilters,
 ) ([]*domain.Exercise, error) {
 	var exercises []*domain.Exercise
 	for _, exercise := range r.exercises {

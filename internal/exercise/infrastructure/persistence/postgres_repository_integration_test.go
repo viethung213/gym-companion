@@ -79,7 +79,7 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 		t.Fatalf("save active exercise: %v", err)
 	}
 
-	exercises, err := repo.SearchActive(ctx, application.SearchFilters{
+	exercises, err := repo.SearchActive(ctx, &application.SearchFilters{
 		TagIDs: []string{"strength"},
 	})
 	if err != nil {
