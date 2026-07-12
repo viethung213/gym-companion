@@ -4,15 +4,14 @@ package persistence
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
-
 	"github.com/viethung213/gym-companion/internal/exercise/application"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
@@ -21,11 +20,15 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
 
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	defer db.Close()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get database handle: %v", err)
+	}
+	defer sqlDB.Close()
 
 	ctx := context.Background()
 	if err := prepareExerciseSchema(ctx, db); err != nil {
@@ -95,11 +98,10 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 	}
 
 	var outboxCount int
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT COUNT(*) FROM exercise.outbox WHERE event_id = $1`,
-		event.ID,
-	).Scan(&outboxCount)
+	err = db.WithContext(ctx).
+		Raw(`SELECT COUNT(*) FROM exercise.outbox WHERE event_id = ?`, event.ID).
+		Scan(&outboxCount).
+		Error
 	if err != nil {
 		t.Fatalf("count outbox: %v", err)
 	}
@@ -108,7 +110,7 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 	}
 }
 
-func prepareExerciseSchema(ctx context.Context, db *sql.DB) error {
+func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 	statements := []string{
 		`CREATE SCHEMA IF NOT EXISTS exercise`,
 		`DROP TABLE IF EXISTS exercise.exercise_tags`,
@@ -173,7 +175,7 @@ func prepareExerciseSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
 			return err
 		}
 	}
