@@ -40,15 +40,20 @@ CREATE TABLE IF NOT EXISTS exercise.exercises (
     video_url VARCHAR(1024),
     difficulty VARCHAR(50) DEFAULT 'Beginner',
     default_rest_seconds INT DEFAULT 60,
-    status VARCHAR(50) DEFAULT 'ACTIVE',
+    status VARCHAR(50) DEFAULT 'DRAFT',
+    archived_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_exercises_status CHECK (
+        status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'ARCHIVED')
+    )
 );
 
 -- Indexing for Exercises Foreign Keys
 CREATE INDEX IF NOT EXISTS idx_exercises_body_part ON exercise.exercises(body_part_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercise.exercises(equipment_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_target_muscle ON exercise.exercises(target_muscle_id);
+CREATE INDEX IF NOT EXISTS idx_exercises_status ON exercise.exercises(status);
 
 -- 6. Table: exercise_secondary_muscles (Many-to-Many)
 CREATE TABLE IF NOT EXISTS exercise.exercise_secondary_muscles (

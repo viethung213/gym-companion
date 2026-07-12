@@ -9,6 +9,7 @@ enum ExerciseStatus {
   EXERCISE_STATUS_DRAFT = 1;
   EXERCISE_STATUS_PENDING_APPROVAL = 2;
   EXERCISE_STATUS_ACTIVE = 3;
+  EXERCISE_STATUS_ARCHIVED = 4;
 }
 
 message ExerciseInfo {
@@ -61,7 +62,7 @@ message UpdateExerciseRequest {
   string difficulty = 11;
   int32 default_rest_seconds = 12;
   repeated string tag_ids = 13;
-  ExerciseStatus status = 14;
+  ExerciseStatus status = 14 [deprecated = true];
 }
 
 message UpdateExerciseResponse {
@@ -74,6 +75,22 @@ message DeleteExerciseRequest {
 
 message DeleteExerciseResponse {
   bool success = 1;
+}
+
+message SubmitExerciseForApprovalRequest {
+  string id = 1;
+}
+
+message SubmitExerciseForApprovalResponse {
+  ExerciseInfo exercise = 1;
+}
+
+message ApproveExerciseRequest {
+  string id = 1;
+}
+
+message ApproveExerciseResponse {
+  ExerciseInfo exercise = 1;
 }
 
 message GetExerciseRequest {

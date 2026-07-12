@@ -9,11 +9,23 @@ import "contracts/supporting/exercise/v1/message/exercise_messages.proto";
 // Event payload when a new exercise is created in Draft state
 message ExerciseCreatedEvent {
   string exercise_id = 1;
-  contracts.supporting.exercise.v1.message.Exercise exercise = 2;
+  contracts.supporting.exercise.v1.message.ExerciseInfo exercise = 2;
+}
+
+// Event payload when an exercise is submitted for approval
+message ExerciseSubmittedForApprovalEvent {
+  string exercise_id = 1;
+  contracts.supporting.exercise.v1.message.ExerciseInfo exercise = 2;
 }
 
 // Event payload when an exercise is approved and goes Active
 message ExerciseApprovedEvent {
   string exercise_id = 1;
-  contracts.supporting.exercise.v1.message.Exercise exercise = 2;
+  contracts.supporting.exercise.v1.message.ExerciseInfo exercise = 2;
+}
+
+// Event payload when an exercise is archived
+message ExerciseArchivedEvent {
+  string exercise_id = 1;
+  contracts.supporting.exercise.v1.message.ExerciseInfo exercise = 2;
 }

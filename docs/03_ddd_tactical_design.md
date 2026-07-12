@@ -181,7 +181,11 @@
 - **Repository**: `ExerciseRepository`
 - **Domain Events**:
   - `ExerciseCreated`: Bài tập tạo mới (trạng thái `Draft`).
+  - `ExerciseSubmittedForApproval`: Bài tập được gửi vào hàng chờ duyệt.
   - `ExerciseApproved`: Admin phê duyệt → trạng thái `Active`.
+  - `ExerciseArchived`: Admin lưu trữ bài tập, thay cho xóa vật lý.
 - **Invariants**:
-  - Lifecycle: `Draft` → `PendingApproval` → `Active`.
+  - Lifecycle kích hoạt: `Draft` → `PendingApproval` → `Active`.
+  - Lifecycle lưu trữ: `Draft` | `PendingApproval` | `Active` → `Archived`.
   - Chỉ bài tập `Active` mới được tham chiếu bởi các Context khác.
+  - Bài tập `Archived` không được trả về trong luồng User đọc/tìm kiếm và không được cập nhật nội dung.
