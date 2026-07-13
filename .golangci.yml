@@ -3,6 +3,10 @@ run:
   issues-exit-code: 1
   tests: true
   go: '1.25'
+  # Loại trừ hoàn toàn các thư mục chứa code tự sinh khỏi phạm vi phân tích
+  exclude-dirs:
+    - internal/gen
+    - docs/swagger
 
 linters:
   disable-all: true
