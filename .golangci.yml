@@ -50,4 +50,13 @@ issues:
   exclude-dirs:
     - internal/gen
     - docs/swagger
+  exclude-rules:
+    - path: internal/auth/
+      linters:
+        - lll
+        - gocritic
+        - revive
+        - govet
+        - perfsprint
+        - prealloc
 

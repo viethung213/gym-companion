@@ -16,13 +16,15 @@ message StartWorkoutSessionResponse {
   google.protobuf.Timestamp started_at = 2;
 }
 
+// Log cho từng rep (được tính toán từ Client và gửi lên Server)
 message RepLog {
   int32 rep_number = 1;
   float rom_percentage = 2;
-  repeated string error_codes = 3;
-  map<string, float> joint_angles = 4;
+  repeated string error_codes = 3; // Ví dụ: ["ERR_BACK_ARCH", "ERR_KNEE_OVER_TOE"]
+  map<string, float> joint_angles = 4; // Map các góc khớp đã tính toán (ví dụ: {"knee_angle": 120.5})
 }
 
+// Request/Response cho LogWorkoutSet
 message LogWorkoutSetRequest {
   string session_id = 1;
   int32 set_number = 2;
@@ -30,10 +32,10 @@ message LogWorkoutSetRequest {
   int32 target_reps = 4;
   int32 actual_reps = 5;
   float weight = 6;
-  optional float form_score = 7;
-  float rpe = 8;
+  optional float form_score = 7; // Sử dụng optional để hỗ trợ N/A cho bài tập Phi AI
+  float rpe = 8; // Độ gắng sức (Rate of Perceived Exertion)
   repeated RepLog reps = 9;
-  string camera_angle = 10;
+  string camera_angle = 10; // Góc quay camera thực tế lúc tập (ví dụ: "side", "front")
 }
 
 message LogWorkoutSetResponse {
@@ -50,6 +52,7 @@ message AbortWorkoutSessionResponse {
   google.protobuf.Timestamp aborted_at = 2;
 }
 
+// Request/Response cho CompleteWorkoutSession
 message CompleteWorkoutSessionRequest {
   string session_id = 1;
 }
@@ -59,7 +62,7 @@ message CompleteWorkoutSessionResponse {
   google.protobuf.Timestamp completed_at = 2;
   int32 total_sets = 3;
   float total_volume = 4;
-  optional float average_form_score = 5;
+  optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
   float average_rpe = 6;
 }
 
@@ -137,7 +140,7 @@ message GetWorkoutSessionErrorsResponse {
 message GetWorkoutHistoryRequest {
   string user_id = 1;
   int32 limit = 2;
-  int32 offset = 3;
+  int32 offset = 3; // Vị trí bắt đầu lấy bản ghi (mặc định là 0 nếu để trống)
 }
 
 message WorkoutSessionSummary {
@@ -145,7 +148,7 @@ message WorkoutSessionSummary {
   google.protobuf.Timestamp date = 2;
   int32 total_sets = 3;
   float total_volume = 4;
-  optional float average_form_score = 5;
+  optional float average_form_score = 5; // Dạng optional (N/A nếu buổi tập phi AI)
 }
 
 message GetWorkoutHistoryResponse {

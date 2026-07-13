@@ -2,12 +2,13 @@ syntax = "proto3";
 
 package contracts.generic.auth.v1.event;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event;authv1event";
 
 message UserRegistered {
   string user_id = 1;
   string email = 2;
   string full_name = 3;
-  string phone = 4;
-  string registered_at = 5;
+  google.protobuf.Timestamp registered_at = 4;
 }

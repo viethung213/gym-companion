@@ -136,9 +136,9 @@ func TestUnaryLoggingInterceptor(t *testing.T) {
 func TestIsAuthRequired(t *testing.T) {
 	t.Parallel()
 	// Test real registered Protobuf method paths
-	// 1. Login should be PUBLIC (has security: {})
-	if isAuthRequired("/contracts.generic.auth.v1.service.AuthService/Login") {
-		t.Error("expected Login to be PUBLIC, but marked as secured")
+	// 1. GetOAuthLoginURL should be PUBLIC (has security: {})
+	if isAuthRequired("/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL") {
+		t.Error("expected GetOAuthLoginURL to be PUBLIC, but marked as secured")
 	}
 
 	// 2. Logout should be SECURED (requires BearerAuth default)
@@ -210,7 +210,7 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 
 	// Case 4: Public method, missing header -> should succeed and NOT fail
 	infoPublic := &grpc.UnaryServerInfo{
-		FullMethod: "/contracts.generic.auth.v1.service.AuthService/Login",
+		FullMethod: "/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL",
 	}
 	publicHandler := func(_ context.Context, _ any) (any, error) {
 		return "public-ok", nil
