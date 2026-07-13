@@ -38,7 +38,7 @@ jobs:
 
       - name: Generate API stubs via Buf Docker Image
         run: |
-          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ghcr.io/viethung213/gym-companion/buf-generator:latest buf generate proto --template proto/buf.gen.yaml
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ghcr.io/viethung213/gym-companion/buf-generator:latest generate proto --template proto/buf.gen.yaml
 
       - name: Set up Go
         uses: actions/setup-go@v5
