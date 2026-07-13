@@ -19,6 +19,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  packages: read
 
 jobs:
   golangci:
@@ -27,6 +28,17 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate API stubs via Buf Docker Image
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ghcr.io/viethung213/gym-companion/buf-generator:latest buf generate proto --template proto/buf.gen.yaml
 
       - name: Set up Go
         uses: actions/setup-go@v5
