@@ -1,7 +1,8 @@
 -- ==========================================
 -- FITAI DATABASE INITIALIZATION SCRIPT
--- Sets up empty Bounded Context schemas and 
--- Outbox Pattern tables (outbox, outbox_log)
+-- Sets up empty Bounded Context schemas,
+-- Outbox Pattern tables (published status & timestamp for outgoing),
+-- and Outbox Log tables (processed_at for incoming).
 -- ==========================================
 
 -- ------------------------------------------
@@ -15,7 +16,9 @@ CREATE TABLE IF NOT EXISTS auth.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS auth.outbox_log (
@@ -40,7 +43,9 @@ CREATE TABLE IF NOT EXISTS profile.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS profile.outbox_log (
@@ -65,7 +70,9 @@ CREATE TABLE IF NOT EXISTS coaching.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS coaching.outbox_log (
@@ -90,7 +97,9 @@ CREATE TABLE IF NOT EXISTS workout_execution.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
@@ -115,7 +124,9 @@ CREATE TABLE IF NOT EXISTS nutrition.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS nutrition.outbox_log (
@@ -140,7 +151,9 @@ CREATE TABLE IF NOT EXISTS notification.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS notification.outbox_log (
@@ -165,7 +178,9 @@ CREATE TABLE IF NOT EXISTS audio.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS audio.outbox_log (
@@ -179,6 +194,7 @@ CREATE TABLE IF NOT EXISTS audio.outbox_log (
     error_message TEXT
 );
 
+-- ------------------------------------------
 -- 8. SCHEMA: exercise
 -- ------------------------------------------
 CREATE SCHEMA IF NOT EXISTS exercise;
@@ -189,7 +205,9 @@ CREATE TABLE IF NOT EXISTS exercise.outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS exercise.outbox_log (
@@ -202,4 +220,16 @@ CREATE TABLE IF NOT EXISTS exercise.outbox_log (
     status VARCHAR(50) NOT NULL,
     error_message TEXT
 );
+
+-- ------------------------------------------
+-- 9. OUTBOX PUBLISHED INDEXES (For polling optimization)
+-- ------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_auth_outbox_published_created ON auth.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_profile_outbox_published_created ON profile.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_coaching_outbox_published_created ON coaching.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_published_created ON workout_execution.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_nutrition_outbox_published_created ON nutrition.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_published_created ON notification.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_audio_outbox_published_created ON audio.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_exercise_outbox_published_created ON exercise.outbox (published, created_at);
 

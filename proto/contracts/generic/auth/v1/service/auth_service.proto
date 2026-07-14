@@ -12,7 +12,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
     title: "Identity & Authentication API"
     version: "1.0"
-    description: "API xác thực người dùng, đăng ký, đăng nhập và xử lý OTP."
+    description: "API xác thực người dùng bằng tài khoản Google/Facebook."
   }
   security_definitions: {
     security: {
@@ -34,39 +34,6 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service AuthService {
-  // Xác thực token và lấy thông tin phiên (Sử dụng nội bộ hoặc Gateway)
-  rpc ValidateToken (contracts.generic.auth.v1.message.ValidateTokenRequest) returns (contracts.generic.auth.v1.message.ValidateTokenResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/auth/validate"
-      body: "*"
-    };
-    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      security: {} // Public bypass
-    };
-  }
-
-  // Đăng ký tài khoản mới
-  rpc Register (contracts.generic.auth.v1.message.RegisterRequest) returns (contracts.generic.auth.v1.message.RegisterResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/auth/register"
-      body: "*"
-    };
-    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      security: {} // Public bypass
-    };
-  }
-
-  // Đăng nhập người dùng bằng email
-  rpc Login (contracts.generic.auth.v1.message.LoginRequest) returns (contracts.generic.auth.v1.message.LoginResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/auth/login"
-      body: "*"
-    };
-    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      security: {} // Public bypass
-    };
-  }
-
   // Làm mới access token bằng refresh token
   rpc RefreshToken (contracts.generic.auth.v1.message.RefreshTokenRequest) returns (contracts.generic.auth.v1.message.RefreshTokenResponse) {
     option (google.api.http) = {
@@ -87,32 +54,38 @@ service AuthService {
     // Sử dụng BearerAuth mặc định
   }
 
-  // Gửi mã OTP xác thực (Đăng ký/Quên mật khẩu)
-  rpc SendOTP (contracts.generic.auth.v1.message.SendOTPRequest) returns (contracts.generic.auth.v1.message.SendOTPResponse) {
+  // Lấy URL đăng nhập OAuth (Google/Facebook)
+  rpc GetOAuthLoginURL (contracts.generic.auth.v1.message.GetOAuthLoginURLRequest) returns (contracts.generic.auth.v1.message.GetOAuthLoginURLResponse) {
     option (google.api.http) = {
-      post: "/api/v1/auth/otp/send"
-      body: "*"
+      get: "/api/v1/auth/oauth/login"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {} // Public bypass
     };
   }
 
-  // Xác nhận OTP để lấy token reset mật khẩu hoặc kích hoạt tài khoản
-  rpc VerifyOTP (contracts.generic.auth.v1.message.VerifyOTPRequest) returns (contracts.generic.auth.v1.message.VerifyOTPResponse) {
+  // Xoay khóa ký JWT thủ công (chỉ dành cho Admin)
+  rpc RotateKeys (contracts.generic.auth.v1.message.RotateKeysRequest) returns (contracts.generic.auth.v1.message.RotateKeysResponse) {
     option (google.api.http) = {
-      post: "/api/v1/auth/otp/verify"
+      post: "/api/v1/auth/keys/rotate"
       body: "*"
+    };
+  }
+
+  // Lấy danh sách Public Keys dưới dạng JWKS
+  rpc GetJWKS (contracts.generic.auth.v1.message.GetJWKSRequest) returns (contracts.generic.auth.v1.message.GetJWKSResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/auth/jwks"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {} // Public bypass
     };
   }
 
-  // Đặt lại mật khẩu mới
-  rpc ResetPassword (contracts.generic.auth.v1.message.ResetPasswordRequest) returns (contracts.generic.auth.v1.message.ResetPasswordResponse) {
+  // Đăng nhập bằng tài khoản Google hoặc Facebook
+  rpc LoginWithOAuth (contracts.generic.auth.v1.message.LoginWithOAuthRequest) returns (contracts.generic.auth.v1.message.LoginResponse) {
     option (google.api.http) = {
-      post: "/api/v1/auth/password/reset"
+      post: "/api/v1/auth/login/oauth"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {

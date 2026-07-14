@@ -4,34 +4,6 @@ package contracts.generic.auth.v1.message;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message;authv1message";
 
-message ValidateTokenRequest {
-  string token = 1;
-}
-
-message ValidateTokenResponse {
-  bool is_valid = 1;
-  string user_id = 2;
-  repeated string roles = 3;
-  string expires_at = 4;
-}
-
-message RegisterRequest {
-  string email = 1;
-  string password = 2;
-  string full_name = 3;
-  string phone = 4;
-}
-
-message RegisterResponse {
-  string user_id = 1;
-  string message = 2;
-}
-
-message LoginRequest {
-  string email = 1;
-  string password = 2;
-}
-
 message LoginResponse {
   string access_token = 1;
   string refresh_token = 2;
@@ -56,34 +28,39 @@ message LogoutResponse {
   string message = 2;
 }
 
-message SendOTPRequest {
-  string email = 1;
-  string purpose = 2; // "REGISTER", "RESET_PASSWORD"
+message GetOAuthLoginURLRequest {
+  string provider = 1; // "google" or "facebook"
+  string redirect_uri = 2; // Optional Frontend override callback URL
 }
 
-message SendOTPResponse {
-  string session_id = 1;
-  string expires_at = 2;
-  string message = 3;
+message GetOAuthLoginURLResponse {
+  string login_url = 1;
 }
 
-message VerifyOTPRequest {
-  string session_id = 1;
-  string otp_code = 2;
+message RotateKeysRequest {}
+
+message RotateKeysResponse {
+  string message = 1;
 }
 
-message VerifyOTPResponse {
-  bool is_valid = 1;
-  string verification_token = 2;
-  string message = 3;
+message GetJWKSRequest {}
+
+message JWKKey {
+  string kty = 1; // "RSA"
+  string use = 2; // "sig"
+  string alg = 3; // "RS256"
+  string kid = 4;
+  string n = 5; // Modulus (Base64URL encoded)
+  string e = 6; // Exponent (Base64URL encoded)
 }
 
-message ResetPasswordRequest {
-  string verification_token = 1;
-  string new_password = 2;
+message GetJWKSResponse {
+  repeated JWKKey keys = 1;
 }
 
-message ResetPasswordResponse {
-  bool success = 1;
-  string message = 2;
+message LoginWithOAuthRequest {
+  string provider = 1; // "google" or "facebook"
+  string code = 2;
+  string redirect_uri = 3; // The redirect URL used during the initial request
+  string state = 4;
 }
