@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/exercise/application"
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"gorm.io/gorm"
 )
@@ -117,7 +117,7 @@ func replaceTags(tx *gorm.DB, info *domain.Info) error {
 
 func (r *PostgresRepository) searchActiveRecords(
 	ctx context.Context,
-	filters *application.SearchFilters,
+	filters *port.SearchFilters,
 ) ([]exerciseRecord, error) {
 	query := r.db.WithContext(ctx).
 		Table("exercise.exercises AS e").
@@ -213,43 +213,43 @@ func queryTagIDs(ctx context.Context, db *gorm.DB, exerciseID string) ([]string,
 	return ids, nil
 }
 
-func queryBodyParts(ctx context.Context, db *gorm.DB) ([]application.BodyPart, error) {
+func queryBodyParts(ctx context.Context, db *gorm.DB) ([]port.BodyPart, error) {
 	var records []bodyPartRecord
 	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("query body parts: %w", err)
 	}
 
-	bodyParts := make([]application.BodyPart, 0, len(records))
+	bodyParts := make([]port.BodyPart, 0, len(records))
 	for _, record := range records {
-		bodyParts = append(bodyParts, application.BodyPart{ID: record.ID, Name: record.Name})
+		bodyParts = append(bodyParts, port.BodyPart{ID: record.ID, Name: record.Name})
 	}
 
 	return bodyParts, nil
 }
 
-func queryEquipments(ctx context.Context, db *gorm.DB) ([]application.Equipment, error) {
+func queryEquipments(ctx context.Context, db *gorm.DB) ([]port.Equipment, error) {
 	var records []equipmentRecord
 	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("query equipments: %w", err)
 	}
 
-	equipments := make([]application.Equipment, 0, len(records))
+	equipments := make([]port.Equipment, 0, len(records))
 	for _, record := range records {
-		equipments = append(equipments, application.Equipment{ID: record.ID, Name: record.Name})
+		equipments = append(equipments, port.Equipment{ID: record.ID, Name: record.Name})
 	}
 
 	return equipments, nil
 }
 
-func queryMuscles(ctx context.Context, db *gorm.DB) ([]application.Muscle, error) {
+func queryMuscles(ctx context.Context, db *gorm.DB) ([]port.Muscle, error) {
 	var records []muscleRecord
 	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("query muscles: %w", err)
 	}
 
-	muscles := make([]application.Muscle, 0, len(records))
+	muscles := make([]port.Muscle, 0, len(records))
 	for _, record := range records {
-		muscles = append(muscles, application.Muscle{
+		muscles = append(muscles, port.Muscle{
 			ID:         record.ID,
 			Name:       record.Name,
 			BodyPartID: record.BodyPartID,
@@ -259,15 +259,15 @@ func queryMuscles(ctx context.Context, db *gorm.DB) ([]application.Muscle, error
 	return muscles, nil
 }
 
-func queryTags(ctx context.Context, db *gorm.DB) ([]application.Tag, error) {
+func queryTags(ctx context.Context, db *gorm.DB) ([]port.Tag, error) {
 	var records []tagRecord
 	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("query tags: %w", err)
 	}
 
-	tags := make([]application.Tag, 0, len(records))
+	tags := make([]port.Tag, 0, len(records))
 	for _, record := range records {
-		tags = append(tags, application.Tag{ID: record.ID, Name: record.Name})
+		tags = append(tags, port.Tag{ID: record.ID, Name: record.Name})
 	}
 
 	return tags, nil

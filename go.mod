@@ -3,13 +3,6 @@ module github.com/viethung213/gym-companion
 go 1.25.8
 
 require (
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
-	google.golang.org/genproto v0.0.0-20260706201446-f0a921348800
-	google.golang.org/genproto/googleapis/api v0.0.0-20260706201446-f0a921348800
-	google.golang.org/grpc v1.82.0
-	google.golang.org/protobuf v1.36.11
-	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.31.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
@@ -17,7 +10,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.51
 	golang.org/x/time v0.15.0
 	google.golang.org/genproto v0.0.0-20260706201446-f0a921348800
-	google.golang.org/genproto/googleapis/api v0.0.0-20260630182238-925bb5da69e7
+	google.golang.org/genproto/googleapis/api v0.0.0-20260706201446-f0a921348800
 	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0

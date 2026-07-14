@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/exercise/application"
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -16,7 +16,7 @@ type PostgresRepository struct {
 	db *gorm.DB
 }
 
-var _ application.Repository = (*PostgresRepository)(nil)
+var _ port.Repository = (*PostgresRepository)(nil)
 
 func NewPostgresRepository(db *gorm.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
@@ -69,7 +69,7 @@ func (r *PostgresRepository) FindByID(
 
 func (r *PostgresRepository) SearchActive(
 	ctx context.Context,
-	filters *application.SearchFilters,
+	filters *port.SearchFilters,
 ) ([]*domain.Exercise, error) {
 	records, err := r.searchActiveRecords(ctx, filters)
 	if err != nil {
@@ -88,25 +88,25 @@ func (r *PostgresRepository) SearchActive(
 	return exercises, nil
 }
 
-func (r *PostgresRepository) GetMetadata(ctx context.Context) (application.Metadata, error) {
+func (r *PostgresRepository) GetMetadata(ctx context.Context) (port.Metadata, error) {
 	bodyParts, err := queryBodyParts(ctx, r.db)
 	if err != nil {
-		return application.Metadata{}, err
+		return port.Metadata{}, err
 	}
 	equipments, err := queryEquipments(ctx, r.db)
 	if err != nil {
-		return application.Metadata{}, err
+		return port.Metadata{}, err
 	}
 	muscles, err := queryMuscles(ctx, r.db)
 	if err != nil {
-		return application.Metadata{}, err
+		return port.Metadata{}, err
 	}
 	tags, err := queryTags(ctx, r.db)
 	if err != nil {
-		return application.Metadata{}, err
+		return port.Metadata{}, err
 	}
 
-	return application.Metadata{
+	return port.Metadata{
 		BodyParts:  bodyParts,
 		Equipments: equipments,
 		Muscles:    muscles,

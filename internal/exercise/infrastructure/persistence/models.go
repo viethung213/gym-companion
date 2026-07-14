@@ -1,6 +1,9 @@
 package persistence
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 type exerciseRecord struct {
 	ID                 string     `gorm:"column:id;primaryKey"`
@@ -80,12 +83,14 @@ func (tagRecord) TableName() string {
 }
 
 type outboxRecord struct {
-	ID           string    `gorm:"column:id;primaryKey"`
-	EventID      string    `gorm:"column:event_id"`
-	EventType    string    `gorm:"column:event_type"`
-	Payload      []byte    `gorm:"column:payload"`
-	PartitionKey string    `gorm:"column:partition_key"`
-	CreatedAt    time.Time `gorm:"column:created_at"`
+	ID           string       `gorm:"column:id;primaryKey"`
+	EventID      string       `gorm:"column:event_id;not null"`
+	EventType    string       `gorm:"column:event_type;not null"`
+	Payload      []byte       `gorm:"column:payload;not null;type:jsonb"`
+	PartitionKey string       `gorm:"column:partition_key;not null"`
+	CreatedAt    time.Time    `gorm:"column:created_at"`
+	Published    bool         `gorm:"column:published;default:false"`
+	PublishedAt  sql.NullTime `gorm:"column:published_at"`
 }
 
 func (outboxRecord) TableName() string {

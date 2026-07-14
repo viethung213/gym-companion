@@ -32,6 +32,43 @@ const (
 	UserRoleKey ContextKey = "userRole"
 )
 
+var (
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrForbidden    = errors.New("forbidden")
+)
+
+type Actor struct {
+	UserID string
+	Role   string
+}
+
+func (a Actor) IsAdmin() bool {
+	return strings.EqualFold(a.Role, "Admin")
+}
+
+func RequireAuthenticated(ctx context.Context) (Actor, error) {
+	userID, ok := ctx.Value(UserIDKey).(string)
+	if !ok || userID == "" {
+		return Actor{}, ErrUnauthorized
+	}
+	role, _ := ctx.Value(UserRoleKey).(string)
+	return Actor{
+		UserID: userID,
+		Role:   role,
+	}, nil
+}
+
+func RequireAdmin(ctx context.Context) (Actor, error) {
+	actor, err := RequireAuthenticated(ctx)
+	if err != nil {
+		return Actor{}, err
+	}
+	if !actor.IsAdmin() {
+		return Actor{}, ErrForbidden
+	}
+	return actor, nil
+}
+
 // UnaryAuthInterceptor intercepts unary gRPC requests to validate JWT tokens.
 func UnaryAuthInterceptor(kp KeyProvider) grpc.UnaryServerInterceptor {
 	return func(

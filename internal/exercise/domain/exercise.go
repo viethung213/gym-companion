@@ -23,8 +23,6 @@ var (
 	ErrInvalidTransition    = errors.New("invalid exercise status transition")
 	ErrArchivedExercise     = errors.New("archived exercise cannot be changed")
 	ErrExerciseNotFound     = errors.New("exercise not found")
-	ErrUnauthorized         = errors.New("authentication required")
-	ErrForbidden            = errors.New("admin role required")
 	ErrInvalidOutboxPayload = errors.New("invalid outbox payload")
 )
 

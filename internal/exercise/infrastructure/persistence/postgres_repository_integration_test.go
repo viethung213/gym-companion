@@ -4,12 +4,14 @@ package persistence
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/viethung213/gym-companion/internal/exercise/application"
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -78,7 +80,7 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 		t.Fatalf("save active exercise: %v", err)
 	}
 
-	exercises, err := repo.SearchActive(ctx, &application.SearchFilters{
+	exercises, err := repo.SearchActive(ctx, &port.SearchFilters{
 		TagIDs: []string{"strength"},
 	})
 	if err != nil {
@@ -164,7 +166,9 @@ func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 			event_type VARCHAR(255) NOT NULL,
 			payload JSONB NOT NULL,
 			partition_key VARCHAR(255) NOT NULL,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			published BOOLEAN DEFAULT FALSE,
+			published_at TIMESTAMP WITH TIME ZONE
 		)`,
 		`INSERT INTO exercise.body_parts (id, name) VALUES ('legs', 'Legs')`,
 		`INSERT INTO exercise.equipments (id, name) VALUES ('barbell', 'Barbell')`,
@@ -180,4 +184,24 @@ func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+func InitDB(databaseURL string) (*gorm.DB, error) {
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("open db connection: %w", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get sql db: %w", err)
+	}
+
+	// Set connection pool configurations
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxLifetime(15 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+
+	return db, nil
 }

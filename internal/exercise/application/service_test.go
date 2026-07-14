@@ -1,4 +1,4 @@
-package application
+package application_test
 
 import (
 	"context"
@@ -7,15 +7,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/exercise/application/command"
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
+	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
 func TestCreateExerciseReturnsDraft(t *testing.T) {
 	t.Parallel()
-	service, repo := newTestService()
+	suite := newTestSuite()
 	ctx := adminContext()
 
-	exercise, err := service.CreateExercise(ctx, validInfo())
+	exercise, err := suite.createHandler.Handle(ctx, command.CreateExerciseCommand{Info: validInfo()})
 	if err != nil {
 		t.Fatalf("create exercise: %v", err)
 	}
@@ -23,17 +27,17 @@ func TestCreateExerciseReturnsDraft(t *testing.T) {
 	if got := exercise.Info().Status; got != domain.StatusDraft {
 		t.Fatalf("got status %q, want %q", got, domain.StatusDraft)
 	}
-	if got := len(repo.events); got != 1 {
+	if got := len(suite.repo.events); got != 1 {
 		t.Fatalf("got events %d, want 1", got)
 	}
 }
 
 func TestUpdateExerciseDoesNotChangeStatus(t *testing.T) {
 	t.Parallel()
-	service, _ := newTestService()
+	suite := newTestSuite()
 	ctx := adminContext()
 
-	exercise, err := service.CreateExercise(ctx, validInfo())
+	exercise, err := suite.createHandler.Handle(ctx, command.CreateExerciseCommand{Info: validInfo()})
 	if err != nil {
 		t.Fatalf("create exercise: %v", err)
 	}
@@ -41,7 +45,10 @@ func TestUpdateExerciseDoesNotChangeStatus(t *testing.T) {
 	info := validInfo()
 	info.Name = "Updated Squat"
 	info.Status = domain.StatusActive
-	updated, err := service.UpdateExercise(ctx, exercise.Info().ID, info)
+	updated, err := suite.updateHandler.Handle(ctx, command.UpdateExerciseCommand{
+		ID:   exercise.Info().ID,
+		Info: info,
+	})
 	if err != nil {
 		t.Fatalf("update exercise: %v", err)
 	}
@@ -53,19 +60,19 @@ func TestUpdateExerciseDoesNotChangeStatus(t *testing.T) {
 
 func TestArchiveExercise(t *testing.T) {
 	t.Parallel()
-	service, _ := newTestService()
+	suite := newTestSuite()
 	ctx := adminContext()
 
-	exercise, err := service.CreateExercise(ctx, validInfo())
+	exercise, err := suite.createHandler.Handle(ctx, command.CreateExerciseCommand{Info: validInfo()})
 	if err != nil {
 		t.Fatalf("create exercise: %v", err)
 	}
 
-	if archiveErr := service.ArchiveExercise(ctx, exercise.Info().ID); archiveErr != nil {
-		t.Fatalf("archive exercise: %v", archiveErr)
+	if err := suite.archiveHandler.Handle(ctx, command.ArchiveExerciseCommand{ID: exercise.Info().ID}); err != nil {
+		t.Fatalf("archive exercise: %v", err)
 	}
 
-	_, err = service.GetExercise(userContext(), exercise.Info().ID)
+	_, err = suite.getHandler.Handle(userContext(), query.GetExerciseQuery{ID: exercise.Info().ID})
 	if !errors.Is(err, domain.ErrExerciseNotFound) {
 		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
 	}
@@ -73,29 +80,29 @@ func TestArchiveExercise(t *testing.T) {
 
 func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 	t.Parallel()
-	service, _ := newTestService()
+	suite := newTestSuite()
 	adminCtx := adminContext()
 	userCtx := userContext()
 
-	active, err := service.CreateExercise(adminCtx, validInfo())
+	active, err := suite.createHandler.Handle(adminCtx, command.CreateExerciseCommand{Info: validInfo()})
 	if err != nil {
 		t.Fatalf("create active exercise: %v", err)
 	}
-	_, submitErr := service.SubmitExerciseForApproval(adminCtx, active.Info().ID)
-	if submitErr != nil {
-		t.Fatalf("submit exercise: %v", submitErr)
+	_, err = suite.submitForApprovalHandler.Handle(adminCtx, command.SubmitExerciseForApprovalCommand{ID: active.Info().ID})
+	if err != nil {
+		t.Fatalf("submit exercise: %v", err)
 	}
-	_, approveErr := service.ApproveExercise(adminCtx, active.Info().ID)
-	if approveErr != nil {
-		t.Fatalf("approve exercise: %v", approveErr)
+	_, err = suite.approveHandler.Handle(adminCtx, command.ApproveExerciseCommand{ID: active.Info().ID})
+	if err != nil {
+		t.Fatalf("approve exercise: %v", err)
 	}
 
-	draft, err := service.CreateExercise(adminCtx, validInfo())
+	draft, err := suite.createHandler.Handle(adminCtx, command.CreateExerciseCommand{Info: validInfo()})
 	if err != nil {
 		t.Fatalf("create draft exercise: %v", err)
 	}
 
-	exercises, err := service.SearchExercises(userCtx, &SearchFilters{})
+	exercises, err := suite.searchHandler.Handle(userCtx, query.SearchExercisesQuery{Filters: &port.SearchFilters{}})
 	if err != nil {
 		t.Fatalf("search exercises: %v", err)
 	}
@@ -103,7 +110,7 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 		t.Fatalf("got exercises %d, want 1", got)
 	}
 
-	_, err = service.GetExercise(userCtx, draft.Info().ID)
+	_, err = suite.getHandler.Handle(userCtx, query.GetExerciseQuery{ID: draft.Info().ID})
 	if !errors.Is(err, domain.ErrExerciseNotFound) {
 		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
 	}
@@ -111,11 +118,11 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 
 func TestAdminMutationRejectsNonAdmin(t *testing.T) {
 	t.Parallel()
-	service, _ := newTestService()
+	suite := newTestSuite()
 
-	_, err := service.CreateExercise(userContext(), validInfo())
-	if !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("got error %v, want %v", err, domain.ErrForbidden)
+	_, err := suite.createHandler.Handle(userContext(), command.CreateExerciseCommand{Info: validInfo()})
+	if !errors.Is(err, middleware.ErrForbidden) {
+		t.Fatalf("got error %v, want %v", err, middleware.ErrForbidden)
 	}
 }
 
@@ -148,7 +155,7 @@ func (r *fakeRepository) FindByID(_ context.Context, id string) (*domain.Exercis
 
 func (r *fakeRepository) SearchActive(
 	_ context.Context,
-	_ *SearchFilters,
+	_ *port.SearchFilters,
 ) ([]*domain.Exercise, error) {
 	var exercises []*domain.Exercise
 	for _, exercise := range r.exercises {
@@ -160,8 +167,8 @@ func (r *fakeRepository) SearchActive(
 	return exercises, nil
 }
 
-func (r *fakeRepository) GetMetadata(_ context.Context) (Metadata, error) {
-	return Metadata{}, nil
+func (r *fakeRepository) GetMetadata(_ context.Context) (port.Metadata, error) {
+	return port.Metadata{}, nil
 }
 
 type fakeClock struct {
@@ -182,30 +189,56 @@ func (g *sequenceIDGenerator) NewID() (string, error) {
 	return "id-" + strconv.Itoa(g.next), nil
 }
 
-func newTestService() (*Service, *fakeRepository) {
+type testSuite struct {
+	repo                     *fakeRepository
+	clock                    fakeClock
+	ids                      *sequenceIDGenerator
+	createHandler            *command.CreateExerciseHandler
+	updateHandler            *command.UpdateExerciseHandler
+	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler
+	approveHandler           *command.ApproveExerciseHandler
+	archiveHandler           *command.ArchiveExerciseHandler
+	getHandler               *query.GetExerciseHandler
+	searchHandler            *query.SearchExercisesHandler
+	metadataHandler          *query.GetCatalogMetadataHandler
+}
+
+func newTestSuite() *testSuite {
 	repo := &fakeRepository{
 		exercises: make(map[string]*domain.Exercise),
 	}
-	ids := &sequenceIDGenerator{}
-	service := NewService(repo, fakeClock{
+	clock := fakeClock{
 		now: time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC),
-	}, ids)
+	}
+	ids := &sequenceIDGenerator{}
 
-	return service, repo
+	return &testSuite{
+		repo:                     repo,
+		clock:                    clock,
+		ids:                      ids,
+		createHandler:            command.NewCreateExerciseHandler(repo, clock, ids),
+		updateHandler:            command.NewUpdateExerciseHandler(repo, clock),
+		submitForApprovalHandler: command.NewSubmitExerciseForApprovalHandler(repo, clock, ids),
+		approveHandler:           command.NewApproveExerciseHandler(repo, clock, ids),
+		archiveHandler:           command.NewArchiveExerciseHandler(repo, clock, ids),
+		getHandler:               query.NewGetExerciseHandler(repo),
+		searchHandler:            query.NewSearchExercisesHandler(repo),
+		metadataHandler:          query.NewGetCatalogMetadataHandler(repo),
+	}
 }
 
 func adminContext() context.Context {
-	return ContextWithActor(context.Background(), Actor{
-		UserID: "admin-1",
-		Roles:  []string{"Admin"},
-	})
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, middleware.UserIDKey, "admin-1")
+	ctx = context.WithValue(ctx, middleware.UserRoleKey, "Admin")
+	return ctx
 }
 
 func userContext() context.Context {
-	return ContextWithActor(context.Background(), Actor{
-		UserID: "user-1",
-		Roles:  []string{"User"},
-	})
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, middleware.UserIDKey, "user-1")
+	ctx = context.WithValue(ctx, middleware.UserRoleKey, "User")
+	return ctx
 }
 
 func validInfo() domain.Info {

@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/viethung213/gym-companion/internal/exercise/application"
+	"github.com/viethung213/gym-companion/internal/exercise/application/command"
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
+	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -16,29 +19,59 @@ import (
 type ExerciseServer struct {
 	exercisesvc.UnimplementedExerciseServiceServer
 
-	service *application.Service
+	createHandler            *command.CreateExerciseHandler
+	updateHandler            *command.UpdateExerciseHandler
+	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler
+	approveHandler           *command.ApproveExerciseHandler
+	archiveHandler           *command.ArchiveExerciseHandler
+	getHandler               *query.GetExerciseHandler
+	searchHandler            *query.SearchExercisesHandler
+	metadataHandler          *query.GetCatalogMetadataHandler
 }
 
 var _ exercisesvc.ExerciseServiceServer = (*ExerciseServer)(nil)
 
-func NewExerciseServer(service *application.Service) *ExerciseServer {
-	return &ExerciseServer{service: service}
+func NewExerciseServer(
+	createHandler *command.CreateExerciseHandler,
+	updateHandler *command.UpdateExerciseHandler,
+	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler,
+	approveHandler *command.ApproveExerciseHandler,
+	archiveHandler *command.ArchiveExerciseHandler,
+	getHandler *query.GetExerciseHandler,
+	searchHandler *query.SearchExercisesHandler,
+	metadataHandler *query.GetCatalogMetadataHandler,
+) *ExerciseServer {
+	return &ExerciseServer{
+		createHandler:            createHandler,
+		updateHandler:            updateHandler,
+		submitForApprovalHandler: submitForApprovalHandler,
+		approveHandler:           approveHandler,
+		archiveHandler:           archiveHandler,
+		getHandler:               getHandler,
+		searchHandler:            searchHandler,
+		metadataHandler:          metadataHandler,
+	}
 }
 
 func (s *ExerciseServer) SearchExercises(
 	ctx context.Context,
 	req *exercisemsg.SearchExercisesRequest,
 ) (*exercisemsg.SearchExercisesResponse, error) {
-	exercises, err := s.service.SearchExercises(ctx, &application.SearchFilters{
-		BodyPartID:         req.GetBodyPartId(),
-		EquipmentID:        req.GetEquipmentId(),
-		TargetMuscleID:     req.GetTargetMuscleId(),
-		SecondaryMuscleIDs: req.GetSecondaryMuscleIds(),
-		TagIDs:             req.GetTagIds(),
-		Keyword:            req.GetKeyword(),
-		Difficulty:         req.GetDifficulty(),
-		Limit:              req.GetLimit(),
-		Offset:             req.GetOffset(),
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	exercises, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{
+		Filters: &port.SearchFilters{
+			BodyPartID:         req.GetBodyPartId(),
+			EquipmentID:        req.GetEquipmentId(),
+			TargetMuscleID:     req.GetTargetMuscleId(),
+			SecondaryMuscleIDs: req.GetSecondaryMuscleIds(),
+			TagIDs:             req.GetTagIds(),
+			Keyword:            req.GetKeyword(),
+			Difficulty:         req.GetDifficulty(),
+			Limit:              req.GetLimit(),
+			Offset:             req.GetOffset(),
+		},
 	})
 	if err != nil {
 		return nil, rpcError(err)
@@ -58,7 +91,7 @@ func (s *ExerciseServer) GetCatalogMetadata(
 	ctx context.Context,
 	_ *exercisemsg.GetCatalogMetadataRequest,
 ) (*exercisemsg.GetCatalogMetadataResponse, error) {
-	metadata, err := s.service.GetCatalogMetadata(ctx)
+	metadata, err := s.metadataHandler.Handle(ctx, query.GetCatalogMetadataQuery{})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -70,7 +103,10 @@ func (s *ExerciseServer) GetExercise(
 	ctx context.Context,
 	req *exercisemsg.GetExerciseRequest,
 ) (*exercisemsg.GetExerciseResponse, error) {
-	exercise, err := s.service.GetExercise(ctx, req.GetId())
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	exercise, err := s.getHandler.Handle(ctx, query.GetExerciseQuery{ID: req.GetId()})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -84,19 +120,24 @@ func (s *ExerciseServer) CreateExercise(
 	ctx context.Context,
 	req *exercisemsg.CreateExerciseRequest,
 ) (*exercisemsg.CreateExerciseResponse, error) {
-	exercise, err := s.service.CreateExercise(ctx, domain.Info{
-		Name:               req.GetName(),
-		BodyPartID:         req.GetBodyPartId(),
-		EquipmentID:        req.GetEquipmentId(),
-		TargetMuscleID:     req.GetTargetMuscleId(),
-		Instructions:       req.GetInstructions(),
-		SecondaryMuscleIDs: req.GetSecondaryMuscleIds(),
-		ThumbnailURL:       req.GetThumbnailUrl(),
-		MediaURL:           req.GetMediaUrl(),
-		VideoURL:           req.GetVideoUrl(),
-		Difficulty:         req.GetDifficulty(),
-		DefaultRestSeconds: req.GetDefaultRestSeconds(),
-		TagIDs:             req.GetTagIds(),
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	exercise, err := s.createHandler.Handle(ctx, command.CreateExerciseCommand{
+		Info: domain.Info{
+			Name:               req.GetName(),
+			BodyPartID:         req.GetBodyPartId(),
+			EquipmentID:        req.GetEquipmentId(),
+			TargetMuscleID:     req.GetTargetMuscleId(),
+			Instructions:       req.GetInstructions(),
+			SecondaryMuscleIDs: req.GetSecondaryMuscleIds(),
+			ThumbnailURL:       req.GetThumbnailUrl(),
+			MediaURL:           req.GetMediaUrl(),
+			VideoURL:           req.GetVideoUrl(),
+			Difficulty:         req.GetDifficulty(),
+			DefaultRestSeconds: req.GetDefaultRestSeconds(),
+			TagIDs:             req.GetTagIds(),
+		},
 	})
 	if err != nil {
 		return nil, rpcError(err)
@@ -111,19 +152,25 @@ func (s *ExerciseServer) UpdateExercise(
 	ctx context.Context,
 	req *exercisemsg.UpdateExerciseRequest,
 ) (*exercisemsg.UpdateExerciseResponse, error) {
-	exercise, err := s.service.UpdateExercise(ctx, req.GetId(), domain.Info{
-		Name:               req.GetName(),
-		BodyPartID:         req.GetBodyPartId(),
-		EquipmentID:        req.GetEquipmentId(),
-		TargetMuscleID:     req.GetTargetMuscleId(),
-		Instructions:       req.GetInstructions(),
-		SecondaryMuscleIDs: req.GetSecondaryMuscleIds(),
-		ThumbnailURL:       req.GetThumbnailUrl(),
-		MediaURL:           req.GetMediaUrl(),
-		VideoURL:           req.GetVideoUrl(),
-		Difficulty:         req.GetDifficulty(),
-		DefaultRestSeconds: req.GetDefaultRestSeconds(),
-		TagIDs:             req.GetTagIds(),
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	exercise, err := s.updateHandler.Handle(ctx, command.UpdateExerciseCommand{
+		ID: req.GetId(),
+		Info: domain.Info{
+			Name:               req.GetName(),
+			BodyPartID:         req.GetBodyPartId(),
+			EquipmentID:        req.GetEquipmentId(),
+			TargetMuscleID:     req.GetTargetMuscleId(),
+			Instructions:       req.GetInstructions(),
+			SecondaryMuscleIDs: req.GetSecondaryMuscleIds(),
+			ThumbnailURL:       req.GetThumbnailUrl(),
+			MediaURL:           req.GetMediaUrl(),
+			VideoURL:           req.GetVideoUrl(),
+			Difficulty:         req.GetDifficulty(),
+			DefaultRestSeconds: req.GetDefaultRestSeconds(),
+			TagIDs:             req.GetTagIds(),
+		},
 	})
 	if err != nil {
 		return nil, rpcError(err)
@@ -138,7 +185,10 @@ func (s *ExerciseServer) SubmitExerciseForApproval(
 	ctx context.Context,
 	req *exercisemsg.SubmitExerciseForApprovalRequest,
 ) (*exercisemsg.SubmitExerciseForApprovalResponse, error) {
-	exercise, err := s.service.SubmitExerciseForApproval(ctx, req.GetId())
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	exercise, err := s.submitForApprovalHandler.Handle(ctx, command.SubmitExerciseForApprovalCommand{ID: req.GetId()})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -152,7 +202,10 @@ func (s *ExerciseServer) ApproveExercise(
 	ctx context.Context,
 	req *exercisemsg.ApproveExerciseRequest,
 ) (*exercisemsg.ApproveExerciseResponse, error) {
-	exercise, err := s.service.ApproveExercise(ctx, req.GetId())
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	exercise, err := s.approveHandler.Handle(ctx, command.ApproveExerciseCommand{ID: req.GetId()})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -166,14 +219,16 @@ func (s *ExerciseServer) DeleteExercise(
 	ctx context.Context,
 	req *exercisemsg.DeleteExerciseRequest,
 ) (*exercisemsg.DeleteExerciseResponse, error) {
-	if err := s.service.ArchiveExercise(ctx, req.GetId()); err != nil {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	if err := s.archiveHandler.Handle(ctx, command.ArchiveExerciseCommand{ID: req.GetId()}); err != nil {
 		return nil, rpcError(err)
 	}
 
 	return &exercisemsg.DeleteExerciseResponse{Success: true}, nil
 }
 
-//nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func toProtoExercise(info domain.Info) *exercisemsg.ExerciseInfo {
 	return &exercisemsg.ExerciseInfo{
 		Id:                 info.ID,
@@ -193,7 +248,7 @@ func toProtoExercise(info domain.Info) *exercisemsg.ExerciseInfo {
 	}
 }
 
-func toProtoMetadata(metadata *application.Metadata) *exercisemsg.GetCatalogMetadataResponse {
+func toProtoMetadata(metadata *port.Metadata) *exercisemsg.GetCatalogMetadataResponse {
 	response := &exercisemsg.GetCatalogMetadataResponse{
 		BodyParts:  make([]*exercisemsg.BodyPart, 0, len(metadata.BodyParts)),
 		Equipments: make([]*exercisemsg.Equipment, 0, len(metadata.Equipments)),
@@ -246,9 +301,9 @@ func toProtoStatus(status domain.Status) exercisemsg.ExerciseStatus {
 
 func rpcError(err error) error {
 	switch {
-	case errors.Is(err, domain.ErrUnauthorized):
+	case errors.Is(err, domain.ErrUnauthorized), errors.Is(err, middleware.ErrUnauthorized):
 		return status.Error(codes.Unauthenticated, err.Error())
-	case errors.Is(err, domain.ErrForbidden):
+	case errors.Is(err, domain.ErrForbidden), errors.Is(err, middleware.ErrForbidden):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, domain.ErrExerciseNotFound):
 		return status.Error(codes.NotFound, err.Error())
