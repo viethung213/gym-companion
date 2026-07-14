@@ -45,3 +45,18 @@ linters-settings:
       - '^log\.Fatal$#Chỉ cho phép log.Fatal trong main() của package main'
       - '^log\.Fatalf$#Chỉ cho phép log.Fatalf trong main() của package main'
 
+issues:
+  # Loại trừ hoàn toàn các thư mục chứa code tự sinh khỏi phạm vi phân tích
+  exclude-dirs:
+    - internal/gen
+    - docs/swagger
+  exclude-rules:
+    - path: internal/auth/
+      linters:
+        - lll
+        - gocritic
+        - revive
+        - govet
+        - perfsprint
+        - prealloc
+

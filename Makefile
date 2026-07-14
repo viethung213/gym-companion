@@ -43,18 +43,15 @@ build-test:
 	docker build --target tester -t fitai-app:test .
 
 
-# Khởi chạy toàn bộ môi trường kiểm thử (App + DBs + Kafka) cục bộ dưới Docker
+# Khởi chạy toàn bộ môi trường hạ tầng kiểm thử (Postgres + Kafka) dưới Docker
 test-env-up:
-	docker network create fitai-network || true
-	cp -n .env.example .env || true
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
 	docker compose -f infra/db/postgres/docker-compose.yml up -d
 	docker compose -f infra/kafka/docker-compose.yml up -d
-	docker compose -f docker-compose.test.yml up -d --build
 
-# Dừng toàn bộ môi trường kiểm thử và xóa toàn bộ dữ liệu rác (volumes) để tránh đầy bộ nhớ
+# Dừng toàn bộ môi trường hạ tầng kiểm thử và xóa toàn bộ dữ liệu rác (volumes) để tránh đầy bộ nhớ
 test-env-down:
-	@echo "Stopping application container..."
-	docker compose -f docker-compose.test.yml down -v || true
 	@echo "Stopping postgres container..."
 	docker compose -f infra/db/postgres/docker-compose.yml down -v || true
 	@echo "Stopping kafka container..."
@@ -73,50 +70,90 @@ lint:
 
 # --- Lệnh Chạy Toàn Bộ Dự Án ---
 
-# Chạy toàn bộ các bài test (cả unit và integration) của toàn dự án
-test-all:
-	@echo "Running all tests..."
-	go test -v ./...
+# Chạy toàn bộ các bài test (Unit, Integration, E2E) của toàn dự án bên trong Docker
+test-all: build-test
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Running all tests (Unit, Integration, E2E) inside Docker..."
+	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
+		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./...); \
+		echo "$$OUT"; \
+		PASSED=$$(echo "$$OUT" | grep -c -e "--- PASS:"); \
+		FAILED=$$(echo "$$OUT" | grep -c -e "--- FAIL:"); \
+		echo "=================================================="; \
+		echo "📊 TỔNG HỢP KẾT QUẢ KIỂM THỬ (TEST SUMMARY):"; \
+		echo "🟢 ĐẠT (PASSED): $$PASSED"; \
+		echo "🔴 THẤT BẠI (FAILED): $$FAILED"; \
+		echo "=================================================="; \
+		if [ $$FAILED -gt 0 ]; then exit 1; fi'
 
-# Chạy tất cả các Unit Tests của toàn dự án (sử dụng tag build: unit)
-test-unit:
-	@echo "Running all Unit Tests (Domain & Application)..."
-	go test -v -tags=unit ./...
+# Chạy tất cả các Unit Tests của toàn dự án bên trong Docker
+test-unit: build-test
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Running all Unit Tests inside Docker..."
+	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=unit ./...
 
-# Chạy tất cả các Integration Tests của toàn dự án (Chạy trong Docker để kết nối hạ tầng)
+# Chạy tất cả các Integration Tests của toàn dự án bên trong Docker
 test-integration: build-test
-	docker network create fitai-network || true
-	cp -n .env.example .env || true
-	@echo "Running Integration Tests inside Docker..."
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Running all Integration Tests inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=integration ./...
 
 # --- Lệnh Chạy Theo Từng Module (Yêu cầu truyền biến MODULE=...) ---
 
-# Chạy toàn bộ test của một module cụ thể (Ví dụ: make test-module MODULE=workout)
-test-module:
+# Chạy toàn bộ test (Unit, Integration, E2E) của một module cụ thể bên trong Docker
+test-module: build-test
 ifndef MODULE
-	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-module MODULE=workout)
+	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-module MODULE=auth)
 endif
-	@echo "Running tests for module $(MODULE)..."
-	go test -v ./internal/$(MODULE)/...
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Running all tests (Unit, Integration, E2E) for module $(MODULE) sequentially inside Docker..."
+	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
+		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./internal/$(MODULE)/...); \
+		echo "$$OUT"; \
+		PASSED=$$(echo "$$OUT" | grep -c -e "--- PASS:"); \
+		FAILED=$$(echo "$$OUT" | grep -c -e "--- FAIL:"); \
+		echo "=================================================="; \
+		echo "📊 TỔNG HỢP KẾT QUẢ KIỂM THỬ MODULE $(MODULE):"; \
+		echo "🟢 ĐẠT (PASSED): $$PASSED"; \
+		echo "🔴 THẤT BẠI (FAILED): $$FAILED"; \
+		echo "=================================================="; \
+		if [ $$FAILED -gt 0 ]; then exit 1; fi'
 
-# Chạy chỉ Unit Tests của một module cụ thể (Ví dụ: make test-unit-module MODULE=workout)
-test-unit-module:
+# Chạy chỉ Unit Tests của một module cụ thể bên trong Docker
+test-unit-module: build-test
 ifndef MODULE
-	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-unit-module MODULE=workout)
+	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-unit-module MODULE=auth)
 endif
-	@echo "Running Unit Tests for module $(MODULE)..."
-	go test -v -tags=unit ./internal/$(MODULE)/...
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Running Unit Tests for module $(MODULE) inside Docker..."
+	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=unit ./internal/$(MODULE)/...
 
-# Chạy chỉ Integration Tests của một module cụ thể (Chạy trong Docker để kết nối hạ tầng)
+# Chạy chỉ Integration Tests của một module cụ thể bên trong Docker
 test-integration-module: build-test
 ifndef MODULE
-	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-integration-module MODULE=workout)
+	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-integration-module MODULE=auth)
 endif
-	docker network create fitai-network || true
-	cp -n .env.example .env || true
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
 	@echo "Running Integration Tests for module $(MODULE) inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=integration ./internal/$(MODULE)/...
+
+# Chạy chỉ E2E Tests của một module cụ thể bên trong Docker
+test-e2e-module: build-test
+ifndef MODULE
+	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-e2e-module MODULE=auth)
+endif
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Running E2E Tests for module $(MODULE) inside Docker..."
+	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=e2e ./internal/$(MODULE)/...
+
+
 
 # =====================================================================
 # 4. Data Initialization & Seeding (Khởi tạo dữ liệu)
