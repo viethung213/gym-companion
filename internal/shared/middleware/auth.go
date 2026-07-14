@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -21,16 +22,24 @@ type KeyProvider interface {
 	GetPublicKeyPEM(ctx context.Context, kid string) (string, error)
 }
 
-var keyProvider KeyProvider
+// ContextKey represents a context key type to avoid collisions.
+type ContextKey string
 
-// SetKeyProvider registers the KeyProvider implementation for the auth interceptors.
-func SetKeyProvider(kp KeyProvider) {
-	keyProvider = kp
-}
+const (
+	// UserIDKey is the context key for the user ID.
+	UserIDKey ContextKey = "userId"
+	// UserRoleKey is the context key for the user role.
+	UserRoleKey ContextKey = "userRole"
+)
 
 // UnaryAuthInterceptor intercepts unary gRPC requests to validate JWT tokens.
-func UnaryAuthInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+func UnaryAuthInterceptor(kp KeyProvider) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
 		// 1. Check if method bypasses auth based on proto contract annotations
 		required := isAuthRequired(info.FullMethod)
 
@@ -45,7 +54,7 @@ func UnaryAuthInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		// 3. Validate token
-		userID, roles, err := parseAndValidateToken(ctx, tokenStr)
+		userID, role, err := parseAndValidateToken(ctx, tokenStr, kp)
 		if err != nil {
 			if required {
 				return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
@@ -55,17 +64,20 @@ func UnaryAuthInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		// 4. Inject identity into context
-		ctx = context.WithValue(ctx, "userId", userID)
-		ctx = context.WithValue(ctx, "userRoles", roles)
+		ctx = context.WithValue(ctx, UserIDKey, userID)
+		ctx = context.WithValue(ctx, UserRoleKey, role)
 
 		return handler(ctx, req)
 	}
 }
 
-
-func parseAndValidateToken(ctx context.Context, tokenStr string) (string, []string, error) {
-	if keyProvider == nil {
-		return "", nil, fmt.Errorf("key provider not initialized")
+func parseAndValidateToken(
+	ctx context.Context,
+	tokenStr string,
+	kp KeyProvider,
+) (userID, role string, err error) {
+	if kp == nil {
+		return "", "", errors.New("key provider not initialized")
 	}
 
 	var kid string
@@ -77,54 +89,49 @@ func parseAndValidateToken(ctx context.Context, tokenStr string) (string, []stri
 		var ok bool
 		kid, ok = token.Header["kid"].(string)
 		if !ok || kid == "" {
-			return nil, fmt.Errorf("missing kid in token header")
+			return nil, errors.New("missing kid in token header")
 		}
 
-		pubKeyPEM, err := keyProvider.GetPublicKeyPEM(ctx, kid)
-		if err != nil {
-			return nil, fmt.Errorf("get public key: %w", err)
+		pubKeyPEM, getErr := kp.GetPublicKeyPEM(ctx, kid)
+		if getErr != nil {
+			return nil, fmt.Errorf("get public key: %w", getErr)
 		}
 
-		pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pubKeyPEM))
-		if err != nil {
-			return nil, fmt.Errorf("parse rsa public key: %w", err)
+		pubKey, parseErr := jwt.ParseRSAPublicKeyFromPEM([]byte(pubKeyPEM))
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse rsa public key: %w", parseErr)
 		}
 
 		return pubKey, nil
 	})
 
 	if err != nil {
-		return "", nil, err
+		return "", "", err
 	}
 
 	if !token.Valid {
-		return "", nil, fmt.Errorf("invalid token")
+		return "", "", errors.New("invalid token")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid claims")
+		return "", "", errors.New("invalid claims")
 	}
 
-	userID, ok := claims["sub"].(string)
+	userID, ok = claims["sub"].(string)
 	if !ok || userID == "" {
-		return "", nil, fmt.Errorf("missing sub claim")
+		return "", "", errors.New("missing sub claim")
+	}
+	role, ok = claims["role"].(string)
+	if !ok || role == "" {
+		return "", "", errors.New("missing role claim")
 	}
 
-	var roles []string
-	if rs, ok := claims["roles"].([]interface{}); ok {
-		for _, r := range rs {
-			if str, ok := r.(string); ok {
-				roles = append(roles, str)
-			}
-		}
-	}
-
-	return userID, roles, nil
+	return userID, role, nil
 }
 
-
-// isAuthRequired checks the compiled protobuf annotations to see if the method requires BearerAuth.
+// isAuthRequired checks the compiled protobuf annotations to see
+// if the method requires BearerAuth.
 func isAuthRequired(fullMethod string) bool {
 	// FullMethod format: "/package.Service/Method"
 	parts := strings.Split(fullMethod, "/")
@@ -174,17 +181,17 @@ func isAuthRequired(fullMethod string) bool {
 func extractToken(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("missing metadata")
+		return "", errors.New("missing metadata")
 	}
 
 	authHeaders := md.Get("authorization")
 	if len(authHeaders) == 0 || authHeaders[0] == "" {
-		return "", fmt.Errorf("missing authorization header")
+		return "", errors.New("missing authorization header")
 	}
 
 	parts := strings.SplitN(authHeaders[0], " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return "", fmt.Errorf("invalid authorization format (expected Bearer <token>)")
+		return "", errors.New("invalid authorization format (expected Bearer <token>)")
 	}
 
 	return parts[1], nil

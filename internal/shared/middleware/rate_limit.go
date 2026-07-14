@@ -18,11 +18,8 @@ type rateLimiterRegistry struct {
 	limiters map[string]*rate.Limiter
 }
 
-var registry = &rateLimiterRegistry{
-	limiters: make(map[string]*rate.Limiter),
-}
-
-// GetLimiter returns or creates a rate.Limiter for a given key, with a specific limit (requests per minute).
+// GetLimiter returns or creates a rate.Limiter for a given key,
+// with a specific limit (requests per minute).
 func (r *rateLimiterRegistry) GetLimiter(key string, reqPerMin int) *rate.Limiter {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -43,13 +40,26 @@ func (r *rateLimiterRegistry) GetLimiter(key string, reqPerMin int) *rate.Limite
 
 // UnaryRateLimitInterceptor limits gRPC unary requests based on method rules.
 func UnaryRateLimitInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	registry := &rateLimiterRegistry{
+		limiters: make(map[string]*rate.Limiter),
+	}
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
 		reqPerMin := getLimitForMethod(info.FullMethod)
 		clientKey := getClientKey(ctx, info.FullMethod)
 
 		limiter := registry.GetLimiter(clientKey, reqPerMin)
 		if !limiter.Allow() {
-			return nil, status.Errorf(codes.ResourceExhausted, "rate limit exceeded: max %d requests per minute for %s", reqPerMin, info.FullMethod)
+			return nil, status.Errorf(
+				codes.ResourceExhausted,
+				"rate limit exceeded: max %d requests per minute for %s",
+				reqPerMin,
+				info.FullMethod,
+			)
 		}
 
 		return handler(ctx, req)
@@ -70,7 +80,7 @@ func getLimitForMethod(fullMethod string) int {
 
 func getClientKey(ctx context.Context, method string) string {
 	// 1. Try User ID from context
-	if userID, ok := ctx.Value("userId").(string); ok && userID != "" {
+	if userID, ok := ctx.Value(UserIDKey).(string); ok && userID != "" {
 		return userID + ":" + method
 	}
 

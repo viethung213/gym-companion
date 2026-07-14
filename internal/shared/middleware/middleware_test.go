@@ -8,40 +8,48 @@ import (
 	"encoding/pem"
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	_ "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
-
-	_ "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 )
 
 var (
-	testPrivateKey   *rsa.PrivateKey
+	//nolint:gochecknoglobals // Caches private key across tests to avoid regeneration.
+	testPrivateKey *rsa.PrivateKey
+	//nolint:gochecknoglobals // Used to cache test RSA public key PEM across tests.
 	testPublicKeyPEM string
+	//nolint:gochecknoglobals // Controls initialization of test RSA keys.
+	keysOnce sync.Once
 )
 
-func init() {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		panic(err)
-	}
-	testPrivateKey = priv
+func getTestKeys(t *testing.T) (privKey *rsa.PrivateKey, pubKeyPEM string) {
+	t.Helper()
+	keysOnce.Do(func() {
+		priv, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("failed to generate RSA key: %v", err)
+		}
+		testPrivateKey = priv
 
-	pubASN1, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
-	if err != nil {
-		panic(err)
-	}
-	pubBytes := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: pubASN1,
+		pubASN1, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+		if err != nil {
+			t.Fatalf("failed to marshal public key: %v", err)
+		}
+		pubBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: pubASN1,
+		})
+		testPublicKeyPEM = string(pubBytes)
 	})
-	testPublicKeyPEM = string(pubBytes)
+	return testPrivateKey, testPublicKeyPEM
 }
 
 type mockKeyProvider struct {
@@ -49,7 +57,7 @@ type mockKeyProvider struct {
 	err    error
 }
 
-func (m *mockKeyProvider) GetPublicKeyPEM(ctx context.Context, kid string) (string, error) {
+func (m *mockKeyProvider) GetPublicKeyPEM(_ context.Context, kid string) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}
@@ -59,25 +67,28 @@ func (m *mockKeyProvider) GetPublicKeyPEM(ctx context.Context, kid string) (stri
 	return "", errors.New("key not found")
 }
 
-func generateTestToken(userID string, roles []string, kid string) string {
+func generateTestToken(t *testing.T, userID, role, kid string) string {
+	t.Helper()
+	privKey, _ := getTestKeys(t)
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"exp":   time.Now().Add(1 * time.Hour).Unix(),
+		"sub":  userID,
+		"role": role,
+		"exp":  time.Now().Add(1 * time.Hour).Unix(),
 	})
 	token.Header["kid"] = kid
-	tokenStr, err := token.SignedString(testPrivateKey)
+	tokenStr, err := token.SignedString(privKey)
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to sign token: %v", err)
 	}
 	return tokenStr
 }
 
 func TestUnaryRecoveryInterceptor(t *testing.T) {
+	t.Parallel()
 	interceptor := UnaryRecoveryInterceptor()
 
 	// Handler that panics
-	panicHandler := func(ctx context.Context, req any) (any, error) {
+	panicHandler := func(_ context.Context, _ any) (any, error) {
 		panic("something went wrong")
 	}
 
@@ -103,9 +114,10 @@ func TestUnaryRecoveryInterceptor(t *testing.T) {
 }
 
 func TestUnaryLoggingInterceptor(t *testing.T) {
+	t.Parallel()
 	interceptor := UnaryLoggingInterceptor()
 
-	dummyHandler := func(ctx context.Context, req any) (any, error) {
+	dummyHandler := func(_ context.Context, _ any) (any, error) {
 		return "success", nil
 	}
 
@@ -122,10 +134,11 @@ func TestUnaryLoggingInterceptor(t *testing.T) {
 }
 
 func TestIsAuthRequired(t *testing.T) {
+	t.Parallel()
 	// Test real registered Protobuf method paths
-	// 1. GetOAuthLoginURL should be PUBLIC (has security: {})
-	if isAuthRequired("/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL") {
-		t.Error("expected GetOAuthLoginURL to be PUBLIC, but marked as secured")
+	// 1. Login should be PUBLIC (has security: {})
+	if isAuthRequired("/contracts.generic.auth.v1.service.AuthService/Login") {
+		t.Error("expected Login to be PUBLIC, but marked as secured")
 	}
 
 	// 2. Logout should be SECURED (requires BearerAuth default)
@@ -140,40 +153,53 @@ func TestIsAuthRequired(t *testing.T) {
 }
 
 func TestUnaryAuthInterceptor(t *testing.T) {
+	t.Parallel()
+	_, pubKeyPEM := getTestKeys(t)
 	mockKP := &mockKeyProvider{
-		keyPEM: testPublicKeyPEM,
+		keyPEM: pubKeyPEM,
 	}
-	SetKeyProvider(mockKP)
 
-	goodToken := generateTestToken("user-123", []string{"user"}, "test-kid")
+	goodToken := generateTestToken(t, "user-123", "user", "test-kid")
 
-	interceptor := UnaryAuthInterceptor()
+	interceptor := UnaryAuthInterceptor(mockKP)
 
-	dummyHandler := func(ctx context.Context, req any) (any, error) {
+	dummyHandler := func(ctx context.Context, _ any) (any, error) {
 		// Verify identity is injected
-		uID := ctx.Value("userId")
+		uID := ctx.Value(UserIDKey)
 		if uID != "user-123" {
 			t.Errorf("expected userId user-123 in context, got %v", uID)
+		}
+		role := ctx.Value(UserRoleKey)
+		if role != "user" {
+			t.Errorf("expected userRole user in context, got %v", role)
 		}
 		return "ok", nil
 	}
 
 	// Case 1: Secured method, missing header -> should fail
-	infoSecured := &grpc.UnaryServerInfo{FullMethod: "/contracts.generic.auth.v1.service.AuthService/Logout"}
+	infoSecured := &grpc.UnaryServerInfo{
+		FullMethod: "/contracts.generic.auth.v1.service.AuthService/Logout",
+	}
 	_, err := interceptor(context.Background(), nil, infoSecured, dummyHandler)
 	if err == nil || status.Code(err) != codes.Unauthenticated {
 		t.Errorf("expected Unauthenticated error, got %v", err)
 	}
 
 	// Case 2: Secured method, invalid token -> should fail
-	ctxWithBadToken := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer bad-token"))
+	ctxWithBadToken := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs("authorization", "Bearer bad-token"),
+	)
 	_, err = interceptor(ctxWithBadToken, nil, infoSecured, dummyHandler)
 	if err == nil || status.Code(err) != codes.Unauthenticated {
 		t.Errorf("expected Unauthenticated error, got %v", err)
 	}
 
 	// Case 3: Secured method, valid token -> should succeed and call handler
-	ctxWithGoodToken := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+goodToken))
+	ctxWithGoodToken := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs("authorization", "Bearer "+goodToken),
+	)
 	resp, err := interceptor(ctxWithGoodToken, nil, infoSecured, dummyHandler)
 	if err != nil {
 		t.Errorf("expected success, got error: %v", err)
@@ -183,8 +209,10 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 	}
 
 	// Case 4: Public method, missing header -> should succeed and NOT fail
-	infoPublic := &grpc.UnaryServerInfo{FullMethod: "/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL"}
-	publicHandler := func(ctx context.Context, req any) (any, error) {
+	infoPublic := &grpc.UnaryServerInfo{
+		FullMethod: "/contracts.generic.auth.v1.service.AuthService/Login",
+	}
+	publicHandler := func(_ context.Context, _ any) (any, error) {
 		return "public-ok", nil
 	}
 	resp, err = interceptor(context.Background(), nil, infoPublic, publicHandler)
@@ -197,9 +225,10 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 }
 
 func TestUnaryRateLimitInterceptor(t *testing.T) {
+	t.Parallel()
 	interceptor := UnaryRateLimitInterceptor()
 
-	dummyHandler := func(ctx context.Context, req any) (any, error) {
+	dummyHandler := func(_ context.Context, _ any) (any, error) {
 		return "ok", nil
 	}
 
@@ -222,6 +251,7 @@ func TestUnaryRateLimitInterceptor(t *testing.T) {
 			return
 		}
 	}
-	// Note: depending on time, this might not trigger on extremely fast environments if burst is large,
-	// but with a 10% burst of 100 (which is 10), calling 11 times in microsecond loop guarantees exhaustion.
+	// Note: depending on time, this might not trigger on extremely fast
+	// environments if burst is large, but with a 10% burst of 100 (which
+	// is 10), calling 11 times in microsecond loop guarantees exhaustion.
 }
