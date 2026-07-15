@@ -13,15 +13,10 @@ type Publisher struct {
 	writer *kafka.Writer
 }
 
-// NewPublisher creates a new Publisher configured with the provided brokers.
-func NewPublisher(brokers []string) *Publisher {
+// NewPublisher creates a new Publisher with the provided shared kafka.Writer.
+func NewPublisher(writer *kafka.Writer) *Publisher {
 	return &Publisher{
-		writer: &kafka.Writer{
-			Addr:                   kafka.TCP(brokers...),
-			Balancer:               &kafka.Hash{},
-			AllowAutoTopicCreation: true,             // Enables topic auto-creation if not exists
-			RequiredAcks:           kafka.RequireAll, // Ensure robust delivery (ACID-like safety)
-		},
+		writer: writer,
 	}
 }
 
@@ -47,10 +42,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, records []*port.OutboxReco
 	return nil
 }
 
-// Close releases the writer connection pool resource.
+// Close is a no-op as the shared Kafka connection Registry handles lifecycle management.
 func (p *Publisher) Close() error {
-	if err := p.writer.Close(); err != nil {
-		return fmt.Errorf("close kafka writer: %w", err)
-	}
 	return nil
 }
