@@ -11,7 +11,9 @@ import (
 	"os"
 	"sync"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/auth"
+	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
@@ -35,7 +37,7 @@ func run() error {
 		grpcPort = "9090"
 	}
 
-	// Initialize Database Registry & connection pool for auth module
+	// Initialize Database Registry & connection pool for auth and exercise modules
 	dbRegistry := database.GetRegistry()
 	defer dbRegistry.CloseAll()
 
@@ -44,6 +46,12 @@ func run() error {
 		return fmt.Errorf("initialize auth database pool: %w", err)
 	}
 	log.Println("Initialized isolated Auth Database Pool successfully.")
+
+	exerciseDB, err := dbRegistry.GetPool("exercise")
+	if err != nil {
+		return fmt.Errorf("initialize exercise database pool: %w", err)
+	}
+	log.Println("Initialized isolated Exercise Database Pool successfully.")
 
 	// Listen on gRPC port
 	lis, err := net.Listen("tcp", ":"+grpcPort)
@@ -77,6 +85,16 @@ func run() error {
 	}
 	defer shutdown()
 
+	// Initialize Exercise Module
+	shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
+		DB:         exerciseDB,
+		GRPCServer: grpcServer,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize exercise module: %w", err)
+	}
+	defer shutdownExercise()
+
 	errChan := make(chan error, 2)
 	go func() {
 		if serveErr := grpcServer.Serve(lis); serveErr != nil {
@@ -89,11 +107,20 @@ func run() error {
 	mux := http.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	// Delegate gRPC-Gateway setup to Auth module
-	err = auth.RegisterGateway(ctx, mux, ":"+grpcPort, opts)
+	// Setup shared gRPC-Gateway multiplexer
+	gwmux := runtime.NewServeMux()
+
+	err = auth.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
 	if err != nil {
 		return fmt.Errorf("register auth gateway: %w", err)
 	}
+
+	err = exercise.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
+	if err != nil {
+		return fmt.Errorf("register exercise gateway: %w", err)
+	}
+
+	mux.Handle("/", gwmux)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {

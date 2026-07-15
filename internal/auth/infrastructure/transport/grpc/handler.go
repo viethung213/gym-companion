@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/application/query"
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
 	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -76,6 +77,9 @@ const userIDContextKey contextKey = "userId"
 
 func extractUserID(ctx context.Context) (string, error) {
 	// 1. Try standard context key (camelCase) set by middleware later
+	if val, ok := ctx.Value(middleware.UserIDKey).(string); ok && val != "" {
+		return val, nil
+	}
 	if val, ok := ctx.Value(userIDContextKey).(string); ok && val != "" {
 		return val, nil
 	}
