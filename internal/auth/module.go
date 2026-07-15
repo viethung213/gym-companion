@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -210,17 +209,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 // RegisterGateway configures and registers the gRPC-Gateway multiplexer for the Auth module.
 func RegisterGateway(
 	ctx context.Context,
-	mux *http.ServeMux,
+	mux *runtime.ServeMux,
 	grpcEndpoint string,
 	opts []grpc.DialOption,
 ) error {
-	gwmux := runtime.NewServeMux()
-	err := authv1service.RegisterAuthServiceHandlerFromEndpoint(ctx, gwmux, grpcEndpoint, opts)
+	err := authv1service.RegisterAuthServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts)
 	if err != nil {
 		return fmt.Errorf("register auth service gateway handler: %w", err)
 	}
 
-	// Mount gRPC-Gateway onto the main HTTP multiplexer
-	mux.Handle("/", gwmux)
 	return nil
 }

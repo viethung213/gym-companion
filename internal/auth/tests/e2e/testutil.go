@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gorm.io/driver/postgres"
@@ -107,14 +108,16 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 	}()
 
 	// Register Gateway
-	mux := http.NewServeMux()
+	gwmux := runtime.NewServeMux()
 	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	err = auth.RegisterGateway(ctx, mux, grpcAddr, dialOpts)
+	err = auth.RegisterGateway(ctx, gwmux, grpcAddr, dialOpts)
 	if err != nil {
 		cancel()
 		t.Fatalf("Failed to register Auth gRPC-Gateway: %v", err)
 	}
 
+	mux := http.NewServeMux()
+	mux.Handle("/", gwmux)
 	httpServer := &http.Server{Handler: mux}
 	// Run HTTP server in background
 	go func() {
