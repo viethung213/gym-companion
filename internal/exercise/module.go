@@ -18,14 +18,16 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
 	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
-	DB         *sql.DB
-	GRPCServer *grpc.Server
+	DB            *sql.DB
+	GRPCServer    *grpc.Server
+	KafkaRegistry *sharedKafka.Registry
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
@@ -81,7 +83,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 
-	kafkaPub := kafka.NewPublisher(kafkaBrokers)
+	writer, err := deps.KafkaRegistry.GetWriter("exercise", kafkaBrokers)
+	if err != nil {
+		return nil, fmt.Errorf("get exercise kafka writer: %w", err)
+	}
+
+	kafkaPub := kafka.NewPublisher(writer)
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 1*time.Second)
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)

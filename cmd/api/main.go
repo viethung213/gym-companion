@@ -15,6 +15,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/shared/database"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -40,6 +41,10 @@ func run() error {
 	// Initialize Database Registry & connection pool for auth and exercise modules
 	dbRegistry := database.GetRegistry()
 	defer dbRegistry.CloseAll()
+
+	// Initialize Kafka Registry
+	kafkaRegistry := sharedKafka.GetRegistry()
+	defer kafkaRegistry.CloseAll()
 
 	db, err := dbRegistry.GetPool("auth")
 	if err != nil {
@@ -79,6 +84,7 @@ func run() error {
 		DB:                db,
 		GRPCServer:        grpcServer,
 		AssignKeyProvider: lazyKP.Set,
+		KafkaRegistry:     kafkaRegistry,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize auth module: %w", err)
@@ -87,8 +93,9 @@ func run() error {
 
 	// Initialize Exercise Module
 	shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
-		DB:         exerciseDB,
-		GRPCServer: grpcServer,
+		DB:            exerciseDB,
+		GRPCServer:    grpcServer,
+		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize exercise module: %w", err)

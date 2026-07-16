@@ -25,6 +25,7 @@ import (
 	grpcAuth "github.com/viethung213/gym-companion/internal/auth/infrastructure/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/worker"
 	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -36,6 +37,7 @@ type ModuleDeps struct {
 	DB                *sql.DB
 	GRPCServer        *grpc.Server
 	AssignKeyProvider func(middleware.KeyProvider)
+	KafkaRegistry     *sharedKafka.Registry
 }
 
 // Initialize bootstraps all layers of the Auth Bounded Context.
@@ -160,7 +162,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 
-	kafkaPub := authKafka.NewPublisher(kafkaBrokers)
+	writer, err := deps.KafkaRegistry.GetWriter("auth", kafkaBrokers)
+	if err != nil {
+		cancelWorkers()
+		return nil, fmt.Errorf("get auth kafka writer: %w", err)
+	}
+
+	kafkaPub := authKafka.NewPublisher(writer)
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 1*time.Second)
 
 	wg.Add(1)
