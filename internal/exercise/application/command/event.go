@@ -1,6 +1,7 @@
 package command
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -57,11 +58,27 @@ func newEvent(
 		return nil, fmt.Errorf("generate event id: %w", err)
 	}
 
+	// Wrap payload inside CloudEvents envelope to align with AGENTS.md conventions
+	cloudEvent := map[string]any{
+		"specversion":     "1.0",
+		"id":              id,
+		"source":          "services/exercise-service",
+		"type":            eventType,
+		"time":            now.Format(time.RFC3339),
+		"datacontenttype": "application/json",
+		"data":            json.RawMessage(payloadBytes),
+	}
+
+	envelopeBytes, err := json.Marshal(cloudEvent)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidOutboxPayload, err)
+	}
+
 	return &domain.Event{
 		ID:           id,
 		Type:         eventType,
 		PartitionKey: info.ID,
-		Payload:      payloadBytes,
+		Payload:      envelopeBytes,
 		CreatedAt:    now,
 	}, nil
 }
