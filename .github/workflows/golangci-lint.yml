@@ -36,9 +36,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate API stubs via Buf Docker Image
-        run: |
-          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ghcr.io/viethung213/gym-companion/buf-generator:latest generate proto --template proto/buf.gen.yaml
+      - name: Generate API stubs via Make
+        run: make proto-gen
 
       - name: Set up Go
         uses: actions/setup-go@v5

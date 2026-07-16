@@ -10,7 +10,7 @@ BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
 # Bước 1: Build Docker image chứa Buf CLI và các plugins Go sinh stubs
 proto-docker-build:
 	@echo "Building Buf custom Docker image..."
-	$(BUF_COMPOSE) build
+	docker build -t ghcr.io/viethung213/gym-companion/buf-generator:latest -f infra/buf/buf.Dockerfile .
 
 # Bước 2: Sinh mã nguồn Go (stubs) và tài liệu Swagger OpenAPI từ các hợp đồng Proto
 proto-gen: clean

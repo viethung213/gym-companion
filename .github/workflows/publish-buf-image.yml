@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'buf.Dockerfile' # Chỉ kích hoạt build lại khi thay đổi Dockerfile này
+      - 'infra/buf/buf.Dockerfile' # Chỉ kích hoạt build lại khi thay đổi Dockerfile này
 
 env:
   REGISTRY: ghcr.io
@@ -41,7 +41,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./buf.Dockerfile
+          file: ./infra/buf/buf.Dockerfile
           push: true
           tags: |
             ${{ steps.prep.outputs.image_path }}:latest
