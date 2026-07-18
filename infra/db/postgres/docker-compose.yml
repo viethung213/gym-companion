@@ -7,9 +7,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: fitai
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: fitai_test
     volumes:
       - postgres-test-data:/var/lib/postgresql/data
       - ../../../scripts/postgres-init:/docker-entrypoint-initdb.d

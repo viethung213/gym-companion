@@ -1,7 +1,10 @@
-.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
+.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all db-migrate-exercise
 
 # Lệnh chạy docker compose của Buf CLI
 BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
+POSTGRES_CONTAINER ?= fitai-postgres-test
+POSTGRES_DATABASE ?= fitai_test
+POSTGRES_USER ?= postgres
 
 # =====================================================================
 # 1. API Contract & Protobuf Commands (Buf CLI)
@@ -47,8 +50,8 @@ build-test:
 test-env-up:
 	@-docker network create fitai-network 2>/dev/null
 	@-cp -n .env.example .env 2>/dev/null
-	docker compose -f infra/db/postgres/docker-compose.yml up -d
-	docker compose -f infra/kafka/docker-compose.yml up -d
+	docker compose -f infra/db/postgres/docker-compose.yml up -d --wait
+	docker compose -f infra/kafka/docker-compose.yml up -d --wait
 
 # Dừng toàn bộ môi trường hạ tầng kiểm thử và xóa toàn bộ dữ liệu rác (volumes) để tránh đầy bộ nhớ
 test-env-down:
@@ -71,7 +74,7 @@ lint:
 # --- Lệnh Chạy Toàn Bộ Dự Án ---
 
 # Chạy toàn bộ các bài test (Unit, Integration, E2E) của toàn dự án bên trong Docker
-test-all: build-test
+test-all: test-env-up build-test
 	@-docker network create fitai-network 2>/dev/null
 	@-cp -n .env.example .env 2>/dev/null
 	@echo "Running all tests (Unit, Integration, E2E) inside Docker..."
@@ -95,7 +98,7 @@ test-unit: build-test
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=unit ./...
 
 # Chạy tất cả các Integration Tests của toàn dự án bên trong Docker
-test-integration: build-test
+test-integration: test-env-up build-test
 	@-docker network create fitai-network 2>/dev/null
 	@-cp -n .env.example .env 2>/dev/null
 	@echo "Running all Integration Tests inside Docker..."
@@ -104,7 +107,7 @@ test-integration: build-test
 # --- Lệnh Chạy Theo Từng Module (Yêu cầu truyền biến MODULE=...) ---
 
 # Chạy toàn bộ test (Unit, Integration, E2E) của một module cụ thể bên trong Docker
-test-module: build-test
+test-module: test-env-up build-test
 ifndef MODULE
 	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-module MODULE=auth)
 endif
@@ -134,7 +137,7 @@ endif
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=unit ./internal/$(MODULE)/...
 
 # Chạy chỉ Integration Tests của một module cụ thể bên trong Docker
-test-integration-module: build-test
+test-integration-module: test-env-up build-test
 ifndef MODULE
 	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-integration-module MODULE=auth)
 endif
@@ -178,6 +181,10 @@ db-init-go:
 # Chạy tất cả các loại script khởi tạo dữ liệu trong dự án
 db-init-all: db-init-postgres db-init-go
 	@echo "All database initialization scripts completed."
+
+db-migrate-exercise:
+	@echo "Applying Exercise database migrations..."
+	docker exec -i $(POSTGRES_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(POSTGRES_USER) -d $(POSTGRES_DATABASE) < scripts/postgres-migrations/exercise/001_add_exercise_archive_status.sql
 
 # =====================================================================
 # 5. Utilities

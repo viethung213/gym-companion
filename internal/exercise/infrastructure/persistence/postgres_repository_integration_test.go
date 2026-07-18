@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,9 +19,10 @@ import (
 func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is required")
+		t.Fatal("TEST_DATABASE_URL is required")
 	}
 
+	ctx := context.Background()
 	db, err := InitDB(databaseURL)
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -31,7 +33,14 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 	}
 	defer sqlDB.Close()
 
-	ctx := context.Background()
+	var databaseName string
+	if err := db.WithContext(ctx).Raw(`SELECT current_database()`).Scan(&databaseName).Error; err != nil {
+		t.Fatalf("get database name: %v", err)
+	}
+	if !strings.HasSuffix(databaseName, "_test") {
+		t.Fatalf("integration database %q must end with _test", databaseName)
+	}
+
 	if err := prepareExerciseSchema(ctx, db); err != nil {
 		t.Fatalf("prepare schema: %v", err)
 	}
@@ -114,6 +123,7 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 	statements := []string{
 		`CREATE SCHEMA IF NOT EXISTS exercise`,
+		`DROP TABLE IF EXISTS exercise.motion_specifications`,
 		`DROP TABLE IF EXISTS exercise.exercise_tags`,
 		`DROP TABLE IF EXISTS exercise.exercise_secondary_muscles`,
 		`DROP TABLE IF EXISTS exercise.exercises`,
