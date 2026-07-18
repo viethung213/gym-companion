@@ -30,7 +30,16 @@ type ModuleDeps struct {
 	KafkaRegistry *sharedKafka.Registry
 }
 
+type PublicAPI struct {
+	SearchExercises *query.SearchExercisesHandler
+}
+
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+	shutdown, _, err := InitializeWithPublicAPI(ctx, deps)
+	return shutdown, err
+}
+
+func InitializeWithPublicAPI(ctx context.Context, deps ModuleDeps) (func(), PublicAPI, error) {
 	// Initialize GORM DB wrapper over sql.DB
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
@@ -38,7 +47,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
+		return nil, PublicAPI{}, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
 	// Initialize Repositories
@@ -85,7 +94,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 	writer, err := deps.KafkaRegistry.GetWriter("exercise", kafkaBrokers)
 	if err != nil {
-		return nil, fmt.Errorf("get exercise kafka writer: %w", err)
+		return nil, PublicAPI{}, fmt.Errorf("get exercise kafka writer: %w", err)
 	}
 
 	kafkaPub := kafka.NewPublisher(writer)
@@ -118,7 +127,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 
 	log.Println("Exercise Bounded Context initialized successfully.")
-	return shutdown, nil
+	return shutdown, PublicAPI{SearchExercises: searchHandler}, nil
 }
 
 func RegisterGateway(

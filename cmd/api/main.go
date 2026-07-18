@@ -13,6 +13,8 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/auth"
+	"github.com/viethung213/gym-companion/internal/coaching"
+	coachingexercise "github.com/viethung213/gym-companion/internal/coaching/infrastructure/exercise"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -58,6 +60,12 @@ func run() error {
 	}
 	log.Println("Initialized isolated Exercise Database Pool successfully.")
 
+	coachingDB, err := dbRegistry.GetPool("coaching")
+	if err != nil {
+		return fmt.Errorf("initialize coaching database pool: %w", err)
+	}
+	log.Println("Initialized isolated Coaching Database Pool successfully.")
+
 	// Listen on gRPC port
 	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
@@ -92,7 +100,7 @@ func run() error {
 	defer shutdown()
 
 	// Initialize Exercise Module
-	shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
+	shutdownExercise, exerciseAPI, err := exercise.InitializeWithPublicAPI(ctx, exercise.ModuleDeps{
 		DB:            exerciseDB,
 		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
@@ -101,6 +109,18 @@ func run() error {
 		return fmt.Errorf("initialize exercise module: %w", err)
 	}
 	defer shutdownExercise()
+
+	// Initialize Coaching Module through Exercise's public application boundary.
+	shutdownCoaching, err := coaching.Initialize(ctx, coaching.ModuleDeps{
+		DB:               coachingDB,
+		GRPCServer:       grpcServer,
+		KafkaRegistry:    kafkaRegistry,
+		ExerciseSearcher: coachingexercise.NewSearcher(exerciseAPI.SearchExercises),
+	})
+	if err != nil {
+		return fmt.Errorf("initialize coaching module: %w", err)
+	}
+	defer shutdownCoaching()
 
 	errChan := make(chan error, 2)
 	go func() {
@@ -125,6 +145,11 @@ func run() error {
 	err = exercise.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
 	if err != nil {
 		return fmt.Errorf("register exercise gateway: %w", err)
+	}
+
+	err = coaching.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
+	if err != nil {
+		return fmt.Errorf("register coaching gateway: %w", err)
 	}
 
 	mux.Handle("/", gwmux)

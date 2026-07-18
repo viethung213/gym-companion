@@ -40,6 +40,9 @@ func TestGenerateDailyPlan(t *testing.T) {
 	if plan.Exercises[0].Sets != 2 || plan.Exercises[0].Reps != 12 {
 		t.Fatalf("unexpected beginner prescription: %#v", plan.Exercises[0])
 	}
+	if len(plan.WarmUpItems) != 1 || len(plan.CoolDownItems) != 1 {
+		t.Fatal("expected deterministic warm-up and cool-down activities")
+	}
 	if repository.savedPlan != plan {
 		t.Fatal("daily plan was not persisted")
 	}
@@ -61,6 +64,8 @@ func TestGenerateDailyPlanReturnsExistingPlan(t *testing.T) {
 		"roadmap-1",
 		"schedule-1",
 		startDate,
+		nil,
+		nil,
 		nil,
 		startDate,
 	)

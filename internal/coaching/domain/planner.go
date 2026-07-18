@@ -59,18 +59,41 @@ func muscleGroupsForTrainingDay(dayOffset int, trainingDays int) []string {
 
 type PrescriptionPlanner struct{}
 
-func (PrescriptionPlanner) Plan(exerciseIDs []string, experienceLevel ExperienceLevel) []PrescribedExercise {
+func (PrescriptionPlanner) Plan(options []ExerciseOption, experienceLevel ExperienceLevel) []PrescribedExercise {
 	sets, reps := prescriptionTargets(experienceLevel)
-	exercises := make([]PrescribedExercise, 0, len(exerciseIDs))
-	for _, exerciseID := range exerciseIDs {
+	exercises := make([]PrescribedExercise, 0, len(options))
+	for _, option := range options {
+		restSeconds := option.DefaultRestSeconds
+		if restSeconds <= 0 {
+			restSeconds = 60
+		}
 		exercises = append(exercises, PrescribedExercise{
-			ExerciseID:  exerciseID,
-			Sets:        sets,
-			Reps:        reps,
-			RestSeconds: 60,
+			ExerciseID:   option.ID,
+			ExerciseName: option.Name,
+			Sets:         sets,
+			Reps:         reps,
+			RestSeconds:  restSeconds,
 		})
 	}
 	return exercises
+}
+
+func (PrescriptionPlanner) PlanSessionActivities(maxSessionMinutes int) ([]PlannedActivity, []PlannedActivity) {
+	warmUpDuration := 5 * 60
+	coolDownDuration := 5 * 60
+	if maxSessionMinutes >= 60 {
+		warmUpDuration = 8 * 60
+		coolDownDuration = 7 * 60
+	}
+	return []PlannedActivity{{
+			Name:            "Dynamic warm-up",
+			DurationSeconds: warmUpDuration,
+			Notes:           "Prepare the joints and movement patterns used in the session.",
+		}}, []PlannedActivity{{
+			Name:            "Cool-down mobility",
+			DurationSeconds: coolDownDuration,
+			Notes:           "Reduce intensity gradually and restore comfortable range of motion.",
+		}}
 }
 
 func prescriptionTargets(experienceLevel ExperienceLevel) (int, int) {

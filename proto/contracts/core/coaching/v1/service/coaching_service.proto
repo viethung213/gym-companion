@@ -10,9 +10,9 @@ import "contracts/core/coaching/v1/message/coaching_messages.proto";
 
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
-    title: "AI Workout Coaching API"
+    title: "Workout Planning and Coaching API"
     version: "1.0"
-    description: "API for workout roadmap planning, weekly scheduling, daily workout plans, and adaptive coaching review."
+    description: "API for four-week roadmap planning, weekly scheduling, and just-in-time daily workout plans."
   }
   security_definitions: {
     security: {

@@ -33,6 +33,7 @@ const (
 )
 
 type PlanningInput struct {
+	ProfileSnapshotID   string
 	Goal                PlanningGoal
 	ExperienceLevel     ExperienceLevel
 	TrainingDaysPerWeek int

@@ -70,3 +70,20 @@ type Clock interface {
 type IDGenerator interface {
 	NewID() (string, error)
 }
+
+type OutboxRecord struct {
+	ID           string
+	EventType    string
+	Payload      []byte
+	PartitionKey string
+}
+
+type OutboxRepository interface {
+	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
+	MarkPublished(ctx context.Context, ids []string) error
+	ExecuteInLock(ctx context.Context, lockID int64, action func(context.Context) error) error
+}
+
+type EventPublisher interface {
+	PublishBatch(ctx context.Context, records []*OutboxRecord) error
+}

@@ -242,6 +242,9 @@ message WorkoutRoadmap {
   google.type.Date end_date = 5;
   repeated RoadmapPhase phases = 6;
   CompletionRate completion_rate = 7;
+  string profile_snapshot_id = 8;
+  PlanningProfileSnapshot planning_snapshot = 9;
+  string planner_version = 10;
 }
 
 message RoadmapPhase {
@@ -300,12 +303,14 @@ message WorkoutPrescription {
 }
 
 message PrescribedExercise {
+  reserved 5;
+  reserved "target_weight";
   string exercise_id = 1;
   string exercise_name = 2;
   int32 target_sets = 3;
   int32 target_reps = 4;
-  float target_weight = 5;
   string notes = 6;
+  int32 rest_seconds = 7;
 }
 
 message AccessoryExercise {

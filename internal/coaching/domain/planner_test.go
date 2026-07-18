@@ -63,6 +63,31 @@ func TestPlannedVolumeValidator_Validate(t *testing.T) {
 	}
 }
 
+func TestPrescriptionPlanner_PreservesExerciseDetailsAndPlansSessionActivities(t *testing.T) {
+	t.Parallel()
+
+	planner := PrescriptionPlanner{}
+	exercises := planner.Plan([]ExerciseOption{{
+		ID:                 "push-up",
+		Name:               "Push Up",
+		DefaultRestSeconds: 75,
+	}}, ExperienceLevelIntermediate)
+	if len(exercises) != 1 {
+		t.Fatalf("len(exercises) = %d, want 1", len(exercises))
+	}
+	if exercises[0].ExerciseName != "Push Up" || exercises[0].Sets != 3 ||
+		exercises[0].Reps != 10 || exercises[0].RestSeconds != 75 {
+		t.Fatalf("unexpected prescription: %#v", exercises[0])
+	}
+	warmUp, coolDown := planner.PlanSessionActivities(60)
+	if len(warmUp) != 1 || warmUp[0].DurationSeconds != 480 {
+		t.Fatalf("unexpected warm-up: %#v", warmUp)
+	}
+	if len(coolDown) != 1 || coolDown[0].DurationSeconds != 420 {
+		t.Fatalf("unexpected cool-down: %#v", coolDown)
+	}
+}
+
 func planningInputForTest() PlanningInput {
 	return PlanningInput{
 		Goal:                PlanningGoalMuscleGain,

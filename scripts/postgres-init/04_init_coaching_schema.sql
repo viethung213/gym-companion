@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS coaching.daily_workout_plans (
     scheduled_date DATE NOT NULL,
     status VARCHAR(32) NOT NULL,
     exercises JSONB NOT NULL,
+    warm_up_items JSONB NOT NULL,
+    cool_down_items JSONB NOT NULL,
     generated_at TIMESTAMPTZ NOT NULL,
     UNIQUE (weekly_schedule_id, scheduled_date)
 );

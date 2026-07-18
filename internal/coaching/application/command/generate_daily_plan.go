@@ -89,11 +89,16 @@ func (h *GenerateDailyPlanHandler) Handle(
 	if len(candidates) == 0 {
 		return nil, ErrNoMatchingExercise
 	}
-	exerciseIDs := make([]string, 0, len(candidates))
+	exerciseOptions := make([]domain.ExerciseOption, 0, len(candidates))
 	for _, candidate := range candidates {
-		exerciseIDs = append(exerciseIDs, candidate.ID)
+		exerciseOptions = append(exerciseOptions, domain.ExerciseOption{
+			ID:                 candidate.ID,
+			Name:               candidate.Name,
+			DefaultRestSeconds: candidate.DefaultRestSeconds,
+		})
 	}
-	exercises := h.planner.Plan(exerciseIDs, roadmap.Input.ExperienceLevel)
+	exercises := h.planner.Plan(exerciseOptions, roadmap.Input.ExperienceLevel)
+	warmUpItems, coolDownItems := h.planner.PlanSessionActivities(roadmap.Input.MaxSessionMinutes)
 	planID, err := h.ids.NewID()
 	if err != nil {
 		return nil, fmt.Errorf("generate daily plan id: %w", err)
@@ -106,6 +111,8 @@ func (h *GenerateDailyPlanHandler) Handle(
 		schedule.ID,
 		command.ScheduledDate,
 		exercises,
+		warmUpItems,
+		coolDownItems,
 		generatedAt,
 	)
 	if err := schedule.AttachDailyPlan(command.ScheduledDate, plan.ID); err != nil {

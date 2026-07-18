@@ -60,6 +60,8 @@ type dailyPlanRecord struct {
 	ScheduledDate    time.Time      `gorm:"column:scheduled_date;not null"`
 	Status           string         `gorm:"column:status;not null"`
 	Exercises        datatypes.JSON `gorm:"column:exercises;type:jsonb;not null"`
+	WarmUpItems      datatypes.JSON `gorm:"column:warm_up_items;type:jsonb;not null"`
+	CoolDownItems    datatypes.JSON `gorm:"column:cool_down_items;type:jsonb;not null"`
 	GeneratedAt      time.Time      `gorm:"column:generated_at;not null"`
 }
 
@@ -313,10 +315,19 @@ func toDailyPlanRecord(plan *domain.DailyWorkoutPlan) (dailyPlanRecord, error) {
 	if err != nil {
 		return dailyPlanRecord{}, fmt.Errorf("marshal prescribed exercises: %w", err)
 	}
+	warmUpItems, err := json.Marshal(plan.WarmUpItems)
+	if err != nil {
+		return dailyPlanRecord{}, fmt.Errorf("marshal warm-up items: %w", err)
+	}
+	coolDownItems, err := json.Marshal(plan.CoolDownItems)
+	if err != nil {
+		return dailyPlanRecord{}, fmt.Errorf("marshal cool-down items: %w", err)
+	}
 	return dailyPlanRecord{
 		ID: plan.ID, UserID: plan.UserID, RoadmapID: plan.RoadmapID,
 		WeeklyScheduleID: plan.WeeklyScheduleID, ScheduledDate: plan.ScheduledDate,
-		Status: string(plan.Status), Exercises: payload, GeneratedAt: plan.GeneratedAt,
+		Status: string(plan.Status), Exercises: payload, WarmUpItems: warmUpItems,
+		CoolDownItems: coolDownItems, GeneratedAt: plan.GeneratedAt,
 	}, nil
 }
 
@@ -351,10 +362,19 @@ func mapDailyPlanResult(row dailyPlanRecord, err error) (*domain.DailyWorkoutPla
 	if err := json.Unmarshal(row.Exercises, &exercises); err != nil {
 		return nil, fmt.Errorf("unmarshal prescribed exercises: %w", err)
 	}
+	var warmUpItems []domain.PlannedActivity
+	if err := json.Unmarshal(row.WarmUpItems, &warmUpItems); err != nil {
+		return nil, fmt.Errorf("unmarshal warm-up items: %w", err)
+	}
+	var coolDownItems []domain.PlannedActivity
+	if err := json.Unmarshal(row.CoolDownItems, &coolDownItems); err != nil {
+		return nil, fmt.Errorf("unmarshal cool-down items: %w", err)
+	}
 	return &domain.DailyWorkoutPlan{
 		ID: row.ID, UserID: row.UserID, RoadmapID: row.RoadmapID,
 		WeeklyScheduleID: row.WeeklyScheduleID, ScheduledDate: row.ScheduledDate,
 		Status: domain.DailyPlanStatus(row.Status), Exercises: exercises,
+		WarmUpItems: warmUpItems, CoolDownItems: coolDownItems,
 		GeneratedAt: row.GeneratedAt,
 	}, nil
 }

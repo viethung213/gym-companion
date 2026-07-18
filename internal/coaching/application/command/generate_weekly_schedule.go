@@ -11,6 +11,17 @@ import (
 
 var ErrRoadmapCycleComplete = errors.New("roadmap already contains four weeks")
 
+var (
+	ErrPreviousScheduleRequired = errors.New("previous weekly schedule id is required")
+	ErrPreviousScheduleMismatch = errors.New("previous weekly schedule does not belong to the roadmap")
+)
+
+type GenerateWeeklySchedule struct {
+	UserID                   string
+	RoadmapID                string
+	PreviousWeeklyScheduleID string
+}
+
 type GenerateWeeklyScheduleHandler struct {
 	repository port.Repository
 	clock      port.Clock
@@ -28,22 +39,31 @@ func NewGenerateWeeklyScheduleHandler(
 
 func (h *GenerateWeeklyScheduleHandler) Handle(
 	ctx context.Context,
-	userID string,
-	roadmapID string,
+	command GenerateWeeklySchedule,
 ) (*domain.WeeklySchedule, error) {
-	roadmap, err := h.repository.FindRoadmap(ctx, userID, roadmapID)
+	if command.PreviousWeeklyScheduleID == "" {
+		return nil, ErrPreviousScheduleRequired
+	}
+	roadmap, err := h.repository.FindRoadmap(ctx, command.UserID, command.RoadmapID)
 	if err != nil {
 		return nil, fmt.Errorf("find roadmap: %w", err)
 	}
-	schedules, err := h.repository.ListSchedules(ctx, userID, roadmapID)
+	previousSchedule, err := h.repository.FindSchedule(
+		ctx,
+		command.UserID,
+		command.PreviousWeeklyScheduleID,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("list schedules: %w", err)
+		return nil, fmt.Errorf("find previous schedule: %w", err)
 	}
-	nextWeek := len(schedules) + 1
+	if previousSchedule.RoadmapID != roadmap.ID {
+		return nil, ErrPreviousScheduleMismatch
+	}
+	nextWeek := previousSchedule.WeekNumber + 1
 	if nextWeek > 4 {
 		return nil, ErrRoadmapCycleComplete
 	}
-	if existing, findErr := h.repository.FindScheduleByWeek(ctx, roadmapID, nextWeek); findErr == nil {
+	if existing, findErr := h.repository.FindScheduleByWeek(ctx, roadmap.ID, nextWeek); findErr == nil {
 		return existing, nil
 	} else if !errors.Is(findErr, domain.ErrNotFound) {
 		return nil, fmt.Errorf("find schedule by week: %w", findErr)
@@ -57,13 +77,13 @@ func (h *GenerateWeeklyScheduleHandler) Handle(
 	if err != nil {
 		return nil, fmt.Errorf("plan week: %w", err)
 	}
-	schedule, err := domain.NewWeeklySchedule(scheduleID, roadmapID, userID, nextWeek, days)
+	schedule, err := domain.NewWeeklySchedule(scheduleID, roadmap.ID, command.UserID, nextWeek, days)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule: %w", err)
 	}
 	event := newEvent(
 		scheduleID,
-		userID,
+		command.UserID,
 		"contracts.coaching.coachingService.v1.weeklyScheduleGenerated",
 		h.clock.Now(),
 	)
