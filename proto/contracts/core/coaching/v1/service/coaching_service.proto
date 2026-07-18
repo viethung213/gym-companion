@@ -93,26 +93,4 @@ service CoachingService {
     };
   }
 
-  // Run BR-AC-04..08 adaptive review for a roadmap.
-  rpc RunAdaptiveReview (contracts.core.coaching.v1.message.RunAdaptiveReviewRequest) returns (contracts.core.coaching.v1.message.RunAdaptiveReviewResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-reviews:run"
-      body: "payload"
-    };
-  }
-
-  // List pending or historical adaptive recommendations.
-  rpc ListAdaptiveRecommendations (contracts.core.coaching.v1.message.ListAdaptiveRecommendationsRequest) returns (contracts.core.coaching.v1.message.ListAdaptiveRecommendationsResponse) {
-    option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-recommendations"
-    };
-  }
-
-  // Apply or reject a user-facing adaptive recommendation.
-  rpc RespondAdaptiveRecommendation (contracts.core.coaching.v1.message.RespondAdaptiveRecommendationRequest) returns (contracts.core.coaching.v1.message.RespondAdaptiveRecommendationResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/adaptive-recommendations/{recommendation_id}:respond"
-      body: "payload"
-    };
-  }
 }

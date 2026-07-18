@@ -15,6 +15,20 @@ enum RoadmapStatus {
   ROADMAP_STATUS_CANCELLED = 4;
 }
 
+enum PlanningGoal {
+  PLANNING_GOAL_UNSPECIFIED = 0;
+  PLANNING_GOAL_MUSCLE_GAIN = 1;
+  PLANNING_GOAL_FAT_LOSS = 2;
+  PLANNING_GOAL_GENERAL_FITNESS = 3;
+}
+
+enum ExperienceLevel {
+  EXPERIENCE_LEVEL_UNSPECIFIED = 0;
+  EXPERIENCE_LEVEL_BEGINNER = 1;
+  EXPERIENCE_LEVEL_INTERMEDIATE = 2;
+  EXPERIENCE_LEVEL_ADVANCED = 3;
+}
+
 enum ScheduleDayStatus {
   SCHEDULE_DAY_STATUS_UNSPECIFIED = 0;
   SCHEDULE_DAY_STATUS_TRAINING = 1;
@@ -68,6 +82,20 @@ message InitiateRoadmapRequest {
 
 message InitiateRoadmapPayload {
   string profile_snapshot_id = 1;
+  PlanningProfileSnapshot planning_profile = 2;
+}
+
+// Temporary planning input until Profile context provides immutable snapshots.
+message PlanningProfileSnapshot {
+  PlanningGoal goal = 1;
+  ExperienceLevel experience_level = 2;
+  int32 training_days_per_week = 3;
+  repeated string preferred_weekdays = 4;
+  int32 max_session_minutes = 5;
+  repeated string equipment_ids = 6;
+  repeated string active_injury_areas = 7;
+  string timezone = 8;
+  google.type.Date start_date = 9;
 }
 
 message InitiateRoadmapResponse {
