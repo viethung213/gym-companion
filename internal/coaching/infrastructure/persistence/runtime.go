@@ -54,7 +54,8 @@ func (r *PostgresRepository) FetchUnpublished(
 		return nil, fmt.Errorf("fetch coaching outbox events: %w", err)
 	}
 	records := make([]*port.OutboxRecord, 0, len(rows))
-	for _, row := range rows {
+	for index := range rows {
+		row := &rows[index]
 		payload, err := json.Marshal(map[string]any{
 			"specversion": "1.0",
 			"id":          row.ID,
@@ -97,7 +98,8 @@ func (r *PostgresRepository) ExecuteInLock(
 ) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var acquired bool
-		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", lockID).Scan(&acquired).Error; err != nil {
+		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", lockID).
+			Scan(&acquired).Error; err != nil {
 			return fmt.Errorf("acquire coaching outbox lock: %w", err)
 		}
 		if !acquired {

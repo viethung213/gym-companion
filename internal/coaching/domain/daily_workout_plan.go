@@ -11,11 +11,11 @@ const (
 )
 
 type PrescribedExercise struct {
-	ExerciseID   string
-	ExerciseName string
-	Sets         int
-	Reps         int
-	RestSeconds  int
+	ExerciseID   string `json:"exercise_id"`
+	ExerciseName string `json:"exercise_name"`
+	Sets         int    `json:"sets"`
+	Reps         int    `json:"reps"`
+	RestSeconds  int    `json:"rest_seconds"`
 }
 
 type ExerciseOption struct {
@@ -25,9 +25,9 @@ type ExerciseOption struct {
 }
 
 type PlannedActivity struct {
-	Name            string
-	DurationSeconds int
-	Notes           string
+	Name            string `json:"name"`
+	DurationSeconds int    `json:"duration_seconds"`
+	Notes           string `json:"notes"`
 }
 
 type DailyWorkoutPlan struct {

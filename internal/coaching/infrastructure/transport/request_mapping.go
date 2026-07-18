@@ -79,8 +79,19 @@ func optionalDate(value *datepb.Date) (time.Time, error) {
 	if value == nil {
 		return time.Time{}, nil
 	}
-	result := time.Date(int(value.GetYear()), time.Month(value.GetMonth()), int(value.GetDay()), 0, 0, 0, 0, time.UTC)
-	if result.Year() != int(value.GetYear()) || int(result.Month()) != int(value.GetMonth()) || result.Day() != int(value.GetDay()) {
+	result := time.Date(
+		int(value.GetYear()),
+		time.Month(value.GetMonth()),
+		int(value.GetDay()),
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+	if result.Year() != int(value.GetYear()) ||
+		int(result.Month()) != int(value.GetMonth()) ||
+		result.Day() != int(value.GetDay()) {
 		return time.Time{}, invalidRequest("date is invalid")
 	}
 	return result, nil
@@ -103,7 +114,11 @@ func parseWeekday(value string) (time.Weekday, error) {
 	return weekday, nil
 }
 
-func pageItems[T any](items []T, pageSize int32, token string) ([]T, string, error) {
+func pageItems[T any](
+	items []T,
+	pageSize int32,
+	token string,
+) (page []T, nextToken string, err error) {
 	offset := 0
 	if token != "" {
 		parsed, err := strconv.Atoi(token)
@@ -123,7 +138,6 @@ func pageItems[T any](items []T, pageSize int32, token string) ([]T, string, err
 	if end > len(items) {
 		end = len(items)
 	}
-	nextToken := ""
 	if end < len(items) {
 		nextToken = strconv.Itoa(end)
 	}

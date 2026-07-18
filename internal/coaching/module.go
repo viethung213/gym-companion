@@ -36,7 +36,8 @@ type ModuleDeps struct {
 var errRequiredDependencies = errors.New("coaching module dependencies are required")
 
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
-	if deps.DB == nil || deps.GRPCServer == nil || deps.KafkaRegistry == nil || deps.ExerciseSearcher == nil {
+	if deps.DB == nil || deps.GRPCServer == nil ||
+		deps.KafkaRegistry == nil || deps.ExerciseSearcher == nil {
 		return nil, errRequiredDependencies
 	}
 	gormDB, err := gorm.Open(gormpostgres.New(gormpostgres.Config{Conn: deps.DB}), &gorm.Config{
@@ -67,7 +68,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("get coaching kafka writer: %w", err)
 	}
-	outboxWorker := worker.NewOutboxWorker(repository, coachingkafka.NewPublisher(writer), time.Second)
+	outboxWorker := worker.NewOutboxWorker(
+		repository,
+		coachingkafka.NewPublisher(writer),
+		time.Second,
+	)
 	workerContext, cancelWorker := context.WithCancel(ctx)
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(1)
@@ -96,7 +101,12 @@ func RegisterGateway(
 	grpcEndpoint string,
 	opts []grpc.DialOption,
 ) error {
-	if err := coachingsvc.RegisterCoachingServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts); err != nil {
+	if err := coachingsvc.RegisterCoachingServiceHandlerFromEndpoint(
+		ctx,
+		mux,
+		grpcEndpoint,
+		opts,
+	); err != nil {
 		return fmt.Errorf("register coaching gateway: %w", err)
 	}
 	return nil

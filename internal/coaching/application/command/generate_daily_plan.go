@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	ErrRestDay            = errors.New("daily plan cannot be generated for a rest day")
-	ErrInjurySafetyBlock  = errors.New("daily plan blocked because injury safety metadata is unavailable")
+	ErrRestDay           = errors.New("daily plan cannot be generated for a rest day")
+	ErrInjurySafetyBlock = errors.New(
+		"daily plan blocked because injury safety metadata is unavailable",
+	)
 	ErrNoMatchingExercise = errors.New("no matching exercises were found")
 )
 
@@ -47,7 +49,7 @@ func NewGenerateDailyPlanHandler(
 
 func (h *GenerateDailyPlanHandler) Handle(
 	ctx context.Context,
-	command GenerateDailyPlan,
+	command *GenerateDailyPlan,
 ) (*domain.DailyWorkoutPlan, error) {
 	schedule, err := h.repository.FindSchedule(ctx, command.UserID, command.WeeklyScheduleID)
 	if err != nil {
@@ -124,13 +126,16 @@ func (h *GenerateDailyPlanHandler) Handle(
 		"contracts.coaching.coachingService.v1.dailyWorkoutPlanGenerated",
 		generatedAt,
 	)
-	if err := h.repository.SaveDailyPlan(ctx, schedule, plan, event); err != nil {
+	if err := h.repository.SaveDailyPlan(ctx, schedule, plan, &event); err != nil {
 		return nil, fmt.Errorf("persist daily plan: %w", err)
 	}
 	return plan, nil
 }
 
-func findScheduleDay(schedule *domain.WeeklySchedule, scheduledDate time.Time) (*domain.ScheduleDay, error) {
+func findScheduleDay(
+	schedule *domain.WeeklySchedule,
+	scheduledDate time.Time,
+) (*domain.ScheduleDay, error) {
 	for index := range schedule.Days {
 		if sameDate(schedule.Days[index].Date, scheduledDate) {
 			return &schedule.Days[index], nil
@@ -139,7 +144,7 @@ func findScheduleDay(schedule *domain.WeeklySchedule, scheduledDate time.Time) (
 	return nil, domain.ErrNotFound
 }
 
-func sameDate(left time.Time, right time.Time) bool {
+func sameDate(left, right time.Time) bool {
 	leftYear, leftMonth, leftDay := left.Date()
 	rightYear, rightMonth, rightDay := right.Date()
 	return leftYear == rightYear && leftMonth == rightMonth && leftDay == rightDay

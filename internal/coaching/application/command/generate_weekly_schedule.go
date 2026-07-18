@@ -13,7 +13,9 @@ var ErrRoadmapCycleComplete = errors.New("roadmap already contains four weeks")
 
 var (
 	ErrPreviousScheduleRequired = errors.New("previous weekly schedule id is required")
-	ErrPreviousScheduleMismatch = errors.New("previous weekly schedule does not belong to the roadmap")
+	ErrPreviousScheduleMismatch = errors.New(
+		"previous weekly schedule does not belong to the roadmap",
+	)
 )
 
 type GenerateWeeklySchedule struct {
@@ -63,7 +65,11 @@ func (h *GenerateWeeklyScheduleHandler) Handle(
 	if nextWeek > 4 {
 		return nil, ErrRoadmapCycleComplete
 	}
-	if existing, findErr := h.repository.FindScheduleByWeek(ctx, roadmap.ID, nextWeek); findErr == nil {
+	if existing, findErr := h.repository.FindScheduleByWeek(
+		ctx,
+		roadmap.ID,
+		nextWeek,
+	); findErr == nil {
 		return existing, nil
 	} else if !errors.Is(findErr, domain.ErrNotFound) {
 		return nil, fmt.Errorf("find schedule by week: %w", findErr)
@@ -73,7 +79,7 @@ func (h *GenerateWeeklyScheduleHandler) Handle(
 	if err != nil {
 		return nil, fmt.Errorf("generate schedule id: %w", err)
 	}
-	days, err := h.planner.PlanWeek(roadmap.Input, nextWeek)
+	days, err := h.planner.PlanWeek(&roadmap.Input, nextWeek)
 	if err != nil {
 		return nil, fmt.Errorf("plan week: %w", err)
 	}
@@ -87,7 +93,7 @@ func (h *GenerateWeeklyScheduleHandler) Handle(
 		"contracts.coaching.coachingService.v1.weeklyScheduleGenerated",
 		h.clock.Now(),
 	)
-	if err := h.repository.SaveSchedule(ctx, schedule, event); err != nil {
+	if err := h.repository.SaveSchedule(ctx, schedule, &event); err != nil {
 		return nil, fmt.Errorf("persist schedule: %w", err)
 	}
 	return schedule, nil

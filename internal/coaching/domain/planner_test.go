@@ -6,6 +6,7 @@ import (
 )
 
 func TestSchedulePlanner_PlanWeek(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		give PlanningInput
@@ -19,9 +20,11 @@ func TestSchedulePlanner_PlanWeek(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			planner := SchedulePlanner{}
-			days, err := planner.PlanWeek(tt.give, 1)
+			days, err := planner.PlanWeek(&tt.give, 1)
 			if err != nil {
 				t.Fatalf("PlanWeek() error = %v", err)
 			}
@@ -43,6 +46,7 @@ func TestSchedulePlanner_PlanWeek(t *testing.T) {
 }
 
 func TestPlannedVolumeValidator_Validate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		givePrevious int
@@ -54,7 +58,9 @@ func TestPlannedVolumeValidator_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			validator := PlannedVolumeValidator{}
 			if got := validator.Validate(tt.givePrevious, tt.giveNext); got != tt.want {
 				t.Fatalf("Validate() = %t, want %t", got, tt.want)

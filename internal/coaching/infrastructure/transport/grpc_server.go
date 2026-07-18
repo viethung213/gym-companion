@@ -48,7 +48,7 @@ func (s *CoachingServer) InitiateRoadmap(
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	result, err := s.initiateRoadmap.Handle(ctx, command.InitiateRoadmap{
+	result, err := s.initiateRoadmap.Handle(ctx, &command.InitiateRoadmap{
 		UserID:         req.GetUserId(),
 		PlanningInput:  input,
 		PlannerVersion: plannerVersion,
@@ -196,7 +196,7 @@ func (s *CoachingServer) GenerateDailyWorkoutPlan(
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	plan, err := s.generateDailyPlan.Handle(ctx, command.GenerateDailyPlan{
+	plan, err := s.generateDailyPlan.Handle(ctx, &command.GenerateDailyPlan{
 		UserID:           req.GetUserId(),
 		WeeklyScheduleID: req.GetWeeklyScheduleId(),
 		ScheduledDate:    scheduledDate,

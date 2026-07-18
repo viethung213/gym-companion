@@ -111,13 +111,13 @@ func (r *PostgresRepository) CreateRoadmapWithSchedule(
 func (r *PostgresRepository) SaveSchedule(
 	ctx context.Context,
 	schedule *domain.WeeklySchedule,
-	event domain.Event,
+	event *domain.Event,
 ) error {
 	scheduleRow, err := toScheduleRecord(schedule)
 	if err != nil {
 		return err
 	}
-	outboxRows, err := toOutboxRecords([]domain.Event{event})
+	outboxRows, err := toOutboxRecords([]domain.Event{*event})
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (r *PostgresRepository) FindActiveRoadmapByUser(
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND status = ?", userID, string(domain.RoadmapStatusActive)).
 		First(&row).Error
-	return mapRoadmapResult(row, err)
+	return mapRoadmapResult(&row, err)
 }
 
 func (r *PostgresRepository) FindRoadmap(
@@ -150,7 +150,7 @@ func (r *PostgresRepository) FindRoadmap(
 ) (*domain.WorkoutRoadmap, error) {
 	var row roadmapRecord
 	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", roadmapID, userID).First(&row).Error
-	return mapRoadmapResult(row, err)
+	return mapRoadmapResult(&row, err)
 }
 
 func (r *PostgresRepository) ListRoadmaps(
@@ -158,12 +158,15 @@ func (r *PostgresRepository) ListRoadmaps(
 	userID string,
 ) ([]*domain.WorkoutRoadmap, error) {
 	var rows []roadmapRecord
-	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("start_date DESC, id").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("start_date DESC, id").
+		Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("query roadmaps: %w", err)
 	}
 	roadmaps := make([]*domain.WorkoutRoadmap, 0, len(rows))
-	for _, row := range rows {
-		roadmap, err := row.toDomain()
+	for index := range rows {
+		roadmap, err := rows[index].toDomain()
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +182,7 @@ func (r *PostgresRepository) FindSchedule(
 ) (*domain.WeeklySchedule, error) {
 	var row scheduleRecord
 	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", scheduleID, userID).First(&row).Error
-	return mapScheduleResult(row, err)
+	return mapScheduleResult(&row, err)
 }
 
 func (r *PostgresRepository) FindScheduleByWeek(
@@ -191,7 +194,7 @@ func (r *PostgresRepository) FindScheduleByWeek(
 	err := r.db.WithContext(ctx).
 		Where("roadmap_id = ? AND week_number = ?", roadmapID, weekNumber).
 		First(&row).Error
-	return mapScheduleResult(row, err)
+	return mapScheduleResult(&row, err)
 }
 
 func (r *PostgresRepository) ListSchedules(
@@ -206,8 +209,8 @@ func (r *PostgresRepository) ListSchedules(
 		return nil, fmt.Errorf("query schedules: %w", err)
 	}
 	schedules := make([]*domain.WeeklySchedule, 0, len(rows))
-	for _, row := range rows {
-		schedule, err := row.toDomain()
+	for index := range rows {
+		schedule, err := rows[index].toDomain()
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +223,7 @@ func (r *PostgresRepository) SaveDailyPlan(
 	ctx context.Context,
 	schedule *domain.WeeklySchedule,
 	plan *domain.DailyWorkoutPlan,
-	event domain.Event,
+	event *domain.Event,
 ) error {
 	scheduleRow, err := toScheduleRecord(schedule)
 	if err != nil {
@@ -230,7 +233,7 @@ func (r *PostgresRepository) SaveDailyPlan(
 	if err != nil {
 		return err
 	}
-	outboxRows, err := toOutboxRecords([]domain.Event{event})
+	outboxRows, err := toOutboxRecords([]domain.Event{*event})
 	if err != nil {
 		return err
 	}
@@ -255,7 +258,7 @@ func (r *PostgresRepository) FindDailyPlan(
 ) (*domain.DailyWorkoutPlan, error) {
 	var row dailyPlanRecord
 	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", planID, userID).First(&row).Error
-	return mapDailyPlanResult(row, err)
+	return mapDailyPlanResult(&row, err)
 }
 
 func (r *PostgresRepository) FindDailyPlanByDate(
@@ -267,7 +270,7 @@ func (r *PostgresRepository) FindDailyPlanByDate(
 	err := r.db.WithContext(ctx).
 		Where("weekly_schedule_id = ? AND scheduled_date = ?", scheduleID, scheduledDate).
 		First(&row).Error
-	return mapDailyPlanResult(row, err)
+	return mapDailyPlanResult(&row, err)
 }
 
 func toRoadmapRecord(roadmap *domain.WorkoutRoadmap) (roadmapRecord, error) {
@@ -331,7 +334,7 @@ func toDailyPlanRecord(plan *domain.DailyWorkoutPlan) (dailyPlanRecord, error) {
 	}, nil
 }
 
-func mapRoadmapResult(row roadmapRecord, err error) (*domain.WorkoutRoadmap, error) {
+func mapRoadmapResult(row *roadmapRecord, err error) (*domain.WorkoutRoadmap, error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, domain.ErrNotFound
 	}
@@ -341,7 +344,7 @@ func mapRoadmapResult(row roadmapRecord, err error) (*domain.WorkoutRoadmap, err
 	return row.toDomain()
 }
 
-func mapScheduleResult(row scheduleRecord, err error) (*domain.WeeklySchedule, error) {
+func mapScheduleResult(row *scheduleRecord, err error) (*domain.WeeklySchedule, error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, domain.ErrNotFound
 	}
@@ -351,7 +354,7 @@ func mapScheduleResult(row scheduleRecord, err error) (*domain.WeeklySchedule, e
 	return row.toDomain()
 }
 
-func mapDailyPlanResult(row dailyPlanRecord, err error) (*domain.DailyWorkoutPlan, error) {
+func mapDailyPlanResult(row *dailyPlanRecord, err error) (*domain.DailyWorkoutPlan, error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, domain.ErrNotFound
 	}
@@ -379,7 +382,7 @@ func mapDailyPlanResult(row dailyPlanRecord, err error) (*domain.DailyWorkoutPla
 	}, nil
 }
 
-func (row roadmapRecord) toDomain() (*domain.WorkoutRoadmap, error) {
+func (row *roadmapRecord) toDomain() (*domain.WorkoutRoadmap, error) {
 	var input domain.PlanningInput
 	if err := json.Unmarshal(row.PlanningInput, &input); err != nil {
 		return nil, fmt.Errorf("unmarshal planning input: %w", err)
@@ -391,7 +394,7 @@ func (row roadmapRecord) toDomain() (*domain.WorkoutRoadmap, error) {
 	}, nil
 }
 
-func (row scheduleRecord) toDomain() (*domain.WeeklySchedule, error) {
+func (row *scheduleRecord) toDomain() (*domain.WeeklySchedule, error) {
 	var days []domain.ScheduleDay
 	if err := json.Unmarshal(row.Days, &days); err != nil {
 		return nil, fmt.Errorf("unmarshal schedule days: %w", err)

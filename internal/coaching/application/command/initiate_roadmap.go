@@ -40,7 +40,7 @@ func NewInitiateRoadmapHandler(
 
 func (h *InitiateRoadmapHandler) Handle(
 	ctx context.Context,
-	command InitiateRoadmap,
+	command *InitiateRoadmap,
 ) (*InitiateRoadmapResult, error) {
 	active, err := h.repository.FindActiveRoadmapByUser(ctx, command.UserID)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
@@ -61,13 +61,13 @@ func (h *InitiateRoadmapHandler) Handle(
 	roadmap, err := domain.NewWorkoutRoadmap(
 		roadmapID,
 		command.UserID,
-		command.PlanningInput,
+		&command.PlanningInput,
 		command.PlannerVersion,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create roadmap: %w", err)
 	}
-	days, err := h.planner.PlanWeek(command.PlanningInput, 1)
+	days, err := h.planner.PlanWeek(&command.PlanningInput, 1)
 	if err != nil {
 		return nil, fmt.Errorf("plan first week: %w", err)
 	}
@@ -78,8 +78,18 @@ func (h *InitiateRoadmapHandler) Handle(
 
 	now := h.clock.Now()
 	events := []domain.Event{
-		newEvent(roadmapID, command.UserID, "contracts.coaching.coachingService.v1.roadmapInitiated", now),
-		newEvent(scheduleID, command.UserID, "contracts.coaching.coachingService.v1.weeklyScheduleGenerated", now),
+		newEvent(
+			roadmapID,
+			command.UserID,
+			"contracts.coaching.coachingService.v1.roadmapInitiated",
+			now,
+		),
+		newEvent(
+			scheduleID,
+			command.UserID,
+			"contracts.coaching.coachingService.v1.weeklyScheduleGenerated",
+			now,
+		),
 	}
 	if err := h.repository.CreateRoadmapWithSchedule(ctx, roadmap, schedule, events); err != nil {
 		return nil, fmt.Errorf("persist roadmap and first schedule: %w", err)
@@ -88,7 +98,7 @@ func (h *InitiateRoadmapHandler) Handle(
 	return &InitiateRoadmapResult{Roadmap: roadmap, Schedule: schedule}, nil
 }
 
-func newEvent(subject string, userID string, eventType string, eventTime time.Time) domain.Event {
+func newEvent(subject, userID, eventType string, eventTime time.Time) domain.Event {
 	return domain.Event{
 		ID:           subject,
 		Type:         eventType,

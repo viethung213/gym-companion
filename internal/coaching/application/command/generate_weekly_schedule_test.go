@@ -13,7 +13,7 @@ func TestGenerateWeeklyScheduleUsesPreviousScheduleAsIdempotencyCursor(t *testin
 
 	startDate := time.Date(2026, time.July, 20, 0, 0, 0, 0, time.UTC)
 	base := newDailyPlanRepository(t, startDate, nil)
-	days, err := (domain.SchedulePlanner{}).PlanWeek(base.roadmap.Input, 2)
+	days, err := (domain.SchedulePlanner{}).PlanWeek(&base.roadmap.Input, 2)
 	if err != nil {
 		t.Fatalf("plan second week fixture: %v", err)
 	}
@@ -110,7 +110,7 @@ func (r *weeklyScheduleRepositoryStub) FindScheduleByWeek(
 func (r *weeklyScheduleRepositoryStub) SaveSchedule(
 	_ context.Context,
 	schedule *domain.WeeklySchedule,
-	_ domain.Event,
+	_ *domain.Event,
 ) error {
 	r.saved = schedule
 	return nil

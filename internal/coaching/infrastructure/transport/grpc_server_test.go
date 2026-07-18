@@ -32,7 +32,8 @@ func TestPlanningInputMapsInlineSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("map planning input: %v", err)
 	}
-	if input.ProfileSnapshotID != "profile-snapshot-1" || input.Goal != domain.PlanningGoalMuscleGain {
+	if input.ProfileSnapshotID != "profile-snapshot-1" ||
+		input.Goal != domain.PlanningGoalMuscleGain {
 		t.Fatalf("unexpected planning input: %#v", input)
 	}
 	if len(input.PreferredWeekdays) != 3 || input.PreferredWeekdays[1] != time.Wednesday {
@@ -43,7 +44,9 @@ func TestPlanningInputMapsInlineSnapshot(t *testing.T) {
 func TestPlanningInputRequiresInlineSnapshotUntilProfileIntegrationExists(t *testing.T) {
 	t.Parallel()
 
-	_, err := planningInput(&coachingmsg.InitiateRoadmapPayload{ProfileSnapshotId: "profile-snapshot-1"})
+	_, err := planningInput(&coachingmsg.InitiateRoadmapPayload{
+		ProfileSnapshotId: "profile-snapshot-1",
+	})
 	if status.Code(rpcError(err)) != codes.FailedPrecondition {
 		t.Fatalf("expected failed precondition, got %v", rpcError(err))
 	}

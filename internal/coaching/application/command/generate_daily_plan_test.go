@@ -26,7 +26,7 @@ func TestGenerateDailyPlan(t *testing.T) {
 		&idGeneratorStub{ids: []string{"daily-plan-1"}},
 	)
 
-	plan, err := handler.Handle(context.Background(), GenerateDailyPlan{
+	plan, err := handler.Handle(context.Background(), &GenerateDailyPlan{
 		UserID:           "user-1",
 		WeeklyScheduleID: "schedule-1",
 		ScheduledDate:    startDate,
@@ -78,7 +78,7 @@ func TestGenerateDailyPlanReturnsExistingPlan(t *testing.T) {
 		&idGeneratorStub{t: t},
 	)
 
-	plan, err := handler.Handle(context.Background(), GenerateDailyPlan{
+	plan, err := handler.Handle(context.Background(), &GenerateDailyPlan{
 		UserID:           "user-1",
 		WeeklyScheduleID: "schedule-1",
 		ScheduledDate:    startDate,
@@ -107,7 +107,7 @@ func TestGenerateDailyPlanRejectsRestDay(t *testing.T) {
 		&idGeneratorStub{t: t},
 	)
 
-	_, err := handler.Handle(context.Background(), GenerateDailyPlan{
+	_, err := handler.Handle(context.Background(), &GenerateDailyPlan{
 		UserID:           "user-1",
 		WeeklyScheduleID: "schedule-1",
 		ScheduledDate:    startDate,
@@ -130,7 +130,7 @@ func TestGenerateDailyPlanBlocksInjuryWithoutSafetyMetadata(t *testing.T) {
 		&idGeneratorStub{t: t},
 	)
 
-	_, err := handler.Handle(context.Background(), GenerateDailyPlan{
+	_, err := handler.Handle(context.Background(), &GenerateDailyPlan{
 		UserID:           "user-1",
 		WeeklyScheduleID: "schedule-1",
 		ScheduledDate:    startDate,
@@ -156,7 +156,7 @@ func TestGenerateDailyPlanRequiresMatchingExercise(t *testing.T) {
 		&idGeneratorStub{t: t},
 	)
 
-	_, err := handler.Handle(context.Background(), GenerateDailyPlan{
+	_, err := handler.Handle(context.Background(), &GenerateDailyPlan{
 		UserID:           "user-1",
 		WeeklyScheduleID: "schedule-1",
 		ScheduledDate:    startDate,
@@ -190,12 +190,16 @@ func newDailyPlanRepository(
 		Timezone:            "Asia/Ho_Chi_Minh",
 		StartDate:           startDate,
 	}
-	roadmap, err := domain.NewWorkoutRoadmap("roadmap-1", "user-1", input, "rules-v1")
+	roadmap, err := domain.NewWorkoutRoadmap("roadmap-1", "user-1", &input, "rules-v1")
 	if err != nil {
 		t.Fatalf("create roadmap fixture: %v", err)
 	}
 	days := []domain.ScheduleDay{
-		{Date: startDate, Status: domain.ScheduleDayStatusTraining, MuscleGroups: []string{"chest", "triceps"}},
+		{
+			Date:         startDate,
+			Status:       domain.ScheduleDayStatusTraining,
+			MuscleGroups: []string{"chest", "triceps"},
+		},
 	}
 	for offset := 1; offset < 7; offset++ {
 		days = append(days, domain.ScheduleDay{
@@ -228,7 +232,7 @@ func (r *dailyPlanRepositoryStub) CreateRoadmapWithSchedule(
 func (r *dailyPlanRepositoryStub) SaveSchedule(
 	context.Context,
 	*domain.WeeklySchedule,
-	domain.Event,
+	*domain.Event,
 ) error {
 	r.t.Fatal("unexpected SaveSchedule call")
 	return nil
@@ -288,7 +292,7 @@ func (r *dailyPlanRepositoryStub) SaveDailyPlan(
 	_ context.Context,
 	schedule *domain.WeeklySchedule,
 	plan *domain.DailyWorkoutPlan,
-	_ domain.Event,
+	_ *domain.Event,
 ) error {
 	r.schedule = schedule
 	r.savedPlan = plan

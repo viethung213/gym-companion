@@ -33,19 +33,19 @@ const (
 )
 
 type PlanningInput struct {
-	ProfileSnapshotID   string
-	Goal                PlanningGoal
-	ExperienceLevel     ExperienceLevel
-	TrainingDaysPerWeek int
-	PreferredWeekdays   []time.Weekday
-	MaxSessionMinutes   int
-	EquipmentIDs        []string
-	ActiveInjuryAreas   []string
-	Timezone            string
-	StartDate           time.Time
+	ProfileSnapshotID   string          `json:"profile_snapshot_id"`
+	Goal                PlanningGoal    `json:"goal"`
+	ExperienceLevel     ExperienceLevel `json:"experience_level"`
+	TrainingDaysPerWeek int             `json:"training_days_per_week"`
+	PreferredWeekdays   []time.Weekday  `json:"preferred_weekdays"`
+	MaxSessionMinutes   int             `json:"max_session_minutes"`
+	EquipmentIDs        []string        `json:"equipment_ids"`
+	ActiveInjuryAreas   []string        `json:"active_injury_areas"`
+	Timezone            string          `json:"timezone"`
+	StartDate           time.Time       `json:"start_date"`
 }
 
-func (i PlanningInput) Validate() error {
+func (i *PlanningInput) Validate() error {
 	if i.Goal == "" {
 		return ErrPlanningGoalRequired
 	}

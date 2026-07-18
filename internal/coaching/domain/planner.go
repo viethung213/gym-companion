@@ -5,11 +5,13 @@ import (
 	"time"
 )
 
-var ErrPreferredWeekdaysInsufficient = errors.New("preferred weekdays are fewer than training days")
+var ErrPreferredWeekdaysInsufficient = errors.New(
+	"preferred weekdays are fewer than training days",
+)
 
 type SchedulePlanner struct{}
 
-func (SchedulePlanner) PlanWeek(input PlanningInput, weekNumber int) ([]ScheduleDay, error) {
+func (SchedulePlanner) PlanWeek(input *PlanningInput, weekNumber int) ([]ScheduleDay, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
@@ -45,7 +47,7 @@ func selectedWeekdays(preferred []time.Weekday, required int) map[time.Weekday]b
 	return selected
 }
 
-func muscleGroupsForTrainingDay(dayOffset int, trainingDays int) []string {
+func muscleGroupsForTrainingDay(dayOffset, trainingDays int) []string {
 	splits := [][]string{
 		{"chest", "triceps"},
 		{"back", "biceps"},
@@ -59,7 +61,10 @@ func muscleGroupsForTrainingDay(dayOffset int, trainingDays int) []string {
 
 type PrescriptionPlanner struct{}
 
-func (PrescriptionPlanner) Plan(options []ExerciseOption, experienceLevel ExperienceLevel) []PrescribedExercise {
+func (PrescriptionPlanner) Plan(
+	options []ExerciseOption,
+	experienceLevel ExperienceLevel,
+) []PrescribedExercise {
 	sets, reps := prescriptionTargets(experienceLevel)
 	exercises := make([]PrescribedExercise, 0, len(options))
 	for _, option := range options {
@@ -78,7 +83,9 @@ func (PrescriptionPlanner) Plan(options []ExerciseOption, experienceLevel Experi
 	return exercises
 }
 
-func (PrescriptionPlanner) PlanSessionActivities(maxSessionMinutes int) ([]PlannedActivity, []PlannedActivity) {
+func (PrescriptionPlanner) PlanSessionActivities(
+	maxSessionMinutes int,
+) (warmUpItems, coolDownItems []PlannedActivity) {
 	warmUpDuration := 5 * 60
 	coolDownDuration := 5 * 60
 	if maxSessionMinutes >= 60 {
@@ -96,7 +103,7 @@ func (PrescriptionPlanner) PlanSessionActivities(maxSessionMinutes int) ([]Plann
 		}}
 }
 
-func prescriptionTargets(experienceLevel ExperienceLevel) (int, int) {
+func prescriptionTargets(experienceLevel ExperienceLevel) (sets, reps int) {
 	switch experienceLevel {
 	case ExperienceLevelAdvanced:
 		return 4, 8
@@ -109,7 +116,7 @@ func prescriptionTargets(experienceLevel ExperienceLevel) (int, int) {
 
 type PlannedVolumeValidator struct{}
 
-func (PlannedVolumeValidator) Validate(previousVolume int, nextVolume int) bool {
+func (PlannedVolumeValidator) Validate(previousVolume, nextVolume int) bool {
 	if previousVolume <= 0 {
 		return true
 	}

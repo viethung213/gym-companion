@@ -1,0 +1,76 @@
+version: "2"
+run:
+  go: "1.25"
+  issues-exit-code: 1
+  tests: true
+linters:
+  default: none
+  enable:
+    - decorder
+    - errcheck
+    - errname
+    - errorlint
+    - forbidigo
+    - forcetypeassert
+    - gochecknoglobals
+    - gochecknoinits
+    - gocritic
+    - goprintffuncname
+    - govet
+    - lll
+    - musttag
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - revive
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^os\.Exit$#Chỉ cho phép os.Exit trong main() của package main
+        - pattern: ^log\.Fatal$#Chỉ cho phép log.Fatal trong main() của package main
+        - pattern: ^log\.Fatalf$#Chỉ cho phép log.Fatalf trong main() của package main
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+    lll:
+      line-length: 99
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gocritic
+          - govet
+          - lll
+          - perfsprint
+          - prealloc
+          - revive
+        path: internal/auth/
+    paths:
+      - internal/gen
+      - docs/swagger
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - internal/gen
+      - docs/swagger
+      - third_party$
+      - builtin$
+      - examples$

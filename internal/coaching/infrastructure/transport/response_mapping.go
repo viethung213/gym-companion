@@ -20,12 +20,12 @@ func toProtoRoadmap(roadmap *domain.WorkoutRoadmap) *coachingmsg.WorkoutRoadmap 
 		Phases:            roadmapPhases(),
 		CompletionRate:    &coachingmsg.CompletionRate{Value: 0, Band: "not_started"},
 		ProfileSnapshotId: roadmap.Input.ProfileSnapshotID,
-		PlanningSnapshot:  toProtoPlanningSnapshot(roadmap.Input),
+		PlanningSnapshot:  toProtoPlanningSnapshot(&roadmap.Input),
 		PlannerVersion:    roadmap.PlannerVersion,
 	}
 }
 
-func toProtoPlanningSnapshot(input domain.PlanningInput) *coachingmsg.PlanningProfileSnapshot {
+func toProtoPlanningSnapshot(input *domain.PlanningInput) *coachingmsg.PlanningProfileSnapshot {
 	weekdays := make([]string, 0, len(input.PreferredWeekdays))
 	for _, weekday := range input.PreferredWeekdays {
 		weekdays = append(weekdays, strings.ToLower(weekday.String()))
@@ -45,9 +45,23 @@ func toProtoPlanningSnapshot(input domain.PlanningInput) *coachingmsg.PlanningPr
 
 func roadmapPhases() []*coachingmsg.RoadmapPhase {
 	return []*coachingmsg.RoadmapPhase{
-		{WeekNumber: 1, Name: "Foundation", Focus: "Establish the planned schedule and baseline volume."},
-		{WeekNumber: 2, Name: "Build", Focus: "Progress planned volume within the ten-percent limit.", TargetOverloadPercent: 10},
-		{WeekNumber: 3, Name: "Consolidate", Focus: "Repeat the schedule with controlled planned progression.", TargetOverloadPercent: 10},
+		{
+			WeekNumber: 1,
+			Name:       "Foundation",
+			Focus:      "Establish the planned schedule and baseline volume.",
+		},
+		{
+			WeekNumber:            2,
+			Name:                  "Build",
+			Focus:                 "Progress planned volume within the ten-percent limit.",
+			TargetOverloadPercent: 10,
+		},
+		{
+			WeekNumber:            3,
+			Name:                  "Consolidate",
+			Focus:                 "Repeat the schedule with controlled planned progression.",
+			TargetOverloadPercent: 10,
+		},
 		{WeekNumber: 4, Name: "Complete", Focus: "Complete the fixed cycle before a future review."},
 	}
 }
@@ -79,7 +93,10 @@ func toProtoSchedule(schedule *domain.WeeklySchedule) *coachingmsg.WeeklySchedul
 				continue
 			}
 			seenGroups[group] = struct{}{}
-			response.MuscleSplit.PrimaryMuscleGroups = append(response.MuscleSplit.PrimaryMuscleGroups, group)
+			response.MuscleSplit.PrimaryMuscleGroups = append(
+				response.MuscleSplit.PrimaryMuscleGroups,
+				group,
+			)
 		}
 	}
 	return response
@@ -123,7 +140,11 @@ func toProtoActivity(item domain.PlannedActivity) *coachingmsg.AccessoryExercise
 }
 
 func toProtoDate(value time.Time) *datepb.Date {
-	return &datepb.Date{Year: int32(value.Year()), Month: int32(value.Month()), Day: int32(value.Day())}
+	return &datepb.Date{
+		Year:  int32(value.Year()),
+		Month: int32(value.Month()),
+		Day:   int32(value.Day()),
+	}
 }
 
 func toDomainGoal(value coachingmsg.PlanningGoal) domain.PlanningGoal {

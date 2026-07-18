@@ -39,11 +39,11 @@ func TestPostgresRepositoryPersistsPlanningFlowAndOutbox(t *testing.T) {
 		Timezone:            "Asia/Ho_Chi_Minh",
 		StartDate:           startDate,
 	}
-	roadmap, err := domain.NewWorkoutRoadmap("roadmap-1", "user-1", input, "rules-v1")
+	roadmap, err := domain.NewWorkoutRoadmap("roadmap-1", "user-1", &input, "rules-v1")
 	if err != nil {
 		t.Fatalf("new roadmap: %v", err)
 	}
-	days, err := (domain.SchedulePlanner{}).PlanWeek(input, 1)
+	days, err := (domain.SchedulePlanner{}).PlanWeek(&input, 1)
 	if err != nil {
 		t.Fatalf("plan week: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestPostgresRepositoryPersistsPlanningFlowAndOutbox(t *testing.T) {
 		ctx,
 		schedule,
 		plan,
-		testEvent("plan-1", "dailyWorkoutPlanGenerated", startDate),
+		eventPointer(testEvent("plan-1", "dailyWorkoutPlanGenerated", startDate)),
 	); err != nil {
 		t.Fatalf("save daily plan: %v", err)
 	}
@@ -102,6 +102,10 @@ func TestPostgresRepositoryPersistsPlanningFlowAndOutbox(t *testing.T) {
 	if len(records) != 3 {
 		t.Fatalf("len(outbox) = %d, want 3", len(records))
 	}
+}
+
+func eventPointer(event domain.Event) *domain.Event {
+	return &event
 }
 
 func testEvent(id string, eventType string, eventTime time.Time) domain.Event {

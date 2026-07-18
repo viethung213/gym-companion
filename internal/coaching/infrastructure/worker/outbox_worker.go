@@ -44,11 +44,15 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 
 func (w *OutboxWorker) process(ctx context.Context) error {
 	var records []*port.OutboxRecord
-	if err := w.repository.ExecuteInLock(ctx, advisoryLockID, func(lockContext context.Context) error {
-		var err error
-		records, err = w.repository.FetchUnpublished(lockContext, 500)
-		return err
-	}); err != nil {
+	if err := w.repository.ExecuteInLock(
+		ctx,
+		advisoryLockID,
+		func(lockContext context.Context) error {
+			var err error
+			records, err = w.repository.FetchUnpublished(lockContext, 500)
+			return err
+		},
+	); err != nil {
 		return err
 	}
 	if len(records) == 0 {
@@ -61,9 +65,13 @@ func (w *OutboxWorker) process(ctx context.Context) error {
 	for index, record := range records {
 		ids[index] = record.ID
 	}
-	if err := w.repository.ExecuteInLock(ctx, advisoryLockID, func(lockContext context.Context) error {
-		return w.repository.MarkPublished(lockContext, ids)
-	}); err != nil {
+	if err := w.repository.ExecuteInLock(
+		ctx,
+		advisoryLockID,
+		func(lockContext context.Context) error {
+			return w.repository.MarkPublished(lockContext, ids)
+		},
+	); err != nil {
 		return fmt.Errorf("mark outbox batch published: %w", err)
 	}
 	log.Printf("Coaching Outbox worker published %d events", len(records))

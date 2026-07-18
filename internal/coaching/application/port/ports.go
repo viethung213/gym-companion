@@ -14,11 +14,14 @@ type Repository interface {
 		schedule *domain.WeeklySchedule,
 		events []domain.Event,
 	) error
-	SaveSchedule(ctx context.Context, schedule *domain.WeeklySchedule, event domain.Event) error
+	SaveSchedule(ctx context.Context, schedule *domain.WeeklySchedule, event *domain.Event) error
 	FindActiveRoadmapByUser(ctx context.Context, userID string) (*domain.WorkoutRoadmap, error)
 	FindRoadmap(ctx context.Context, userID string, roadmapID string) (*domain.WorkoutRoadmap, error)
 	ListRoadmaps(ctx context.Context, userID string) ([]*domain.WorkoutRoadmap, error)
-	FindSchedule(ctx context.Context, userID string, scheduleID string) (*domain.WeeklySchedule, error)
+	FindSchedule(
+		ctx context.Context,
+		userID, scheduleID string,
+	) (*domain.WeeklySchedule, error)
 	FindScheduleByWeek(
 		ctx context.Context,
 		roadmapID string,
@@ -33,7 +36,7 @@ type Repository interface {
 		ctx context.Context,
 		schedule *domain.WeeklySchedule,
 		plan *domain.DailyWorkoutPlan,
-		event domain.Event,
+		event *domain.Event,
 	) error
 	FindDailyPlan(ctx context.Context, userID string, planID string) (*domain.DailyWorkoutPlan, error)
 	FindDailyPlanByDate(

@@ -20,10 +20,10 @@ const (
 )
 
 type ScheduleDay struct {
-	Date         time.Time
-	Status       ScheduleDayStatus
-	MuscleGroups []string
-	DailyPlanID  string
+	Date         time.Time         `json:"date"`
+	Status       ScheduleDayStatus `json:"status"`
+	MuscleGroups []string          `json:"muscle_groups"`
+	DailyPlanID  string            `json:"daily_plan_id"`
 }
 
 type WeeklySchedule struct {
@@ -36,7 +36,11 @@ type WeeklySchedule struct {
 	Days       []ScheduleDay
 }
 
-func NewWeeklySchedule(id string, roadmapID string, userID string, weekNumber int, days []ScheduleDay) (*WeeklySchedule, error) {
+func NewWeeklySchedule(
+	id, roadmapID, userID string,
+	weekNumber int,
+	days []ScheduleDay,
+) (*WeeklySchedule, error) {
 	if len(days) != 7 {
 		return nil, ErrScheduleMustContainSevenDays
 	}

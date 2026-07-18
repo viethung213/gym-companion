@@ -26,7 +26,11 @@ type WorkoutRoadmap struct {
 	PlannerVersion string
 }
 
-func NewWorkoutRoadmap(id string, userID string, input PlanningInput, plannerVersion string) (*WorkoutRoadmap, error) {
+func NewWorkoutRoadmap(
+	id, userID string,
+	input *PlanningInput,
+	plannerVersion string,
+) (*WorkoutRoadmap, error) {
 	if id == "" {
 		return nil, ErrRoadmapIDRequired
 	}
@@ -50,9 +54,10 @@ func dateOnly(value time.Time) time.Time {
 	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, value.Location())
 }
 
-func copyPlanningInput(input PlanningInput) PlanningInput {
-	input.PreferredWeekdays = append([]time.Weekday(nil), input.PreferredWeekdays...)
-	input.EquipmentIDs = append([]string(nil), input.EquipmentIDs...)
-	input.ActiveInjuryAreas = append([]string(nil), input.ActiveInjuryAreas...)
-	return input
+func copyPlanningInput(input *PlanningInput) PlanningInput {
+	copied := *input
+	copied.PreferredWeekdays = append([]time.Weekday(nil), input.PreferredWeekdays...)
+	copied.EquipmentIDs = append([]string(nil), input.EquipmentIDs...)
+	copied.ActiveInjuryAreas = append([]string(nil), input.ActiveInjuryAreas...)
+	return copied
 }
