@@ -36,6 +36,23 @@ CREATE TABLE IF NOT EXISTS coaching.weekly_schedules (
 CREATE INDEX IF NOT EXISTS coaching_schedules_user_roadmap
     ON coaching.weekly_schedules (user_id, roadmap_id, week_number);
 
+CREATE TABLE IF NOT EXISTS coaching.daily_workout_plans (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    roadmap_id VARCHAR(255) NOT NULL
+        REFERENCES coaching.workout_roadmaps(id) ON DELETE CASCADE,
+    weekly_schedule_id VARCHAR(255) NOT NULL
+        REFERENCES coaching.weekly_schedules(id) ON DELETE CASCADE,
+    scheduled_date DATE NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    exercises JSONB NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (weekly_schedule_id, scheduled_date)
+);
+
+CREATE INDEX IF NOT EXISTS coaching_daily_plans_user_date
+    ON coaching.daily_workout_plans (user_id, scheduled_date);
+
 CREATE TABLE IF NOT EXISTS coaching.outbox_events (
     id VARCHAR(255) PRIMARY KEY,
     event_type VARCHAR(255) NOT NULL,

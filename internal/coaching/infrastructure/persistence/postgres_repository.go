@@ -52,6 +52,19 @@ type outboxRecord struct {
 
 func (outboxRecord) TableName() string { return "coaching.outbox_events" }
 
+type dailyPlanRecord struct {
+	ID               string         `gorm:"column:id;primaryKey"`
+	UserID           string         `gorm:"column:user_id;not null"`
+	RoadmapID        string         `gorm:"column:roadmap_id;not null"`
+	WeeklyScheduleID string         `gorm:"column:weekly_schedule_id;not null"`
+	ScheduledDate    time.Time      `gorm:"column:scheduled_date;not null"`
+	Status           string         `gorm:"column:status;not null"`
+	Exercises        datatypes.JSON `gorm:"column:exercises;type:jsonb;not null"`
+	GeneratedAt      time.Time      `gorm:"column:generated_at;not null"`
+}
+
+func (dailyPlanRecord) TableName() string { return "coaching.daily_workout_plans" }
+
 type PostgresRepository struct {
 	db *gorm.DB
 }
@@ -201,6 +214,60 @@ func (r *PostgresRepository) ListSchedules(
 	return schedules, nil
 }
 
+func (r *PostgresRepository) SaveDailyPlan(
+	ctx context.Context,
+	schedule *domain.WeeklySchedule,
+	plan *domain.DailyWorkoutPlan,
+	event domain.Event,
+) error {
+	scheduleRow, err := toScheduleRecord(schedule)
+	if err != nil {
+		return err
+	}
+	planRow, err := toDailyPlanRecord(plan)
+	if err != nil {
+		return err
+	}
+	outboxRows, err := toOutboxRecords([]domain.Event{event})
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&scheduleRow).Error; err != nil {
+			return fmt.Errorf("update schedule: %w", err)
+		}
+		if err := tx.Create(&planRow).Error; err != nil {
+			return fmt.Errorf("insert daily plan: %w", err)
+		}
+		if err := tx.Create(&outboxRows[0]).Error; err != nil {
+			return fmt.Errorf("insert outbox event: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *PostgresRepository) FindDailyPlan(
+	ctx context.Context,
+	userID string,
+	planID string,
+) (*domain.DailyWorkoutPlan, error) {
+	var row dailyPlanRecord
+	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", planID, userID).First(&row).Error
+	return mapDailyPlanResult(row, err)
+}
+
+func (r *PostgresRepository) FindDailyPlanByDate(
+	ctx context.Context,
+	scheduleID string,
+	scheduledDate time.Time,
+) (*domain.DailyWorkoutPlan, error) {
+	var row dailyPlanRecord
+	err := r.db.WithContext(ctx).
+		Where("weekly_schedule_id = ? AND scheduled_date = ?", scheduleID, scheduledDate).
+		First(&row).Error
+	return mapDailyPlanResult(row, err)
+}
+
 func toRoadmapRecord(roadmap *domain.WorkoutRoadmap) (roadmapRecord, error) {
 	payload, err := json.Marshal(roadmap.Input)
 	if err != nil {
@@ -241,6 +308,18 @@ func toOutboxRecords(events []domain.Event) ([]outboxRecord, error) {
 	return rows, nil
 }
 
+func toDailyPlanRecord(plan *domain.DailyWorkoutPlan) (dailyPlanRecord, error) {
+	payload, err := json.Marshal(plan.Exercises)
+	if err != nil {
+		return dailyPlanRecord{}, fmt.Errorf("marshal prescribed exercises: %w", err)
+	}
+	return dailyPlanRecord{
+		ID: plan.ID, UserID: plan.UserID, RoadmapID: plan.RoadmapID,
+		WeeklyScheduleID: plan.WeeklyScheduleID, ScheduledDate: plan.ScheduledDate,
+		Status: string(plan.Status), Exercises: payload, GeneratedAt: plan.GeneratedAt,
+	}, nil
+}
+
 func mapRoadmapResult(row roadmapRecord, err error) (*domain.WorkoutRoadmap, error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, domain.ErrNotFound
@@ -259,6 +338,25 @@ func mapScheduleResult(row scheduleRecord, err error) (*domain.WeeklySchedule, e
 		return nil, fmt.Errorf("query schedule: %w", err)
 	}
 	return row.toDomain()
+}
+
+func mapDailyPlanResult(row dailyPlanRecord, err error) (*domain.DailyWorkoutPlan, error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query daily plan: %w", err)
+	}
+	var exercises []domain.PrescribedExercise
+	if err := json.Unmarshal(row.Exercises, &exercises); err != nil {
+		return nil, fmt.Errorf("unmarshal prescribed exercises: %w", err)
+	}
+	return &domain.DailyWorkoutPlan{
+		ID: row.ID, UserID: row.UserID, RoadmapID: row.RoadmapID,
+		WeeklyScheduleID: row.WeeklyScheduleID, ScheduledDate: row.ScheduledDate,
+		Status: domain.DailyPlanStatus(row.Status), Exercises: exercises,
+		GeneratedAt: row.GeneratedAt,
+	}, nil
 }
 
 func (row roadmapRecord) toDomain() (*domain.WorkoutRoadmap, error) {

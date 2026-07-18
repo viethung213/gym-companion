@@ -62,3 +62,15 @@ func (h *Handler) ListSchedules(
 	}
 	return schedules, nil
 }
+
+func (h *Handler) GetDailyPlan(
+	ctx context.Context,
+	userID string,
+	planID string,
+) (*domain.DailyWorkoutPlan, error) {
+	plan, err := h.repository.FindDailyPlan(ctx, userID, planID)
+	if err != nil {
+		return nil, fmt.Errorf("find daily plan: %w", err)
+	}
+	return plan, nil
+}

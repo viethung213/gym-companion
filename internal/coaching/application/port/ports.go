@@ -29,6 +29,38 @@ type Repository interface {
 		userID string,
 		roadmapID string,
 	) ([]*domain.WeeklySchedule, error)
+	SaveDailyPlan(
+		ctx context.Context,
+		schedule *domain.WeeklySchedule,
+		plan *domain.DailyWorkoutPlan,
+		event domain.Event,
+	) error
+	FindDailyPlan(ctx context.Context, userID string, planID string) (*domain.DailyWorkoutPlan, error)
+	FindDailyPlanByDate(
+		ctx context.Context,
+		scheduleID string,
+		scheduledDate time.Time,
+	) (*domain.DailyWorkoutPlan, error)
+}
+
+type ExerciseSearchCriteria struct {
+	MuscleGroupIDs []string
+	EquipmentIDs   []string
+	Difficulty     string
+	Limit          int
+}
+
+type ExerciseCandidate struct {
+	ID                 string
+	Name               string
+	TargetMuscleID     string
+	EquipmentID        string
+	Difficulty         string
+	DefaultRestSeconds int
+}
+
+type ExerciseSearcher interface {
+	Search(ctx context.Context, criteria ExerciseSearchCriteria) ([]ExerciseCandidate, error)
 }
 
 type Clock interface {
