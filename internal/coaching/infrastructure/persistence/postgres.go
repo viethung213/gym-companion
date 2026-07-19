@@ -212,7 +212,7 @@ func (r *PostgresDailyWorkoutPlanRepository) SaveBatch(ctx context.Context, plan
 
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for i, plan := range plans {
-			prescriptionData, err := json.Marshal(plan.WorkoutPrescription())
+			prescriptionData, err := json.Marshal(toWorkoutPrescriptionDTO(plan.WorkoutPrescription()))
 			if err != nil {
 				return fmt.Errorf("marshal plan prescription for %s: %w", plan.ID(), err)
 			}

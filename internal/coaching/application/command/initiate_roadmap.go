@@ -187,7 +187,7 @@ func (h *InitiateRoadmapHandler) createDailyPlan(
 	}
 
 	// Build prescription from planner result
-	prescription := buildPrescription(exercises, planResult)
+	prescription := buildPrescription(exercises, planResult, cmd.ExperienceLevel)
 
 	planID, err := h.ids.NewID()
 	if err != nil {
@@ -210,8 +210,11 @@ func (h *InitiateRoadmapHandler) createDailyPlan(
 	return plan, event, nil
 }
 
-// buildPrescription maps planner result + exercise info into a WorkoutPrescription.
-func buildPrescription(exercises []port.ExerciseInfo, result *port.PlanWorkoutResult) domain.WorkoutPrescription {
+func buildPrescription(
+	exercises []port.ExerciseInfo,
+	result *port.PlanWorkoutResult,
+	experienceLevel string,
+) domain.WorkoutPrescription {
 	exerciseMap := make(map[string]port.ExerciseInfo, len(exercises))
 	for _, e := range exercises {
 		exerciseMap[e.ID] = e
@@ -223,11 +226,14 @@ func buildPrescription(exercises []port.ExerciseInfo, result *port.PlanWorkoutRe
 		if !ok {
 			continue
 		}
+
+		spec := domain.ResolvePrescriptionSpec(experienceLevel, ex.Category)
+
 		mainExercises = append(mainExercises, domain.PrescribedExercise{
 			ExerciseID:   ex.ID,
 			ExerciseName: ex.Name,
-			TargetSets:   3, // ponytail: default 3 sets, refine when Gemini planner returns specifics
-			TargetReps:   10,
+			TargetSets:   spec.TargetSets,
+			TargetReps:   spec.TargetReps,
 		})
 	}
 
