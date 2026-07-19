@@ -18,13 +18,20 @@ type mockRoadmapRepo struct {
 	savedEvent    *domain.Event
 }
 
-func (m *mockRoadmapRepo) Save(_ context.Context, r *domain.WorkoutRoadmap, e *domain.Event) error {
+func (m *mockRoadmapRepo) Save(
+	_ context.Context,
+	r *domain.WorkoutRoadmap,
+	e *domain.Event,
+) error {
 	m.savedRoadmap = r
 	m.savedEvent = e
 	return nil
 }
 
-func (m *mockRoadmapRepo) FindActiveByUserID(_ context.Context, _ string) (*domain.WorkoutRoadmap, error) {
+func (m *mockRoadmapRepo) FindActiveByUserID(
+	_ context.Context,
+	_ string,
+) (*domain.WorkoutRoadmap, error) {
 	return m.activeRoadmap, nil
 }
 
@@ -33,18 +40,26 @@ type mockScheduleRepo struct {
 	savedEvent    *domain.Event
 }
 
-func (m *mockScheduleRepo) Save(_ context.Context, s *domain.WeeklySchedule, e *domain.Event) error {
+func (m *mockScheduleRepo) Save(
+	_ context.Context,
+	s *domain.WeeklySchedule,
+	e *domain.Event,
+) error {
 	m.savedSchedule = s
 	m.savedEvent = e
 	return nil
 }
 
 type mockPlanRepo struct {
-	savedPlans []*domain.DailyWorkoutPlan
+	savedPlans  []*domain.DailyWorkoutPlan
 	savedEvents []*domain.Event
 }
 
-func (m *mockPlanRepo) SaveBatch(_ context.Context, plans []*domain.DailyWorkoutPlan, events []*domain.Event) error {
+func (m *mockPlanRepo) SaveBatch(
+	_ context.Context,
+	plans []*domain.DailyWorkoutPlan,
+	events []*domain.Event,
+) error {
 	m.savedPlans = plans
 	m.savedEvents = events
 	return nil
@@ -52,7 +67,10 @@ func (m *mockPlanRepo) SaveBatch(_ context.Context, plans []*domain.DailyWorkout
 
 type mockExerciseSvc struct{}
 
-func (m mockExerciseSvc) SearchExercises(_ context.Context, _ port.ExerciseSearchFilters) ([]port.ExerciseInfo, error) {
+func (m mockExerciseSvc) SearchExercises(
+	_ context.Context,
+	_ port.ExerciseSearchFilters,
+) ([]port.ExerciseInfo, error) {
 	return []port.ExerciseInfo{
 		{ID: "ex-1", Name: "Barbell Bench Press", Category: "Compound", PrimaryMuscle: "Chest"},
 		{ID: "ex-2", Name: "Incline Dumbbell Press", Category: "Compound", PrimaryMuscle: "Chest"},

@@ -93,8 +93,69 @@ func (r *PostgresWeeklyScheduleRepository) getDB(ctx context.Context) *gorm.DB {
 	return r.db.WithContext(ctx)
 }
 
+type scheduleDayDTO struct {
+	Date               time.Time               `json:"date"`
+	DayOfWeek          string                  `json:"day_of_week"`
+	Status             domain.WorkoutDayStatus `json:"status"`
+	TargetMuscleGroups []string                `json:"target_muscle_groups"`
+	DailyPlanID        string                  `json:"daily_plan_id"`
+}
+
+type prescribedExerciseDTO struct {
+	ExerciseID      string  `json:"exercise_id"`
+	ExerciseName    string  `json:"exercise_name"`
+	TargetSets      int     `json:"target_sets"`
+	TargetReps      int     `json:"target_reps"`
+	TargetWeight    float64 `json:"target_weight"`
+	DurationSeconds int     `json:"duration_seconds"`
+	Notes           string  `json:"notes"`
+}
+
+type workoutPrescriptionDTO struct {
+	WarmUps       []prescribedExerciseDTO `json:"warm_ups"`
+	MainExercises []prescribedExerciseDTO `json:"main_exercises"`
+	CoolDowns     []prescribedExerciseDTO `json:"cool_downs"`
+}
+
+func toScheduleDayDTOs(days []domain.ScheduleDay) []scheduleDayDTO {
+	dtos := make([]scheduleDayDTO, len(days))
+	for i, d := range days {
+		dtos[i] = scheduleDayDTO{
+			Date:               d.Date,
+			DayOfWeek:          d.DayOfWeek,
+			Status:             d.Status,
+			TargetMuscleGroups: d.TargetMuscleGroups,
+			DailyPlanID:        d.DailyPlanID,
+		}
+	}
+	return dtos
+}
+
+func toWorkoutPrescriptionDTO(p domain.WorkoutPrescription) workoutPrescriptionDTO {
+	toExDTOs := func(exs []domain.PrescribedExercise) []prescribedExerciseDTO {
+		res := make([]prescribedExerciseDTO, len(exs))
+		for i, e := range exs {
+			res[i] = prescribedExerciseDTO{
+				ExerciseID:      e.ExerciseID,
+				ExerciseName:    e.ExerciseName,
+				TargetSets:      e.TargetSets,
+				TargetReps:      e.TargetReps,
+				TargetWeight:    e.TargetWeight,
+				DurationSeconds: e.DurationSeconds,
+				Notes:           e.Notes,
+			}
+		}
+		return res
+	}
+	return workoutPrescriptionDTO{
+		WarmUps:       toExDTOs(p.WarmUps),
+		MainExercises: toExDTOs(p.MainExercises),
+		CoolDowns:     toExDTOs(p.CoolDowns),
+	}
+}
+
 func (r *PostgresWeeklyScheduleRepository) Save(ctx context.Context, schedule *domain.WeeklySchedule, event *domain.Event) error {
-	daysData, err := json.Marshal(schedule.ScheduleDays())
+	daysData, err := json.Marshal(toScheduleDayDTOs(schedule.ScheduleDays()))
 	if err != nil {
 		return fmt.Errorf("marshal schedule days: %w", err)
 	}

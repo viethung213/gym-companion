@@ -23,14 +23,17 @@ func NewCoachingServer(initiateRoadmap *command.InitiateRoadmapHandler) *Coachin
 	}
 }
 
-func (s *CoachingServer) InitiateRoadmap(ctx context.Context, req *coachingmsg.InitiateRoadmapRequest) (*coachingmsg.InitiateRoadmapResponse, error) {
+func (s *CoachingServer) InitiateRoadmap(
+	ctx context.Context,
+	req *coachingmsg.InitiateRoadmapRequest,
+) (*coachingmsg.InitiateRoadmapResponse, error) {
 	if req == nil || req.UserId == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
 	cmd := &command.InitiateRoadmapCommand{
 		UserID:          req.UserId,
-		ExperienceLevel: "beginner", // ponytail: default fallback experience level for manual API initiation
+		ExperienceLevel: "beginner", // ponytail: default fallback for manual API
 	}
 
 	if err := s.initiateRoadmap.Handle(ctx, cmd); err != nil {

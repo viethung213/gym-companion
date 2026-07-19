@@ -16,7 +16,11 @@ type OutboxWorker struct {
 	interval  time.Duration
 }
 
-func NewOutboxWorker(repo port.OutboxRepository, publisher port.BrokerPublisher, interval time.Duration) *OutboxWorker {
+func NewOutboxWorker(
+	repo port.OutboxRepository,
+	publisher port.BrokerPublisher,
+	interval time.Duration,
+) *OutboxWorker {
 	return &OutboxWorker{
 		repo:      repo,
 		publisher: publisher,

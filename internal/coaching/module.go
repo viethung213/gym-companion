@@ -31,7 +31,7 @@ type ModuleDeps struct {
 	DB            *sql.DB
 	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
-	ExerciseClient exercisesvc.ExerciseServiceClient // Optional: client connection to Exercise module gRPC
+	ExerciseClient exercisesvc.ExerciseServiceClient // Optional gRPC client
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {

@@ -127,8 +127,8 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd *InitiateRoadma
 		return nil
 	}
 
-	var plans []*domain.DailyWorkoutPlan
-	var planEvents []*domain.Event
+	plans := make([]*domain.DailyWorkoutPlan, 0, len(trainingDays))
+	planEvents := make([]*domain.Event, 0, len(trainingDays))
 
 	for _, day := range trainingDays {
 		plan, event, planErr := h.createDailyPlan(ctx, day, schedule, roadmap, cmd, now)
@@ -217,7 +217,7 @@ func buildPrescription(exercises []port.ExerciseInfo, result *port.PlanWorkoutRe
 		exerciseMap[e.ID] = e
 	}
 
-	var mainExercises []domain.PrescribedExercise
+	mainExercises := make([]domain.PrescribedExercise, 0, len(result.SelectedExerciseIDs))
 	for _, id := range result.SelectedExerciseIDs {
 		ex, ok := exerciseMap[id]
 		if !ok {

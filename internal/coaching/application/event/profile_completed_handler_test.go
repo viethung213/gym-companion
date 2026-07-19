@@ -26,19 +26,30 @@ func (m *mockRoadmapRepo) FindActiveByUserID(_ context.Context, _ string) (*doma
 
 type mockScheduleRepo struct{}
 
-func (m *mockScheduleRepo) Save(_ context.Context, _ *domain.WeeklySchedule, _ *domain.Event) error {
+func (m *mockScheduleRepo) Save(
+	_ context.Context,
+	_ *domain.WeeklySchedule,
+	_ *domain.Event,
+) error {
 	return nil
 }
 
 type mockPlanRepo struct{}
 
-func (m *mockPlanRepo) SaveBatch(_ context.Context, _ []*domain.DailyWorkoutPlan, _ []*domain.Event) error {
+func (m *mockPlanRepo) SaveBatch(
+	_ context.Context,
+	_ []*domain.DailyWorkoutPlan,
+	_ []*domain.Event,
+) error {
 	return nil
 }
 
 type mockExerciseSvc struct{}
 
-func (m mockExerciseSvc) SearchExercises(_ context.Context, _ port.ExerciseSearchFilters) ([]port.ExerciseInfo, error) {
+func (m mockExerciseSvc) SearchExercises(
+	_ context.Context,
+	_ port.ExerciseSearchFilters,
+) ([]port.ExerciseInfo, error) {
 	return []port.ExerciseInfo{
 		{ID: "ex-1", Name: "Pushup", Category: "Compound", PrimaryMuscle: "Chest"},
 	}, nil
