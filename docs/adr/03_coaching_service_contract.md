@@ -12,17 +12,20 @@ Tách biệt hoàn toàn hai cấu phần để đảm bảo ranh giới Bounded
 
 ---
 
-## 2. API Contract Thực Tế
+## 2. API & Commands Hệ Thống
 
-### Commands
+### API Public (Client gọi qua gRPC/HTTP)
 - `InitiateRoadmap`: Khởi tạo lộ trình 4 tuần ban đầu.
-- `SubmitPreWorkoutCheckIn`: Gửi câu trả lời check-in động (đóng gói trực tiếp trong request body, dùng `body: "*"`).
+- `SubmitPreWorkoutCheckIn`: Gửi câu trả lời check-in động (dùng `body: "*"`).
+- `GetActiveRoadmap`: Lấy nhanh Roadmap đang chạy kèm lịch tuần hiện tại (Endpoint `/active`).
+- `GetPreWorkoutCheckIn`: Lấy câu hỏi check-in động đã sinh sẵn.
+- `GetDailyWorkoutPlan`: Lấy giáo án tập luyện ngày.
+- `ListWorkoutRoadmaps` & `GetWorkoutRoadmap`: Xem lại lịch sử lộ trình cũ.
 
-### Queries
-- `GetActiveRoadmap`: Lấy nhanh Roadmap đang chạy kèm lịch tuần hiện tại (Endpoint `/active` được chấp thuận để tối ưu UX).
-- `GetPreWorkoutCheckIn`: Lấy bộ câu hỏi check-in động được AI sinh trước từ buổi tập cũ (giảm thiểu latency).
-- `GetDailyWorkoutPlan`: Lấy giáo án tập luyện ngày (đang để Unary, tương lai nâng cấp lên Server Stream theo ADR-01).
-- `ListWorkoutRoadmaps` & `GetWorkoutRoadmap`: Phục vụ xem lại lịch sử lộ trình cũ.
+### Commands Nội Bộ (Backend xử lý ngầm qua Event/Worker)
+- `GenerateNextWeeklySchedule`: Tự động sinh lịch tuần kế tiếp khi nhận event kết thúc buổi tập cuối tuần.
+- `GenerateDailyWorkoutPlanDraft`: Chạy background job sinh trước giáo án nháp (pre-caching) cho ngày hôm sau.
+- `RegenerateDailyWorkoutPlan`: Sinh lại giáo án JIT khi check-in báo chấn thương mới hoặc thiếu thiết bị.
 
 ---
 
