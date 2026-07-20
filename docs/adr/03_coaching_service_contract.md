@@ -26,73 +26,47 @@ Vì `contracts/` là Single Source of Truth cho API, gRPC, REST gateway và Open
 
 ## 2. Ý Định Thiết Kế
 
-Tạo `CoachingService` riêng trong cùng bounded context `core/workout/v1`.
+Tách **Coaching & Planning** thành bounded context riêng:
 
-Mục tiêu không phải là tách sang package mới `core/coaching/v1`, mà là tách rõ trách nhiệm ở mức service contract:
+- Contract: `proto/contracts/core/coaching/v1`.
+- Go module: `internal/coaching`.
+- PostgreSQL schema: `coaching`.
 
-- `WorkoutService`: điều phối buổi tập thực tế.
+- `WorkoutExecutionService`: điều phối và ghi nhận buổi tập thực tế.
 - `CoachingService`: lập lộ trình, sinh lịch tuần, sinh giáo án ngày, và xử lý adaptive review.
 
-Cách này giữ đúng mapping vật lý hiện tại: `Coaching & Planning` và `Workout Execution & Motion` vẫn nằm trong module `workout`, nhưng API contract không còn lẫn command của hai nghiệp vụ.
+Cách tách này giữ domain, dữ liệu và contract của hai nghiệp vụ độc lập.
 
 ---
 
-## 3. Vì Sao Cần Các API Planning
+## 3. Danh Sách Command
 
-### `InitiateRoadmap`
-
-API này cần có vì `WorkoutRoadmap` không phải dữ liệu do user tự tạo thủ công.
-Nó được sinh sau khi hồ sơ sức khỏe đạt điều kiện kích hoạt AI Coach.
-
-Command này đại diện cho UC-02.1:
-
-- đọc profile, mục tiêu, injury, khung giờ tập;
-- tạo roadmap 4 tuần;
-- tạo `WeeklySchedule` tuần đầu;
-- chạy `OverloadValidator` để đảm bảo volume ban đầu hợp lệ;
-- phát event `RoadmapInitiated` và `WeeklyScheduleGenerated`.
-
-### `GenerateNextWeeklySchedule`
-
-API này cần có vì lịch tuần sau không nên được tạo trước toàn bộ.
-Nó phụ thuộc vào dữ liệu tuần vừa rồi: completion, volume thực tế, RPE, form score, session bất thường.
-
-Command này đại diện cho UC-02.3:
-
-- đọc roadmap active;
-- đọc performance tuần trước;
-- sinh lịch tuần kế tiếp;
-- đảm bảo progressive overload không vượt quá 10%;
-- lưu `WeeklySchedule` mới.
-
-### `GenerateDailyWorkoutPlan`
-
-API này cần có vì giáo án chi tiết được sinh JIT.
-Không nên lock toàn bộ bài tập, set, rep, tạ cho cả 4 tuần ngay từ đầu.
-
-Command này đại diện cho UC-02.2:
-
-- nhận ngày tập dự kiến;
-- nhận check-in input nếu có;
-- xử lý injury mới, recovery, missed session;
-- chọn bài tập phù hợp;
-- để Backend Go tính set, rep, tạ, volume theo ADR 02;
-- tạo `DailyWorkoutPlan` sẵn sàng cho `WorkoutService.StartWorkoutSession`.
+| Command | Ý nghĩa |
+|---|---|
+| `InitiateRoadmap` | Nội bộ: tạo roadmap và lịch tuần đầu sau `ProfileCompleted`. |
+| `GenerateNextWeeklySchedule` | Nội bộ: sinh lịch tuần kế tiếp từ kết quả tập thực tế. |
+| `GenerateDailyWorkoutPlan` | Public: sinh giáo án JIT từ check-in của user. |
+| `RegenerateDailyWorkoutPlan` | Public: thay plan chưa sử dụng khi ngữ cảnh thay đổi. |
+| `RespondAdaptiveRecommendation` | Public: nhận lựa chọn của user cho đề xuất thích ứng. |
+| `ResumeRoadmap` | Public: cho user tiếp tục roadmap đang tạm dừng. |
+| `PauseRoadmap` | Nội bộ: tạm dừng roadmap theo adaptive recommendation. |
+| `SkipScheduledDay` | Nội bộ: đánh dấu bỏ buổi, không tự dồn lịch. |
+| `RescheduleScheduleDay` | Nội bộ: dời ngày tập sau khi user xác nhận. |
+| `RunAdaptiveReview` | Nội bộ: đánh giá CR và các signal B1–B4. |
+| `CompleteRoadmap` | Nội bộ: hoàn thành roadmap khi kết thúc chu kỳ. |
 
 ---
 
-## 4. Vì Sao Cần Query API
+## 4. Danh Sách Query
 
-Các command `Generate...` chỉ tạo hoặc cập nhật dữ liệu.
-Client vẫn cần API đọc lại dữ liệu đã sinh.
-
-Do đó `CoachingService` cần có query rõ ràng:
-
-- `ListWorkoutRoadmaps`: lấy danh sách roadmap, có thể filter theo status.
-- `GetWorkoutRoadmap`: lấy chi tiết một roadmap.
-- `ListWeeklySchedules`: lấy lịch tuần theo roadmap hoặc khoảng ngày.
-- `GetWeeklySchedule`: lấy chi tiết một lịch tuần.
-- `GetDailyWorkoutPlan`: lấy giáo án ngày để hiển thị hoặc truyền sang luồng execution.
+| Query | Ý nghĩa |
+|---|---|
+| `ListWorkoutRoadmaps` | Lấy danh sách roadmap của user, có thể lọc theo trạng thái. |
+| `GetWorkoutRoadmap` | Lấy chi tiết một roadmap. |
+| `ListWeeklySchedules` | Lấy lịch tuần theo roadmap hoặc khoảng ngày. |
+| `GetWeeklySchedule` | Lấy chi tiết một lịch tuần. |
+| `GetDailyWorkoutPlan` | Lấy giáo án ngày để hiển thị hoặc bắt đầu buổi tập. |
+| `ListAdaptiveRecommendations` | Lấy đề xuất thích ứng đang chờ hoặc lịch sử. |
 
 Không dùng endpoint kiểu `/workout-roadmaps/active`.
 `active` là trạng thái của resource, không phải resource.

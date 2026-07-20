@@ -15,50 +15,20 @@ enum RoadmapStatus {
   ROADMAP_STATUS_CANCELLED = 4;
 }
 
-enum ScheduleDayStatus {
-  SCHEDULE_DAY_STATUS_UNSPECIFIED = 0;
-  SCHEDULE_DAY_STATUS_TRAINING = 1;
-  SCHEDULE_DAY_STATUS_REST = 2;
-  SCHEDULE_DAY_STATUS_SKIPPED = 3;
-  SCHEDULE_DAY_STATUS_RESCHEDULED = 4;
+enum WorkoutDayStatus {
+  WORKOUT_DAY_STATUS_UNSPECIFIED = 0;
+  WORKOUT_DAY_STATUS_TRAINING = 1;     // Ngày có lịch tập
+  WORKOUT_DAY_STATUS_REST = 2;         // Ngày nghỉ phục hồi
+  WORKOUT_DAY_STATUS_SKIPPED = 3;      // Lịch là tập nhưng bỏ lỡ (không tập)
+  WORKOUT_DAY_STATUS_RESCHEDULED = 4;  // Chủ động dời lịch sang ngày khác
 }
 
 enum DailyPlanStatus {
   DAILY_PLAN_STATUS_UNSPECIFIED = 0;
-  DAILY_PLAN_STATUS_GENERATED = 1;
-  DAILY_PLAN_STATUS_USED = 2;
-  DAILY_PLAN_STATUS_SKIPPED = 3;
-  DAILY_PLAN_STATUS_REPLACED = 4;
-}
-
-enum AdaptiveRecommendationType {
-  ADAPTIVE_RECOMMENDATION_TYPE_UNSPECIFIED = 0;
-  ADAPTIVE_RECOMMENDATION_TYPE_CYCLE_COMPLETION = 1;
-  ADAPTIVE_RECOMMENDATION_TYPE_INACTIVITY = 2;
-  ADAPTIVE_RECOMMENDATION_TYPE_SCHEDULE_MISMATCH = 3;
-  ADAPTIVE_RECOMMENDATION_TYPE_OVERTRAINING = 4;
-  ADAPTIVE_RECOMMENDATION_TYPE_PLATEAU = 5;
-}
-
-enum AdaptiveRecommendationStatus {
-  ADAPTIVE_RECOMMENDATION_STATUS_UNSPECIFIED = 0;
-  ADAPTIVE_RECOMMENDATION_STATUS_PENDING = 1;
-  ADAPTIVE_RECOMMENDATION_STATUS_ACCEPTED = 2;
-  ADAPTIVE_RECOMMENDATION_STATUS_DECLINED = 3;
-  ADAPTIVE_RECOMMENDATION_STATUS_APPLIED = 4;
-  ADAPTIVE_RECOMMENDATION_STATUS_EXPIRED = 5;
-}
-
-enum AdaptiveRecommendationOptionType {
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_UNSPECIFIED = 0;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_CONTINUE_FROM_LAST_MISSED = 1;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_RESET_CURRENT_WEEK = 2;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_PAUSE_ROADMAP = 3;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_RESCHEDULE_DAY = 4;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_DELOAD_WEEK = 5;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_CHANGE_EXERCISE = 6;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_INCREASE_SETS = 7;
-  ADAPTIVE_RECOMMENDATION_OPTION_TYPE_KEEP_CURRENT_PLAN = 8;
+  DAILY_PLAN_STATUS_DRAFT = 1;
+  DAILY_PLAN_STATUS_ACTIVE = 2;
+  DAILY_PLAN_STATUS_COMPLETED = 3;
+  DAILY_PLAN_STATUS_SKIPPED = 4;
 }
 
 message InitiateRoadmapRequest {
@@ -96,114 +66,42 @@ message GetWorkoutRoadmapResponse {
   WorkoutRoadmap roadmap = 1;
 }
 
-message GenerateNextWeeklyScheduleRequest {
+message GetActiveRoadmapRequest {
   string user_id = 1;
-  string roadmap_id = 2;
-  GenerateNextWeeklySchedulePayload payload = 3;
 }
 
-message GenerateNextWeeklySchedulePayload {
-  string previous_weekly_schedule_id = 1;
+message GetActiveRoadmapResponse {
+  WorkoutRoadmap roadmap = 1;
+  WeeklySchedule current_weekly_schedule = 2;
 }
 
-message GenerateNextWeeklyScheduleResponse {
-  WeeklySchedule weekly_schedule = 1;
-}
-
-message ListWeeklySchedulesRequest {
+message GetPreWorkoutCheckInRequest {
   string user_id = 1;
-  string roadmap_id = 2;
-  google.type.Date start_date = 3;
-  google.type.Date end_date = 4;
-  int32 page_size = 5;
-  string page_token = 6;
 }
 
-message ListWeeklySchedulesResponse {
-  repeated WeeklySchedule weekly_schedules = 1;
-  string next_page_token = 2;
+message GetPreWorkoutCheckInResponse {
+  string check_in_id = 1;
+  repeated CheckInQuestion questions = 2;
 }
 
-message GetWeeklyScheduleRequest {
+message SubmitPreWorkoutCheckInRequest {
   string user_id = 1;
-  string weekly_schedule_id = 2;
+  string check_in_id = 2;
+  repeated CheckInAnswer answers = 3;
 }
 
-message GetWeeklyScheduleResponse {
-  WeeklySchedule weekly_schedule = 1;
-}
-
-message GenerateDailyWorkoutPlanRequest {
-  string user_id = 1;
-  string weekly_schedule_id = 2;
-  GenerateDailyWorkoutPlanPayload payload = 3;
-}
-
-message GenerateDailyWorkoutPlanPayload {
-  google.type.Date scheduled_date = 1;
-  DailyCheckIn check_in = 2;
-  MissedSessionDecision missed_session_decision = 3;
-}
-
-message GenerateDailyWorkoutPlanResponse {
-  DailyWorkoutPlan daily_workout_plan = 1;
+message SubmitPreWorkoutCheckInResponse {
+  bool requires_regeneration = 1;
+  string coach_feedback = 2;
 }
 
 message GetDailyWorkoutPlanRequest {
   string user_id = 1;
-  string daily_workout_plan_id = 2;
+  google.type.Date scheduled_date = 2;
 }
 
 message GetDailyWorkoutPlanResponse {
   DailyWorkoutPlan daily_workout_plan = 1;
-}
-
-message RunAdaptiveReviewRequest {
-  string user_id = 1;
-  string roadmap_id = 2;
-  RunAdaptiveReviewPayload payload = 3;
-}
-
-message RunAdaptiveReviewPayload {
-  google.type.Date review_date = 1;
-}
-
-message RunAdaptiveReviewResponse {
-  repeated AdaptiveRecommendation recommendations = 1;
-  repeated WeeklySchedule generated_weekly_schedules = 2;
-  repeated WorkoutRoadmap generated_roadmaps = 3;
-}
-
-message ListAdaptiveRecommendationsRequest {
-  string user_id = 1;
-  string roadmap_id = 2;
-  AdaptiveRecommendationStatus status = 3;
-  int32 page_size = 4;
-  string page_token = 5;
-}
-
-message ListAdaptiveRecommendationsResponse {
-  repeated AdaptiveRecommendation recommendations = 1;
-  string next_page_token = 2;
-}
-
-message RespondAdaptiveRecommendationRequest {
-  string user_id = 1;
-  string recommendation_id = 2;
-  RespondAdaptiveRecommendationPayload payload = 3;
-}
-
-message RespondAdaptiveRecommendationPayload {
-  string selected_option_id = 1;
-  bool accepted = 2;
-  string note = 3;
-}
-
-message RespondAdaptiveRecommendationResponse {
-  AdaptiveRecommendation recommendation = 1;
-  WorkoutRoadmap roadmap = 2;
-  WeeklySchedule weekly_schedule = 3;
-  DailyWorkoutPlan daily_workout_plan = 4;
 }
 
 message WorkoutRoadmap {
@@ -212,20 +110,6 @@ message WorkoutRoadmap {
   RoadmapStatus status = 3;
   google.type.Date start_date = 4;
   google.type.Date end_date = 5;
-  repeated RoadmapPhase phases = 6;
-  CompletionRate completion_rate = 7;
-}
-
-message RoadmapPhase {
-  int32 week_number = 1;
-  string name = 2;
-  string focus = 3;
-  float target_overload_percent = 4;
-}
-
-message CompletionRate {
-  float value = 1;
-  string band = 2;
 }
 
 message WeeklySchedule {
@@ -235,22 +119,15 @@ message WeeklySchedule {
   int32 week_number = 4;
   google.type.Date start_date = 5;
   google.type.Date end_date = 6;
-  MuscleSplit muscle_split = 7;
+  string muscle_split_type = 7;
   repeated ScheduleDay schedule_days = 8;
-  repeated string daily_workout_plan_ids = 9;
-}
-
-message MuscleSplit {
-  string split_type = 1;
-  repeated string primary_muscle_groups = 2;
-  repeated string secondary_muscle_groups = 3;
 }
 
 message ScheduleDay {
   google.type.Date scheduled_date = 1;
   string day_of_week = 2;
-  ScheduleDayStatus status = 3;
-  repeated string muscle_groups = 4;
+  WorkoutDayStatus status = 3;
+  repeated string target_muscle_groups = 4;
   string daily_workout_plan_id = 5;
 }
 
@@ -262,13 +139,15 @@ message DailyWorkoutPlan {
   google.type.Date scheduled_date = 5;
   DailyPlanStatus status = 6;
   WorkoutPrescription workout_prescription = 7;
-  google.protobuf.Timestamp generated_at = 8;
+  string reasoning_explanation = 8;
+  string adjustment_explanation = 9;
+  google.protobuf.Timestamp generated_at = 10;
 }
 
 message WorkoutPrescription {
-  repeated PrescribedExercise exercises = 1;
-  repeated AccessoryExercise warm_up_items = 2;
-  repeated AccessoryExercise cool_down_items = 3;
+  repeated PrescribedExercise warm_ups = 1;
+  repeated PrescribedExercise main_exercises = 2;
+  repeated PrescribedExercise cool_downs = 3;
 }
 
 message PrescribedExercise {
@@ -277,42 +156,25 @@ message PrescribedExercise {
   int32 target_sets = 3;
   int32 target_reps = 4;
   float target_weight = 5;
-  string notes = 6;
+  int32 duration_seconds = 6;
+  string notes = 7;
 }
 
-message AccessoryExercise {
-  string exercise_id = 1;
-  string exercise_name = 2;
-  int32 duration_seconds = 3;
-  string notes = 4;
+message CheckInQuestion {
+  string question_id = 1;
+  string question_text = 2;
+  repeated CheckInOption options = 3;
+  bool allow_custom_text = 4;
+  string custom_text_placeholder = 5;
 }
 
-message DailyCheckIn {
-  int32 recovery_score = 1;
-  int32 fatigue_score = 2;
-  repeated string new_injury_areas = 3;
-  string note = 4;
-}
-
-message MissedSessionDecision {
-  string missed_daily_workout_plan_id = 1;
-  AdaptiveRecommendationOptionType decision = 2;
-}
-
-message AdaptiveRecommendation {
-  string recommendation_id = 1;
-  string roadmap_id = 2;
-  AdaptiveRecommendationType type = 3;
-  AdaptiveRecommendationStatus status = 4;
-  string reason = 5;
-  repeated AdaptiveRecommendationOption options = 6;
-  google.protobuf.Timestamp created_at = 7;
-  google.protobuf.Timestamp expires_at = 8;
-}
-
-message AdaptiveRecommendationOption {
+message CheckInOption {
   string option_id = 1;
-  AdaptiveRecommendationOptionType type = 2;
-  string label = 3;
-  string description = 4;
+  string option_text = 2;
+}
+
+message CheckInAnswer {
+  string question_id = 1;
+  repeated string selected_option_ids = 2;
+  string custom_text = 3;
 }

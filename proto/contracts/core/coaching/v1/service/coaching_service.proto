@@ -56,63 +56,35 @@ service CoachingService {
     };
   }
 
-  // Generate the next weekly schedule for a roadmap.
-  rpc GenerateNextWeeklySchedule (contracts.core.coaching.v1.message.GenerateNextWeeklyScheduleRequest) returns (contracts.core.coaching.v1.message.GenerateNextWeeklyScheduleResponse) {
+  // Get the single active roadmap for a user.
+  rpc GetActiveRoadmap (contracts.core.coaching.v1.message.GetActiveRoadmapRequest) returns (contracts.core.coaching.v1.message.GetActiveRoadmapResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/weekly-schedules:generate-next"
-      body: "payload"
+      get: "/api/v1/users/{user_id}/workout-roadmaps/active"
     };
   }
 
-  // List weekly schedules in a roadmap.
-  rpc ListWeeklySchedules (contracts.core.coaching.v1.message.ListWeeklySchedulesRequest) returns (contracts.core.coaching.v1.message.ListWeeklySchedulesResponse) {
+  // Get pre-workout check-in questions dynamically generated for today's session.
+  rpc GetPreWorkoutCheckIn (contracts.core.coaching.v1.message.GetPreWorkoutCheckInRequest) returns (contracts.core.coaching.v1.message.GetPreWorkoutCheckInResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/weekly-schedules"
+      get: "/api/v1/users/{user_id}/pre-workout-checkin"
     };
   }
 
-  // Get one weekly schedule by id.
-  rpc GetWeeklySchedule (contracts.core.coaching.v1.message.GetWeeklyScheduleRequest) returns (contracts.core.coaching.v1.message.GetWeeklyScheduleResponse) {
+  // Submit answers for the pre-workout check-in.
+  rpc SubmitPreWorkoutCheckIn (contracts.core.coaching.v1.message.SubmitPreWorkoutCheckInRequest) returns (contracts.core.coaching.v1.message.SubmitPreWorkoutCheckInResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/weekly-schedules/{weekly_schedule_id}"
+      post: "/api/v1/users/{user_id}/pre-workout-checkin:submit"
+      body: "*"
     };
   }
 
-  // Generate the detailed just-in-time workout plan for a scheduled day.
-  rpc GenerateDailyWorkoutPlan (contracts.core.coaching.v1.message.GenerateDailyWorkoutPlanRequest) returns (contracts.core.coaching.v1.message.GenerateDailyWorkoutPlanResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/weekly-schedules/{weekly_schedule_id}/daily-workout-plans:generate"
-      body: "payload"
-    };
-  }
-
-  // Get one daily workout plan by id.
+  // Get today's detailed workout plan.
+  // TODO: In the future, this RPC will be refactored into a Server Streaming RPC to support Warm-up Rendering
+  // and progressive JIT streaming (as defined in ADR-01):
+  // rpc GetDailyWorkoutPlan (GetDailyWorkoutPlanRequest) returns (stream GetDailyWorkoutPlanResponse);
   rpc GetDailyWorkoutPlan (contracts.core.coaching.v1.message.GetDailyWorkoutPlanRequest) returns (contracts.core.coaching.v1.message.GetDailyWorkoutPlanResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/daily-workout-plans/{daily_workout_plan_id}"
-    };
-  }
-
-  // Run BR-AC-04..08 adaptive review for a roadmap.
-  rpc RunAdaptiveReview (contracts.core.coaching.v1.message.RunAdaptiveReviewRequest) returns (contracts.core.coaching.v1.message.RunAdaptiveReviewResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-reviews:run"
-      body: "payload"
-    };
-  }
-
-  // List pending or historical adaptive recommendations.
-  rpc ListAdaptiveRecommendations (contracts.core.coaching.v1.message.ListAdaptiveRecommendationsRequest) returns (contracts.core.coaching.v1.message.ListAdaptiveRecommendationsResponse) {
-    option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}/adaptive-recommendations"
-    };
-  }
-
-  // Apply or reject a user-facing adaptive recommendation.
-  rpc RespondAdaptiveRecommendation (contracts.core.coaching.v1.message.RespondAdaptiveRecommendationRequest) returns (contracts.core.coaching.v1.message.RespondAdaptiveRecommendationResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/adaptive-recommendations/{recommendation_id}:respond"
-      body: "payload"
+      get: "/api/v1/users/{user_id}/daily-workout-plans/today"
     };
   }
 }

@@ -29,7 +29,7 @@ message LogWorkoutSetRequest {
   string session_id = 1;
   int32 set_number = 2;
   string exercise_id = 3;
-  int32 target_reps = 4;
+  optional int32 target_reps = 4; // Chuyển thành optional, Server tự động map từ giáo án gốc
   int32 actual_reps = 5;
   float weight = 6;
   optional float form_score = 7; // Sử dụng optional để hỗ trợ N/A cho bài tập Phi AI
@@ -64,6 +64,8 @@ message CompleteWorkoutSessionResponse {
   float total_volume = 4;
   optional float average_form_score = 5; // Sử dụng optional nếu toàn bài phi AI
   float average_rpe = 6;
+  string ai_coach_report = 7;           // Nhận xét, vinh danh cá nhân hóa từ AI Coach
+  string nutrition_recommendation = 8; // Gợi ý thực đơn dinh dưỡng phục hồi
 }
 
 message ErrorLog {
