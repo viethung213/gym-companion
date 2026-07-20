@@ -10,9 +10,7 @@ import "google/type/date.proto";
 enum RoadmapStatus {
   ROADMAP_STATUS_UNSPECIFIED = 0;
   ROADMAP_STATUS_ACTIVE = 1;
-  ROADMAP_STATUS_PAUSED = 2;
-  ROADMAP_STATUS_COMPLETED = 3;
-  ROADMAP_STATUS_CANCELLED = 4;
+  ROADMAP_STATUS_COMPLETED = 2;
 }
 
 enum WorkoutDayStatus {
