@@ -11,4 +11,5 @@ message WorkoutSessionAborted {
   string user_id = 2;
   google.protobuf.Timestamp aborted_at = 3;
   string reason = 4; // e.g. "timeout", "user_cancelled"
+  string plan_id = 5; // Liên kết sang DailyWorkoutPlan để đồng bộ trạng thái
 }
