@@ -11,6 +11,7 @@
   * v1.3 (01/07/2026): Chuyển sang cơ chế sinh lộ trình tổng quan & sinh giáo án chi tiết theo buổi.
   * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
   * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn) và tư vấn món ăn ngoài.
+  * v1.8 (12/07/2026): Nâng cấp mức độ cá nhân hóa của Coaching & Planning để phù hợp thực tế: mở rộng FR-UM-03 thành khung giờ rảnh theo tuần, thêm FR-UM-05 (nhóm cơ ưu tiên) và FR-UM-06 (dụng cụ tập luyện sẵn có), tách `primary_goal`/`secondary_goals` khi user chọn nhiều mục tiêu, bổ sung BR-AC-09 → BR-AC-15 (lập lịch theo thời gian rảnh, ưu tiên nhóm cơ có sàn cân bằng, chiến lược theo `experience_level`, Fit Score định kỳ, ràng buộc dụng cụ, ưu tiên mục tiêu chính, chống lặp bài tập).
 
 ---
 
@@ -37,7 +38,7 @@
 ## 3. BẢN ĐỒ QUY TRÌNH NGHIỆP VỤ
 
 ### 3.1 Quy trình Khởi tạo (Onboarding & Planning)
-1. User nhập thông tin cơ bản, chỉ số cơ thể, mục tiêu (Tăng cơ/Giảm mỡ) & khung giờ tập cố định.
+1. User nhập thông tin cơ bản, chỉ số cơ thể, `experience_level`, mục tiêu chính/phụ (Tăng cơ/Giảm mỡ), khung giờ rảnh theo tuần, dụng cụ tập luyện sẵn có và (tùy chọn) nhóm cơ ưu tiên.
 2. User khai báo chấn thương cũ hoặc bệnh lý mãn tính.
 3. AI Coach tính toán `User Fitness Score` & khởi tạo Lộ trình tổng quan 4 tuần, Lịch tập tuần và Gợi ý dinh dưỡng.
 
@@ -68,9 +69,11 @@
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
 | **FR-UM-01** | **Đăng ký/Đăng nhập**: Qua Email, SĐT (xác thực OTP) và liên kết MXH (Google, Apple, Facebook). | M |
-| **FR-UM-02** | **Hồ sơ sức khỏe**: Khai báo tuổi, giới tính, chiều cao, cân nặng, mục tiêu, chấn thương/bệnh lý. | M |
-| **FR-UM-03** | **Khung giờ cố định**: Bắt buộc chọn tối thiểu 1 khung giờ tập cố định trong ngày để nhắc lịch. | M |
+| **FR-UM-02** | **Hồ sơ sức khỏe**: Khai báo tuổi, giới tính, chiều cao, cân nặng, `experience_level` (Mới bắt đầu / Đã có kinh nghiệm / Lâu năm — BR-AC-11), mục tiêu chính (`primary_goal`: Tăng cơ / Giảm mỡ) và tối đa 1 mục tiêu phụ (`secondary_goals`, BR-AC-14), chấn thương/bệnh lý. | M |
+| **FR-UM-03** | **Khung giờ rảnh theo tuần**: Với mỗi ngày trong tuần, User khai báo có rảnh tập không, khung giờ rảnh (sáng/chiều/tối hoặc giờ cụ thể) và thời lượng tối đa có thể tập (phút/buổi). Bắt buộc tối thiểu số ngày rảnh tương ứng số buổi/tuần mong muốn theo mục tiêu. Dùng để (a) nhắc lịch và (b) làm ràng buộc cứng khi `Coaching` xếp `WeeklySchedule` (BR-AC-09). | M |
 | **FR-UM-04** | **Nhắc lịch tự động**: Push Notification trước 15 phút theo phong cách AI Coach đã chọn. | S |
+| **FR-UM-05** | **Nhóm cơ ưu tiên**: User có thể chọn tối đa 2 nhóm cơ muốn ưu tiên tập nhiều hơn (VD: ngực, mông). Không bắt buộc; nếu bỏ trống thì `Coaching` dùng phân bổ cân bằng mặc định. Ưu tiên này luôn bị giới hạn bởi sàn cân bằng cơ thể (BR-AC-10). | S |
+| **FR-UM-06** | **Dụng cụ tập luyện sẵn có**: User khai báo dụng cụ thực tế có thể dùng (tại nhà hoặc phòng gym cụ thể). Nếu bỏ trống, hệ thống mặc định chỉ chọn bài Bodyweight (không dụng cụ) để đảm bảo giáo án luôn khả thi (Assumption-03). Dùng làm whitelist khi `Coaching` chọn bài tập (BR-AC-13). | M |
 
 ### Module 2: AI Coach cá nhân
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
@@ -136,12 +139,19 @@
 | **BR-NU-01** | Dinh dưỡng | AI Nutrition tuyệt đối không gợi ý thực đơn tổng năng lượng dưới **1,200 kcal/ngày** cho bất kỳ đối tượng nào. |
 | **BR-NU-02** | Dinh dưỡng | Nguồn protein chính đã ăn trong Meal History sẽ bị khóa không gợi ý lại trong vòng **7 ngày tiếp theo**. |
 | **BR-AC-03** | Tập luyện | Giáo án các buổi bỏ tập đánh dấu là "Bỏ qua", **không tự động dồn/bù** vào ngày tiếp theo nếu chưa có xác nhận từ người dùng. |
-| **BR-AC-04** | Lộ trình | **Quy tắc điều chỉnh CR cuối chu kỳ (Trigger A)**:<br>- **CR < 40%**: Hỏi lý do bỏ tập, chờ phản hồi mới đề xuất giảm số buổi/tuần và rút ngắn thời lượng giáo án.<br>- **40% <= CR < 70%**: Giữ nguyên số buổi, giảm tải lượng 10-15%, chèn xen kẽ buổi Express 30 phút. Tự động sinh lộ trình mới.<br>- **70% <= CR < 90%**: Giữ nguyên cấu trúc, tăng Progressive Overload <= 10% theo BR-AC-02. Tự sinh lộ trình.<br>- **CR >= 90%**: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". |
+| **BR-AC-04** | Lộ trình | **Quy tắc điều chỉnh CR cuối chu kỳ (Trigger A)**:<br>- **CR < 40%**: Hỏi lý do bỏ tập, chờ phản hồi mới đề xuất giảm số buổi/tuần và rút ngắn thời lượng giáo án.<br>- **40% <= CR < 70%**: Giữ nguyên số buổi, giảm tải lượng 10-15%, chèn xen kẽ buổi Express 30 phút. Tự động sinh lộ trình mới.<br>- **70% <= CR < 90%**: Giữ nguyên cấu trúc, tăng Progressive Overload theo trần BR-AC-02/BR-AC-11 (10% mặc định, 5% cho tier Beginner). Tự sinh lộ trình.<br>- **CR >= 90%**: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". |
 | **BR-AC-05** | Lộ trình | **Signal B1 (Không hoạt động 7 ngày liên tiếp)**: AI Coach gửi tin nhắn check-in theo phong cách đã chọn, đề xuất 3 phương án: (a) tập tiếp từ buổi bỏ gần nhất, (b) đặt lại lịch tuần này, (c) tạm dừng lộ trình (Pause tối đa 4 tuần). Không tự chỉnh lịch nếu user chưa phản hồi. |
 | **BR-AC-06** | Lịch tập | **Signal B2 (Lịch không tương thích)**: User bỏ tập cùng 1 ngày trong tuần $\ge 3$ lần liên tiếp → AI đề xuất dời slot ngày đó sang ngày khác. Nếu đồng ý thì cập nhật lịch tuần, nếu từ chối thì giữ nguyên và không hỏi lại. |
 | **BR-AC-07** | Tập luyện | **Signal B3 (Tập quá tải - Overtraining)**: Kích hoạt khi user tập $\ge 2$ buổi/ngày hoặc RPE trung bình $\ge 8.5$ liên tục $\ge 5$ buổi → Cảnh báo quá tải, bắt buộc chèn 1 ngày nghỉ trong lịch kế tiếp, gợi ý Active Recovery. |
 | **BR-AC-08** | Lộ trình | **Signal B4 (Tiến bộ đình trệ - Plateau)**: Sức mạnh (1RM) và Form trung bình không tăng trong 3 tuần liên tiếp (chỉ tính tuần có CR $\ge 70\%$) → AI Coach gợi ý chọn: (a) Deload Week (giảm 40% tải lượng 1 tuần), (b) Đổi biến thể bài tập tương đương, (c) Tăng set giữ tạ. |
 | **BR-AC-09** | Tập luyện | **Thích ứng sau phục hồi (Post-Injury Adaptation)**: Khi một khớp chấn thương được xác nhận phục hồi (`recovered`), hệ thống áp dụng cơ chế bảo vệ trong **3 buổi tập đầu tiên** liên quan đến nhóm cơ của khớp đó: (1) Giới hạn tải lượng gợi ý tối đa không vượt quá **50%** mức tạ cao nhất lịch sử (PR) trước chấn thương. (2) Ưu tiên gợi ý các bài tập dùng Bodyweight hoặc Machine/Cable (đường chuyển động cố định) thay vì bài Free Weight tự do. (3) Chỉ cho phép quay lại Progressive Overload bình thường khi đạt RPE $\le 7$ và Form Score $\ge 80\%$ liên tục trong 3 buổi tập bảo vệ này. |
+| **BR-AC-10** | Lịch tập | **Lập lịch ràng buộc theo thời gian rảnh**: `WeeklySchedule` chỉ được xếp buổi tập vào các ngày/khung giờ User đã khai báo rảnh (FR-UM-03); thời lượng giáo án của buổi đó không được vượt quá thời lượng tối đa User khai báo cho ngày đó. Nếu tổng số slot rảnh trong tuần ít hơn số buổi tối thiểu cần để đạt mục tiêu, hệ thống phải **tự hạ số buổi/tuần** xuống cho vừa số slot rảnh thay vì xếp lịch vào ngày User đã báo bận. |
+| **BR-AC-11** | Lịch tập | **Ưu tiên nhóm cơ có sàn cân bằng**: Nhóm cơ trong `preferred_muscle_groups` (FR-UM-05) được tăng tần suất xuất hiện trong `MuscleSplit` nhưng vẫn phải đảm bảo mỗi nhóm cơ chính (đẩy/kéo/chân/core) xuất hiện tối thiểu 1 lần trong chu kỳ tuần, và không được xếp lại cùng một nhóm cơ trong vòng **dưới 48 giờ** (nguyên tắc phục hồi cơ), kể cả khi được ưu tiên. |
+| **BR-AC-12** | Lộ trình | **Chiến lược lập kế hoạch theo `experience_level`**: <br>- **Mới bắt đầu**: Bắt buộc dùng giáo án mẫu đã kiểm chứng (Fixed Template, có biến thể theo `available_equipment` — BR-AC-14) cho split và bài compound nền tảng, không để AI tự do sáng tạo bài mới; trần Progressive Overload thận trọng hơn BR-AC-02, tối đa **5% volume/tuần** thay vì 10%; Warm-up/Cool-down là bắt buộc, không cho phép Skip trong 4 tuần đầu. <br>- **Đã có kinh nghiệm / Lâu năm**: Được áp dụng toàn bộ trần BR-AC-02 (tối đa 10%/tuần), AI được chọn bài linh hoạt theo `preferred_muscle_groups` và biến thể nâng cao, cho phép Skip Warm-up/Cool-down. <br>Mục tiêu: đảm bảo giáo án chính xác và an toàn tuyệt đối cho người mới (nhóm rủi ro rời bỏ/chấn thương cao nhất theo OB-02, OB-03), trong khi vẫn giữ lịch tập tốt nhưng linh hoạt hơn cho người tập lâu năm — không bắt buộc tối ưu tuyệt đối cho nhóm này vì họ đã có khả năng tự điều chỉnh. |
+| **BR-AC-13** | Lộ trình | **Fit Score định kỳ (chủ động, không chỉ chờ tín hiệu cực đoan)**: Sau mỗi buổi tập, hệ thống cập nhật `FitScore` (dựa trên RPE trung bình gần đây, CR, xu hướng delta 1RM) theo 2 trục Too-Little / Too-Much. Khi `FitScore` lệch nhẹ nhưng chưa chạm ngưỡng cực đoan của BR-AC-07/BR-AC-08, hệ thống điều chỉnh tăng/giảm nhẹ tải lượng ở giáo án JIT kế tiếp (trong biên BR-AC-02/BR-AC-12) thay vì đợi đủ điều kiện Signal B3/B4 mới sửa mạnh một lần. Tạm ngưng khi Signal B3/B4 đang active để tránh 2 cơ chế cùng chỉnh chồng lên nhau. |
+| **BR-AC-14** | Tập luyện | **Ràng buộc theo dụng cụ tập luyện**: `Coaching` chỉ được chọn bài tập mà `Exercise.EquipmentID` nằm trong `available_equipment` (FR-UM-06) của User, hoặc bài Bodyweight (luôn hợp lệ). Không được gợi ý bài tập cần dụng cụ User không khai báo có — kể cả khi bài đó phù hợp nhất về mặt nhóm cơ/mục tiêu, phải chọn bài thay thế khả thi trong danh mục. |
+| **BR-AC-15** | Lộ trình | **Ưu tiên mục tiêu chính khi có nhiều mục tiêu**: `primary_goal` (FR-UM-02) là mục tiêu duy nhất quyết định `MuscleSplit`, trần Progressive Overload và rep range. `secondary_goals` chỉ được dùng để ưu tiên accessory/finisher exercise, không được thay đổi lập trình chính của `primary_goal`. Nếu User không khai báo `primary_goal` rõ ràng khi chọn nhiều mục tiêu xung đột nhau (VD Tăng cơ + Giảm mỡ cùng lúc), hệ thống phải yêu cầu User chọn 1 mục tiêu chính trước khi `InitiateRoadmap`. |
+| **BR-AC-16** | Tập luyện | **Chống lặp bài tập (Exercise Variety)**: Bài tập accessory/finisher đã dùng cho một nhóm cơ không được gợi ý lại giống hệt trong **2 tuần liên tiếp** kế tiếp cho cùng nhóm cơ đó, trừ bài compound nền tảng của Fixed Template (tier Beginner — BR-AC-12), vốn cố định có chủ đích để User làm quen kỹ thuật. Nguyên tắc tương tự BR-NU-02/BR-NU-03 của Nutrition, áp dụng cho Workout Planning để giảm rủi ro nhàm chán làm giảm CR. |
 | **BR-WL-01** | Buổi tập | **Giới hạn thời gian**: Cảnh báo kết thúc sau 90 phút (người mới) hoặc 180 phút (người cũ). Đạt 240 phút không tương tác → Tự động đóng buổi tập, lưu nhãn `Anomalous Session`, loại dữ liệu khỏi tính Overload, buổi sau bắt buộc Recovery. |
 | **BR-WL-02** | Buổi tập | **Phát hiện tải lượng luyện tập (Training Load) bất thường**: Tải lượng buổi tập > 250% trung bình 5 buổi gần nhất có cùng nhóm cơ/mục tiêu → Yêu cầu xác nhận trước khi lưu; bắt buộc chèn $\ge 1$ ngày nghỉ hoàn toàn cho nhóm cơ đó. |
 | **BR-WL-03** | Buổi tập | **Ghi nhận bài tập phi AI**: Đảm bảo tính liên tục của dữ liệu hiệu suất tổng thể. Các bài tập phi AI không ghi nhận điểm Form Score (báo N/A/Trống), chỉ ghi nhận số set, rep/thời gian thực tế và mức tạ (do người dùng tự nhập) để làm cơ sở tính Tải lượng tập luyện (Training Load) và Overload. |
@@ -151,7 +161,7 @@
 
 ## 6. YÊU CẦU DỮ LIỆU NGHIỆP VỤ (DATA)
 - **Đầu vào (Inputs)**:
-  * Profile: Chỉ số cơ thể, mục tiêu, chấn thương/bệnh lý, `experience_level`, khung giờ cố định. (`equipment_list` & `food_restrictions` thu thập dần qua chatbot).
+  * Profile: Chỉ số cơ thể, `primary_goal`/`secondary_goals` (FR-UM-02), chấn thương/bệnh lý, `experience_level` (FR-UM-02), khung giờ rảnh theo tuần (`availability`, FR-UM-03), nhóm cơ ưu tiên (`preferred_muscle_groups`, FR-UM-05, optional), dụng cụ tập luyện sẵn có (`available_equipment`, FR-UM-06). (`food_restrictions` thu thập dần qua chatbot).
   * Video: Luồng video $\ge 720\text{p}$, $30\text{fps}$.
   * RPE: Đánh giá gắng sức (1-10) sau set/buổi.
   * Nhật ký ăn uống (Meal Logs).
