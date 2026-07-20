@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain"
 	"gorm.io/gorm"
@@ -31,8 +32,12 @@ func (r *PostgresRoadmapRepository) getDB(ctx context.Context) *gorm.DB {
 	return r.db.WithContext(ctx)
 }
 
-func (r *PostgresRoadmapRepository) Save(ctx context.Context, roadmap *domain.WorkoutRoadmap, event *domain.Event) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (r *PostgresRoadmapRepository) Save(
+	ctx context.Context,
+	roadmap *domain.WorkoutRoadmap,
+	event *domain.Event,
+) error {
+	return withinTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		rec := roadmapRecord{
 			ID:        roadmap.ID(),
 			UserID:    roadmap.UserID(),
@@ -44,6 +49,11 @@ func (r *PostgresRoadmapRepository) Save(ctx context.Context, roadmap *domain.Wo
 		}
 
 		if err := tx.Save(&rec).Error; err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) &&
+				pgErr.ConstraintName == "uq_coaching_active_roadmap_per_user" {
+				return domain.ErrRoadmapAlreadyActive
+			}
 			return fmt.Errorf("save roadmap record: %w", err)
 		}
 
@@ -56,7 +66,10 @@ func (r *PostgresRoadmapRepository) Save(ctx context.Context, roadmap *domain.Wo
 	})
 }
 
-func (r *PostgresRoadmapRepository) FindActiveByUserID(ctx context.Context, userID string) (*domain.WorkoutRoadmap, error) {
+func (r *PostgresRoadmapRepository) FindActiveByUserID(
+	ctx context.Context,
+	userID string,
+) (*domain.WorkoutRoadmap, error) {
 	var rec roadmapRecord
 	err := r.getDB(ctx).
 		Where("user_id = ? AND status = ?", userID, string(domain.RoadmapStatusActive)).
@@ -154,13 +167,17 @@ func toWorkoutPrescriptionDTO(p domain.WorkoutPrescription) workoutPrescriptionD
 	}
 }
 
-func (r *PostgresWeeklyScheduleRepository) Save(ctx context.Context, schedule *domain.WeeklySchedule, event *domain.Event) error {
+func (r *PostgresWeeklyScheduleRepository) Save(
+	ctx context.Context,
+	schedule *domain.WeeklySchedule,
+	event *domain.Event,
+) error {
 	daysData, err := json.Marshal(toScheduleDayDTOs(schedule.ScheduleDays()))
 	if err != nil {
 		return fmt.Errorf("marshal schedule days: %w", err)
 	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return withinTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		rec := weeklyScheduleRecord{
 			ID:              schedule.ID(),
 			RoadmapID:       schedule.RoadmapID(),
@@ -205,12 +222,16 @@ func (r *PostgresDailyWorkoutPlanRepository) getDB(ctx context.Context) *gorm.DB
 	return r.db.WithContext(ctx)
 }
 
-func (r *PostgresDailyWorkoutPlanRepository) SaveBatch(ctx context.Context, plans []*domain.DailyWorkoutPlan, events []*domain.Event) error {
+func (r *PostgresDailyWorkoutPlanRepository) SaveBatch(
+	ctx context.Context,
+	plans []*domain.DailyWorkoutPlan,
+	events []*domain.Event,
+) error {
 	if len(plans) == 0 {
 		return nil
 	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return withinTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		for i, plan := range plans {
 			prescriptionData, err := json.Marshal(toWorkoutPrescriptionDTO(plan.WorkoutPrescription()))
 			if err != nil {
@@ -273,20 +294,30 @@ func (r *PostgresInboxRepository) getDB(ctx context.Context) *gorm.DB {
 	return r.db.WithContext(ctx)
 }
 
-func (r *PostgresInboxRepository) IsProcessed(ctx context.Context, eventID string) (bool, error) {
-	var count int64
+func (r *PostgresInboxRepository) IsProcessed(
+	ctx context.Context,
+	eventID string,
+) (bool, error) {
+	var id string
 	err := r.getDB(ctx).
 		Model(&outboxLogRecord{}).
+		Select("id").
 		Where("event_id = ?", eventID).
-		Count(&count).Error
-
+		Limit(1).
+		Scan(&id).Error
 	if err != nil {
 		return false, fmt.Errorf("check event_id processed in outbox_log: %w", err)
 	}
-	return count > 0, nil
+
+	return id != "", nil
 }
 
-func (r *PostgresInboxRepository) MarkProcessed(ctx context.Context, eventID, eventType string, payload []byte, partitionKey string) error {
+func (r *PostgresInboxRepository) MarkProcessed(
+	ctx context.Context,
+	eventID, eventType string,
+	payload []byte,
+	partitionKey string,
+) error {
 	logID := uuid.New().String()
 	rec := outboxLogRecord{
 		ID:           logID,

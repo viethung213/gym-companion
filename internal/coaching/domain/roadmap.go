@@ -19,9 +19,9 @@ const (
 const roadmapDurationWeeks = 4
 
 var (
-	ErrInvalidRoadmap         = errors.New("invalid workout roadmap")
-	ErrRoadmapAlreadyActive   = errors.New("user already has an active roadmap")
-	ErrRoadmapInvalidStatus   = errors.New("invalid roadmap status")
+	ErrInvalidRoadmap           = errors.New("invalid workout roadmap")
+	ErrRoadmapAlreadyActive     = errors.New("user already has an active roadmap")
+	ErrRoadmapInvalidStatus     = errors.New("invalid roadmap status")
 	ErrRoadmapInvalidTransition = errors.New("invalid roadmap status transition")
 )
 
@@ -38,7 +38,7 @@ type WorkoutRoadmap struct {
 }
 
 // Initiate creates a new WorkoutRoadmap for a user starting from the given date.
-func Initiate(id, userID string, startDate time.Time, now time.Time) (*WorkoutRoadmap, error) {
+func Initiate(id, userID string, startDate, now time.Time) (*WorkoutRoadmap, error) {
 	if id == "" {
 		return nil, fmt.Errorf("%w: id is required", ErrInvalidRoadmap)
 	}
@@ -81,7 +81,7 @@ func RehydrateRoadmap(
 	}, nil
 }
 
-func (r *WorkoutRoadmap) ID() string           { return r.id }
+func (r *WorkoutRoadmap) ID() string            { return r.id }
 func (r *WorkoutRoadmap) UserID() string        { return r.userID }
 func (r *WorkoutRoadmap) Status() RoadmapStatus { return r.status }
 func (r *WorkoutRoadmap) StartDate() time.Time  { return r.startDate }

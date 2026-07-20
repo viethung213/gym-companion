@@ -11,6 +11,8 @@ type SearchFilters struct {
 	BodyPartID         string
 	EquipmentID        string
 	TargetMuscleID     string
+	TargetMuscleIDs    []string
+	AvoidMuscleIDs     []string
 	SecondaryMuscleIDs []string
 	TagIDs             []string
 	Keyword            string

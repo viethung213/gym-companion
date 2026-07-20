@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -10,7 +9,14 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain"
+	coachingevent "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event"
+	datepb "google.golang.org/genproto/googleapis/type/date"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+var errActiveRoadmapExists = errors.New("active roadmap already exists")
 
 // InitiateRoadmapCommand contains the data needed to create a new roadmap.
 type InitiateRoadmapCommand struct {
@@ -30,6 +36,7 @@ type InitiateRoadmapHandler struct {
 	planner      port.WorkoutPlanner
 	clock        port.Clock
 	ids          port.IDGenerator
+	unitOfWork   port.UnitOfWork
 }
 
 // NewInitiateRoadmapHandler creates a new handler with all dependencies injected.
@@ -41,6 +48,7 @@ func NewInitiateRoadmapHandler(
 	planner port.WorkoutPlanner,
 	clock port.Clock,
 	ids port.IDGenerator,
+	unitOfWork port.UnitOfWork,
 ) *InitiateRoadmapHandler {
 	return &InitiateRoadmapHandler{
 		roadmapRepo:  roadmapRepo,
@@ -50,6 +58,7 @@ func NewInitiateRoadmapHandler(
 		planner:      planner,
 		clock:        clock,
 		ids:          ids,
+		unitOfWork:   unitOfWork,
 	}
 }
 
@@ -62,17 +71,19 @@ func NewInitiateRoadmapHandler(
 func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd *InitiateRoadmapCommand) error {
 	now := h.clock.Now()
 
-	// 1. Idempotency: skip if user already has an active roadmap
 	existing, err := h.roadmapRepo.FindActiveByUserID(ctx, cmd.UserID)
 	if err != nil {
 		return fmt.Errorf("check existing active roadmap: %w", err)
 	}
 	if existing != nil {
-		log.Printf("INFO: user %s already has active roadmap %s, skipping initiation", cmd.UserID, existing.ID())
+		log.Printf(
+			"INFO: user %s already has active roadmap %s, skipping initiation",
+			cmd.UserID,
+			existing.ID(),
+		)
 		return nil
 	}
 
-	// 2. Create WorkoutRoadmap
 	roadmapID, err := h.ids.NewID()
 	if err != nil {
 		return fmt.Errorf("generate roadmap id: %w", err)
@@ -89,12 +100,6 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd *InitiateRoadma
 		return fmt.Errorf("build roadmap event: %w", err)
 	}
 
-	if err = h.roadmapRepo.Save(ctx, roadmap, roadmapEvent); err != nil {
-		return fmt.Errorf("save roadmap: %w", err)
-	}
-	log.Printf("INFO: created roadmap %s for user %s", roadmapID, cmd.UserID)
-
-	// 3. Generate WeeklySchedule (week 1)
 	scheduleID, err := h.ids.NewID()
 	if err != nil {
 		return fmt.Errorf("generate schedule id: %w", err)
@@ -115,28 +120,28 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd *InitiateRoadma
 		return fmt.Errorf("build schedule event: %w", err)
 	}
 
-	if err = h.scheduleRepo.Save(ctx, schedule, scheduleEvent); err != nil {
-		return fmt.Errorf("save weekly schedule: %w", err)
-	}
-	log.Printf("INFO: generated weekly schedule %s (week 1) for roadmap %s", scheduleID, roadmapID)
-
-	// 4. Create DailyWorkoutPlans for each training day
 	trainingDays := schedule.TrainingDays()
-	if len(trainingDays) == 0 {
-		log.Printf("WARN: no training days in schedule %s, skipping plan generation", scheduleID)
-		return nil
-	}
-
 	plans := make([]*domain.DailyWorkoutPlan, 0, len(trainingDays))
 	planEvents := make([]*domain.Event, 0, len(trainingDays))
 
-	for _, day := range trainingDays {
-		plan, event, planErr := h.createDailyPlan(ctx, day, schedule, roadmap, cmd, now)
+	for i := range trainingDays {
+		day := &trainingDays[i]
+		plan, event, planErr := h.createDailyPlan(
+			ctx,
+			day,
+			schedule,
+			roadmap,
+			cmd,
+			now,
+		)
 		if planErr != nil {
-			return fmt.Errorf("create daily plan for %s: %w", day.Date.Format("2006-01-02"), planErr)
+			return fmt.Errorf(
+				"create daily plan for %s: %w",
+				day.Date.Format("2006-01-02"),
+				planErr,
+			)
 		}
 
-		// Link plan to schedule day
 		if linkErr := schedule.SetDailyPlanID(day.Date, plan.ID()); linkErr != nil {
 			return fmt.Errorf("link plan to schedule: %w", linkErr)
 		}
@@ -145,13 +150,33 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd *InitiateRoadma
 		planEvents = append(planEvents, event)
 	}
 
-	if err = h.planRepo.SaveBatch(ctx, plans, planEvents); err != nil {
-		return fmt.Errorf("save daily plans batch: %w", err)
-	}
+	err = h.unitOfWork.WithinTransaction(ctx, func(txCtx context.Context) error {
+		active, findErr := h.roadmapRepo.FindActiveByUserID(txCtx, cmd.UserID)
+		if findErr != nil {
+			return fmt.Errorf("recheck active roadmap: %w", findErr)
+		}
+		if active != nil {
+			return errActiveRoadmapExists
+		}
 
-	// Update schedule with linked plan IDs
-	if err = h.scheduleRepo.Save(ctx, schedule, nil); err != nil {
-		return fmt.Errorf("update schedule with plan links: %w", err)
+		if saveErr := h.roadmapRepo.Save(txCtx, roadmap, roadmapEvent); saveErr != nil {
+			return fmt.Errorf("save roadmap: %w", saveErr)
+		}
+		if saveErr := h.scheduleRepo.Save(txCtx, schedule, scheduleEvent); saveErr != nil {
+			return fmt.Errorf("save weekly schedule: %w", saveErr)
+		}
+		if saveErr := h.planRepo.SaveBatch(txCtx, plans, planEvents); saveErr != nil {
+			return fmt.Errorf("save daily plans batch: %w", saveErr)
+		}
+
+		return nil
+	})
+	if errors.Is(err, errActiveRoadmapExists) ||
+		errors.Is(err, domain.ErrRoadmapAlreadyActive) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("persist roadmap initiation: %w", err)
 	}
 
 	log.Printf("INFO: created %d daily plans for schedule %s", len(plans), scheduleID)
@@ -160,23 +185,26 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd *InitiateRoadma
 
 func (h *InitiateRoadmapHandler) createDailyPlan(
 	ctx context.Context,
-	day domain.ScheduleDay,
+	day *domain.ScheduleDay,
 	schedule *domain.WeeklySchedule,
 	roadmap *domain.WorkoutRoadmap,
 	cmd *InitiateRoadmapCommand,
 	now time.Time,
 ) (*domain.DailyWorkoutPlan, *domain.Event, error) {
 	// Search exercises from Exercise module via gRPC
-	exercises, err := h.exerciseSvc.SearchExercises(ctx, port.ExerciseSearchFilters{
+	exercises, err := h.exerciseSvc.SearchExercises(ctx, &port.ExerciseSearchFilters{
 		TargetMuscleGroups: day.TargetMuscleGroups,
 		AvoidInjuryAreas:   cmd.RegisteredInjuries,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("search exercises: %w", err)
 	}
+	if len(exercises) == 0 {
+		return nil, nil, errors.New("search exercises: no safe exercises available")
+	}
 
 	// Ask planner (mock → Gemini) to arrange exercises
-	planResult, err := h.planner.PlanWorkout(ctx, port.PlanWorkoutRequest{
+	planResult, err := h.planner.PlanWorkout(ctx, &port.PlanWorkoutRequest{
 		AvailableExercises: exercises,
 		TargetMuscleGroups: day.TargetMuscleGroups,
 		Goals:              cmd.Goals,
@@ -188,6 +216,9 @@ func (h *InitiateRoadmapHandler) createDailyPlan(
 
 	// Build prescription from planner result
 	prescription := buildPrescription(exercises, planResult, cmd.ExperienceLevel)
+	if len(prescription.MainExercises) == 0 {
+		return nil, nil, errors.New("plan workout: planner selected no valid exercises")
+	}
 
 	planID, err := h.ids.NewID()
 	if err != nil {
@@ -242,64 +273,72 @@ func buildPrescription(
 	}
 }
 
-// Event builders
+func (h *InitiateRoadmapHandler) buildRoadmapEvent(
+	roadmap *domain.WorkoutRoadmap,
+	now time.Time,
+) (*domain.Event, error) {
+	payload := &coachingevent.RoadmapInitiated{
+		RoadmapId:   roadmap.ID(),
+		StartDate:   toProtoDate(roadmap.StartDate()),
+		EndDate:     toProtoDate(roadmap.EndDate()),
+		InitiatedAt: timestamppb.New(now),
+	}
 
-type roadmapEventPayload struct {
-	RoadmapID string `json:"roadmapId"`
-	UserID    string `json:"userId"`
-	StartDate string `json:"startDate"`
-	EndDate   string `json:"endDate"`
+	return h.buildEvent(
+		domain.EventTypeRoadmapInitiated,
+		roadmap.UserID(),
+		payload,
+		now,
+	)
 }
 
-type scheduleEventPayload struct {
-	WeeklyScheduleID string `json:"weeklyScheduleId"`
-	RoadmapID        string `json:"roadmapId"`
-	UserID           string `json:"userId"`
-	WeekNumber       int    `json:"weekNumber"`
-	StartDate        string `json:"startDate"`
-	EndDate          string `json:"endDate"`
+func (h *InitiateRoadmapHandler) buildScheduleEvent(
+	schedule *domain.WeeklySchedule,
+	now time.Time,
+) (*domain.Event, error) {
+	payload := &coachingevent.WeeklyScheduleGenerated{
+		WeeklyScheduleId: schedule.ID(),
+		RoadmapId:        schedule.RoadmapID(),
+		WeekNumber:       int32(schedule.WeekNumber()),
+		StartDate:        toProtoDate(schedule.StartDate()),
+		EndDate:          toProtoDate(schedule.EndDate()),
+		GeneratedAt:      timestamppb.New(now),
+	}
+
+	return h.buildEvent(
+		domain.EventTypeWeeklyScheduleGenerated,
+		schedule.UserID(),
+		payload,
+		now,
+	)
 }
 
-type planEventPayload struct {
-	DailyWorkoutPlanID string `json:"dailyWorkoutPlanId"`
-	WeeklyScheduleID   string `json:"weeklyScheduleId"`
-	RoadmapID          string `json:"roadmapId"`
-	UserID             string `json:"userId"`
-	ScheduledDate      string `json:"scheduledDate"`
+func (h *InitiateRoadmapHandler) buildPlanEvent(
+	plan *domain.DailyWorkoutPlan,
+	now time.Time,
+) (*domain.Event, error) {
+	payload := &coachingevent.DailyWorkoutPlanGenerated{
+		DailyWorkoutPlanId: plan.ID(),
+		WeeklyScheduleId:   plan.WeeklyScheduleID(),
+		RoadmapId:          plan.RoadmapID(),
+		ScheduledDate:      toProtoDate(plan.ScheduledDate()),
+		GeneratedAt:        timestamppb.New(now),
+	}
+
+	return h.buildEvent(
+		domain.EventTypeDailyWorkoutPlanGenerated,
+		plan.UserID(),
+		payload,
+		now,
+	)
 }
 
-func (h *InitiateRoadmapHandler) buildRoadmapEvent(r *domain.WorkoutRoadmap, now time.Time) (*domain.Event, error) {
-	return h.buildEvent(domain.EventTypeRoadmapInitiated, r.UserID(), roadmapEventPayload{
-		RoadmapID: r.ID(),
-		UserID:    r.UserID(),
-		StartDate: r.StartDate().Format("2006-01-02"),
-		EndDate:   r.EndDate().Format("2006-01-02"),
-	}, now)
-}
-
-func (h *InitiateRoadmapHandler) buildScheduleEvent(s *domain.WeeklySchedule, now time.Time) (*domain.Event, error) {
-	return h.buildEvent(domain.EventTypeWeeklyScheduleGenerated, s.UserID(), scheduleEventPayload{
-		WeeklyScheduleID: s.ID(),
-		RoadmapID:        s.RoadmapID(),
-		UserID:           s.UserID(),
-		WeekNumber:       s.WeekNumber(),
-		StartDate:        s.StartDate().Format("2006-01-02"),
-		EndDate:          s.EndDate().Format("2006-01-02"),
-	}, now)
-}
-
-func (h *InitiateRoadmapHandler) buildPlanEvent(p *domain.DailyWorkoutPlan, now time.Time) (*domain.Event, error) {
-	return h.buildEvent(domain.EventTypeDailyWorkoutPlanGenerated, p.UserID(), planEventPayload{
-		DailyWorkoutPlanID: p.ID(),
-		WeeklyScheduleID:  p.WeeklyScheduleID(),
-		RoadmapID:         p.RoadmapID(),
-		UserID:             p.UserID(),
-		ScheduledDate:      p.ScheduledDate().Format("2006-01-02"),
-	}, now)
-}
-
-func (h *InitiateRoadmapHandler) buildEvent(eventType, partitionKey string, payload any, now time.Time) (*domain.Event, error) {
-	data, err := json.Marshal(payload)
+func (h *InitiateRoadmapHandler) buildEvent(
+	eventType, partitionKey string,
+	payload proto.Message,
+	now time.Time,
+) (*domain.Event, error) {
+	data, err := protojson.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal event payload: %w", err)
 	}
@@ -322,5 +361,10 @@ func truncateToDate(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-// ErrInvalidOutboxPayload is returned when an event payload cannot be serialized.
-var ErrInvalidOutboxPayload = errors.New("invalid outbox payload")
+func toProtoDate(value time.Time) *datepb.Date {
+	return &datepb.Date{
+		Year:  int32(value.Year()),
+		Month: int32(value.Month()),
+		Day:   int32(value.Day()),
+	}
+}

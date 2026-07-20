@@ -14,6 +14,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
+	coachingexercise "github.com/viethung213/gym-companion/internal/coaching/infrastructure/exercise"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -99,7 +100,7 @@ func run() error {
 	defer shutdown()
 
 	// Initialize Exercise Module
-	shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
+	exerciseRuntime, err := exercise.Initialize(ctx, exercise.ModuleDeps{
 		DB:            exerciseDB,
 		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
@@ -107,13 +108,19 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("initialize exercise module: %w", err)
 	}
-	defer shutdownExercise()
+	defer exerciseRuntime.Shutdown()
+
+	exerciseService, err := coachingexercise.NewAdapter(exerciseRuntime.Catalog)
+	if err != nil {
+		return fmt.Errorf("initialize coaching exercise service: %w", err)
+	}
 
 	// Initialize Coaching Module
 	shutdownCoaching, err := coaching.Initialize(ctx, coaching.ModuleDeps{
-		DB:            coachingDB,
-		GRPCServer:    grpcServer,
-		KafkaRegistry: kafkaRegistry,
+		DB:              coachingDB,
+		GRPCServer:      grpcServer,
+		KafkaRegistry:   kafkaRegistry,
+		ExerciseService: exerciseService,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize coaching module: %w", err)

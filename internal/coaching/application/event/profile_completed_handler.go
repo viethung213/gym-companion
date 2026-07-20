@@ -23,15 +23,23 @@ type ProfileCompletedHandler struct {
 }
 
 // NewProfileCompletedHandler creates a new event handler.
-func NewProfileCompletedHandler(initiateRoadmap *command.InitiateRoadmapHandler) *ProfileCompletedHandler {
+func NewProfileCompletedHandler(
+	initiateRoadmap *command.InitiateRoadmapHandler,
+) *ProfileCompletedHandler {
 	return &ProfileCompletedHandler{
 		initiateRoadmap: initiateRoadmap,
 	}
 }
 
 // Handle maps the event to a command and dispatches it.
-func (h *ProfileCompletedHandler) Handle(ctx context.Context, evt ProfileCompletedEvent) error {
-	log.Printf("INFO: received ProfileCompleted event for user %s, dispatching InitiateRoadmap command", evt.UserID)
+func (h *ProfileCompletedHandler) Handle(
+	ctx context.Context,
+	evt *ProfileCompletedEvent,
+) error {
+	log.Printf(
+		"INFO: received ProfileCompleted event for user %s",
+		evt.UserID,
+	)
 
 	cmd := &command.InitiateRoadmapCommand{
 		UserID:             evt.UserID,

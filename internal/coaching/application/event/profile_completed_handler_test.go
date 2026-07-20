@@ -15,12 +15,19 @@ type mockRoadmapRepo struct {
 	savedRoadmap *domain.WorkoutRoadmap
 }
 
-func (m *mockRoadmapRepo) Save(_ context.Context, r *domain.WorkoutRoadmap, _ *domain.Event) error {
-	m.savedRoadmap = r
+func (m *mockRoadmapRepo) Save(
+	_ context.Context,
+	roadmap *domain.WorkoutRoadmap,
+	_ *domain.Event,
+) error {
+	m.savedRoadmap = roadmap
 	return nil
 }
 
-func (m *mockRoadmapRepo) FindActiveByUserID(_ context.Context, _ string) (*domain.WorkoutRoadmap, error) {
+func (m *mockRoadmapRepo) FindActiveByUserID(
+	_ context.Context,
+	_ string,
+) (*domain.WorkoutRoadmap, error) {
 	return nil, nil
 }
 
@@ -48,7 +55,7 @@ type mockExerciseSvc struct{}
 
 func (m mockExerciseSvc) SearchExercises(
 	_ context.Context,
-	_ port.ExerciseSearchFilters,
+	_ *port.ExerciseSearchFilters,
 ) ([]port.ExerciseInfo, error) {
 	return []port.ExerciseInfo{
 		{ID: "ex-1", Name: "Pushup", Category: "Compound", PrimaryMuscle: "Chest"},
@@ -57,7 +64,10 @@ func (m mockExerciseSvc) SearchExercises(
 
 type mockPlanner struct{}
 
-func (m mockPlanner) PlanWorkout(_ context.Context, _ port.PlanWorkoutRequest) (*port.PlanWorkoutResult, error) {
+func (m mockPlanner) PlanWorkout(
+	_ context.Context,
+	_ *port.PlanWorkoutRequest,
+) (*port.PlanWorkoutResult, error) {
 	return &port.PlanWorkoutResult{
 		SelectedExerciseIDs:  []string{"ex-1"},
 		ReasoningExplanation: "Event handler test mock",
@@ -72,6 +82,15 @@ type testIDGen struct{}
 
 func (g *testIDGen) NewID() (string, error) { return "test-evt-id", nil }
 
+type mockUnitOfWork struct{}
+
+func (mockUnitOfWork) WithinTransaction(
+	ctx context.Context,
+	fn func(context.Context) error,
+) error {
+	return fn(ctx)
+}
+
 func TestProfileCompletedHandler_Handle(t *testing.T) {
 	t.Parallel()
 
@@ -82,6 +101,7 @@ func TestProfileCompletedHandler_Handle(t *testing.T) {
 	initiateHandler := command.NewInitiateRoadmapHandler(
 		roadmapRepo, &mockScheduleRepo{}, &mockPlanRepo{},
 		mockExerciseSvc{}, mockPlanner{}, fixedClock{t: now}, &testIDGen{},
+		mockUnitOfWork{},
 	)
 
 	handler := appEvent.NewProfileCompletedHandler(initiateHandler)
@@ -93,7 +113,7 @@ func TestProfileCompletedHandler_Handle(t *testing.T) {
 		ExperienceLevel:    "intermediate",
 	}
 
-	if err := handler.Handle(ctx, evt); err != nil {
+	if err := handler.Handle(ctx, &evt); err != nil {
 		t.Fatalf("handle profile completed event failed: %v", err)
 	}
 

@@ -19,7 +19,10 @@ func NewMockPlanner() *MockPlanner {
 }
 
 // PlanWorkout arranges available exercises in order (compound first, isolation second).
-func (m *MockPlanner) PlanWorkout(ctx context.Context, req port.PlanWorkoutRequest) (*port.PlanWorkoutResult, error) {
+func (m *MockPlanner) PlanWorkout(
+	_ context.Context,
+	req *port.PlanWorkoutRequest,
+) (*port.PlanWorkoutResult, error) {
 	if len(req.AvailableExercises) == 0 {
 		return &port.PlanWorkoutResult{
 			SelectedExerciseIDs:  nil,
@@ -39,7 +42,8 @@ func (m *MockPlanner) PlanWorkout(ctx context.Context, req port.PlanWorkoutReque
 	}
 
 	return &port.PlanWorkoutResult{
-		SelectedExerciseIDs:  selectedIDs,
-		ReasoningExplanation: "Giáo án được sắp xếp theo nguyên tắc khoa học thể thao (Mock AI Planner).",
+		SelectedExerciseIDs: selectedIDs,
+		ReasoningExplanation: "Giáo án được sắp xếp theo nguyên tắc khoa học " +
+			"thể thao (Mock AI Planner).",
 	}, nil
 }

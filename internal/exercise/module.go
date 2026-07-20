@@ -30,7 +30,16 @@ type ModuleDeps struct {
 	KafkaRegistry *sharedKafka.Registry
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+type Runtime struct {
+	Catalog  *query.Catalog
+	shutdown func()
+}
+
+func (r *Runtime) Shutdown() {
+	r.shutdown()
+}
+
+func Initialize(ctx context.Context, deps ModuleDeps) (*Runtime, error) {
 	// Initialize GORM DB wrapper over sql.DB
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
@@ -58,6 +67,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	// Initialize CQRS Query Handlers
 	getHandler := query.NewGetExerciseHandler(repo)
 	searchHandler := query.NewSearchExercisesHandler(repo)
+	catalog := query.NewCatalog(repo)
 	metadataHandler := query.NewGetCatalogMetadataHandler(repo)
 
 	// Initialize gRPC Handler and Register Service
@@ -118,7 +128,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 
 	log.Println("Exercise Bounded Context initialized successfully.")
-	return shutdown, nil
+	return &Runtime{
+		Catalog:  catalog,
+		shutdown: shutdown,
+	}, nil
 }
 
 func RegisterGateway(

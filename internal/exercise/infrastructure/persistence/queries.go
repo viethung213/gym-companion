@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
@@ -133,6 +134,21 @@ func (r *PostgresRepository) searchActiveRecords(
 	if filters.TargetMuscleID != "" {
 		query = query.Where("e.target_muscle_id = ?", filters.TargetMuscleID)
 	}
+	if len(filters.TargetMuscleIDs) > 0 {
+		query = query.Where("LOWER(e.target_muscle_id) IN ?", lowerStrings(filters.TargetMuscleIDs))
+	}
+	if len(filters.AvoidMuscleIDs) > 0 {
+		avoided := lowerStrings(filters.AvoidMuscleIDs)
+		query = query.
+			Where("LOWER(e.target_muscle_id) NOT IN ?", avoided).
+			Where(
+				`NOT EXISTS (
+					SELECT 1 FROM exercise.exercise_secondary_muscles esm
+					WHERE esm.exercise_id = e.id AND LOWER(esm.muscle_id) IN ?
+				)`,
+				avoided,
+			)
+	}
 	if filters.Keyword != "" {
 		query = query.Where("e.name ILIKE '%' || ? || '%'", filters.Keyword)
 	}
@@ -177,6 +193,17 @@ func (r *PostgresRepository) searchActiveRecords(
 	}
 
 	return records, nil
+}
+
+func lowerStrings(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func querySecondaryMuscleIDs(

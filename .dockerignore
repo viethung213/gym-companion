@@ -1,0 +1,4 @@
+.git
+.cache
+outputs
+node_modules

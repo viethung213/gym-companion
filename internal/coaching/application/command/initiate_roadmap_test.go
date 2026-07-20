@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ type mockExerciseSvc struct{}
 
 func (m mockExerciseSvc) SearchExercises(
 	_ context.Context,
-	_ port.ExerciseSearchFilters,
+	_ *port.ExerciseSearchFilters,
 ) ([]port.ExerciseInfo, error) {
 	return []port.ExerciseInfo{
 		{ID: "ex-1", Name: "Barbell Bench Press", Category: "Compound", PrimaryMuscle: "Chest"},
@@ -79,7 +80,10 @@ func (m mockExerciseSvc) SearchExercises(
 
 type mockPlanner struct{}
 
-func (m mockPlanner) PlanWorkout(_ context.Context, req port.PlanWorkoutRequest) (*port.PlanWorkoutResult, error) {
+func (m mockPlanner) PlanWorkout(
+	_ context.Context,
+	_ *port.PlanWorkoutRequest,
+) (*port.PlanWorkoutResult, error) {
 	return &port.PlanWorkoutResult{
 		SelectedExerciseIDs:  []string{"ex-1", "ex-2"},
 		ReasoningExplanation: "Mock test arrangement",
@@ -95,6 +99,24 @@ type testIDGen struct{ counter int }
 func (g *testIDGen) NewID() (string, error) {
 	g.counter++
 	return "test-id", nil
+}
+
+type mockUnitOfWork struct{}
+
+func (mockUnitOfWork) WithinTransaction(
+	ctx context.Context,
+	fn func(context.Context) error,
+) error {
+	return fn(ctx)
+}
+
+type failingUnitOfWork struct{ err error }
+
+func (u failingUnitOfWork) WithinTransaction(
+	context.Context,
+	func(context.Context) error,
+) error {
+	return u.err
 }
 
 func TestInitiateRoadmapHandler_Handle(t *testing.T) {
@@ -117,6 +139,7 @@ func TestInitiateRoadmapHandler_Handle(t *testing.T) {
 		handler := command.NewInitiateRoadmapHandler(
 			roadmapRepo, scheduleRepo, planRepo,
 			exerciseSvc, planner, clock, ids,
+			mockUnitOfWork{},
 		)
 
 		cmd := &command.InitiateRoadmapCommand{
@@ -164,6 +187,7 @@ func TestInitiateRoadmapHandler_Handle(t *testing.T) {
 		handler := command.NewInitiateRoadmapHandler(
 			roadmapRepo, scheduleRepo, planRepo,
 			mockExerciseSvc{}, mockPlanner{}, fixedClock{t: now}, &testIDGen{},
+			mockUnitOfWork{},
 		)
 
 		cmd := &command.InitiateRoadmapCommand{
@@ -179,4 +203,35 @@ func TestInitiateRoadmapHandler_Handle(t *testing.T) {
 			t.Errorf("expected no roadmap saved since active roadmap already exists")
 		}
 	})
+}
+
+func TestInitiateRoadmapHandlerDoesNotWriteOutsideUnitOfWork(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 20, 10, 0, 0, 0, time.UTC)
+	roadmaps := &mockRoadmapRepo{}
+	schedules := &mockScheduleRepo{}
+	plans := &mockPlanRepo{}
+	handler := command.NewInitiateRoadmapHandler(
+		roadmaps,
+		schedules,
+		plans,
+		mockExerciseSvc{},
+		mockPlanner{},
+		fixedClock{t: now},
+		&testIDGen{},
+		failingUnitOfWork{err: errors.New("database unavailable")},
+	)
+
+	err := handler.Handle(context.Background(), &command.InitiateRoadmapCommand{
+		UserID:          "user-atomic",
+		ExperienceLevel: "beginner",
+	})
+	if err == nil {
+		t.Fatal("handle unexpectedly succeeded")
+	}
+	if roadmaps.savedRoadmap != nil || schedules.savedSchedule != nil ||
+		len(plans.savedPlans) != 0 {
+		t.Fatal("repository write occurred outside unit of work")
+	}
 }

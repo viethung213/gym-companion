@@ -43,17 +43,17 @@ type WorkoutPrescription struct {
 // DailyWorkoutPlan is the Aggregate Root for a specific day's workout prescription,
 // generated JIT to avoid locking WeeklySchedule.
 type DailyWorkoutPlan struct {
-	id                      string
-	weeklyScheduleID        string
-	roadmapID               string
-	userID                  string
-	scheduledDate           time.Time
-	status                  DailyPlanStatus
-	workoutPrescription     WorkoutPrescription
-	reasoningExplanation    string
-	adjustmentExplanation   string
-	createdAt               time.Time
-	updatedAt               time.Time
+	id                    string
+	weeklyScheduleID      string
+	roadmapID             string
+	userID                string
+	scheduledDate         time.Time
+	status                DailyPlanStatus
+	workoutPrescription   WorkoutPrescription
+	reasoningExplanation  string
+	adjustmentExplanation string
+	createdAt             time.Time
+	updatedAt             time.Time
 }
 
 // CreateDailyPlan creates a new DailyWorkoutPlan in DRAFT status.
@@ -118,17 +118,19 @@ func RehydrateDailyPlan(
 	}, nil
 }
 
-func (p *DailyWorkoutPlan) ID() string                          { return p.id }
-func (p *DailyWorkoutPlan) WeeklyScheduleID() string            { return p.weeklyScheduleID }
-func (p *DailyWorkoutPlan) RoadmapID() string                   { return p.roadmapID }
-func (p *DailyWorkoutPlan) UserID() string                      { return p.userID }
-func (p *DailyWorkoutPlan) ScheduledDate() time.Time            { return p.scheduledDate }
-func (p *DailyWorkoutPlan) Status() DailyPlanStatus             { return p.status }
-func (p *DailyWorkoutPlan) WorkoutPrescription() WorkoutPrescription { return p.workoutPrescription }
-func (p *DailyWorkoutPlan) ReasoningExplanation() string        { return p.reasoningExplanation }
-func (p *DailyWorkoutPlan) AdjustmentExplanation() string       { return p.adjustmentExplanation }
-func (p *DailyWorkoutPlan) CreatedAt() time.Time                { return p.createdAt }
-func (p *DailyWorkoutPlan) UpdatedAt() time.Time                { return p.updatedAt }
+func (p *DailyWorkoutPlan) ID() string               { return p.id }
+func (p *DailyWorkoutPlan) WeeklyScheduleID() string { return p.weeklyScheduleID }
+func (p *DailyWorkoutPlan) RoadmapID() string        { return p.roadmapID }
+func (p *DailyWorkoutPlan) UserID() string           { return p.userID }
+func (p *DailyWorkoutPlan) ScheduledDate() time.Time { return p.scheduledDate }
+func (p *DailyWorkoutPlan) Status() DailyPlanStatus  { return p.status }
+func (p *DailyWorkoutPlan) WorkoutPrescription() WorkoutPrescription {
+	return p.workoutPrescription
+}
+func (p *DailyWorkoutPlan) ReasoningExplanation() string  { return p.reasoningExplanation }
+func (p *DailyWorkoutPlan) AdjustmentExplanation() string { return p.adjustmentExplanation }
+func (p *DailyWorkoutPlan) CreatedAt() time.Time          { return p.createdAt }
+func (p *DailyWorkoutPlan) UpdatedAt() time.Time          { return p.updatedAt }
 
 // Activate transitions the plan from DRAFT to ACTIVE.
 func (p *DailyWorkoutPlan) Activate(now time.Time) error {
@@ -162,7 +164,10 @@ func (p *DailyWorkoutPlan) Skip(now time.Time) error {
 
 func (s DailyPlanStatus) Valid() bool {
 	switch s {
-	case DailyPlanStatusDraft, DailyPlanStatusActive, DailyPlanStatusCompleted, DailyPlanStatusSkipped:
+	case DailyPlanStatusDraft,
+		DailyPlanStatusActive,
+		DailyPlanStatusCompleted,
+		DailyPlanStatusSkipped:
 		return true
 	default:
 		return false

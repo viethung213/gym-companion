@@ -10,12 +10,13 @@ import (
 
 type Publisher struct {
 	writer *kafka.Writer
+	topic  string
 }
 
 var _ port.BrokerPublisher = (*Publisher)(nil)
 
-func NewPublisher(writer *kafka.Writer) *Publisher {
-	return &Publisher{writer: writer}
+func NewPublisher(writer *kafka.Writer, topic string) *Publisher {
+	return &Publisher{writer: writer, topic: topic}
 }
 
 func (p *Publisher) PublishBatch(ctx context.Context, records []*port.OutboxRecord) error {
@@ -26,6 +27,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, records []*port.OutboxReco
 	msgs := make([]kafka.Message, len(records))
 	for i, r := range records {
 		msgs[i] = kafka.Message{
+			Topic: p.topic,
 			Key:   []byte(r.PartitionKey),
 			Value: r.Payload,
 			Headers: []kafka.Header{

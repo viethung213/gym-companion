@@ -3,9 +3,11 @@ package coaching
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -13,14 +15,13 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	appEvent "github.com/viethung213/gym-companion/internal/coaching/application/event"
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai"
-	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/infrastructure/grpc"
 	coachingKafka "github.com/viethung213/gym-companion/internal/coaching/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/worker"
 	coachingsvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service"
-	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -28,13 +29,26 @@ import (
 )
 
 type ModuleDeps struct {
-	DB            *sql.DB
-	GRPCServer    *grpc.Server
-	KafkaRegistry *sharedKafka.Registry
-	ExerciseClient exercisesvc.ExerciseServiceClient // Optional gRPC client
+	DB              *sql.DB
+	GRPCServer      *grpc.Server
+	KafkaRegistry   *sharedKafka.Registry
+	ExerciseService port.ExerciseQueryService
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+	if isNilDependency(deps.ExerciseService) {
+		return nil, errors.New("exercise query service is required")
+	}
+	if deps.DB == nil {
+		return nil, errors.New("database is required")
+	}
+	if deps.GRPCServer == nil {
+		return nil, errors.New("gRPC server is required")
+	}
+	if deps.KafkaRegistry == nil {
+		return nil, errors.New("kafka registry is required")
+	}
+
 	// 1. Wrap sql.DB with GORM
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
@@ -51,21 +65,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	planRepo := persistence.NewPostgresDailyWorkoutPlanRepository(gormDB)
 	inboxRepo := persistence.NewPostgresInboxRepository(gormDB)
 	outboxRepo := persistence.NewOutboxRepository(gormDB)
+	unitOfWork := persistence.NewUnitOfWork(gormDB)
 	clock := persistence.SystemClock{}
 	ids := persistence.RandomIDGenerator{}
-
-	// 3. Infrastructure Adapters
-	var exerciseAdapter *coachingGrpc.ExerciseAdapter
-	if deps.ExerciseClient != nil {
-		exerciseAdapter = coachingGrpc.NewExerciseAdapter(deps.ExerciseClient)
-	}
 
 	planner := ai.NewMockPlanner()
 
 	// 4. Command & Event Handlers
 	initiateHandler := command.NewInitiateRoadmapHandler(
 		roadmapRepo, scheduleRepo, planRepo,
-		exerciseAdapter, planner, clock, ids,
+		deps.ExerciseService, planner, clock, ids, unitOfWork,
 	)
 	profileCompletedHandler := appEvent.NewProfileCompletedHandler(initiateHandler)
 
@@ -88,8 +97,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("get coaching kafka writer: %w", err)
 	}
-	kafkaPub := coachingKafka.NewPublisher(writer)
+	kafkaPub := coachingKafka.NewPublisher(writer, "coaching.events")
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 1*time.Second)
+	deadLetters := coachingKafka.NewDeadLetterPublisher(
+		writer,
+		"profile.events.dlq",
+	)
 
 	// Kafka Consumer for profile.events topic
 	kafkaConsumer := coachingKafka.NewConsumer(
@@ -98,6 +111,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		"coaching-group",
 		inboxRepo,
 		profileCompletedHandler,
+		deadLetters,
 	)
 
 	// 7. Start Background Workers
@@ -107,23 +121,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in Coaching Outbox background worker: %v", r)
-			}
-		}()
-		outboxWorker.Start(workerCtx)
+		runManagedWorker(workerCtx, "Coaching Outbox", outboxWorker.Start)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in Coaching Kafka consumer: %v", r)
-			}
-		}()
-		kafkaConsumer.Start(workerCtx)
+		runManagedWorker(workerCtx, "Coaching Kafka consumer", kafkaConsumer.Start)
 	}()
 
 	// 8. Shutdown Callback
@@ -138,6 +142,66 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 	log.Println("Coaching Bounded Context initialized successfully.")
 	return shutdown, nil
+}
+
+func runManagedWorker(
+	ctx context.Context,
+	name string,
+	run func(context.Context),
+) {
+	for ctx.Err() == nil {
+		panicked := runWorkerOnce(ctx, name, run)
+		if !panicked || !waitForWorkerRestart(ctx) {
+			return
+		}
+	}
+}
+
+func runWorkerOnce(
+	ctx context.Context,
+	name string,
+	run func(context.Context),
+) (panicked bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			panicked = true
+			log.Printf("PANIC RECOVERED in %s worker: %v", name, recovered)
+		}
+	}()
+	run(ctx)
+
+	return false
+}
+
+func waitForWorkerRestart(ctx context.Context) bool {
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func isNilDependency(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan,
+		reflect.Func,
+		reflect.Interface,
+		reflect.Map,
+		reflect.Pointer,
+		reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }
 
 func RegisterGateway(

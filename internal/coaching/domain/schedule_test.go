@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -14,39 +15,39 @@ func TestGenerateWeeklySchedule(t *testing.T) {
 	startDate := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name                 string
-		experienceLevel      string
+		name                  string
+		experienceLevel       string
 		wantTrainingDaysCount int
-		wantSplitType        string
-		wantErr              bool
+		wantSplitType         string
+		wantErr               bool
 	}{
 		{
-			name:                 "beginner gets 3 days full body",
-			experienceLevel:      "beginner",
+			name:                  "beginner gets 3 days full body",
+			experienceLevel:       "beginner",
 			wantTrainingDaysCount: 3,
-			wantSplitType:        "FullBody",
-			wantErr:              false,
+			wantSplitType:         "FullBody",
+			wantErr:               false,
 		},
 		{
-			name:                 "intermediate gets 4 days upper lower",
-			experienceLevel:      "intermediate",
+			name:                  "intermediate gets 4 days upper lower",
+			experienceLevel:       "intermediate",
 			wantTrainingDaysCount: 4,
-			wantSplitType:        "Upper/Lower",
-			wantErr:              false,
+			wantSplitType:         "Upper/Lower",
+			wantErr:               false,
 		},
 		{
-			name:                 "advanced gets 5 days push pull legs",
-			experienceLevel:      "advanced",
+			name:                  "advanced gets 5 days push pull legs",
+			experienceLevel:       "advanced",
 			wantTrainingDaysCount: 5,
-			wantSplitType:        "Push/Pull/Legs",
-			wantErr:              false,
+			wantSplitType:         "Push/Pull/Legs",
+			wantErr:               false,
 		},
 		{
-			name:                 "invalid experience level returns error",
-			experienceLevel:      "expert",
+			name:                  "invalid experience level returns error",
+			experienceLevel:       "expert",
 			wantTrainingDaysCount: 0,
-			wantSplitType:        "",
-			wantErr:              true,
+			wantSplitType:         "",
+			wantErr:               true,
 		},
 	}
 
@@ -83,6 +84,49 @@ func TestGenerateWeeklySchedule(t *testing.T) {
 			restDays := 7 - len(trainingDays)
 			if restDays < 1 {
 				t.Errorf("BR-AC-01 violated: rest days count = %d, want >= 1", restDays)
+			}
+		})
+	}
+}
+
+func TestGenerateWeeklySchedule_SpreadsTrainingDays(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.July, 20, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		give string
+		want []int
+	}{
+		{name: "beginner uppercase", give: "BEGINNER", want: []int{0, 3, 6}},
+		{name: "intermediate", give: "intermediate", want: []int{0, 2, 4, 6}},
+		{name: "advanced", give: "advanced", want: []int{0, 2, 3, 5, 6}},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			schedule, err := domain.GenerateWeeklySchedule(
+				"schedule-1",
+				"roadmap-1",
+				"user-1",
+				1,
+				start,
+				tt.give,
+				start,
+			)
+			if err != nil {
+				t.Fatalf("generate schedule: %v", err)
+			}
+
+			got := make([]int, 0, len(tt.want))
+			for _, day := range schedule.TrainingDays() {
+				got = append(got, int(day.Date.Sub(start).Hours()/24))
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("training offsets got = %v, want = %v", got, tt.want)
 			}
 		})
 	}

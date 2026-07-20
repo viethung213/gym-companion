@@ -1,62 +1,76 @@
+version: "2"
 run:
-  timeout: 5m
+  go: "1.25"
   issues-exit-code: 1
   tests: true
-  go: '1.25'
-
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet
+    - decorder
     - errcheck
-    - gocritic
-    - errorlint
     - errname
+    - errorlint
+    - forbidigo
     - forcetypeassert
     - gochecknoglobals
     - gochecknoinits
-    - forbidigo
+    - gocritic
+    - goprintffuncname
+    - govet
+    - lll
     - musttag
+    - paralleltest
     - perfsprint
     - prealloc
-    - lll
-    - decorder
     - revive
-    - goprintffuncname
-    - paralleltest
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^os\.Exit$#Chỉ cho phép os.Exit trong main() của package main
+        - pattern: ^log\.Fatal$#Chỉ cho phép log.Fatal trong main() của package main
+        - pattern: ^log\.Fatalf$#Chỉ cho phép log.Fatalf trong main() của package main
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+    lll:
+      line-length: 99
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gocritic
+          - govet
+          - lll
+          - perfsprint
+          - prealloc
+          - revive
+        path: internal/auth/
+    paths:
+      - internal/gen
+      - docs/swagger
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
     - gci
     - gofmt
-
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment # Tắt cảnh báo sắp xếp trường struct để tránh tối ưu hoá mù quáng
-  lll:
-    line-length: 99 # Giới hạn 99 ký tự theo Rule 38
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-  forbidigo:
-    forbid:
-      - '^os\.Exit$#Chỉ cho phép os.Exit trong main() của package main'
-      - '^log\.Fatal$#Chỉ cho phép log.Fatal trong main() của package main'
-      - '^log\.Fatalf$#Chỉ cho phép log.Fatalf trong main() của package main'
-
-issues:
-  # Loại trừ hoàn toàn các thư mục chứa code tự sinh khỏi phạm vi phân tích
-  exclude-dirs:
-    - internal/gen
-    - docs/swagger
-  exclude-rules:
-    - path: internal/auth/
-      linters:
-        - lll
-        - gocritic
-        - revive
-        - govet
-        - perfsprint
-        - prealloc
-
+  exclusions:
+    generated: lax
+    paths:
+      - internal/gen
+      - docs/swagger
+      - third_party$
+      - builtin$
+      - examples$

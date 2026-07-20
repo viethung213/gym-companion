@@ -17,10 +17,10 @@ type IDGenerator interface {
 
 // ExerciseInfo represents exercise data returned from the Exercise module.
 type ExerciseInfo struct {
-	ID             string
-	Name           string
-	Category       string // "Compound" or "Isolation"
-	PrimaryMuscle  string
+	ID              string
+	Name            string
+	Category        string // "Compound" or "Isolation"
+	PrimaryMuscle   string
 	MovementPattern string
 	EquipmentNeeded string
 }
@@ -34,7 +34,10 @@ type ExerciseSearchFilters struct {
 // ExerciseQueryService is the port for querying exercises from the Exercise module.
 // Infrastructure implements this via gRPC adapter.
 type ExerciseQueryService interface {
-	SearchExercises(ctx context.Context, filters ExerciseSearchFilters) ([]ExerciseInfo, error)
+	SearchExercises(
+		ctx context.Context,
+		filters *ExerciseSearchFilters,
+	) ([]ExerciseInfo, error)
 }
 
 // PlanWorkoutRequest contains inputs for the workout planner.
@@ -47,14 +50,19 @@ type PlanWorkoutRequest struct {
 
 // PlanWorkoutResult contains the planner's exercise arrangement.
 type PlanWorkoutResult struct {
-	SelectedExerciseIDs    []string
-	ReasoningExplanation   string
+	SelectedExerciseIDs  []string
+	ReasoningExplanation string
 }
 
 // WorkoutPlanner is the port for arranging exercises into a workout.
 // Currently implemented as a Mock. Swap to Gemini SDK by replacing the implementation.
 type WorkoutPlanner interface {
-	PlanWorkout(ctx context.Context, req PlanWorkoutRequest) (*PlanWorkoutResult, error)
+	PlanWorkout(ctx context.Context, req *PlanWorkoutRequest) (*PlanWorkoutResult, error)
+}
+
+// UnitOfWork coordinates atomic application writes.
+type UnitOfWork interface {
+	WithinTransaction(ctx context.Context, fn func(context.Context) error) error
 }
 
 // OutboxRecord represents a database outbox entry for event publishing.
@@ -81,5 +89,10 @@ type BrokerPublisher interface {
 // InboxRepository defines the port for idempotent event consumption (inbox/outbox_log pattern).
 type InboxRepository interface {
 	IsProcessed(ctx context.Context, eventID string) (bool, error)
-	MarkProcessed(ctx context.Context, eventID, eventType string, payload []byte, partitionKey string) error
+	MarkProcessed(
+		ctx context.Context,
+		eventID, eventType string,
+		payload []byte,
+		partitionKey string,
+	) error
 }

@@ -297,8 +297,8 @@ func toProtoMetadata(metadata *port.Metadata) *exercisemsg.GetCatalogMetadataRes
 	return response
 }
 
-func toProtoStatus(status domain.Status) exercisemsg.ExerciseStatus {
-	switch status {
+func toProtoStatus(exerciseStatus domain.Status) exercisemsg.ExerciseStatus {
+	switch exerciseStatus {
 	case domain.StatusDraft:
 		return exercisemsg.ExerciseStatus_EXERCISE_STATUS_DRAFT
 	case domain.StatusPendingApproval:

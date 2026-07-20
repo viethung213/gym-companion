@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -123,14 +124,14 @@ func RehydrateWeeklySchedule(
 }
 
 func (s *WeeklySchedule) ID() string              { return s.id }
-func (s *WeeklySchedule) RoadmapID() string        { return s.roadmapID }
-func (s *WeeklySchedule) UserID() string           { return s.userID }
-func (s *WeeklySchedule) WeekNumber() int          { return s.weekNumber }
-func (s *WeeklySchedule) StartDate() time.Time     { return s.startDate }
-func (s *WeeklySchedule) EndDate() time.Time       { return s.endDate }
-func (s *WeeklySchedule) MuscleSplitType() string  { return s.muscleSplitType }
-func (s *WeeklySchedule) CreatedAt() time.Time     { return s.createdAt }
-func (s *WeeklySchedule) UpdatedAt() time.Time     { return s.updatedAt }
+func (s *WeeklySchedule) RoadmapID() string       { return s.roadmapID }
+func (s *WeeklySchedule) UserID() string          { return s.userID }
+func (s *WeeklySchedule) WeekNumber() int         { return s.weekNumber }
+func (s *WeeklySchedule) StartDate() time.Time    { return s.startDate }
+func (s *WeeklySchedule) EndDate() time.Time      { return s.endDate }
+func (s *WeeklySchedule) MuscleSplitType() string { return s.muscleSplitType }
+func (s *WeeklySchedule) CreatedAt() time.Time    { return s.createdAt }
+func (s *WeeklySchedule) UpdatedAt() time.Time    { return s.updatedAt }
 
 // ScheduleDays returns a defensive copy of the schedule days.
 func (s *WeeklySchedule) ScheduleDays() []ScheduleDay {
@@ -165,8 +166,10 @@ func (s *WeeklySchedule) SetDailyPlanID(date time.Time, planID string) error {
 }
 
 // resolveTrainingPlan determines training days count and muscle split type.
-func resolveTrainingPlan(experienceLevel string) (int, string, error) {
-	switch experienceLevel {
+func resolveTrainingPlan(
+	experienceLevel string,
+) (trainingDays int, splitType string, err error) {
+	switch strings.ToLower(strings.TrimSpace(experienceLevel)) {
 	case "beginner":
 		return 3, "FullBody", nil
 	case "intermediate":
@@ -210,13 +213,13 @@ func spreadTrainingSlots(count int) [daysPerWeek]bool {
 	if count <= 0 || count > maxTrainingDaysPerWeek {
 		return slots
 	}
-	// Evenly distribute training days: Mon(0), Wed(2), Fri(4) for 3 days, etc.
-	gap := daysPerWeek / count
+	if count == 1 {
+		slots[0] = true
+		return slots
+	}
+
 	for i := range count {
-		idx := i * gap
-		if idx >= daysPerWeek {
-			idx = daysPerWeek - 1
-		}
+		idx := (i*(daysPerWeek-1) + (count-1)/2) / (count - 1)
 		slots[idx] = true
 	}
 	return slots

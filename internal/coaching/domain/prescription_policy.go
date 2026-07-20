@@ -1,6 +1,6 @@
 package domain
 
-// PrescriptionPolicy specifies default volume (sets/reps) rules based on experience level and exercise category.
+// PrescriptionPolicy specifies default volume rules by experience and category.
 type PrescriptionPolicy struct{}
 
 type PrescriptionSpec struct {
