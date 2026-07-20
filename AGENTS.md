@@ -1,9 +1,6 @@
 # Agent Instructions
 
 ## 1. Agent Behavior
-- **Mandatory Go Workflow**: Before writing, modifying, or reviewing Go code,
-  follow `.agents/rules/go-feature-workflow.md` in addition to the applicable
-  Go skill.
 - **Think Before Coding**: State assumptions, ask if unsure, and surface tradeoffs. Don't hide confusion. If a requirement is unclear, or if you must make any assumptions, you MUST stop and ask for explicit confirmation from the user before writing any code or continuing.
 - **Simplicity First**: Write the minimum code required. No speculative features, abstractions, or "flexibility" not requested.
 - **Surgical Edits**: Change only what is necessary. Match existing style. Cleanup only unused code created by your changes.
@@ -26,8 +23,6 @@
   - Dependencies must point inward: Domain must not depend on infrastructure. Application defines interfaces, not implementations.
 - **Event-Driven Standards (CloudEvents)**:
   - If event-driven messaging is introduced, all event envelopes must adhere strictly to the **CloudEvents** specification. The `data` payload of these events must follow the camelCase JSON mapping standard, while envelope-level extension attributes must remain all-lowercase.
-  - Event producers and consumers must use the shared CloudEvents codec and
-    generated protobuf contracts. Handwritten wire payloads are prohibited.
 - **Pre-Commit Quality Assurance**:
   - Before committing any changes to version control, all code validation procedures—including styling/formatting verification, API contract/schema linting, and full test suite execution—must be executed and pass successfully to ensure codebase integrity and correctness.
 - **Test-Driven & Verifiable**:
@@ -43,14 +38,8 @@
   - Domain layer không import thư viện ngoài (không GORM, không Gin, không ORM tag). Domain structs không chứa JSON/DB tag; mapping do Infrastructure qua `ToDomain()` / `ToPersistence()`.
   - Mọi thay đổi trạng thái Aggregate phải qua method nghiệp vụ rõ tên (`Activate()`, `AddSet()`).
   - Interface (Port) định nghĩa ở nơi **sử dụng** (Domain/Application), không ở nơi triển khai (Infrastructure). Dependency Injection qua constructor.
-  - Application dependencies must be named by capability, not by transport
-    (for example, `ExerciseQueryService`, not `ExerciseClient`). Required
-    dependencies must be validated during initialization; typed-nil injection
-    is prohibited.
   - Không bỏ qua lỗi: luôn `if err != nil`, wrap lỗi bằng `fmt.Errorf("context: %w", err)`. Goroutine ngầm bắt buộc dùng `context.Context`.
   - Không `AutoMigrate` GORM ở production; dùng migration SQL đánh số version. Các thao tác ghi phối hợp nhiều Aggregate chạy chung 1 transaction với `context.Context`.
-  - Coordinated writes are atomic by default. Saga/eventual-consistency
-    workflows require explicit Developer approval before implementation.
 - **API & Protobuf Convention**:
   - Phương pháp: **Contract-First** — `.proto` là nguồn sự thật duy nhất cho mọi API và Event. Quản lý bằng **Buf CLI**: lint + breaking change detection.
   - Sinh mã 1 lần tại `/proto`: Go stubs → `/internal/gen/go/contracts/`, OpenAPI → `/docs/swagger/contracts/`.
