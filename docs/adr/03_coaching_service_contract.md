@@ -1,7 +1,7 @@
 # ADR 03: Ý Định Thiết Kế Contract Cho Coaching Service
 
-* **Trạng thái**: Proposed
-* **Tác giả**: Codex & Developer
+* **Trạng thái**: Accepted
+* **Tác giả**: Codex, Developer & Lead Architect
 
 ---
 
@@ -33,190 +33,78 @@ Tách **Coaching & Planning** thành bounded context riêng:
 - PostgreSQL schema: `coaching`.
 
 - `WorkoutExecutionService`: điều phối và ghi nhận buổi tập thực tế.
-- `CoachingService`: lập lộ trình, sinh lịch tuần, sinh giáo án ngày, và xử lý adaptive review.
+- `CoachingService`: lập lộ trình, quản lý lịch tuần, sinh giáo án ngày JIT, và xử lý adaptive check-in.
 
 Cách tách này giữ domain, dữ liệu và contract của hai nghiệp vụ độc lập.
 
 ---
 
-## 3. Danh Sách Command
+## 3. Danh Sách Command Thực Tế
 
 | Command | Ý nghĩa |
 |---|---|
-| `InitiateRoadmap` | Nội bộ: tạo roadmap và lịch tuần đầu sau `ProfileCompleted`. |
-| `GenerateNextWeeklySchedule` | Nội bộ: sinh lịch tuần kế tiếp từ kết quả tập thực tế. |
-| `GenerateDailyWorkoutPlan` | Public: sinh giáo án JIT từ check-in của user. |
-| `RegenerateDailyWorkoutPlan` | Public: thay plan chưa sử dụng khi ngữ cảnh thay đổi. |
-| `RespondAdaptiveRecommendation` | Public: nhận lựa chọn của user cho đề xuất thích ứng. |
-| `ResumeRoadmap` | Public: cho user tiếp tục roadmap đang tạm dừng. |
-| `PauseRoadmap` | Nội bộ: tạm dừng roadmap theo adaptive recommendation. |
-| `SkipScheduledDay` | Nội bộ: đánh dấu bỏ buổi, không tự dồn lịch. |
-| `RescheduleScheduleDay` | Nội bộ: dời ngày tập sau khi user xác nhận. |
-| `RunAdaptiveReview` | Nội bộ: đánh giá CR và các signal B1–B4. |
-| `CompleteRoadmap` | Nội bộ: hoàn thành roadmap khi kết thúc chu kỳ. |
+| `InitiateRoadmap` | Khởi tạo roadmap và lịch tuần đầu tiên dựa trên thông tin khảo sát. |
+| `SubmitPreWorkoutCheckIn` | Gửi câu trả lời khảo sát check-in động trước buổi tập (báo mệt, đau khớp, thiếu dụng cụ). |
+
+Các hành động điều chỉnh khác như dời ngày tập, tạm dừng, deload... được thực thi trực tiếp qua các câu lệnh nghiệp vụ nội bộ ở backend hoặc do AI Agent tự động gọi Tool cập nhật DB, tránh phơi ra các API CRUD tĩnh phức tạp.
 
 ---
 
-## 4. Danh Sách Query
+## 4. Danh Sách Query Thực Tế
 
 | Query | Ý nghĩa |
 |---|---|
-| `ListWorkoutRoadmaps` | Lấy danh sách roadmap của user, có thể lọc theo trạng thái. |
-| `GetWorkoutRoadmap` | Lấy chi tiết một roadmap. |
-| `ListWeeklySchedules` | Lấy lịch tuần theo roadmap hoặc khoảng ngày. |
-| `GetWeeklySchedule` | Lấy chi tiết một lịch tuần. |
-| `GetDailyWorkoutPlan` | Lấy giáo án ngày để hiển thị hoặc bắt đầu buổi tập. |
-| `ListAdaptiveRecommendations` | Lấy đề xuất thích ứng đang chờ hoặc lịch sử. |
+| `ListWorkoutRoadmaps` | Lấy danh sách lịch sử các roadmap cũ (đã COMPLETED hoặc CANCELLED). |
+| `GetWorkoutRoadmap` | Lấy chi tiết một roadmap cũ theo ID. |
+| `GetActiveRoadmap` | Lấy nhanh duy nhất 1 roadmap đang hoạt động (ACTIVE) kèm theo lịch tuần hiện tại. |
+| `GetPreWorkoutCheckIn` | Lấy bộ câu hỏi check-in động (trắc nghiệm + tự điền) được AI sinh trước cho hôm nay. |
+| `GetDailyWorkoutPlan` | Lấy giáo án tập luyện của ngày hôm nay. |
 
-Không dùng endpoint kiểu `/workout-roadmaps/active`.
-`active` là trạng thái của resource, không phải resource.
-Thiết kế phù hợp hơn là:
-
-```http
-GET /api/v1/users/{user_id}/workout-roadmaps?status=ROADMAP_STATUS_ACTIVE
-GET /api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}
-```
+*Lưu ý về endpoint `/active`*: Endpoint `GET /api/v1/users/{user_id}/workout-roadmaps/active` được chấp thuận như một ngoại lệ thiết kế hợp lý nhằm tối ưu hóa trải nghiệm (UX-driven API design), giúp Client lấy nhanh dữ liệu trang chủ chỉ với 1 lượt gọi.
 
 ---
 
-## 5. Vì Sao Cần Adaptive Review
+## 5. Cơ Chế Thích Ứng Động (Dynamic Adaptive Check-In)
 
-BR-AC-04 đến BR-AC-08 mô tả các rule điều chỉnh coaching sau khi có dữ liệu thực tế.
-Nếu chỉ có API generate roadmap/schedule/plan, hệ thống chưa đủ khả năng phản ứng với hành vi thật của user.
+Quy tắc thích ứng (BR-AC-04 đến BR-AC-08) được vận hành động thông qua 2 cơ chế tương tác:
 
-Adaptive review cần tồn tại vì:
-
-- user có thể bỏ tập nhiều ngày;
-- user có thể bỏ cùng một ngày trong tuần lặp lại;
-- user có thể tập quá tải;
-- user có thể bị plateau;
-- cuối chu kỳ cần tính completion rate để quyết định roadmap tiếp theo.
-
-Tuy nhiên, không phải adaptive signal nào cũng được tự động áp dụng.
-Một số signal cần tạo đề xuất và chờ user chọn.
-Vì vậy cần model `AdaptiveRecommendation`.
-
-Ví dụ:
-
-- BR-AC-05: không hoạt động 7 ngày → đề xuất tiếp tục, reset tuần, hoặc pause roadmap.
-- BR-AC-06: bỏ cùng ngày ≥ 3 lần → đề xuất dời lịch, chỉ áp dụng nếu user đồng ý.
-- BR-AC-08: plateau → đề xuất deload, đổi bài, hoặc tăng set.
-
-Ngược lại, BR-AC-07 về overtraining có tính an toàn cao hơn, nên hệ thống có thể bắt buộc chèn ngày nghỉ.
+1. **Khảo sát động trước buổi tập (Pre-generated Check-In)**:
+   - Cuối mỗi buổi tập trước, hệ thống chạy background job gọi AI Agent sinh sẵn bộ câu hỏi check-in động cá nhân hóa cho buổi tiếp theo (ví dụ hỏi thăm chấn thương cũ).
+   - Khi mở app, Client lấy bộ câu hỏi từ DB lên hiển thị lập tức (0ms latency).
+   - Người dùng trả lời, hệ thống cập nhật DB và tự động kích hoạt AI sửa lại giáo án ngày (JIT) nếu phát hiện chấn thương mới hoặc thiếu thiết bị.
+2. **Tương tác qua Chat tự do với AI Coach**:
+   - AI Coach tự động phát hiện các sự kiện bất thường (ví dụ: bùng tập 3 buổi liên tiếp) và bắt đầu hội thoại hỏi han.
+   - Người dùng chat trả lời, AI Agent tự trích xuất intent và gọi Tool Backend (`UpdateWorkoutContext`) để trực tiếp thay đổi lịch tập hoặc cơ cấu lại bài tập dưới database.
 
 ---
 
 ## 6. Vì Sao Không Dùng `Update` / `Delete` Chung Chung
 
-`WorkoutRoadmap`, `WeeklySchedule`, và `DailyWorkoutPlan` là dữ liệu nghiệp vụ do hệ thống sinh ra.
-Chúng cần audit được theo thời gian.
-
-Không nên có API generic như:
-
-```http
-PUT /workout-roadmaps/{id}
-DELETE /weekly-schedules/{id}
-```
-
-Các thao tác thay đổi phải là command nghiệp vụ rõ nghĩa:
-
-- `RespondAdaptiveRecommendation`
-- `RescheduleScheduleDay`
-- `SkipScheduledDay`
-- `RegenerateDailyWorkoutPlan`
-- `PauseRoadmap`
-- `ResumeRoadmap`
-
-Cách này giúp contract thể hiện đúng lý do thay đổi trạng thái, thay vì chỉ cho phép client sửa dữ liệu trực tiếp.
+Các thao tác thay đổi phải là command nghiệp vụ rõ nghĩa để đảm bảo tính audit lịch sử và giữ vững ranh giới nghiệp vụ, thay vì cho phép client tự sửa dữ liệu DB trực tiếp bằng API generic `PUT/DELETE`.
 
 ---
 
 ## 7. Vì Sao Event Payload Phải Tối Thiểu
 
-Event trong hệ thống phải đi theo CloudEvents.
-Envelope chứa các thông tin kỹ thuật như:
-
-- `id`
-- `source`
-- `type`
-- `time`
-- extension attributes, ví dụ `userid`
-
-Phần `data` chỉ nên chứa dữ liệu nghiệp vụ tối thiểu cần cho consumer.
-
-Vì vậy event mới của coaching không nên nhét `user_id` vào payload nếu user id đã nằm trong CloudEvents extension và được dùng làm Kafka partition key.
-
-Ví dụ payload tốt:
-
-```proto
-message WeeklyScheduleGenerated {
-  string weekly_schedule_id = 1;
-  string roadmap_id = 2;
-  int32 week_number = 3;
-  google.type.Date start_date = 4;
-  google.type.Date end_date = 5;
-  google.protobuf.Timestamp generated_at = 6;
-}
-```
-
-Payload này đủ để consumer biết lịch nào được sinh, thuộc roadmap nào, tuần mấy, có hiệu lực trong khoảng nào.
-Thông tin routing/user ownership nằm ở envelope.
+Event trong hệ thống tuân theo CloudEvents. Phần `data` chỉ chứa dữ liệu nghiệp vụ tối thiểu để tránh dư thừa. Thông tin định tuyến (ví dụ: `user_id`) nằm ở envelope và được dùng làm Kafka partition key.
 
 ---
 
 ## 8. Quy Ước Thời Gian
 
-Contract cần phân biệt rõ:
-
-- `google.type.Date`: ngày nghiệp vụ, không kèm giờ.
-- `google.protobuf.Timestamp`: thời điểm chính xác hệ thống ghi nhận.
-
-Áp dụng:
-
-- `start_date`, `end_date`, `scheduled_date` dùng `google.type.Date`.
-- `generated_at`, `created_at`, `responded_at`, `paused_at`, `resumed_at` dùng `google.protobuf.Timestamp`.
-
-Điều này tránh nhầm giữa "ngày dự kiến tập" và "thời điểm hệ thống sinh dữ liệu".
+- `google.type.Date`: ngày nghiệp vụ (không kèm giờ), ví dụ: `start_date`, `end_date`, `scheduled_date`.
+- `google.protobuf.Timestamp`: thời điểm chính xác hệ thống ghi nhận, ví dụ: `generated_at`, `initiated_at`.
 
 ---
 
 ## 9. Hệ Quả Triển Khai
 
-Khi triển khai proto cho `CoachingService`:
-
-- dùng command/query rõ ràng;
-- REST URL dùng danh từ số nhiều;
-- command có input ngoài path dùng `body: "payload"`;
-- query không có body;
-- khai báo security bằng OpenAPI annotation trong proto;
-- không viết manual route hoặc manual OpenAPI;
-- chạy `buf lint`, `buf breaking`, và `buf generate`.
-
-Backend Go phải là nơi tính toán số liệu an toàn:
-
-- set;
-- rep;
-- tạ;
-- volume;
-- progressive overload;
-- validation theo BR-AC-01 và BR-AC-02.
-
-Agent chỉ hỗ trợ chọn bài tập hoặc thay thế bài tập theo ngữ cảnh.
-Agent không được là nguồn quyết định cuối cùng cho các con số tải trọng.
+- Dùng command/query rõ ràng, không viết manual route.
+- Backend Go là nơi chịu trách nhiệm tính toán số liệu tải trọng an toàn (set, rep, tạ, volume) theo công thức Epley/Rule Engine.
+- AI Agent đóng vai trò Reasoning Layer: chỉ hỗ trợ chọn bài tập, sắp xếp bài tập và giải thích điều chỉnh dựa trên ngữ cảnh an toàn do Backend cung cấp.
 
 ---
 
 ## 10. Kết Luận
 
-`CoachingService` cần tồn tại để tách nghiệp vụ lập kế hoạch khỏi nghiệp vụ thực thi buổi tập.
-Các API planning tạo dữ liệu theo lifecycle của roadmap, weekly schedule và daily plan.
-Các API adaptive xử lý phản ứng sau khi có dữ liệu tập thực tế.
-
-Thiết kế này giúp contract:
-
-- bám đúng DDD boundary;
-- tránh endpoint mơ hồ như `/active`;
-- tránh `Update/Delete` chung chung;
-- giữ event payload tối thiểu;
-- tuân thủ contract-first và CloudEvents;
-- phù hợp với quyết định ADR 02: Backend Go tính toán an toàn, Agent chỉ hỗ trợ chọn bài.
+Tách biệt rõ ràng **Coaching** (Lập kế hoạch) và **Execution** (Thực thi) giúp hệ thống giữ vững Bounded Context, tối giản cấu trúc API gRPC/REST, và đảm bảo an toàn tuyệt đối cho người tập nhờ cơ chế kiểm soát kép giữa Backend Go và AI Agent.
