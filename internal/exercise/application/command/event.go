@@ -1,49 +1,16 @@
 package command
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	exercisev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/event"
+	exercisev1msg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
-
-type exerciseEventPayload struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
-	BodyPartID         string   `json:"bodyPartId"`
-	EquipmentID        string   `json:"equipmentId"`
-	TargetMuscleID     string   `json:"targetMuscleId"`
-	Instructions       string   `json:"instructions"`
-	SecondaryMuscleIDs []string `json:"secondaryMuscleIds"`
-	ThumbnailURL       string   `json:"thumbnailUrl"`
-	MediaURL           string   `json:"mediaUrl"`
-	VideoURL           string   `json:"videoUrl"`
-	Difficulty         string   `json:"difficulty"`
-	DefaultRestSeconds int32    `json:"defaultRestSeconds"`
-	TagIDs             []string `json:"tagIds"`
-	Status             string   `json:"status"`
-}
-
-func newExerciseEventPayload(info *domain.Info) exerciseEventPayload {
-	return exerciseEventPayload{
-		ID:                 info.ID,
-		Name:               info.Name,
-		BodyPartID:         info.BodyPartID,
-		EquipmentID:        info.EquipmentID,
-		TargetMuscleID:     info.TargetMuscleID,
-		Instructions:       info.Instructions,
-		SecondaryMuscleIDs: info.SecondaryMuscleIDs,
-		ThumbnailURL:       info.ThumbnailURL,
-		MediaURL:           info.MediaURL,
-		VideoURL:           info.VideoURL,
-		Difficulty:         info.Difficulty,
-		DefaultRestSeconds: info.DefaultRestSeconds,
-		TagIDs:             info.TagIDs,
-		Status:             string(info.Status),
-	}
-}
 
 func newEvent(
 	ids port.IDGenerator,
@@ -52,7 +19,35 @@ func newEvent(
 	now time.Time,
 ) (*domain.Event, error) {
 	info := exercise.Info()
-	payload, err := json.Marshal(newExerciseEventPayload(&info))
+	exerciseInfo := mapToProtoExerciseInfo(&info)
+
+	var protoMsg proto.Message
+	switch eventType {
+	case domain.EventTypeExerciseCreated:
+		protoMsg = &exercisev1event.ExerciseCreatedEvent{
+			ExerciseId: exerciseInfo.Id,
+			Exercise:   exerciseInfo,
+		}
+	case domain.EventTypeExerciseSubmittedForApproval:
+		protoMsg = &exercisev1event.ExerciseSubmittedForApprovalEvent{
+			ExerciseId: exerciseInfo.Id,
+			Exercise:   exerciseInfo,
+		}
+	case domain.EventTypeExerciseApproved:
+		protoMsg = &exercisev1event.ExerciseApprovedEvent{
+			ExerciseId: exerciseInfo.Id,
+			Exercise:   exerciseInfo,
+		}
+	case domain.EventTypeExerciseArchived:
+		protoMsg = &exercisev1event.ExerciseArchivedEvent{
+			ExerciseId: exerciseInfo.Id,
+			Exercise:   exerciseInfo,
+		}
+	default:
+		return nil, fmt.Errorf("unknown event type: %s", eventType)
+	}
+
+	payloadBytes, err := protojson.Marshal(protoMsg)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidOutboxPayload, err)
 	}
@@ -65,8 +60,42 @@ func newEvent(
 	return &domain.Event{
 		ID:           id,
 		Type:         eventType,
-		PartitionKey: exercise.Info().ID,
-		Payload:      payload,
+		PartitionKey: info.ID,
+		Payload:      payloadBytes,
 		CreatedAt:    now,
 	}, nil
+}
+
+func mapToProtoExerciseInfo(info *domain.Info) *exercisev1msg.ExerciseInfo {
+	return &exercisev1msg.ExerciseInfo{
+		Id:                 info.ID,
+		Name:               info.Name,
+		BodyPartId:         info.BodyPartID,
+		EquipmentId:        info.EquipmentID,
+		TargetMuscleId:     info.TargetMuscleID,
+		Instructions:       info.Instructions,
+		SecondaryMuscleIds: info.SecondaryMuscleIDs,
+		ThumbnailUrl:       info.ThumbnailURL,
+		MediaUrl:           info.MediaURL,
+		VideoUrl:           info.VideoURL,
+		Difficulty:         info.Difficulty,
+		DefaultRestSeconds: info.DefaultRestSeconds,
+		TagIds:             info.TagIDs,
+		Status:             mapToProtoStatus(info.Status),
+	}
+}
+
+func mapToProtoStatus(status domain.Status) exercisev1msg.ExerciseStatus {
+	switch status {
+	case domain.StatusDraft:
+		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_DRAFT
+	case domain.StatusPendingApproval:
+		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_PENDING_APPROVAL
+	case domain.StatusActive:
+		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_ACTIVE
+	case domain.StatusArchived:
+		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_ARCHIVED
+	default:
+		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_UNSPECIFIED
+	}
 }
