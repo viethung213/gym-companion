@@ -108,6 +108,7 @@ message WorkoutRoadmap {
   RoadmapStatus status = 3;
   google.type.Date start_date = 4;
   google.type.Date end_date = 5;
+  string planning_tier = 8; // "BEGINNER" | "EXPERIENCED" (snapshot tại InitiateRoadmap - BR-AC-11)
 }
 
 message WeeklySchedule {
@@ -127,6 +128,8 @@ message ScheduleDay {
   WorkoutDayStatus status = 3;
   repeated string target_muscle_groups = 4;
   string daily_workout_plan_id = 5;
+  string time_window = 6; // Slot rảnh theo AvailabilitySlot (BR-AC-09)
+  int32 planned_duration_minutes = 7;
 }
 
 message DailyWorkoutPlan {

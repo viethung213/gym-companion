@@ -20,16 +20,26 @@ message Injury {
   string recovered_at = 7;
 }
 
+// AvailabilitySlot mô tả 1 ngày trong tuần user rảnh để tập (BR-AC-09)
+message AvailabilitySlot {
+  string day_of_week = 1; // "MONDAY".."SUNDAY"
+  string time_window = 2; // "MORNING" | "AFTERNOON" | "EVENING", hoặc "HH:MM-HH:MM"
+  int32 max_duration_minutes = 3;
+}
+
 message SaveHealthProfileRequest {
   string user_id = 1;
   float weight_kg = 2;
   float height_cm = 3;
   int32 age = 4;
   string gender = 5;
-  repeated string goals = 6;
-  repeated InjuryInput injuries = 7;
-  string experience_level = 8; // "BEGINNER", "INTERMEDIATE", "ADVANCED"
-  repeated string preferred_workout_times = 9;
+  string primary_goal = 6; // "MUSCLE_GAIN" | "FAT_LOSS" (BR-AC-14)
+  repeated string secondary_goals = 7;
+  repeated InjuryInput injuries = 8;
+  string experience_level = 9; // "BEGINNER", "INTERMEDIATE", "ADVANCED"
+  repeated AvailabilitySlot availability = 10;
+  repeated string preferred_muscle_groups = 11; // tối đa 2, optional (FR-UM-05, BR-AC-10)
+  repeated string available_equipment = 12; // Dụng cụ sẵn có, rỗng = bodyweight (FR-UM-06, BR-AC-13)
 }
 
 message SaveHealthProfileResponse {
@@ -49,12 +59,15 @@ message GetProfileResponse {
   float height_cm = 3;
   int32 age = 4;
   string gender = 5;
-  repeated string goals = 6;
-  string experience_level = 7;
-  repeated string preferred_workout_times = 8;
-  repeated Injury injuries = 9;
-  string created_at = 10;
-  string updated_at = 11;
+  string primary_goal = 6;
+  repeated string secondary_goals = 7;
+  string experience_level = 8;
+  repeated AvailabilitySlot availability = 9;
+  repeated string preferred_muscle_groups = 10;
+  repeated string available_equipment = 11;
+  repeated Injury injuries = 12;
+  string created_at = 13;
+  string updated_at = 14;
 }
 
 message UpdateProfileRequest {
@@ -63,9 +76,12 @@ message UpdateProfileRequest {
   float height_cm = 3;
   int32 age = 4;
   string gender = 5;
-  repeated string goals = 6;
-  string experience_level = 7;
-  repeated string preferred_workout_times = 8;
+  string primary_goal = 6;
+  repeated string secondary_goals = 7;
+  string experience_level = 8;
+  repeated AvailabilitySlot availability = 9;
+  repeated string preferred_muscle_groups = 10;
+  repeated string available_equipment = 11;
 }
 
 message UpdateProfileResponse {
