@@ -12,11 +12,10 @@
   - `Injury`: Vùng cơ bị thương, ngày báo, trạng thái (`Active` | `Recovered`).
 - **Value Objects**:
   - `BiologicalMetrics`: Tuổi, giới tính, chiều cao, cân nặng hiện tại, tỷ lệ mỡ.
-  - `ExperienceLevel`: `Beginner` | `Intermediate` | `Advanced` — nguồn suy ra `PlanningTier` cho `Coaching` (BR-AC-11).
-  - `GoalSet`: `primary_goal` (bắt buộc, quyết định split/overload/rep-range) và `secondary_goals` (tối đa 1, chỉ ảnh hưởng accessory — BR-AC-14).
-  - `WeeklyAvailability`: Danh sách `AvailabilitySlot` (ngày trong tuần, khung giờ, thời lượng tối đa) — thay thế khái niệm "khung giờ tập cố định" cũ; là ràng buộc cứng khi `Coaching` xếp `WeeklySchedule` (BR-AC-09).
-  - `PreferredMuscleGroups`: Tối đa 2 nhóm cơ user muốn ưu tiên (FR-UM-05, optional).
-  - `AvailableEquipment`: Danh sách `equipment_id` user thực sự có; rỗng = chỉ dùng bài Bodyweight (FR-UM-06, BR-AC-13).
+  - `ExperienceLevel`: `Beginner` | `Intermediate` | `Advanced` — nguồn suy ra `PlanningTier` cho `Coaching` (BR-AC-12).
+  - `GoalSet`: `primary_goal` (bắt buộc thể trạng, quyết định dinh dưỡng/split/overload) và `secondary_goal` (tùy chọn vùng/nhóm cơ ưu tiên — BR-AC-15).
+  - `WeeklyAvailability`: Danh sách `AvailabilitySlot` (ngày trong tuần, khung giờ, thời lượng tối đa) — thay thế khái niệm "khung giờ tập cố định" cũ; là ràng buộc cứng khi `Coaching` xếp `WeeklySchedule` (BR-AC-10).
+  - `AvailableEquipment`: Danh sách `equipment_id` user thực sự có; rỗng = chỉ dùng bài Bodyweight (FR-UM-06, BR-AC-14).
   - `ChatbotContext`: Dị ứng thức ăn (thiết bị/dụng cụ đã tách sang `AvailableEquipment` là field chính thức, không còn thu thập ngẫu nhiên qua chatbot).
   - `CoachPersonality`: Phong cách Coach (`DrillSergeant` | `BestFriend` | `DataAnalyst`).
 - **Repository**: `UserRepository`
@@ -26,7 +25,6 @@
   - `InjuryRecovered`: Cho phép phục hồi bài tập đã loại bỏ.
 - **Invariants**:
   - `ActiveCoachEnabled = true` chỉ khi hồ sơ đạt ≥ 80% độ hoàn thiện (gồm các chỉ số sinh học bắt buộc, `ExperienceLevel`, `primary_goal`, và tối thiểu 1 `AvailabilitySlot`).
-  - `GoalSet`: nếu `primary_goal` và `secondary_goals` xung đột nhau (VD Tăng cơ + Giảm mỡ) mà User không xác nhận `primary_goal` rõ ràng → hồ sơ không được coi là hoàn thiện đủ điều kiện `InitiateRoadmap` (BR-AC-14).
 
 #### Aggregate Root: `BodyMetricsHistory`
 - **Nhiệm vụ**: Lưu lịch sử thay đổi hình thể theo thời gian.
@@ -46,10 +44,10 @@
 #### Aggregate Root: `WorkoutRoadmap`
 - **Nhiệm vụ**: Kiểm soát lộ trình tập luyện 4 tuần và trạng thái chu kỳ.
 - **Value Objects**:
-  - `RoadmapPhase`: Giai đoạn hiện tại và Progressive Overload target (`target_overload_percent` — giá trị cụ thể do `PlanningTier` quyết định, xem BR-AC-11).
+  - `RoadmapPhase`: Giai đoạn hiện tại và Progressive Overload target (`target_overload_percent` — giá trị cụ thể do `PlanningTier` quyết định, xem BR-AC-12).
   - `CompletionRate`: Tỷ lệ hoàn thành tính cuối chu kỳ (CR).
   - `PlanningTier`: Snapshot `ExperienceLevel` của User tại thời điểm `InitiateRoadmap` (`Beginner` | `Experienced`). Cố định trong suốt vòng đời roadmap — user đổi `experience_level` giữa chừng không đổi tier của roadmap đang chạy, chỉ áp dụng cho roadmap kế tiếp.
-  - `PrimaryGoal`: Snapshot `primary_goal` tại thời điểm khởi tạo, quyết định `MuscleSplit` và rep-range cho toàn bộ roadmap (BR-AC-14).
+  - `PrimaryGoal`: Snapshot `primary_goal` tại thời điểm khởi tạo, quyết định `MuscleSplit` và rep-range cho toàn bộ roadmap (BR-AC-15).
 - **Repository**: `WorkoutRoadmapRepository`
 - **Domain Events**:
   - `RoadmapInitiated`: Khởi tạo lộ trình đầu tiên.
@@ -63,8 +61,8 @@
 #### Aggregate Root: `WeeklySchedule`
 - **Nhiệm vụ**: Lịch tập/nghỉ của một tuần cụ thể, tham chiếu `WorkoutRoadmapId` bằng ID.
 - **Value Objects**:
-  - `MuscleSplit`: Nhóm cơ phân bổ cho từng ngày tập, ưu tiên `PreferredMuscleGroups` trong giới hạn sàn cân bằng (BR-AC-10).
-  - `AvailabilityWindow`: Mỗi `ScheduleDay` mang theo `time_window` + `planned_duration_minutes`, đối chiếu từ `WeeklyAvailability` của User tại thời điểm sinh lịch (BR-AC-09).
+  - `MuscleSplit`: Nhóm cơ phân bổ cho từng ngày tập, ưu tiên vùng/nhóm cơ trong `secondary_goal` trong giới hạn sàn cân bằng (BR-AC-11).
+  - `AvailabilityWindow`: Mỗi `ScheduleDay` mang theo `time_window` + `planned_duration_minutes`, đối chiếu từ `WeeklyAvailability` của User tại thời điểm sinh lịch (BR-AC-10).
   - `DailyPlanIds`: Danh sách ID tham chiếu tới các `DailyWorkoutPlan`.
 - **Repository**: `WeeklyScheduleRepository`
 - **Domain Events**:
@@ -73,27 +71,27 @@
 - **Invariants**:
   - Tối thiểu 1 ngày nghỉ hoàn toàn, tối đa 6 ngày tập trong tuần (BR-AC-01).
   - Buổi bỏ tập đánh dấu "Bỏ qua", không tự dồn bù chưa có xác nhận (BR-AC-03).
-  - Mỗi `ScheduleDay` chỉ được xếp vào slot có trong `WeeklyAvailability`; số buổi/tuần không được vượt số slot rảnh (BR-AC-09).
+  - Mỗi `ScheduleDay` chỉ được xếp vào slot có trong `WeeklyAvailability`; số buổi/tuần không được vượt số slot rảnh (BR-AC-10).
 
 #### Aggregate Root: `DailyWorkoutPlan`
 - **Nhiệm vụ**: Giáo án chi tiết một buổi tập, sinh JIT để tránh lock `WeeklySchedule`.
 - **Value Objects**:
-  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, warm-up/cool-down. Mọi `exercise_id` phải nằm trong danh mục lọc theo `AvailableEquipment` (BR-AC-13).
-- **Repository**: `DailyWorkoutPlanRepository` — cần hỗ trợ `GetRecentExerciseIDs(userID, muscleGroup, lookbackWeeks)` để `AdaptiveCoachEngine` tránh chọn lại accessory/finisher đã dùng gần đây (BR-AC-15).
+  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, warm-up/cool-down. Mọi `exercise_id` phải nằm trong danh mục lọc theo `AvailableEquipment` (BR-AC-14).
+- **Repository**: `DailyWorkoutPlanRepository` — cần hỗ trợ `GetRecentExerciseIDs(userID, muscleGroup, lookbackWeeks)` để `AdaptiveCoachEngine` tránh chọn lại accessory/finisher đã dùng gần đây (BR-AC-16).
 - **Domain Events**:
   - `DailyWorkoutPlanGenerated`: Giáo án đã được sinh.
 
 #### [Domain Service] `AdaptiveCoachEngine`
-- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), đánh giá CR cuối chu kỳ (BR-AC-04), cập nhật `FitScore` định kỳ sau mỗi buổi (BR-AC-12), và đảm bảo tính đa dạng bài tập khi sinh `DailyWorkoutPlan` (BR-AC-15).
+- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), đánh giá CR cuối chu kỳ (BR-AC-04), cập nhật `FitScore` định kỳ sau mỗi buổi (BR-AC-13), và đảm bảo tính đa dạng bài tập khi sinh `DailyWorkoutPlan` (BR-AC-16).
 - **Input**: `WorkoutRoadmap`, `WeeklySchedule`, lịch sử `WorkoutSession`, `DailyWorkoutPlanRepository.GetRecentExerciseIDs`.
 - **Signal B1** (BR-AC-05): Không hoạt động 7 ngày → Đề xuất 3 phương án (tiếp tục / đặt lại / tạm dừng).
 - **Signal B2** (BR-AC-06): Bỏ tập cùng ngày ≥ 3 lần liên tiếp → Đề xuất dời slot.
 - **Signal B3** (BR-AC-07): ≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi → Cảnh báo, chèn nghỉ bắt buộc.
 - **Signal B4** (BR-AC-08): 1RM + Form không tăng 3 tuần liên tiếp (CR ≥ 70%) → Đề xuất Deload / đổi bài / tăng set.
-- **FitScore** (BR-AC-12): Trục Too-Little/Too-Much tính từ RPE gần đây, CR, delta 1RM. Chỉ áp dụng điều chỉnh nhẹ khi **chưa** có Signal B3/B4 đang active cho cùng chu kỳ, để tránh 2 cơ chế cùng sửa chồng lên nhau; khi Signal B3/B4 kích hoạt thì FitScore tạm ngưng, nhường quyền điều chỉnh mạnh cho signal đó.
+- **FitScore** (BR-AC-13): Trục Too-Little/Too-Much tính từ RPE gần đây, CR, delta 1RM. Chỉ áp dụng điều chỉnh nhẹ khi **chưa** có Signal B3/B4 đang active cho cùng chu kỳ, để tránh 2 cơ chế cùng sửa chồng lên nhau; khi Signal B3/B4 kích hoạt thì FitScore tạm ngưng, nhường quyền điều chỉnh mạnh cho signal đó.
 
 #### [Domain Service] `OverloadValidator`
-- **Nhiệm vụ**: Kiểm tra volume `WeeklySchedule` mới không vượt trần Progressive Overload theo `PlanningTier` của roadmap (BR-AC-02 mặc định 10%; BR-AC-11 hạ còn 5% cho tier `Beginner`) so với volume thực tế tuần trước.
+- **Nhiệm vụ**: Kiểm tra volume `WeeklySchedule` mới không vượt trần Progressive Overload theo `PlanningTier` của roadmap (BR-AC-02 mặc định 10%; BR-AC-12 hạ còn 5% cho tier `Beginner`) so với volume thực tế tuần trước.
 
 ---
 
