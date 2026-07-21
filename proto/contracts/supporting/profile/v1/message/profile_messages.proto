@@ -37,7 +37,7 @@ message SaveHealthProfileRequest {
   repeated string secondary_goals = 7;
   repeated InjuryInput injuries = 8;
   string experience_level = 9; // "BEGINNER", "INTERMEDIATE", "ADVANCED"
-  repeated AvailabilitySlot availability = 10;
+  repeated AvailabilitySlot availability_slots = 10;
   repeated string preferred_muscle_groups = 11; // tối đa 2, optional (FR-UM-05, BR-AC-10)
   repeated string available_equipment = 12; // Dụng cụ sẵn có, rỗng = bodyweight (FR-UM-06, BR-AC-13)
 }
@@ -62,7 +62,7 @@ message GetProfileResponse {
   string primary_goal = 6;
   repeated string secondary_goals = 7;
   string experience_level = 8;
-  repeated AvailabilitySlot availability = 9;
+  repeated AvailabilitySlot availability_slots = 9;
   repeated string preferred_muscle_groups = 10;
   repeated string available_equipment = 11;
   repeated Injury injuries = 12;
@@ -79,7 +79,7 @@ message UpdateProfileRequest {
   string primary_goal = 6;
   repeated string secondary_goals = 7;
   string experience_level = 8;
-  repeated AvailabilitySlot availability = 9;
+  repeated AvailabilitySlot availability_slots = 9;
   repeated string preferred_muscle_groups = 10;
   repeated string available_equipment = 11;
 }
