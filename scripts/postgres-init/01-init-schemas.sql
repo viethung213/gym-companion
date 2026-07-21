@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS auth.outbox (
 
 CREATE TABLE IF NOT EXISTS auth.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS profile.outbox (
 
 CREATE TABLE IF NOT EXISTS profile.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS coaching.outbox (
 
 CREATE TABLE IF NOT EXISTS coaching.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS workout_execution.outbox (
 
 CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS nutrition.outbox (
 
 CREATE TABLE IF NOT EXISTS nutrition.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS notification.outbox (
 
 CREATE TABLE IF NOT EXISTS notification.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS audio.outbox (
 
 CREATE TABLE IF NOT EXISTS audio.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -212,7 +212,7 @@ CREATE TABLE IF NOT EXISTS exercise.outbox (
 
 CREATE TABLE IF NOT EXISTS exercise.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
