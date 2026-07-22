@@ -139,9 +139,9 @@ message DailyWorkoutPlan {
   string weekly_schedule_id = 4;
   google.type.Date scheduled_date = 5;
   DailyPlanStatus status = 6;
-  WorkoutPrescription workout_prescription = 7;
-  string reasoning_explanation = 8;
-  string adjustment_explanation = 9;
+  WorkoutPrescription prescription = 7;
+  string reasoning = 8;
+  string adjustment_reason = 9;
   google.protobuf.Timestamp generated_at = 10;
 }
 
