@@ -92,12 +92,15 @@
 | **Precondition** | User tập ≥ 2 buổi/ngày hoặc Session RPE (điểm đánh giá nỗ lực cả buổi tập do người dùng khai báo) trung bình ≥ 8.5 liên tục ≥ 5 buổi. |
 
 **Main Flow**
-1. `AdaptiveCoachEngine` phát hiện Signal B3.
-2. System cảnh báo nguy cơ quá tải, đề xuất Active Recovery.
-3. System bắt buộc chèn 1 ngày nghỉ vào `WeeklySchedule` kế tiếp.
+1. `AdaptiveCoachEngine` phát hiện Signal B3 (User bấm "Tập buổi mới" lần 2 trong ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi).
+2. AI Coach cảnh báo nguy cơ quá tải, chuyển giáo án buổi 2 sang **Active Recovery / Cardio LISS / Mobility**.
+3. System đề xuất chèn ngày nghỉ hoàn toàn vào `WeeklySchedule` kế tiếp.
+
+**Alternative Flow**
+- A1: User chọn Override "Vẫn muốn tập nặng buổi 2" → System ghi nhận User Override, Go Engine ép buộc đổi sang nhóm cơ khác hoàn toàn với buổi sáng (khóa sạch nhóm cơ đã tập buổi 1).
 
 **Error / Edge Cases**
-- E1: User từ chối ngày nghỉ → System vẫn chèn (bắt buộc, không cho bypass).
+- E1: User yêu cầu tập lại trùng nhóm cơ buổi sáng → Go Engine từ chối, yêu cầu chọn nhóm cơ khác hoặc bài Recovery.
 
 **Domain Events**: `WeeklyScheduleGenerated`
 

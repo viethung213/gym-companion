@@ -146,3 +146,30 @@
 > *Xử lý bất đồng bộ qua Eventual Consistency, không chặn UC-03.4.*
 
 **Domain Events**: `NewPersonalRecordAchieved`
+
+---
+
+### UC-03.6 SelectExtraWorkouts (Tập thêm bài bổ trợ - FR-AC-08)
+
+| | |
+|---|---|
+| **Actor** | User · System (Go Backend API) |
+| **Precondition** | `WorkoutSession` vừa đạt trạng thái `Completed` (bao gồm cả phần Cooldown của FR-AC-07). User tại màn hình Post-session Summary. |
+
+**Main Flow**
+1. User nhấn nút **"Tập thêm bài bổ trợ (Extra Workouts)"**.
+2. Client gọi API `POST /api/v1/coaching/extra-exercises` gửi kèm `session_id`.
+3. System (Backend Go Engine) thực hiện deduplication: loại bỏ 100% các bài tập đã hoàn thành trong buổi chính.
+4. System loại bỏ bài compound nặng và bài thuộc danh sách chấn thương active.
+5. System trả về 3 danh mục bài tập thêm an toàn:
+   - `Accessory/Core`: Bài tập cơ phụ (bụng, cẳng tay, bắp chân, tay sau).
+   - `Cardio LISS`: Cardio thả lỏng 10-15 phút.
+   - `Deep Mobility`: Giãn cơ dẻo khớp/Foam Rolling chuyên sâu.
+6. User chọn bài tập và bắt đầu tập thêm (phản hồi API < 100ms, Go thuần không gọi AI Agent).
+
+**Error / Edge Cases**
+- E1: Không còn bài tập an toàn khả thi trong DB → hiển thị thông báo "Bạn đã hoàn thành đủ volume hôm nay!".
+
+**Postcondition**: Các set tập thêm được ghi nhận nối tiếp vào `WorkoutSessionCompleted`.
+
+**Domain Events**: —
