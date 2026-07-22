@@ -20,7 +20,7 @@ message Injury {
   string recovered_at = 7;
 }
 
-// AvailabilitySlot mô tả 1 ngày trong tuần user rảnh để tập (BR-AC-09)
+// AvailabilitySlot mô tả 1 ngày trong tuần user rảnh để tập
 message AvailabilitySlot {
   string day_of_week = 1; // "MONDAY".."SUNDAY"
   string time_window = 2; // "MORNING" | "AFTERNOON" | "EVENING", hoặc "HH:MM-HH:MM"
