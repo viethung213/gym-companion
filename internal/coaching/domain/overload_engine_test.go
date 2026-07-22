@@ -37,12 +37,17 @@ func TestOverloadEngine(t *testing.T) {
 		t.Errorf("expected error for exceeding hard cap")
 	}
 	
-	// Next weight fast track
-	nw := engine.NextWeight(100, ProgressionFastTrack)
+	// Next weight fast track (experienced vs beginner)
+	nw := engine.NextWeight(100, ProgressionFastTrack, false)
 	if nw != 105 {
 		t.Errorf("got %v, want 105", nw)
 	}
-	
+
+	nwBeginner := engine.NextWeight(100, ProgressionFastTrack, true)
+	if nwBeginner != 105 {
+		t.Errorf("got %v, want 105", nwBeginner)
+	}
+
 	// Warmup
 	wu := engine.CalculateWarmupSet(100, true)
 	if wu == nil || wu.Weight() != 50 {
@@ -62,5 +67,26 @@ func TestOverloadEngine(t *testing.T) {
 	if rest != 150 {
 		t.Errorf("got %v, want 150", rest)
 	}
+
+	// GeneratePrescription
+	wp, err := engine.GeneratePrescription(FitnessGoalMuscleGain, "BEGINNER", 1, 100, "Compound")
+	if err != nil {
+		t.Fatalf("GeneratePrescription failed: %v", err)
+	}
+	if wp.Reps() != 10 || wp.Sets() != 3 {
+		t.Errorf("got reps %v sets %v, want reps 10 sets 3", wp.Reps(), wp.Sets())
+	}
+
+	// Estimate duration
+	pe, err := NewPlannedExercise("ex-1", wp, "note")
+	if err != nil {
+		t.Fatalf("NewPlannedExercise failed: %v", err)
+	}
+	duration := engine.EstimateSessionDurationMinutes([]PlannedExercise{pe}, true)
+	if duration <= 10 {
+		t.Errorf("got duration %v, want > 10", duration)
+	}
 }
+
+
 
