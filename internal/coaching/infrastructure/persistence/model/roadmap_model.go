@@ -18,8 +18,9 @@ type WorkoutRoadmapModel struct {
 }
 
 func (WorkoutRoadmapModel) TableName() string {
-	return "coaching_workout_roadmaps"
+	return "coaching_roadmaps"
 }
+
 
 func (m *WorkoutRoadmapModel) ToDomain() *domain.WorkoutRoadmap {
 	return domain.UnmarshalWorkoutRoadmap(

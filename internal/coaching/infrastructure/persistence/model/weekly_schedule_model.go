@@ -21,8 +21,9 @@ type WeeklyScheduleModel struct {
 }
 
 func (WeeklyScheduleModel) TableName() string {
-	return "coaching_weekly_schedules"
+	return "coaching_schedules"
 }
+
 
 type ScheduleDayModel struct {
 	ID                     string   `gorm:"column:id;primaryKey"`

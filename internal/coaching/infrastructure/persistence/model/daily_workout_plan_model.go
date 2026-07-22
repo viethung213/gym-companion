@@ -18,7 +18,7 @@ type DailyWorkoutPlanModel struct {
 }
 
 func (DailyWorkoutPlanModel) TableName() string {
-	return "coaching_daily_workout_plans"
+	return "coaching_daily_sessions"
 }
 
 type PlannedExerciseModel struct {
@@ -35,8 +35,9 @@ type PlannedExerciseModel struct {
 }
 
 func (PlannedExerciseModel) TableName() string {
-	return "coaching_planned_exercises"
+	return "coaching_session_items"
 }
+
 
 func (m *DailyWorkoutPlanModel) ToDomain() *domain.DailyWorkoutPlan {
 	var domainExs []domain.PlannedExercise

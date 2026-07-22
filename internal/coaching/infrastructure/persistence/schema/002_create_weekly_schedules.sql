@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS coaching_weekly_schedules (
+CREATE TABLE IF NOT EXISTS coaching_schedules (
     id VARCHAR(36) PRIMARY KEY,
     roadmap_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS coaching_weekly_schedules (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_coaching_weekly_schedules_roadmap_id ON coaching_weekly_schedules (roadmap_id);
-CREATE INDEX IF NOT EXISTS idx_coaching_weekly_schedules_user_id ON coaching_weekly_schedules (user_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_schedules_roadmap_id ON coaching_schedules (roadmap_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_schedules_user_id ON coaching_schedules (user_id);
 
 CREATE TABLE IF NOT EXISTS coaching_schedule_days (
     id VARCHAR(36) PRIMARY KEY,
@@ -23,8 +23,9 @@ CREATE TABLE IF NOT EXISTS coaching_schedule_days (
     daily_workout_plan_id VARCHAR(36) NOT NULL,
     time_window VARCHAR(50) NOT NULL,
     planned_duration_minutes INT NOT NULL,
-    CONSTRAINT fk_coaching_schedule_days_schedule_id FOREIGN KEY (schedule_id) REFERENCES coaching_weekly_schedules(id) ON DELETE CASCADE
+    CONSTRAINT fk_coaching_schedule_days_schedule_id FOREIGN KEY (schedule_id) REFERENCES coaching_schedules(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_coaching_schedule_days_schedule_id ON coaching_schedule_days (schedule_id);
 CREATE INDEX IF NOT EXISTS idx_coaching_schedule_days_scheduled_date ON coaching_schedule_days (scheduled_date);
+
