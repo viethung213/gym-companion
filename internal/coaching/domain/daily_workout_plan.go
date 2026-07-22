@@ -3,9 +3,12 @@ package domain
 import (
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type PlannedExercise struct {
+	id           string
 	exerciseID   string
 	prescription WorkoutPrescription
 	notes        string
@@ -19,15 +22,18 @@ func NewPlannedExercise(exerciseID string, prescription WorkoutPrescription, not
 		return PlannedExercise{}, err
 	}
 	return PlannedExercise{
+		id:           uuid.New().String(),
 		exerciseID:   exerciseID,
 		prescription: prescription,
 		notes:        notes,
 	}, nil
 }
 
+func (pe PlannedExercise) ID() string                     { return pe.id }
 func (pe PlannedExercise) ExerciseID() string             { return pe.exerciseID }
 func (pe PlannedExercise) Prescription() WorkoutPrescription { return pe.prescription }
 func (pe PlannedExercise) Notes() string                    { return pe.notes }
+
 
 type DailyWorkoutPlan struct {
 	id         string

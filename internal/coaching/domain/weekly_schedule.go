@@ -3,6 +3,8 @@ package domain
 import (
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type DayStatus string
@@ -15,6 +17,7 @@ const (
 )
 
 type ScheduleDay struct {
+	id                     string
 	scheduledDate          time.Time
 	dayOfWeek              int
 	status                 DayStatus
@@ -37,6 +40,7 @@ func NewScheduleDay(
 	copy(musclesCopy, targetMuscleGroups)
 
 	return ScheduleDay{
+		id:                     uuid.New().String(),
 		scheduledDate:          scheduledDate,
 		dayOfWeek:              dayOfWeek,
 		status:                 status,
@@ -47,12 +51,14 @@ func NewScheduleDay(
 	}
 }
 
+func (s ScheduleDay) ID() string                     { return s.id }
 func (s ScheduleDay) ScheduledDate() time.Time          { return s.scheduledDate }
 func (s ScheduleDay) DayOfWeek() int                  { return s.dayOfWeek }
 func (s ScheduleDay) Status() DayStatus               { return s.status }
 func (s ScheduleDay) DailyWorkoutPlanID() string     { return s.dailyWorkoutPlanID }
 func (s ScheduleDay) TimeWindow() string             { return s.timeWindow }
 func (s ScheduleDay) PlannedDurationMinutes() int    { return s.plannedDurationMinutes }
+
 
 func (s ScheduleDay) TargetMuscleGroups() []string {
 	muscles := make([]string, len(s.targetMuscleGroups))
