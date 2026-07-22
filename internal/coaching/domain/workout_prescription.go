@@ -1,33 +1,71 @@
 package domain
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
+// WorkoutPrescription represents the target exercise prescription (Sets, Reps, Weight, RPE, RestSeconds).
 type WorkoutPrescription struct {
-	Sets        int
-	Reps        int
-	Weight      float64
-	RPE         int
-	RestSeconds int
+	sets        int
+	reps        int
+	weight      float64
+	rpe         float64
+	restSeconds int
 }
 
-func NewWorkoutPrescription(sets, reps int, weight float64, rpe, restSeconds int) (WorkoutPrescription, error) {
-	if sets <= 0 || reps <= 0 {
-		return WorkoutPrescription{}, fmt.Errorf("%w: sets and reps must be positive", ErrInvalidPrescription)
+// NewWorkoutPrescription creates and validates a new WorkoutPrescription value object.
+func NewWorkoutPrescription(sets, reps int, weight, rpe float64, restSeconds int) (WorkoutPrescription, error) {
+	wp := WorkoutPrescription{
+		sets:        sets,
+		reps:        reps,
+		weight:      weight,
+		rpe:         rpe,
+		restSeconds: restSeconds,
 	}
-	if weight < 0 {
-		return WorkoutPrescription{}, fmt.Errorf("%w: weight cannot be negative", ErrInvalidPrescription)
+
+	if err := wp.Validate(); err != nil {
+		return WorkoutPrescription{}, err
 	}
-	if rpe < 1 || rpe > 10 {
-		return WorkoutPrescription{}, fmt.Errorf("%w: RPE must be between 1 and 10", ErrInvalidPrescription)
-	}
-	return WorkoutPrescription{
-		Sets:        sets,
-		Reps:        reps,
-		Weight:      weight,
-		RPE:         rpe,
-		RestSeconds: restSeconds,
-	}, nil
+
+	return wp, nil
 }
+
+// Validate checks business invariant rules for WorkoutPrescription.
+func (wp WorkoutPrescription) Validate() error {
+	if wp.sets <= 0 {
+		return fmt.Errorf("%w: sets must be greater than zero", ErrInvalidPrescription)
+	}
+	if wp.reps <= 0 {
+		return fmt.Errorf("%w: reps must be greater than zero", ErrInvalidPrescription)
+	}
+	if wp.weight < 0 {
+		return fmt.Errorf("%w: weight cannot be negative", ErrInvalidPrescription)
+	}
+	if wp.rpe < 0 || wp.rpe > 10 {
+		return fmt.Errorf("%w: rpe must be between 0 and 10", ErrInvalidPrescription)
+	}
+	if wp.restSeconds < 0 {
+		return fmt.Errorf("%w: rest seconds cannot be negative", ErrInvalidPrescription)
+	}
+
+	return nil
+}
+
+func (wp WorkoutPrescription) Sets() int {
+	return wp.sets
+}
+
+func (wp WorkoutPrescription) Reps() int {
+	return wp.reps
+}
+
+func (wp WorkoutPrescription) Weight() float64 {
+	return wp.weight
+}
+
+func (wp WorkoutPrescription) RPE() float64 {
+	return wp.rpe
+}
+
+func (wp WorkoutPrescription) RestSeconds() int {
+	return wp.restSeconds
+}
+

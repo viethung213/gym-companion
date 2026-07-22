@@ -45,13 +45,22 @@ func TestOverloadEngine(t *testing.T) {
 	
 	// Warmup
 	wu := engine.CalculateWarmupSet(100, true)
-	if wu == nil || wu.Weight != 50 {
+	if wu == nil || wu.Weight() != 50 {
 		t.Errorf("invalid warmup")
 	}
-	
+
+	// Periodization Multipliers
+	if m := engine.GetPeriodizationMultiplier(1); m != 0.65 {
+		t.Errorf("week 1 periodization got %v, want 0.65", m)
+	}
+	if m := engine.GetPeriodizationMultiplier(3); m != 0.85 {
+		t.Errorf("week 3 periodization got %v, want 0.85", m)
+	}
+
 	// Rest period
 	rest := engine.RestPeriod("Compound", true)
 	if rest != 150 {
 		t.Errorf("got %v, want 150", rest)
 	}
 }
+

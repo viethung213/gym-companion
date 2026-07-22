@@ -67,12 +67,30 @@ func (e *OverloadEngine) CalculateWarmupSet(workingWeight float64, isCompound bo
 	if !isCompound {
 		return nil
 	}
-	return &WorkoutPrescription{
-		Sets:        1,
-		Reps:        10,
-		Weight:      workingWeight * 0.50,
-		RPE:         5,
-		RestSeconds: 90,
+	wp, err := NewWorkoutPrescription(1, 10, workingWeight*0.50, 5.0, 90)
+	if err != nil {
+		return nil
+	}
+	return &wp
+}
+
+// GetPeriodizationMultiplier returns intensity multiplier (% 1RM) based on 4-week periodization scheme.
+// Week 1: Adaptation (65% 1RM)
+// Week 2: Build (75% 1RM)
+// Week 3: Peak (85% 1RM)
+// Week 4: Deload (55% 1RM)
+func (e *OverloadEngine) GetPeriodizationMultiplier(weekNumber int) float64 {
+	switch weekNumber {
+	case 1:
+		return 0.65 // Adaptation
+	case 2:
+		return 0.75 // Build
+	case 3:
+		return 0.85 // Peak
+	case 4:
+		return 0.55 // Deload
+	default:
+		return 0.70
 	}
 }
 
@@ -88,9 +106,10 @@ func (e *OverloadEngine) RestPeriod(category string, isBeginner bool) int {
 	default:
 		base = 60
 	}
-	
+
 	if isBeginner {
 		base += 30
 	}
 	return base
 }
+
