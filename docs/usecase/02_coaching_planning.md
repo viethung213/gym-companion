@@ -32,6 +32,7 @@
 - E2: `OverloadValidator` từ chối volume tuần 1 (quá cao) → tự điều chỉnh xuống và retry.
 - E3: `availability` có 0 slot rảnh (User bỏ qua ở Onboarding và chưa cập nhật) → dùng mặc định 3 buổi tối/tuần không cố định ngày, cảnh báo User nên cập nhật availability thật để lịch chính xác hơn.
 - E4: `available_equipment` rỗng → chỉ chọn bài Bodyweight cho toàn bộ `WeeklySchedule` (BR-AC-13), không chặn sinh lộ trình.
+- E5: Lộ trình khởi tạo giữa tuần (ví dụ Thứ 4) → `WeeklySchedule` Tuần 1 chỉ xếp các buổi tập vào slot rảnh còn lại trong phần tuần đó (Thứ 4 đến Chủ Nhật), hạ số buổi Tuần 1 nếu thiếu slot; Tuần 2 trở đi xếp trọn vẹn 7 ngày (T2-CN).
 
 **Postcondition**: `WorkoutRoadmap` và `WeeklySchedule` tuần 1 được tạo. Chưa sinh `DailyWorkoutPlan`.  
 > *`CoachingService.InitiateRoadmap()` gọi `WorkoutRoadmapRepository.Save()` và `WeeklyScheduleRepository.Save()`.*
