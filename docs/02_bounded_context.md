@@ -21,33 +21,42 @@
 ## 2. Đặc Tả Từng Bounded Context
 
 ### 1. User Profile Context
-- **Trách nhiệm**: Xác thực tài khoản, quản lý chỉ số cơ thể và lịch sử (cân nặng, % mỡ, số đo, ảnh tiến trình), quản lý chấn thương và khung giờ tập. [FR-UM-01, FR-UM-02, FR-PT-01]
+- **Trách nhiệm**: Xác thực tài khoản, quản lý chỉ số cơ thể và lịch sử (cân nặng, % mỡ, số đo, ảnh tiến trình), quản lý chấn thương, `experience_level`, khung giờ rảnh theo tuần (`availability`), mục tiêu thể trạng (`primary_goal`), mục tiêu ưu tiên vùng/nhóm cơ (`secondary_goal`) và dụng cụ tập luyện sẵn có (`available_equipment`). [FR-UM-01 → FR-UM-06, FR-PT-01]
 - **Không trách nhiệm**: Không tính Fitness Score, không sinh lộ trình, không chạy timer buổi tập.
 - **Aggregates**: `User`, `BodyMetricsHistory`
 - **Quy tắc nghiệp vụ**:
   - BR-UM-01: Hồ sơ đạt ≥ 80% mới kích hoạt AI Coach và tạo lộ trình.
 - **Context liên quan**:
-  - Cung cấp `BiologicalMetrics`, `Injury` cho `Coaching` và `Nutrition`.
+  - Cung cấp `BiologicalMetrics`, `Injury`, `experience_level`, `availability`, `primary_goal`, `secondary_goal`, `available_equipment` cho `Coaching`; `BiologicalMetrics` cho `Nutrition`.
   - Lắng nghe Event `BodyMetricUpdated` từ `Workout Execution` để cập nhật lịch sử chỉ số.
 
 ---
 
 ### 2. Coaching & Planning Context
-- **Trách nhiệm**: Lập lộ trình 4 tuần, lịch tuần, giáo án JIT chi tiết; thực thi thích ứng (Signal B1–B4, CR cuối chu kỳ); quản lý phong cách Coach và nhắc lịch. [FR-AC-01 → FR-AC-07, FR-UM-04]
+- **Trách nhiệm**: Lập lộ trình 4 tuần, lịch tuần, giáo án JIT chi tiết theo đúng thời gian rảnh/dụng cụ/vùng ưu tiên (`secondary_goal`)/`experience_level` của User; thực thi thích ứng (Signal B1–B4, CR cuối chu kỳ, Fit Score định kỳ); quản lý phong cách Coach và nhắc lịch. [FR-AC-01 → FR-AC-07, FR-UM-03 → FR-UM-06]
 - **Không trách nhiệm**: Không ghi nhận thực tế buổi tập, không đếm rep, không tính 1RM.
 - **Aggregates**: `WorkoutRoadmap`, `WeeklySchedule`, `DailyWorkoutPlan`
+  - `WeeklySchedule` chứa `AvailabilityWindow` (tham chiếu khung giờ rảnh của User cho từng ngày) để đảm bảo BR-AC-10.
 - **Domain Services**: `AdaptiveCoachEngine`, `OverloadValidator`
 - **Quy tắc nghiệp vụ**:
   - BR-AC-01: Tối đa 6 buổi/tuần, ≥ 1 ngày nghỉ.
-  - BR-AC-02: Progressive Overload ≤ 10% volume/tuần.
+  - BR-AC-02: Progressive Overload ≤ 10% volume/tuần (trần mặc định; xem BR-AC-12 cho tier Beginner).
   - BR-AC-03: Buổi bỏ tập = "Bỏ qua", không tự dồn bù.
   - BR-AC-04: Quy tắc CR cuối chu kỳ (4 mức: <40%, 40–70%, 70–90%, ≥90%).
   - BR-AC-05: Signal B1 — Không hoạt động 7 ngày.
   - BR-AC-06: Signal B2 — Lịch không tương thích.
   - BR-AC-07: Signal B3 — Overtraining (≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi).
   - BR-AC-08: Signal B4 — Plateau (1RM + Form không tăng 3 tuần liên tiếp với CR ≥ 70%).
+  - BR-AC-09: Thích ứng sau phục hồi (Post-Injury Adaptation — giới hạn ≤50% PR 3 buổi đầu).
+  - BR-AC-10: Lịch tập chỉ được xếp vào slot rảnh User khai báo (`availability`); thiếu slot rảnh → tự hạ số buổi/tuần.
+  - BR-AC-11: Vùng/nhóm cơ ưu tiên (`secondary_goal`) được tăng tần suất nhưng vẫn phải giữ sàn cân bằng toàn thân và khoảng cách phục hồi ≥ 48h/nhóm cơ.
+  - BR-AC-12: Chiến lược lập kế hoạch phân theo `PlanningTier` — Beginner dùng Fixed Template + trần Overload 5%/tuần + bắt buộc Warm-up/Cool-down; Experienced dùng trần BR-AC-02 đầy đủ + chọn bài linh hoạt hơn.
+  - BR-AC-13: Fit Score định kỳ sau mỗi buổi (RPE, CR, delta 1RM) để điều chỉnh nhẹ tải lượng sớm, tạm ngưng khi Signal B3/B4 đang active.
+  - BR-AC-14: Chỉ chọn bài tập có `EquipmentID` nằm trong `available_equipment` của User (hoặc Bodyweight).
+  - BR-AC-15: `primary_goal` bắt buộc quyết định thể trạng/calo/overload/rep-range; `secondary_goal` tùy chọn ảnh hưởng dồn volume accessory/finisher.
+  - BR-AC-16: Không lặp lại accessory/finisher giống hệt cho cùng nhóm cơ trong 2 tuần liên tiếp, trừ compound nền tảng của Fixed Template (Beginner).
 - **Context liên quan**:
-  - Đọc `BiologicalMetrics`, `Injury` từ `User Profile`.
+  - Đọc `BiologicalMetrics`, `Injury`, `experience_level`, `availability`, `primary_goal`, `secondary_goal`, `available_equipment` từ `User Profile`.
   - Đọc thông tin bài tập được quản lý bởi `Workout Execution & Motion`.
   - Lắng nghe `WorkoutSessionCompleted` từ `Workout Execution`.
   - Gọi Shared Infrastructure để gửi Push Notification.
@@ -107,7 +116,7 @@ graph TD
     NU["Nutrition"]
     EX["Exercise"]
 
-    UP -- "BiologicalMetrics, Injury" --> CP
+    UP -- "BiologicalMetrics, Injury, Availability, Preference, Equipment" --> CP
     UP -- "BiologicalMetrics" --> NU
 
     EX -- "Exercise (ID ref)" --> CP

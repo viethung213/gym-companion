@@ -16,12 +16,12 @@
 
 **Main Flow**
 1. System tính `CompletionRate` (CR) = số buổi hoàn thành / tổng số buổi đã lên lịch (loại trừ `AnomalousSession`).
-2. System áp dụng quy tắc BR-AC-04:
+2. System áp dụng quy tắc BR-AC-04 (trần Progressive Overload lấy theo `PlanningTier` của roadmap sắp tạo — BR-AC-11: 5% cho Beginner, 10% cho Experienced):
    - CR < 40%: Hỏi lý do, chờ phản hồi, đề xuất giảm số buổi/tuần và rút ngắn thời lượng. Nếu user đồng ý → cấu hình lại; nếu từ chối → chuyển sang **A1**.
-   - 40% ≤ CR < 70%: Giảm tải lượng 10–15%, chèn xen kẽ buổi Express 30 phút. Tự sinh lộ trình mới.
-   - 70% ≤ CR < 90%: Giữ cấu trúc, tăng Progressive Overload ≤ 10%. Tự sinh lộ trình mới.
-   - CR ≥ 90%: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". Nếu user đồng ý → thêm buổi; nếu từ chối → chuyển sang **A1**.
-3. System tạo `WorkoutRoadmap` mới, phát `RoadmapInitiated`.
+   - 40% ≤ CR < 70%: Giữ nguyên số buổi, giảm tải lượng 10-15%, chèn xen kẽ buổi Express 30 phút. Tự động sinh lộ trình mới.
+   - 70% ≤ CR < 90%: Giữ cấu trúc, tăng Progressive Overload theo trần BR-AC-11. Tự sinh lộ trình mới.
+   - CR ≥ 90%: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01, và không vượt số slot rảnh trong `availability` — BR-AC-09), gắn badge "Xuất sắc". Nếu user đồng ý → thêm buổi; nếu từ chối → chuyển sang **A1**.
+3. System tạo `WorkoutRoadmap` mới (snapshot `PlanningTier` mới nhất từ `experience_level` hiện tại của User), phát `RoadmapInitiated`.
 
 **Alternative Flow**
 - A1: User từ chối đề xuất thay đổi số buổi tập (khi CR < 40% hoặc CR ≥ 90%) → System giữ nguyên cấu trúc số buổi/tuần cũ của lộ trình, nhưng tự động điều chỉnh Progressive Overload (tăng/giảm mức tạ hoặc volume tạ gợi ý) tương ứng để đảm bảo tính an toàn và thích ứng.
@@ -92,12 +92,15 @@
 | **Precondition** | User tập ≥ 2 buổi/ngày hoặc Session RPE (điểm đánh giá nỗ lực cả buổi tập do người dùng khai báo) trung bình ≥ 8.5 liên tục ≥ 5 buổi. |
 
 **Main Flow**
-1. `AdaptiveCoachEngine` phát hiện Signal B3.
-2. System cảnh báo nguy cơ quá tải, đề xuất Active Recovery.
-3. System bắt buộc chèn 1 ngày nghỉ vào `WeeklySchedule` kế tiếp.
+1. `AdaptiveCoachEngine` phát hiện Signal B3 (User bấm "Tập buổi mới" lần 2 trong ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi).
+2. AI Coach cảnh báo nguy cơ quá tải, chuyển giáo án buổi 2 sang **Active Recovery / Cardio LISS / Mobility**.
+3. System đề xuất chèn ngày nghỉ hoàn toàn vào `WeeklySchedule` kế tiếp.
+
+**Alternative Flow**
+- A1: User chọn Override "Vẫn muốn tập nặng buổi 2" → System ghi nhận User Override, Go Engine ép buộc đổi sang nhóm cơ khác hoàn toàn với buổi sáng (khóa sạch nhóm cơ đã tập buổi 1).
 
 **Error / Edge Cases**
-- E1: User từ chối ngày nghỉ → System vẫn chèn (bắt buộc, không cho bypass).
+- E1: User yêu cầu tập lại trùng nhóm cơ buổi sáng → Go Engine từ chối, yêu cầu chọn nhóm cơ khác hoặc bài Recovery.
 
 **Domain Events**: `WeeklyScheduleGenerated`
 
@@ -122,3 +125,28 @@
 - E1: User không chọn trong 48h → tự áp dụng Deload Week (an toàn nhất).
 
 **Domain Events**: `RoadmapAdjusted`
+
+---
+
+### UC-04.6 UpdateFitScore — Điều chỉnh nhẹ định kỳ (BR-AC-12)
+
+| | |
+|---|---|
+| **Actor** | System (AI Coach) |
+| **Precondition** | Một `WorkoutSession` vừa hoàn thành. Không có Signal B3 hoặc B4 đang `Active`/`Pending` cho cùng `WorkoutRoadmap`. |
+
+**Main Flow**
+1. `AdaptiveCoachEngine` cập nhật `FitScore` từ RPE trung bình gần đây, CR hiện tại, và xu hướng delta 1RM.
+2. Nếu `FitScore` lệch nhẹ về **Too-Little** (RPE thấp liên tục, CR cao, 1RM tăng đều) → tăng nhẹ tải lượng ở `DailyWorkoutPlan` kế tiếp, trong biên trần overload theo `PlanningTier` (BR-AC-11).
+3. Nếu `FitScore` lệch nhẹ về **Too-Much** (RPE tăng dần nhưng chưa tới ngưỡng B3) → giảm nhẹ tải lượng hoặc set ở `DailyWorkoutPlan` kế tiếp.
+4. Điều chỉnh áp dụng thẳng, không tạo `AdaptiveRecommendation` chờ user phản hồi (khác với Signal B1/B2/B4) — vì đây là tinh chỉnh nhỏ trong biên an toàn đã định, không phải thay đổi cấu trúc lộ trình.
+
+**Alternative Flow**
+- A1: Signal B3 hoặc B4 kích hoạt trong cùng chu kỳ → `FitScore` tạm ngưng điều chỉnh, nhường quyền xử lý cho signal đó (tránh 2 cơ chế chỉnh chồng lên nhau).
+
+**Error / Edge Cases**
+- E1: Chưa đủ lịch sử (< 3 buổi gần nhất) để tính `FitScore` tin cậy → giữ nguyên tải lượng, không điều chỉnh.
+
+**Postcondition**: `FitScore` được cập nhật; `DailyWorkoutPlan` kế tiếp (nếu có điều chỉnh) phản ánh tải lượng mới trong biên an toàn.
+
+**Domain Events**: —

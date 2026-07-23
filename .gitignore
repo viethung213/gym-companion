@@ -54,3 +54,4 @@ logs/
 .gemini/
 .antigravity/
 antigravity*/
+.claude/

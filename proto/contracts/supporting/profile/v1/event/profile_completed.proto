@@ -4,6 +4,8 @@ package contracts.supporting.profile.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
 
+import "contracts/supporting/profile/v1/message/profile_messages.proto";
+
 message BiologicalMetrics {
   float weight_kg = 1;
   float height_cm = 2;
@@ -14,9 +16,12 @@ message BiologicalMetrics {
 message ProfileCompleted {
   string user_id = 1;
   BiologicalMetrics biological_metrics = 2;
-  repeated string goals = 3;
-  repeated string registered_injuries = 4;
-  repeated string preferred_workout_times = 5;
-  string experience_level = 6;
-  string completed_at = 7;
+  string primary_goal = 3;
+  repeated string secondary_goals = 4;
+  repeated contracts.supporting.profile.v1.message.Injury injuries = 5;
+  repeated contracts.supporting.profile.v1.message.AvailabilitySlot availability_slots = 6; // Khung giờ rảnh 
+  string experience_level = 7;
+  repeated string preferred_muscle_groups = 8; 
+  repeated string available_equipment = 9; 
+  string completed_at = 10;
 }

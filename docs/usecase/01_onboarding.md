@@ -42,18 +42,21 @@
 | **Precondition** | User đã đăng nhập. Hồ sơ chưa hoàn thiện ≥ 80%. |
 
 **Main Flow**
-1. User nhập tuổi, giới tính, chiều cao, cân nặng, mục tiêu (Tăng cơ / Giảm mỡ).
-2. User chọn khung giờ tập cố định mong muốn (hệ thống hỗ trợ gán giá trị mặc định và cho phép thay đổi bất kỳ lúc nào).
-3. System tính `ProfileCompletionRate` dựa trên các trường bắt buộc (các chỉ số sinh học và mục tiêu).
-4. Khi tỷ lệ ≥ 80%, System kích hoạt `ActiveCoachEnabled = true`.
+1. User nhập tuổi, giới tính, chiều cao, cân nặng, `experience_level` (Mới bắt đầu / Đã có kinh nghiệm / Lâu năm) và `primary_goal` bắt buộc (Giảm mỡ / Tăng cơ / Tăng sức mạnh / Duy trì); có thể chọn thêm tối đa 1 `secondary_goal` tùy chọn (Vùng/Nhóm cơ ưu tiên: Thân trên, Thân dưới, Cơ bụng, Ngực, Vai, Mông...).
+2. User khai báo `availability`: với mỗi ngày trong tuần, chọn có rảnh tập không, khung giờ rảnh và thời lượng tối đa có thể tập (hệ thống hỗ trợ gán giá trị mặc định — 3 buổi tối/tuần — và cho phép chỉnh sửa bất kỳ lúc nào trong Profile settings).
+3. User khai báo `available_equipment` (dụng cụ tập luyện sẵn có tại nhà/phòng gym); nếu bỏ qua, hệ thống mặc định Bodyweight-only.
+4. System tính `ProfileCompletionRate` dựa trên các trường bắt buộc (chỉ số sinh học, `primary_goal`, `experience_level`, tối thiểu 1 slot rảnh trong `availability`).
+5. Khi tỷ lệ ≥ 80%, System kích hoạt `ActiveCoachEnabled = true`.
 
 **Alternative Flow**
-- A1: User bỏ qua việc thiết lập khung giờ tập cố định — System tự động áp dụng khung giờ mặc định (hoặc để trống) và cho phép cập nhật sau này trong Profile settings.
+- A1: User bỏ qua thiết lập `availability` chi tiết — System áp dụng mặc định (3 buổi tối/tuần, không cố định ngày) và cho phép cập nhật sau; lịch tập sinh ra ở UC-02.1 khi đó không bị ràng buộc theo ngày cụ thể (BR-AC-10 áp dụng ngay khi User cập nhật availability thật).
 - A2: User khai báo chấn thương cũ hoặc bệnh lý mãn tính — Chuyển tiếp thực hiện **UC-01.3 ReportInjury** để ghi nhận vào hồ sơ.
+- A3: User không chọn `primary_goal` — System từ chối hoàn thiện hồ sơ và yêu cầu chọn 1 mục tiêu thể trạng chính (BR-AC-15).
 
 **Error / Edge Cases**
 - E1: Giá trị cân nặng / chiều cao không hợp lệ (≤ 0) → từ chối lưu, hiển thị lỗi inline.
-- E2: Hoàn thiện < 80% (thiếu các trường chỉ số sinh học hoặc mục tiêu) → `ActiveCoachEnabled` giữ `false`, không sinh lộ trình.
+- E2: Hoàn thiện < 80% (thiếu các trường chỉ số sinh học, `primary_goal` hoặc `experience_level`) → `ActiveCoachEnabled` giữ `false`, không sinh lộ trình.
+- E3: Số ngày rảnh trong `availability` = 0 → từ chối lưu, yêu cầu chọn tối thiểu 1 ngày (BR-AC-10 cần ít nhất 1 slot để sinh được `WeeklySchedule`).
 
 **Postcondition**: `User.BiologicalMetrics` được cập nhật. Nếu đủ điều kiện (≥ 80%), `UserProfileCompleted` được phát.  
 > *`UserService.CompleteProfile()` gọi `UserRepository.Save()` và publish `UserProfileCompleted`.*
