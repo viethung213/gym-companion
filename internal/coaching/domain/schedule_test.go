@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewWeeklySchedule(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	startDate := now
 	endDate := now.AddDate(0, 0, 7)
@@ -26,6 +27,7 @@ func TestNewWeeklySchedule(t *testing.T) {
 	}
 
 	t.Run("successful creation with 1 rest day", func(t *testing.T) {
+		t.Parallel()
 		days := createValidDays()
 		ws, err := domain.NewWeeklySchedule("ws_1", "rdp_1", "usr_100", 1, startDate, endDate, "Push/Pull/Legs", days)
 		if err != nil {
@@ -37,6 +39,7 @@ func TestNewWeeklySchedule(t *testing.T) {
 	})
 
 	t.Run("violation of BR-AC-01 (7 training days, 0 rest days)", func(t *testing.T) {
+		t.Parallel()
 		days := createValidDays()
 		days[6] = domain.NewScheduleDay(startDate.AddDate(0, 0, 6), "Sunday", domain.WorkoutDayStatusTraining, []string{"Legs"}, "")
 		_, err := domain.NewWeeklySchedule("ws_1", "rdp_1", "usr_100", 1, startDate, endDate, "Push/Pull/Legs", days)
@@ -46,6 +49,7 @@ func TestNewWeeklySchedule(t *testing.T) {
 	})
 
 	t.Run("invalid week number", func(t *testing.T) {
+		t.Parallel()
 		days := createValidDays()
 		_, err := domain.NewWeeklySchedule("ws_1", "rdp_1", "usr_100", 5, startDate, endDate, "Push/Pull/Legs", days)
 		if err != domain.ErrInvalidWeekNumber {
@@ -54,6 +58,7 @@ func TestNewWeeklySchedule(t *testing.T) {
 	})
 
 	t.Run("mark day skipped per BR-AC-03 decision 1.1", func(t *testing.T) {
+		t.Parallel()
 		days := createValidDays()
 		ws, _ := domain.NewWeeklySchedule("ws_1", "rdp_1", "usr_100", 1, startDate, endDate, "Push/Pull/Legs", days)
 		targetDate := startDate.AddDate(0, 0, 0)

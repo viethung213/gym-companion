@@ -103,6 +103,7 @@ func (m *mockExerciseProvider) GetBaseline1RM(ctx context.Context, userID string
 }
 
 func TestCoachingGRPCHandler_InitiateRoadmap(t *testing.T) {
+	t.Parallel()
 	rRepo := &mockRoadmapRepo{}
 	sRepo := &mockScheduleRepo{}
 	dRepo := &mockDailyPlanRepo{}

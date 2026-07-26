@@ -11,6 +11,7 @@ import (
 )
 
 func TestProcessPostWorkoutHandler(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	dRepo := &mockDailyPlanRepo{}
 	sRepo := &mockScheduleRepo{}

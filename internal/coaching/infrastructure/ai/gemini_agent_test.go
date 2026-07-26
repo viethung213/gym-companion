@@ -10,10 +10,12 @@ import (
 )
 
 func TestGeminiCoachAgent(t *testing.T) {
+	t.Parallel()
 	agent := coachingai.NewGeminiCoachAgent("mock_api_key")
 	ctx := context.Background()
 
 	t.Run("GenerateRoadmapStrategy", func(t *testing.T) {
+		t.Parallel()
 		out, err := agent.GenerateRoadmapStrategy(ctx, port.RoadmapStrategyParams{
 			UserID:          "usr_100",
 			Goal:            "Hypertrophy",
@@ -28,6 +30,7 @@ func TestGeminiCoachAgent(t *testing.T) {
 	})
 
 	t.Run("GenerateWeeklySchedule", func(t *testing.T) {
+		t.Parallel()
 		out, err := agent.GenerateWeeklySchedule(ctx, port.WeeklyScheduleParams{
 			UserID:     "usr_100",
 			RoadmapID:  "rdp_1",
@@ -43,6 +46,7 @@ func TestGeminiCoachAgent(t *testing.T) {
 	})
 
 	t.Run("GenerateDailyPrescription", func(t *testing.T) {
+		t.Parallel()
 		out, err := agent.GenerateDailyPrescription(ctx, port.DailyPrescriptionParams{
 			UserID:                  "usr_100",
 			RoadmapID:               "rdp_1",

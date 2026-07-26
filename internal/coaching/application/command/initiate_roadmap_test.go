@@ -83,6 +83,7 @@ func (m *mockPublisher) PublishEvent(ctx context.Context, eventType string, aggr
 }
 
 func TestInitiateRoadmapHandler(t *testing.T) {
+	t.Parallel()
 	rRepo := &mockRoadmapRepo{}
 	sRepo := &mockScheduleRepo{}
 	agent := &mockCoachingAgent{}

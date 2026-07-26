@@ -8,11 +8,13 @@ import (
 )
 
 func TestNewWorkoutRoadmap(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	startDate := now
 	endDate := now.AddDate(0, 0, 28)
 
 	t.Run("successful creation", func(t *testing.T) {
+		t.Parallel()
 		r, err := domain.NewWorkoutRoadmap("rdp_123", "usr_100", startDate, endDate)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -29,6 +31,7 @@ func TestNewWorkoutRoadmap(t *testing.T) {
 	})
 
 	t.Run("empty user id returns error", func(t *testing.T) {
+		t.Parallel()
 		_, err := domain.NewWorkoutRoadmap("rdp_123", "", startDate, endDate)
 		if err != domain.ErrInvalidUser {
 			t.Errorf("expected ErrInvalidUser, got %v", err)
@@ -36,6 +39,7 @@ func TestNewWorkoutRoadmap(t *testing.T) {
 	})
 
 	t.Run("invalid date range returns error", func(t *testing.T) {
+		t.Parallel()
 		_, err := domain.NewWorkoutRoadmap("rdp_123", "usr_100", endDate, startDate)
 		if err != domain.ErrInvalidDates {
 			t.Errorf("expected ErrInvalidDates, got %v", err)
@@ -43,6 +47,7 @@ func TestNewWorkoutRoadmap(t *testing.T) {
 	})
 
 	t.Run("complete active roadmap", func(t *testing.T) {
+		t.Parallel()
 		r, _ := domain.NewWorkoutRoadmap("rdp_123", "usr_100", startDate, endDate)
 		err := r.Complete()
 		if err != nil {

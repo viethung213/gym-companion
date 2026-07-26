@@ -8,9 +8,11 @@ import (
 )
 
 func TestUpperSafetyEnvelopeValidator(t *testing.T) {
+	t.Parallel()
 	validator := domain.NewUpperSafetyEnvelopeValidator()
 
 	t.Run("BR-AC-02 Load Adjustment Ceiling (+30%)", func(t *testing.T) {
+		t.Parallel()
 		prevWeight := float32(100.0)
 		proposedWeight := float32(140.0) // Exceeds +30% (max 130)
 
@@ -24,6 +26,7 @@ func TestUpperSafetyEnvelopeValidator(t *testing.T) {
 	})
 
 	t.Run("BR-AC-02 Load Adjustment Ceiling (-30%)", func(t *testing.T) {
+		t.Parallel()
 		prevWeight := float32(100.0)
 		proposedWeight := float32(50.0) // Below -30% (min 70)
 
@@ -37,6 +40,7 @@ func TestUpperSafetyEnvelopeValidator(t *testing.T) {
 	})
 
 	t.Run("BR-AC-02 Load Adjustment Ceiling within range", func(t *testing.T) {
+		t.Parallel()
 		prevWeight := float32(100.0)
 		proposedWeight := float32(115.0)
 
@@ -50,6 +54,7 @@ func TestUpperSafetyEnvelopeValidator(t *testing.T) {
 	})
 
 	t.Run("Decision 1.4 Deload Week RPE <= 6 lock", func(t *testing.T) {
+		t.Parallel()
 		exs := []domain.PrescribedExercise{
 			domain.NewPrescribedExercise("ex_1", "Bench", 3, 10, 60, 0, "", 90, 120, 8.5),
 		}
@@ -71,6 +76,7 @@ func TestUpperSafetyEnvelopeValidator(t *testing.T) {
 	})
 
 	t.Run("Active Injury Lock pruning", func(t *testing.T) {
+		t.Parallel()
 		exs := []domain.PrescribedExercise{
 			domain.NewPrescribedExercise("ex_1", "Bench Press", 3, 10, 60, 0, "Targets Shoulder and Chest", 90, 120, 7.5),
 			domain.NewPrescribedExercise("ex_2", "Squat", 3, 10, 80, 0, "Targets Quads and Glutes", 90, 120, 7.5),
@@ -91,6 +97,7 @@ func TestUpperSafetyEnvelopeValidator(t *testing.T) {
 	})
 
 	t.Run("BR-AC-01 Rest Days validation", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now().UTC()
 		days := make([]domain.ScheduleDay, 7)
 		for i := 0; i < 7; i++ {

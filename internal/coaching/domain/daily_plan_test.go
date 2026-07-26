@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewDailyWorkoutPlan(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	mainEx := []domain.PrescribedExercise{
 		domain.NewPrescribedExercise("ex_bench", "Bench Press", 3, 10, 60.0, 0, "Focus on chest stretch", 90, 120, 7.5),
@@ -15,6 +16,7 @@ func TestNewDailyWorkoutPlan(t *testing.T) {
 	prescription := domain.NewWorkoutPrescription(nil, mainEx, nil)
 
 	t.Run("successful creation", func(t *testing.T) {
+		t.Parallel()
 		p, err := domain.NewDailyWorkoutPlan("dwp_1", "usr_100", "rdp_1", "ws_1", now, domain.DailyPlanStatusActive, prescription, "Reasoning", "")
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -28,6 +30,7 @@ func TestNewDailyWorkoutPlan(t *testing.T) {
 	})
 
 	t.Run("empty main exercises returns error", func(t *testing.T) {
+		t.Parallel()
 		emptyPrescription := domain.NewWorkoutPrescription(nil, nil, nil)
 		_, err := domain.NewDailyWorkoutPlan("dwp_1", "usr_100", "rdp_1", "ws_1", now, domain.DailyPlanStatusActive, emptyPrescription, "", "")
 		if err != domain.ErrEmptyPrescription {
@@ -36,6 +39,7 @@ func TestNewDailyWorkoutPlan(t *testing.T) {
 	})
 
 	t.Run("activate and complete plan", func(t *testing.T) {
+		t.Parallel()
 		p, _ := domain.NewDailyWorkoutPlan("dwp_1", "usr_100", "rdp_1", "ws_1", now, domain.DailyPlanStatusDraft, prescription, "", "")
 		p.Activate()
 		if p.Status() != domain.DailyPlanStatusActive {

@@ -40,6 +40,7 @@ func (m *mockExerciseProvider) GetBaseline1RM(ctx context.Context, userID string
 }
 
 func TestGenerateDailyPlanHandler(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	rRepo := &mockRoadmapRepo{}
 	sRepo := &mockScheduleRepo{}

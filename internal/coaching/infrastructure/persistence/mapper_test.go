@@ -9,11 +9,13 @@ import (
 )
 
 func TestMappers(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	startDate := now
 	endDate := now.AddDate(0, 0, 28)
 
 	t.Run("WorkoutRoadmap Mapper", func(t *testing.T) {
+		t.Parallel()
 		roadmap, _ := domain.NewWorkoutRoadmap("rdp_1", "usr_100", startDate, endDate)
 		model := persistence.RoadmapToPersistence(roadmap)
 		if model.ID != "rdp_1" || model.UserID != "usr_100" {
@@ -27,6 +29,7 @@ func TestMappers(t *testing.T) {
 	})
 
 	t.Run("WeeklySchedule Mapper", func(t *testing.T) {
+		t.Parallel()
 		days := make([]domain.ScheduleDay, 7)
 		for i := 0; i < 7; i++ {
 			st := domain.WorkoutDayStatusTraining
@@ -53,6 +56,7 @@ func TestMappers(t *testing.T) {
 	})
 
 	t.Run("DailyWorkoutPlan Mapper", func(t *testing.T) {
+		t.Parallel()
 		exs := []domain.PrescribedExercise{
 			domain.NewPrescribedExercise("ex_1", "Bench", 3, 10, 60, 0, "", 90, 120, 7.5),
 		}
