@@ -12,8 +12,10 @@
   - `Injury`: Vùng cơ bị thương, ngày báo, trạng thái (`Active` | `Recovered`).
 - **Value Objects**:
   - `BiologicalMetrics`: Tuổi, giới tính, chiều cao, cân nặng hiện tại, tỷ lệ mỡ.
-  - `TrainingScheduleSlot`: Khung giờ tập cố định.
-  - `ChatbotContext`: Thiết bị có sẵn, dị ứng thức ăn.
+  - `PrimaryGoal`: Mục tiêu chính (`PRIMARY_GOAL_MUSCLE_GAIN` hoặc `PRIMARY_GOAL_FAT_LOSS`).
+  - `AvailableEquipment`: Danh sách dụng cụ có sẵn (luôn mặc định chứa `BODYWEIGHT`).
+  - `PreferredMuscleGroups`: Danh sách nhóm cơ ưu tiên.
+  - `AvailableSlots`: Khung giờ rảnh trong tuần.
   - `CoachPersonality`: Phong cách Coach (`DrillSergeant` | `BestFriend` | `DataAnalyst`).
 - **Repository**: `UserRepository`
 - **Domain Events**:
