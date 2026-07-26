@@ -15,15 +15,16 @@
 | **Precondition** | `UserProfileCompleted` event được nhận. `ActiveCoachEnabled = true`. |
 
 **Main Flow**
-1. System đọc `BiologicalMetrics` và mục tiêu từ `User`.
+1. System đọc `BiologicalMetrics`, `primary_goal`, `preferred_muscle_groups`, `available_equipment` và `available_slots` từ `User`.
 2. System tính `FitnessScore` và xác định giai đoạn khởi điểm.
 3. System tạo `WorkoutRoadmap` (4 tuần) với `RoadmapPhase` và `CompletionRate = 0`.
-4. System tạo `WeeklySchedule` đầu tiên với `MuscleSplit` phù hợp mục tiêu, tuân thủ `BR-AC-01`.
+4. System tạo `WeeklySchedule` đầu tiên với `MuscleSplit` phân bổ theo `primary_goal`, ưu tiên `preferred_muscle_groups` và gán vào các ngày rảnh trong `available_slots`, tuân thủ `BR-AC-01`.
 5. System gọi `OverloadValidator` để xác nhận volume tuần 1 hợp lệ.
 6. System phát `RoadmapInitiated`.
 
 **Alternative Flow**
 - A1: User có `Injury` active → System loại bỏ bài tập tác động vùng chấn thương khi sinh lịch tuần.
+- A2: `preferred_muscle_groups` rỗng → System tự động áp dụng `MuscleSplit` phân bổ cân bằng chuẩn (Standard Push/Pull/Legs hoặc Upper/Lower split).
 
 **Error / Edge Cases**
 - E1: `BiologicalMetrics` không đủ dữ liệu → không sinh được lộ trình, yêu cầu hoàn thiện hồ sơ.
@@ -49,7 +50,7 @@
    - System kích hoạt đề xuất dồn/bù: Hỏi user muốn dồn buổi tập cũ sang hôm nay (và đẩy lịch các buổi sau) hay bỏ qua.
    - Nếu user chọn dồn/bù → System cập nhật lại `WeeklySchedule` và tiến hành sinh giáo án cho buổi tập bị dồn đó.
    - Nếu user chọn bỏ qua (hoặc không phản hồi) → System đánh dấu buổi tập cũ là `Skipped` (`BR-AC-03`), tiếp tục sinh giáo án cho ngày hôm nay theo lịch.
-3. System sinh `WorkoutPrescription` (bài tập, set, rep, tạ gợi ý, warm-up/cool-down) dựa trên `MuscleSplit` của ngày hôm nay và `PersonalRecord` (1RM) hiện tại.
+3. System sinh `WorkoutPrescription` (bài tập, set, rep, tạ gợi ý, warm-up/cool-down) dựa trên `MuscleSplit` của ngày hôm nay, `PersonalRecord` (1RM) hiện tại và chỉ chọn các bài tập có dụng cụ thuộc `available_equipment`.
 4. System kiểm tra `Injury` active — loại bỏ bài tập tác động vùng chấn thương và thay thế bằng bài tương đương.
 5. System tạo `DailyWorkoutPlan`, phát `DailyWorkoutPlanGenerated`.
 
@@ -91,5 +92,27 @@
 
 **Postcondition**: `WeeklySchedule` tuần tiếp theo được tạo sẵn sàng để sinh giáo án hàng ngày.
 > *`CoachingService.GenerateWeeklySchedule()` gọi `WeeklyScheduleRepository.Save()` và phát `WeeklyScheduleGenerated`.*
+
+**Domain Events**: `WeeklyScheduleGenerated`
+
+---
+
+### UC-02.4 ReevaluateScheduleOnProfileUpdated
+
+| | |
+|---|---|
+| **Actor** | System (AI Coach) |
+| **Precondition** | Event `ProfileUpdated` được nhận. `WorkoutRoadmap` đang ở trạng thái `Active`. |
+
+**Main Flow**
+1. System đọc thông tin snapshot mới từ `User` (`available_equipment`, `available_slots`, `preferred_muscle_groups`, `primary_goal`).
+2. System kích hoạt Re-evaluation cho `WeeklySchedule` bắt đầu từ ngày tập tiếp theo:
+   - Cập nhật danh mục bài tập tương thích với `available_equipment` mới.
+   - Điều chỉnh ngày tập trong tuần theo `available_slots` mới.
+   - Phân bổ lại `MuscleSplit` theo `preferred_muscle_groups` và `primary_goal`.
+3. System cập nhật `WeeklySchedule` và phát `WeeklyScheduleGenerated`.
+
+**Postcondition**: `WeeklySchedule` được điều chỉnh từ ngày tập tiếp theo.  
+> *`CoachingService.ReevaluateSchedule()` cập nhật `WeeklyScheduleRepository.Save()` và publish `WeeklyScheduleGenerated`.*
 
 **Domain Events**: `WeeklyScheduleGenerated`
