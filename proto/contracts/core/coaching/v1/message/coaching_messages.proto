@@ -156,6 +156,9 @@ message PrescribedExercise {
   float target_weight = 5;
   int32 duration_seconds = 6;
   string notes = 7;
+  int32 rest_set_sec = 8;
+  int32 rest_exercise_sec = 9;
+  float target_rpe = 10;
 }
 
 message CheckInQuestion {

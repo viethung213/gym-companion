@@ -71,13 +71,13 @@
 #### Aggregate Root: `DailyWorkoutPlan`
 - **Nhiệm vụ**: Giáo án chi tiết một buổi tập, sinh JIT để tránh lock `WeeklySchedule`.
 - **Value Objects**:
-  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, warm-up/cool-down.
+  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, thời gian nghỉ giữa hiệp (`rest_set_sec`), thời gian nghỉ sau bài tập (`rest_exercise_sec`), `target_rpe`, warm-up/cool-down.
 - **Repository**: `DailyWorkoutPlanRepository`
 - **Domain Events**:
   - `DailyWorkoutPlanGenerated`: Giáo án đã được sinh.
 
 #### [Domain Service] `AdaptiveCoachEngine`
-- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4) và đánh giá CR cuối chu kỳ (BR-AC-04).
+- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), điều phối 4 giai đoạn lộ trình (`Accumulation` ➔ `Overload` ➔ `Peak` ➔ `Supercompensation/Deload` theo BR-AC-09) và đánh giá CR cuối chu kỳ (BR-AC-04).
 - **Input**: `WorkoutRoadmap`, `WeeklySchedule`, lịch sử `WorkoutSession`.
 - **Signal B1** (BR-AC-05): Không hoạt động 7 ngày → Đề xuất 3 phương án (tiếp tục / đặt lại / tạm dừng).
 - **Signal B2** (BR-AC-06): Bỏ tập cùng ngày ≥ 3 lần liên tiếp → Đề xuất dời slot.

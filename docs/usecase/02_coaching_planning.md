@@ -18,7 +18,7 @@
 1. System đọc `BiologicalMetrics`, `primary_goal`, `preferred_muscle_groups`, `available_equipment` và `available_slots` từ `User`.
 2. System tính `FitnessScore` và xác định giai đoạn khởi điểm.
 3. System tạo `WorkoutRoadmap` (4 tuần) với `RoadmapPhase` và `CompletionRate = 0`.
-4. System tạo `WeeklySchedule` đầu tiên với `MuscleSplit` phân bổ theo `primary_goal`, ưu tiên `preferred_muscle_groups` và gán vào các ngày rảnh trong `available_slots`, tuân thủ `BR-AC-01`.
+4. System tạo `WeeklySchedule` đầu tiên (giai đoạn Accumulation - Tích lũy, RPE 6–7) với `MuscleSplit` phân bổ theo `primary_goal`, ưu tiên `preferred_muscle_groups` và gán vào các ngày rảnh trong `available_slots`, tuân thủ `BR-AC-01` và `BR-AC-09`.
 5. System gọi `OverloadValidator` để xác nhận volume tuần 1 hợp lệ.
 6. System phát `RoadmapInitiated`.
 
@@ -50,7 +50,7 @@
    - System kích hoạt đề xuất dồn/bù: Hỏi user muốn dồn buổi tập cũ sang hôm nay (và đẩy lịch các buổi sau) hay bỏ qua.
    - Nếu user chọn dồn/bù → System cập nhật lại `WeeklySchedule` và tiến hành sinh giáo án cho buổi tập bị dồn đó.
    - Nếu user chọn bỏ qua (hoặc không phản hồi) → System đánh dấu buổi tập cũ là `Skipped` (`BR-AC-03`), tiếp tục sinh giáo án cho ngày hôm nay theo lịch.
-3. System sinh `WorkoutPrescription` (bài tập, set, rep, tạ gợi ý, warm-up/cool-down) dựa trên `MuscleSplit` của ngày hôm nay, `PersonalRecord` (1RM) hiện tại và chỉ chọn các bài tập có dụng cụ thuộc `available_equipment`.
+3. System sinh `WorkoutPrescription` (bài tập, set, rep, tạ gợi ý, `rest_set_sec`, `rest_exercise_sec`, `target_rpe` theo Phase của tuần, warm-up/cool-down) dựa trên `MuscleSplit` của ngày hôm nay, `PersonalRecord` (1RM) hiện tại và chỉ chọn các bài tập có dụng cụ thuộc `available_equipment`.
 4. System kiểm tra `Injury` active — loại bỏ bài tập tác động vùng chấn thương và thay thế bằng bài tương đương.
 5. System tạo `DailyWorkoutPlan`, phát `DailyWorkoutPlanGenerated`.
 
@@ -80,7 +80,7 @@
 
 **Main Flow**
 1. System đọc lịch sử tập luyện thực tế của tuần vừa rồi (tổng volume thực tế).
-2. System sinh `WeeklySchedule` tiếp theo (tuần 2, 3, hoặc 4) của lộ trình hiện tại, tuân thủ `BR-AC-01`.
+2. System sinh `WeeklySchedule` tiếp theo (tuần 2 - Overload RPE 7–8, tuần 3 - Peak RPE 8–9, hoặc tuần 4 - Supercompensation/Deload RPE 5–6 giảm 40–50% volume) của lộ trình hiện tại, tuân thủ `BR-AC-01` và `BR-AC-09`.
 3. System gọi `OverloadValidator` để kiểm tra Progressive Overload của lịch tuần mới không vượt quá 10% volume thực tế của tuần trước (BR-AC-02).
 4. System lưu `WeeklySchedule` mới và phát `WeeklyScheduleGenerated`.
 

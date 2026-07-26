@@ -46,6 +46,7 @@
   - BR-AC-06: Signal B2 — Lịch không tương thích.
   - BR-AC-07: Signal B3 — Overtraining (≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi).
   - BR-AC-08: Signal B4 — Plateau (1RM + Form không tăng 3 tuần liên tiếp với CR ≥ 70%).
+  - BR-AC-09: Lộ trình 4 tuần chuyên khoa tuân thủ 4 giai đoạn: Tuần 1 (Accumulation - Tích lũy RPE 6–7), Tuần 2 (Overload - Tăng tải RPE 7–8), Tuần 3 (Peak - Chạm đỉnh RPE 8–9), và Tuần 4 (Supercompensation/Deload - Giảm 40–50% volume, RPE 5–6).
 - **Context liên quan**:
   - Đọc `BiologicalMetrics`, `Injury`, `PrimaryGoal`, `AvailableEquipment`, `PreferredMuscleGroups`, `AvailableSlots` từ `User Profile`.
   - Đọc thông tin bài tập được quản lý bởi `Workout Execution & Motion`.
