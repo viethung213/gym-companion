@@ -1,16 +1,17 @@
 # ĐẶC TẢ YÊU CẦU NGHIỆP VỤ CỐT LÕI (CORE BRD) - FITAI
-### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.7.0-OPT (Tối ưu Token)
+### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.8.0-OPT (Tối ưu Token)
 
 ---
 
 ## KIỂM SOÁT TÀI LIỆU
-- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 03/07/2026
+- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 27/07/2026
 - **Trạng thái**: Approved | **Phân loại**: Internal Confidential
 - **Lịch sử đổi mới chính**:
   * v1.0 (27/06/2026): Hoàn thiện 7 module nghiệp vụ gốc.
   * v1.3 (01/07/2026): Chuyển sang cơ chế sinh lộ trình tổng quan & sinh giáo án chi tiết theo buổi.
   * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
   * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn) và tư vấn món ăn ngoài.
+  * v1.8 (27/07/2026): Chuyển từ sinh giáo án Just-In-Time theo từng buổi sang sinh trước toàn bộ giáo án của tuần hiện tại; chỉ điều chỉnh các buổi bị ảnh hưởng khi có signal mới.
 
 ---
 
@@ -50,11 +51,12 @@
 4. **Dãn cơ (Cooldown)**: Trước khi kết thúc buổi tập, nếu giáo án có Cooldown, hệ thống hiển thị bài tập dãn cơ (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Cooldown** để bỏ qua.
 5. Nghỉ ngơi → Lặp lại cho đến khi hoàn thành giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
 
-### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
-1. Trigger: Đến ngày tập / User mở app.
-2. AI Coach hỏi/nhận trạng thái sức khỏe (chấn thương mới, độ phục hồi) & phân tích dữ liệu RPE/Form buổi trước.
-3. AI Coach tự động sinh giáo án chi tiết hôm nay (bài tập, set, rep, tạ gợi ý).
-4. User nhận giáo án và chuẩn bị thực hiện (chuyển sang Quy trình 3.2).
+### 3.3 Quy trình Sinh giáo án theo tuần (Weekly Workout Generation)
+1. Trigger: Khởi tạo lộ trình mới hoặc bắt đầu một tuần tập mới.
+2. AI Coach tổng hợp `WorkoutRoadmap`, `WeeklySchedule`, hồ sơ sức khỏe, thiết bị hiện có và dữ liệu hiệu suất gần nhất.
+3. AI Coach sinh trước toàn bộ `DailyWorkoutPlan` cho các ngày tập trong tuần hiện tại, bao gồm bài tập, set, rep, mức tạ gợi ý, Warm-up và Cooldown.
+4. Khi phát sinh signal mới như chấn thương, thiếu thiết bị, thay đổi lịch, quá tải hoặc hiệu suất bất thường, hệ thống chỉ điều chỉnh các buổi bị ảnh hưởng; không sinh lại toàn bộ roadmap hoặc toàn bộ tuần nếu không cần thiết.
+5. User có thể xem trước kế hoạch tuần và mở giáo án của ngày hiện tại để thực hiện theo Quy trình 3.2.
 
 ### 3.4 Quy trình Đánh giá & Điều chỉnh Lộ trình (Adaptive Review Cycle)
 1. **Trigger A (Cuối chu kỳ 4 tuần)**: AI Coach tính Completion Rate (CR) để tự động nâng/hạ hoặc cấu hình lại lộ trình 4 tuần kế tiếp theo quy tắc **BR-AC-04**.
@@ -75,12 +77,12 @@
 ### Module 2: AI Coach cá nhân
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
-| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (mốc định hướng) & Lịch tập tuần (phân bổ cơ). Không sinh chi tiết bài ở bước này. | M |
+| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (mốc định hướng), Lịch tập tuần (phân bổ cơ) và toàn bộ giáo án chi tiết cho tuần hiện tại. Các tuần tiếp theo được sinh khi bắt đầu tuần mới hoặc khi roadmap được tái cấu hình. | M |
 | **FR-AC-02** | **Tự động điều chỉnh**: Phân tích hiệu suất tập để tăng/giảm tạ, thay bài tập hoặc chèn Deload Week. | M |
 | **FR-AC-03** | **Bài tập thay thế**: Loại bỏ bài tác động vào vùng chấn thương đột xuất cho đến khi báo phục hồi. | S |
 | **FR-AC-04** | **Đồng hành**: Gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thực tế (PR, quay lại sau nghỉ dài). | S |
 | **FR-AC-05** | **Phong cách Coach**: Cho chọn Drill Sergeant (nghiêm khắc), Best Friend (thân thiện), Data Analyst (khoa học). | C |
-| **FR-AC-06** | **Sinh giáo án theo buổi**: Sinh bài tập, set, rep, tạ gợi ý trước buổi tập. AI Coach hỏi 1-2 câu ngắn về thiết bị & dị ứng thực phẩm theo ngữ cảnh nếu chưa có thông tin. | M |
+| **FR-AC-06** | **Sinh và điều chỉnh giáo án tuần**: Sinh trước bài tập, set, rep và tạ gợi ý cho toàn bộ các buổi của tuần hiện tại. Khi có thay đổi về sức khỏe, thiết bị, lịch hoặc hiệu suất, AI Coach chỉ điều chỉnh các buổi bị ảnh hưởng. AI Coach có thể hỏi 1-2 câu ngắn theo ngữ cảnh nếu thiếu thông tin cần thiết. | M |
 | **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án (hỗ trợ cả AI và Phi AI, cho phép user bỏ qua/Skip). | M |
 
 ### Module 3: AI Camera Coach (Phân tích tư thế)
@@ -157,7 +159,7 @@
   * Nhật ký ăn uống (Meal Logs).
 - **Đầu ra (Outputs)**:
   * Lộ trình 4 tuần & Lịch tập tuần (phân bổ cơ).
-  * Giáo án buổi: Bài tập, set, rep, tạ gợi ý, video demo.
+  * Giáo án tuần: Tập hợp các `DailyWorkoutPlan` gồm bài tập, set, rep, tạ gợi ý và video demo cho từng ngày tập.
   * Thực đơn ngày: 3 bữa chính + 1 bữa phụ (3 mức giá, chi tiết macro/calo).
   * Cảnh báo sửa tư thế (Visual Overlay + Audio Alert).
   * Báo cáo buổi tập: Tổng time, volume, calo, Form trung bình, lỗi phổ biến, lời khuyên phục hồi.
@@ -172,4 +174,4 @@
 - **Constraint-02 (Bảo mật)**: Xử lý video on-device (Edge AI); chỉ gửi tọa độ khớp dạng số về server.
 
 ---
-*Tài liệu Đặc tả Yêu cầu Nghiệp vụ Cốt lõi theo chuẩn BABOK v3.0 – Cập nhật lần cuối ngày 02/07/2026*
+*Tài liệu Đặc tả Yêu cầu Nghiệp vụ Cốt lõi theo chuẩn BABOK v3.0 – Cập nhật lần cuối ngày 27/07/2026*
