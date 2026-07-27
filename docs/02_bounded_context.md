@@ -35,7 +35,7 @@
 ### 2. Coaching & Planning Context
 - **Trách nhiệm**: Lập lộ trình 4 tuần, lịch tuần, giáo án JIT chi tiết; thực thi thích ứng (Signal B1–B4, CR cuối chu kỳ); quản lý phong cách Coach và nhắc lịch. [FR-AC-01 → FR-AC-07, FR-UM-04]
 - **Không trách nhiệm**: Không ghi nhận thực tế buổi tập, không đếm rep, không tính 1RM.
-- **Aggregates**: `WorkoutRoadmap`, `WeeklySchedule`, `DailyWorkoutPlan`
+- **Aggregates**: `WorkoutRoadmap` (Aggregate Root quản lý 4 `WeeklySchedule` và 28 ngày tập), `DailyWorkoutPlan`
 - **Domain Services**: `AdaptiveCoachEngine`, `OverloadValidator`
 - **Quy tắc nghiệp vụ**:
   - BR-AC-01: Tối đa 6 buổi/tuần, ≥ 1 ngày nghỉ.

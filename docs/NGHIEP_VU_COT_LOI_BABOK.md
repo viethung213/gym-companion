@@ -37,9 +37,9 @@
 ## 3. BẢN ĐỒ QUY TRÌNH NGHIỆP VỤ
 
 ### 3.1 Quy trình Khởi tạo (Onboarding & Planning)
-1. User nhập thông tin cơ bản, chỉ số cơ thể, mục tiêu (Tăng cơ/Giảm mỡ) & khung giờ tập cố định.
+1. User nhập thông tin cơ bản, chỉ số cơ thể, mục tiêu (`primary_goal`: Tăng cơ/Giảm mỡ/Sức mạnh), nhóm cơ ưu tiên (`preferred_muscle_groups`) & khung giờ/ngày rảnh (`available_slots`).
 2. User khai báo chấn thương cũ hoặc bệnh lý mãn tính.
-3. AI Coach tính toán `User Fitness Score` & khởi tạo Lộ trình tổng quan 4 tuần, Lịch tập tuần và Gợi ý dinh dưỡng.
+3. AI Coach tính toán `User Fitness Score` (thể trạng khởi điểm RPE 6–7) và khởi tạo Lộ trình 4 tuần (28 ngày) phân bổ 4 pha luyện tập (Accumulation, Overload, Peak, Deload) cùng các `DailyWorkoutPlan` chi tiết (bài tập, set, rep, tạ gợi ý, thời gian nghỉ) tương ứng các ngày rảnh trong `available_slots` và Gợi ý dinh dưỡng.
 
 ### 3.2 Quy trình Luyện tập (Workout Execution)
 1. User check-in & cấu hình playlist âm nhạc (phát chạy ngầm xuyên suốt buổi tập).
@@ -50,15 +50,15 @@
 4. **Dãn cơ (Cooldown)**: Trước khi kết thúc buổi tập, nếu giáo án có Cooldown, hệ thống hiển thị bài tập dãn cơ (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Cooldown** để bỏ qua.
 5. Nghỉ ngơi → Lặp lại cho đến khi hoàn thành giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
 
-### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
-1. Trigger: Đến ngày tập / User mở app.
-2. AI Coach hỏi/nhận trạng thái sức khỏe (chấn thương mới, độ phục hồi) & phân tích dữ liệu RPE/Form buổi trước.
-3. AI Coach tự động sinh giáo án chi tiết hôm nay (bài tập, set, rep, tạ gợi ý).
+### 3.3 Quy trình Truy xuất & Thực thi Giáo án theo buổi
+1. Trigger: Đến ngày tập hoặc User mở ứng dụng.
+2. Hệ thống đọc trực tiếp `DailyWorkoutPlan` đã khởi tạo của ngày hôm nay từ cơ sở dữ liệu.
+3. User thực hiện Check-in ngắn. Nếu có biến động sức khỏe/chấn thương mới ➔ AI Coach kích hoạt Re-generate giáo án riêng cho hôm nay hoặc điều chỉnh tải trọng.
 4. User nhận giáo án và chuẩn bị thực hiện (chuyển sang Quy trình 3.2).
 
 ### 3.4 Quy trình Đánh giá & Điều chỉnh Lộ trình (Adaptive Review Cycle)
 1. **Trigger A (Cuối chu kỳ 4 tuần)**: AI Coach tính Completion Rate (CR) để tự động nâng/hạ hoặc cấu hình lại lộ trình 4 tuần kế tiếp theo quy tắc **BR-AC-04**.
-2. **Trigger B (Giữa chu kỳ - Event-driven)**: Hệ thống liên tục quét 4 tín hiệu hành vi độc lập (Không hoạt động, Lịch không tương thích, Tập quá tải, Tiến bộ đình trệ) để đề xuất điều chỉnh nhanh giáo án theo các quy tắc **BR-AC-05** -> **BR-AC-08**.
+2. **Trigger B (Giữa chu kỳ - Event-driven)**: Hệ thống liên tục quét 4 tín hiệu hành vi độc lập (Không hoạt động, Lịch không tương thích, Tập quá tải, Tiến bộ đình trệ) hoặc khi User cập nhật hồ sơ (`ProfileUpdated`) để đề xuất **Re-generate các giáo án chưa tập (`scheduled_date >= today`)** trong 4 tuần theo các quy tắc **BR-AC-05** -> **BR-AC-08**.
 
 ---
 
@@ -75,12 +75,12 @@
 ### Module 2: AI Coach cá nhân
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
-| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (mốc định hướng) & Lịch tập tuần (phân bổ cơ). Không sinh chi tiết bài ở bước này. | M |
+| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (28 ngày tập) phân bổ nhóm cơ & RPE target theo 4 pha (Accumulation, Overload, Peak, Deload) và các giáo án chi tiết dựa trên `available_slots`, `primary_goal`, `preferred_muscle_groups` và `user_fitness_score`. | M |
 | **FR-AC-02** | **Tự động điều chỉnh**: Phân tích hiệu suất tập để tăng/giảm tạ, thay bài tập hoặc chèn Deload Week. | M |
 | **FR-AC-03** | **Bài tập thay thế**: Loại bỏ bài tác động vào vùng chấn thương đột xuất cho đến khi báo phục hồi. | S |
 | **FR-AC-04** | **Đồng hành**: Gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thực tế (PR, quay lại sau nghỉ dài). | S |
 | **FR-AC-05** | **Phong cách Coach**: Cho chọn Drill Sergeant (nghiêm khắc), Best Friend (thân thiện), Data Analyst (khoa học). | C |
-| **FR-AC-06** | **Sinh giáo án theo buổi**: Sinh bài tập, set, rep, tạ gợi ý trước buổi tập. AI Coach hỏi 1-2 câu ngắn về thiết bị & dị ứng thực phẩm theo ngữ cảnh nếu chưa có thông tin. | M |
+| **FR-AC-06** | **Tải giáo án từ cơ sở dữ liệu & Re-generate linh hoạt**: Khi mở ứng dụng, đọc giáo án đã khởi tạo trực tiếp từ cơ sở dữ liệu. Khi có thay đổi hồ sơ hoặc sức khỏe ➔ Re-generate các giáo án chưa thực thi (`scheduled_date >= today`). | M |
 | **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án (hỗ trợ cả AI và Phi AI, cho phép user bỏ qua/Skip). | M |
 
 ### Module 3: AI Camera Coach (Phân tích tư thế)

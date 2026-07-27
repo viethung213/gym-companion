@@ -15,23 +15,12 @@ message RoadmapInitiated {
   google.protobuf.Timestamp initiated_at = 5;
 }
 
-message WeeklyScheduleGenerated {
-  string weekly_schedule_id = 1;
+message DailyWorkoutPlanExecuted {
+  string daily_workout_plan_id = 1;
   string roadmap_id = 2;
   string user_id = 3;
-  int32 week_number = 4;
-  google.type.Date start_date = 5;
-  google.type.Date end_date = 6;
-  google.protobuf.Timestamp generated_at = 7;
-}
-
-message DailyWorkoutPlanGenerated {
-  string daily_workout_plan_id = 1;
-  string weekly_schedule_id = 2;
-  string roadmap_id = 3;
-  string user_id = 4;
-  google.type.Date scheduled_date = 5;
-  google.protobuf.Timestamp generated_at = 6;
+  google.type.Date scheduled_date = 4;
+  google.protobuf.Timestamp executed_at = 5;
 }
 
 message RoadmapAdjusted {

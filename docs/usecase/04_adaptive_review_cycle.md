@@ -60,7 +60,7 @@
 
 **Postcondition**: Lịch tập được cập nhật theo lựa chọn của user (hoặc giữ nguyên nếu không phản hồi).
 
-**Domain Events**: `RoadmapPaused` | `WeeklyScheduleGenerated`
+**Domain Events**: `RoadmapPaused` | `RoadmapAdjusted`
 
 ---
 
@@ -74,13 +74,13 @@
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B2.
 2. System đề xuất dời slot ngày đó sang ngày khác còn trống trong tuần.
-3. If user đồng ý → cập nhật `WeeklySchedule`, phát `ScheduleDayRescheduled`.
+3. If user đồng ý → Re-generate các giáo án chưa thực thi trong `WorkoutRoadmap`, phát `RoadmapAdjusted`.
 4. Nếu user từ chối → giữ nguyên, không hỏi lại về vấn đề này.
 
 **Error / Edge Cases**
 - E1: Không còn ngày trống trong tuần (đã tối đa 6 buổi) → chỉ thông báo, không đề xuất đổi.
 
-**Domain Events**: `ScheduleDayRescheduled`
+**Domain Events**: `RoadmapAdjusted`
 
 ---
 
@@ -94,12 +94,12 @@
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B3.
 2. System cảnh báo nguy cơ quá tải, đề xuất Active Recovery.
-3. System bắt buộc chèn 1 ngày nghỉ vào `WeeklySchedule` kế tiếp.
+3. System bắt buộc chèn 1 ngày nghỉ vào `WorkoutRoadmap` cho ngày kế tiếp và Re-generate giáo án các ngày chưa thực thi.
 
 **Error / Edge Cases**
 - E1: User từ chối ngày nghỉ → System vẫn chèn (bắt buộc, không cho bypass).
 
-**Domain Events**: `WeeklyScheduleGenerated`
+**Domain Events**: `RoadmapAdjusted`
 
 ---
 

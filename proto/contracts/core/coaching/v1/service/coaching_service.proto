@@ -34,7 +34,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service CoachingService {
-  // Create the initial four-week roadmap and first weekly schedule.
+  // Create the complete four-week roadmap with pre-generated daily workout plans.
   rpc InitiateRoadmap (contracts.core.coaching.v1.message.InitiateRoadmapRequest) returns (contracts.core.coaching.v1.message.InitiateRoadmapResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/workout-roadmaps"

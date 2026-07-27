@@ -41,51 +41,35 @@
 ## 2. Context AI Coaching & Planning
 
 #### Aggregate Root: `WorkoutRoadmap`
-- **Nhiệm vụ**: Kiểm soát lộ trình tập luyện 4 tuần và trạng thái chu kỳ.
-- **Value Objects**:
-  - `RoadmapPhase`: Giai đoạn hiện tại và Progressive Overload target.
-  - `CompletionRate`: Tỷ lệ hoàn thành tính cuối chu kỳ (CR).
+- **Nhiệm vụ**: Quản lý toàn bộ Lộ trình 4 tuần (28 ngày tập), 4 tuần `WeeklySchedule` và 28 `DailyWorkoutPlan` chi tiết.
+- **Entities & Value Objects**:
+  - `WeeklySchedule` (Entity): Đại diện cho 1 tuần tập (chứa 7 `ScheduleDay` và `MuscleSplit`).
+  - `ScheduleDay` (Value Object): Trạng thái ngày tập (`Training`, `Rest`, `Skipped`), nhóm cơ mục tiêu và ID tham chiếu `DailyWorkoutPlan`.
+  - `DailyWorkoutPlan` (Entity): Giáo án chi tiết một buổi tập (`WorkoutPrescription` gồm bài tập, set, rep, tạ gợi ý, rest time, target RPE, warm-up/cool-down).
+  - `RoadmapPhase`: Giai đoạn hiện tại (`Accumulation`, `Overload`, `Peak`, `Deload`) và RPE target.
+  - `CompletionRate`: Tỷ lệ hoàn thành tính vào ngày 28 (cuối chu kỳ 4 tuần).
 - **Repository**: `WorkoutRoadmapRepository`
 - **Domain Events**:
-  - `RoadmapInitiated`: Khởi tạo lộ trình đầu tiên.
-  - `RoadmapAdjusted`: Điều chỉnh lộ trình (Trigger A).
+  - `RoadmapInitiated`: Khởi tạo lộ trình 4 tuần và 28 giáo án chi tiết.
+  - `RoadmapAdjusted`: Điều chỉnh các giáo án chưa thực thi khi đổi profile/chấn thương.
   - `RoadmapPaused`: Tạm dừng lộ trình (Signal B1, tối đa 4 tuần).
   - `RoadmapResumed`: Tiếp tục lộ trình sau khi tạm dừng.
+  - `DailyWorkoutPlanExecuted`: Giáo án của ngày hôm nay đã được thực thi.
 - **Invariants**:
   - Lifecycle: `Active` → `Paused` → `Resumed` → `Completed`.
-  - `RoadmapPaused` tối đa 4 tuần, sau đó tự chuyển về `Active` hoặc hỏi lại user.
-
-#### Aggregate Root: `WeeklySchedule`
-- **Nhiệm vụ**: Lịch tập/nghỉ của một tuần cụ thể, tham chiếu `WorkoutRoadmapId` bằng ID.
-- **Value Objects**:
-  - `MuscleSplit`: Nhóm cơ phân bổ cho từng ngày tập.
-  - `DailyPlanIds`: Danh sách ID tham chiếu tới các `DailyWorkoutPlan`.
-- **Repository**: `WeeklyScheduleRepository`
-- **Domain Events**:
-  - `WeeklyScheduleGenerated`: Tạo lịch tuần mới.
-  - `ScheduleDayRescheduled`: Dời ngày tập (Signal B2).
-- **Invariants**:
-  - Tối thiểu 1 ngày nghỉ hoàn toàn, tối đa 6 ngày tập trong tuần (BR-AC-01).
-  - Buổi bỏ tập đánh dấu "Bỏ qua", không tự dồn bù chưa có xác nhận (BR-AC-03).
-
-#### Aggregate Root: `DailyWorkoutPlan`
-- **Nhiệm vụ**: Giáo án chi tiết một buổi tập, sinh JIT để tránh lock `WeeklySchedule`.
-- **Value Objects**:
-  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, thời gian nghỉ giữa hiệp (`rest_set_sec`), thời gian nghỉ sau bài tập (`rest_exercise_sec`), `target_rpe`, warm-up/cool-down.
-- **Repository**: `DailyWorkoutPlanRepository`
-- **Domain Events**:
-  - `DailyWorkoutPlanGenerated`: Giáo án đã được sinh.
+  - Tối thiểu 1 ngày nghỉ hoàn toàn, tối đa 6 ngày tập trong mỗi tuần (`BR-AC-01`).
+  - Buổi bỏ tập tự động đánh dấu `Skipped` (`BR-AC-03`), không dời đẩy lịch của các ngày tiếp theo.
 
 #### [Domain Service] `AdaptiveCoachEngine`
-- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), điều phối 4 giai đoạn lộ trình (`Accumulation` ➔ `Overload` ➔ `Peak` ➔ `Supercompensation/Deload` theo BR-AC-09) và đánh giá CR cuối chu kỳ (BR-AC-04).
-- **Input**: `WorkoutRoadmap`, `WeeklySchedule`, lịch sử `WorkoutSession`.
+- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), điều phối 4 giai đoạn lộ trình (`Accumulation` ➔ `Overload` ➔ `Peak` ➔ `Deload` theo BR-AC-09) và đánh giá CR cuối chu kỳ 4 tuần (`BR-AC-04`).
+- **Input**: `WorkoutRoadmap`, lịch sử `WorkoutSession`.
 - **Signal B1** (BR-AC-05): Không hoạt động 7 ngày → Đề xuất 3 phương án (tiếp tục / đặt lại / tạm dừng).
 - **Signal B2** (BR-AC-06): Bỏ tập cùng ngày ≥ 3 lần liên tiếp → Đề xuất dời slot.
 - **Signal B3** (BR-AC-07): ≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi → Cảnh báo, chèn nghỉ bắt buộc.
 - **Signal B4** (BR-AC-08): 1RM + Form không tăng 3 tuần liên tiếp (CR ≥ 70%) → Đề xuất Deload / đổi bài / tăng set.
 
 #### [Domain Service] `OverloadValidator`
-- **Nhiệm vụ**: Kiểm tra volume `WeeklySchedule` mới không vượt 10% volume thực tế tuần trước (BR-AC-02).
+- **Nhiệm vụ**: Kiểm soát giới hạn biên độ điều chỉnh tải trọng ($\pm 30\%$, `BR-AC-02`).
 
 ---
 

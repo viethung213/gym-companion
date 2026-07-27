@@ -40,7 +40,6 @@ message InitiateRoadmapPayload {
 
 message InitiateRoadmapResponse {
   WorkoutRoadmap roadmap = 1;
-  WeeklySchedule first_weekly_schedule = 2;
 }
 
 message ListWorkoutRoadmapsRequest {
@@ -70,7 +69,6 @@ message GetActiveRoadmapRequest {
 
 message GetActiveRoadmapResponse {
   WorkoutRoadmap roadmap = 1;
-  WeeklySchedule current_weekly_schedule = 2;
 }
 
 message GetPreWorkoutCheckInRequest {
@@ -108,6 +106,8 @@ message WorkoutRoadmap {
   RoadmapStatus status = 3;
   google.type.Date start_date = 4;
   google.type.Date end_date = 5;
+  repeated WeeklySchedule weekly_schedules = 6;
+  repeated DailyWorkoutPlan daily_workout_plans = 7;
 }
 
 message WeeklySchedule {
