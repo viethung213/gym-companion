@@ -1,65 +1,8 @@
 # Coaching & Planning Context — Technical Design Document
 
-## 1. System Architecture & Component Flow
-
-```mermaid
-flowchart TD
-    FE["Frontend / Mobile App"]
-
-    subgraph Coaching_Context["Coaching & Planning Context"]
-        API["gRPC Transport / Coaching Service API"]
-
-        INIT["Initiate Roadmap Command"]
-        CHANGE["Regenerate Schedule Command"]
-        SIGNAL["Signal & External Event Consumer"]
-
-        CTX["Context Builder"]
-        AGENT["AI Coach Agent"]
-        TOOLS["Agent Tools"]
-        POLICY["Guardrail Policy Engine"]
-
-        ROADMAP["Roadmap Aggregate Root"]
-        WEEK["WeekPlan Entity"]
-        DAY["DayPlan Entity"]
-        SESSION_PLAN["SessionPlan Entity"]
-
-        REPO[("Coaching Repository (PostgreSQL)")]
-        OUTBOX[("Transactional Outbox (Kafka)")]
-    end
-
-    FE --> API
-
-    API --> INIT
-    API --> CHANGE
-
-    SIGNAL --> CTX
-    INIT --> CTX
-    CHANGE --> CTX
-
-    CTX --> AGENT
-    AGENT <--> TOOLS
-    AGENT --> POLICY
-
-    POLICY -->|Accept| ROADMAP
-    POLICY -.->|Reject / Revise| AGENT
-
-    ROADMAP --> WEEK
-    WEEK --> DAY
-    DAY --> SESSION_PLAN
-
-    ROADMAP --> REPO
-    SESSION_PLAN --> REPO
-
-    ROADMAP --> OUTBOX
-    SESSION_PLAN --> OUTBOX
-```
-
----
-
-## 2. Các Luồng Hoạt động Cốt lõi (Core Operating Flows)
+## 1. Luồng Vận hành Tổng quan (Core Operating Architecture)
 
 Cả 4 luồng nghiệp vụ chính của phân hệ Coaching đều vận hành theo nguyên tắc tự động hóa trơn trượt:
-`Yêu cầu / Event` $\rightarrow$ `Build Context` $\rightarrow$ `AI Agent Suy luận` $\rightarrow$ `Guardrail Kiểm tra An toàn` $\rightarrow$ `Lưu DB & Phát Event (SAVED)`
 
 ```mermaid
 flowchart LR
@@ -155,10 +98,10 @@ internal/coaching/
 
 ## 4. Danh mục Agent Tools Thiết yếu
 
-| Tên Tool | Chức năng chính | Luồng sử dụng |
-|---|---|---|
-| `scale_volume_intensity` | Điều chỉnh % tạ, rep, set hàng loạt trên các buổi `PENDING` | Core Flow 3 & 4 (Trigger A, Deload, Plateau) |
-| `shift_session_slots` | Dời lịch các buổi `PENDING` sang ngày rảnh khác | Core Flow 3 & 4 (Signal B2, Đổi lịch) |
-| `search_eligible_exercises` | Tìm bài tập hợp lệ theo thiết bị & nhóm cơ | Core Flow 1 (`InitiateRoadmap`), Core Flow 3 |
-| `replace_injured_exercises` | Tìm bài tập thay thế an toàn né vùng chấn thương | Core Flow 4 (`InjuryReported`, `Post-Injury`) |
-| `get_exercise_history` | Đọc lịch sử 1RM & tạ PR gần nhất | Tất cả các luồng |
+| Tên Tool | Chức năng chính |
+|---|---|
+| `scale_volume_intensity` | Điều chỉnh % tạ, rep, set hàng loạt trên các buổi `PENDING` |
+| `shift_session_slots` | Dời lịch các buổi `PENDING` sang ngày rảnh khác |
+| `search_eligible_exercises` | Tìm bài tập hợp lệ theo thiết bị & nhóm cơ |
+| `replace_injured_exercises` | Tìm bài tập thay thế an toàn né vùng chấn thương |
+| `get_exercise_history` | Đọc lịch sử 1RM & tạ PR gần nhất |
