@@ -20,6 +20,14 @@ enum SessionPlanStatus {
   SESSION_PLAN_STATUS_SKIPPED = 3;   // Đã bỏ qua / không tập
 }
 
+enum RoadmapPhase {
+  ROADMAP_PHASE_UNSPECIFIED = 0;
+  ROADMAP_PHASE_ACCUMULATION = 1; // Tích lũy khối lượng
+  ROADMAP_PHASE_OVERLOAD = 2;     // Tăng tải lũy tiến
+  ROADMAP_PHASE_PEAK = 3;         // Đỉnh cao phong độ
+  ROADMAP_PHASE_DELOAD = 4;       // Giảm tải phục hồi
+}
+
 message InitiateRoadmapRequest {
   string user_id = 1;
 }
@@ -90,10 +98,12 @@ message WeekPlan {
   string roadmap_id = 2;
   string user_id = 3;
   int32 week_number = 4;
-  google.type.Date start_date = 5;
-  google.type.Date end_date = 6;
-  string muscle_split_type = 7;
-  repeated DayPlan day_plans = 8;
+  RoadmapPhase phase = 5;
+  float target_rpe = 6;
+  google.type.Date start_date = 7;
+  google.type.Date end_date = 8;
+  string muscle_split_type = 9;
+  repeated DayPlan day_plans = 10;
 }
 
 message DayPlan {
@@ -117,7 +127,7 @@ message SessionPlan {
   SessionPlanStatus status = 8;
   repeated string target_muscle_groups = 9;
   WorkoutPrescription prescription = 10;
-  string reasoning_explanation = 11;
+  string reasoning = 11;
   google.protobuf.Timestamp generated_at = 12;
 }
 
