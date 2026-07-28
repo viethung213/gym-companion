@@ -38,7 +38,6 @@ service CoachingService {
   rpc InitiateRoadmap (contracts.core.coaching.v1.message.InitiateRoadmapRequest) returns (contracts.core.coaching.v1.message.InitiateRoadmapResponse) {
     option (google.api.http) = {
       post: "/api/v1/users/{user_id}/roadmaps"
-      body: "payload"
     };
   }
 

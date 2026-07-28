@@ -22,11 +22,6 @@ enum SessionPlanStatus {
 
 message InitiateRoadmapRequest {
   string user_id = 1;
-  InitiateRoadmapPayload payload = 2;
-}
-
-message InitiateRoadmapPayload {
-  string profile_snapshot_id = 1;
 }
 
 message InitiateRoadmapResponse {
@@ -108,8 +103,7 @@ message DayPlan {
   string user_id = 4;
   google.type.Date scheduled_date = 5;
   bool is_rest_day = 6;
-  repeated string available_slots = 7;
-  repeated SessionPlan session_plans = 8;
+  repeated SessionPlan session_plans = 7;
 }
 
 message SessionPlan {
