@@ -139,22 +139,3 @@ message PrescribedExercise {
   int32 rest_exercise_sec = 9;
   float target_rpe = 10;
 }
-
-message CheckInQuestion {
-  string question_id = 1;
-  string question_text = 2;
-  repeated CheckInOption options = 3;
-  bool allow_custom_text = 4;
-  string custom_text_placeholder = 5;
-}
-
-message CheckInOption {
-  string option_id = 1;
-  string option_text = 2;
-}
-
-message CheckInAnswer {
-  string question_id = 1;
-  repeated string selected_option_ids = 2;
-  string custom_text = 3;
-}
