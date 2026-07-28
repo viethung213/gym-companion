@@ -5,13 +5,13 @@ package contracts.core.coaching.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event;coachingv1event";
 
 import "google/protobuf/timestamp.proto";
-import "proto/contracts/core/coaching/v1/message/coaching_messages.proto";
+import "contracts/core/coaching/v1/message/coaching_messages.proto";
 
 message RoadmapInitiatedEventPayload {
   string roadmap_id = 1;
   string user_id = 2;
   google.protobuf.Timestamp initiated_at = 3;
-  message.Roadmap roadmap = 4;
+  contracts.core.coaching.v1.message.Roadmap roadmap = 4;
 }
 
 message RoadmapAdjustedEventPayload {
@@ -19,7 +19,7 @@ message RoadmapAdjustedEventPayload {
   string user_id = 2;
   string reason = 3;
   google.protobuf.Timestamp adjusted_at = 4;
-  message.Roadmap roadmap = 5;
+  contracts.core.coaching.v1.message.Roadmap roadmap = 5;
 }
 
 message SessionPlanExecutedEventPayload {
