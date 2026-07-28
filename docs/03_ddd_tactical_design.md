@@ -49,21 +49,22 @@
   - `RoadmapPhase`: Giai đoạn hiện tại (`Accumulation`, `Overload`, `Peak`, `Deload`) và RPE target.
 - **Repository**: `RoadmapRepository`
 - **Domain Events**:
-  - `RoadmapInitiated`: Khởi tạo lộ trình 4 tuần (4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan`).
-  - `RoadmapAdjusted`: Điều chỉnh giáo án chưa thực thi (`status = PENDING`) khi có tín hiệu thích ứng hoặc đổi profile.
-  - `SessionPlanExecuted`: Buổi tập trong ngày đã được thực thi thành công.
-- **Invariants**:
-  - Lifecycle: `Active` → `Completed` (hoặc `Cancelled`).
-  - Tối thiểu 1 ngày nghỉ hoàn toàn, tối đa 6 ngày tập trong mỗi tuần (`BR-AC-01`).
-  - Buổi bỏ tập tự động đánh dấu `Skipped` (`BR-AC-03`), không dời đẩy lịch của các ngày tiếp theo.
+  - `RoadmapInitiated`: Khởi tạo thành công lộ trình 4 tuần (gồm 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan` ban đầu).
+  - `RoadmapAdjusted`: Phát ra khi hệ thống tự động re-generate hoặc điều chỉnh lại giáo án các buổi tập chưa thực thi (`status = PENDING`) do tín hiệu thích ứng (Signal B1-B4, Trigger A) hoặc do người dùng cập nhật Profile. Các phân hệ khác (VD: Dinh dưỡng, Nhắc lịch) lắng nghe event này để cập nhật kế hoạch tương ứng.
+  - `SessionPlanExecuted`: Phát ra ngay khi người dùng hoàn thành một buổi tập (`SessionPlan.status` chuyển thành `COMPLETED`).
+- **Invariants (Các ràng buộc điều kiện bất biến)**:
+  - **Vòng đời Lộ trình (Roadmap Lifecycle)**: Trạng thái của Aggregate Root `Roadmap` chỉ đi từ `ACTIVE` $\rightarrow$ `COMPLETED` (khi hoàn thành 4 tuần).
+  - **Phân bổ ngày tập/nghỉ tuần**: Mọi `WeekPlan` phải có tối thiểu 1 ngày nghỉ hoàn toàn (`is_rest_day = true`) và tối đa 6 ngày tập (`BR-AC-01`).
+  - **Bảo toàn lịch khi bỏ tập**: Buổi tập trôi qua không thực hiện sẽ tự động chuyển sang trạng thái `SKIPPED`, tuyệt đối không đẩy dời lịch của các `SessionPlan` ngày tiếp theo (`BR-AC-03`).
 
 #### [Domain Service] `AdaptiveCoachEngine`
-- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4) và thực thi quy tắc thích ứng định kỳ dựa trên $SCR$ và $\Delta RPE$ (`BR-AC-04`).
+- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), thích ứng sau phục hồi chấn thương (`BR-AC-09`), và thực thi quy tắc thích ứng định kỳ dựa trên $SCR$ và $\Delta RPE$ (`BR-AC-04`).
 - **Input**: `Roadmap`, lịch sử `WorkoutSession`.
 - **Signal B1** (BR-AC-05): Bỏ tập 3 buổi liên tiếp (hoặc không mở app 7 ngày) → Đề xuất (a) tập tiếp, (b) đặt lại lịch tuần.
 - **Signal B2** (BR-AC-06): Bỏ tập cùng 1 ngày trong tuần ≥ 3 lần liên tiếp → Đề xuất dời slot.
 - **Signal B3** (BR-AC-07): Tập ngoài lịch (ngày nghỉ hoặc buổi thứ 2+ trong ngày) → Check-in hỏi nguyên nhân (quá nhẹ / thừa thời gian / quá sức).
 - **Signal B4** (BR-AC-08): 1RM không tăng 2 tuần liên tiếp (khi $SCR \ge 80\%$) → Đề xuất các phương án phá Plateau (đổi biến thể bài tập / dải rep / thứ tự bài).
+- **Post-Injury Adaptation** (BR-AC-09): Áp dụng cơ chế bảo vệ 3 buổi đầu khi khớp chấn thương phục hồi (giới hạn $\le 50\%$ tạ PR, ưu tiên Machine/Cable, điều kiện $RPE \le 7$).
 
 #### [Domain Service] `OverloadValidator`
 - **Nhiệm vụ**: Kiểm soát giới hạn biên độ điều chỉnh tải trọng ($\pm 30\%$, `BR-AC-02`).
