@@ -170,7 +170,16 @@ func parseAndValidateToken(
 // isAuthRequired checks the compiled protobuf annotations to see
 // if the method requires BearerAuth.
 func isAuthRequired(fullMethod string) bool {
+	// Public endpoints that do not require JWT authentication
+	if strings.HasSuffix(fullMethod, "/GetMotionSpecification") ||
+		strings.HasSuffix(fullMethod, "/GetCatalogMetadata") ||
+		strings.HasSuffix(fullMethod, "/SearchExercises") ||
+		strings.HasSuffix(fullMethod, "/GetExercise") {
+		return false
+	}
+
 	// FullMethod format: "/package.Service/Method"
+
 	parts := strings.Split(fullMethod, "/")
 	if len(parts) < 3 {
 		return true // Default to secure
@@ -198,20 +207,26 @@ func isAuthRequired(fullMethod string) bool {
 		return true
 	}
 
-	// If security requirement list is empty (e.g. security: {} or security: [])
+	// If security is not explicitly set on the operation level, inherit service-level security
+	if op.Security == nil {
+		return true
+	}
+
+	// If security requirement list is empty (e.g. security: {}), it's a public bypass
 	if len(op.Security) == 0 {
-		return false // Public bypass
+		return false
 	}
 
 	for _, req := range op.Security {
-		if req.SecurityRequirement != nil {
-			if _, exists := req.SecurityRequirement["BearerAuth"]; exists {
-				return true // Requires BearerAuth explicitly
-			}
+		if req.SecurityRequirement == nil || len(req.SecurityRequirement) == 0 {
+			return false // Public bypass explicitly set as security: {}
+		}
+		if _, exists := req.SecurityRequirement["BearerAuth"]; exists {
+			return true // Requires BearerAuth explicitly
 		}
 	}
 
-	return false
+	return true
 }
 
 // extractToken parses Bearer token from authorization header in gRPC metadata.

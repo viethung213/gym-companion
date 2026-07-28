@@ -17,10 +17,23 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service WorkoutExecutionService {
-  // Bắt đầu một buổi tập mới
+  option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_tag) = {
+    name: "Workout Execution / User"
+    description: "API dành cho người dùng thực thi và lưu vết buổi tập"
+  };
+
+  // Bắt đầu một buổi tập bộc phát mới
   rpc StartWorkoutSession (contracts.core.workout_execution.v1.message.StartWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.StartWorkoutSessionResponse) {
     option (google.api.http) = {
       post: "/api/v1/execution/sessions/start"
+      body: "*"
+    };
+  }
+
+  // Kích hoạt bắt đầu một buổi tập đã được lên lịch trước
+  rpc StartScheduledWorkoutSession (contracts.core.workout_execution.v1.message.StartScheduledWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.StartScheduledWorkoutSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/{session_id}/start"
       body: "*"
     };
   }
@@ -62,12 +75,16 @@ service WorkoutExecutionService {
     option (google.api.http) = {
       get: "/api/v1/execution/exercises/{exercise_id}/motion-spec"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {}
+    };
   }
 
-  // Lấy danh sách kỷ lục cá nhân (1RM) của người dùng
+
+  // Lấy danh sách kỷ lục cá nhân (1RM) của người dùng đang đăng nhập
   rpc GetPersonalRecords (contracts.core.workout_execution.v1.message.GetPersonalRecordsRequest) returns (contracts.core.workout_execution.v1.message.GetPersonalRecordsResponse) {
     option (google.api.http) = {
-      get: "/api/v1/execution/users/{user_id}/personal-records"
+      get: "/api/v1/execution/prs"
     };
   }
 
@@ -78,10 +95,32 @@ service WorkoutExecutionService {
     };
   }
 
-  // Lấy lịch sử các buổi tập của người dùng
+  // Lấy lịch sử các buổi tập của người dùng đang đăng nhập
   rpc GetWorkoutHistory (contracts.core.workout_execution.v1.message.GetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutHistoryResponse) {
     option (google.api.http) = {
-      get: "/api/v1/execution/users/{user_id}/history"
+      get: "/api/v1/execution/history"
+    };
+  }
+}
+
+// Service dành riêng cho Admin và HLV (Coach) tra cứu thông tin học viên / người dùng khác
+service AdminWorkoutExecutionService {
+  option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_tag) = {
+    name: "Workout Execution / Admin"
+    description: "API dành cho Admin/Coach tra cứu dữ liệu tập luyện của học viên"
+  };
+
+  // Admin/HLV lấy danh sách kỷ lục cá nhân (1RM) của một người dùng chỉ định
+  rpc AdminGetPersonalRecords (contracts.core.workout_execution.v1.message.AdminGetPersonalRecordsRequest) returns (contracts.core.workout_execution.v1.message.GetPersonalRecordsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/admin/execution/users/{user_id}/prs"
+    };
+  }
+
+  // Admin/HLV lấy lịch sử các buổi tập của một người dùng chỉ định
+  rpc AdminGetWorkoutHistory (contracts.core.workout_execution.v1.message.AdminGetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/admin/execution/users/{user_id}/history"
     };
   }
 }

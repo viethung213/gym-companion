@@ -41,6 +41,7 @@ service AuthService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
       security: {} // Public bypass
     };
   }
@@ -51,7 +52,9 @@ service AuthService {
       post: "/api/v1/auth/logout"
       body: "*"
     };
-    // Sử dụng BearerAuth mặc định
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+    };
   }
 
   // Lấy URL đăng nhập OAuth (Google/Facebook)
@@ -60,6 +63,7 @@ service AuthService {
       get: "/api/v1/auth/oauth/login"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
       security: {} // Public bypass
     };
   }
@@ -70,6 +74,9 @@ service AuthService {
       post: "/api/v1/auth/keys/rotate"
       body: "*"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
   }
 
   // Lấy danh sách Public Keys dưới dạng JWKS
@@ -78,6 +85,7 @@ service AuthService {
       get: "/api/v1/auth/jwks"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
       security: {} // Public bypass
     };
   }
@@ -89,6 +97,7 @@ service AuthService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
       security: {} // Public bypass
     };
   }

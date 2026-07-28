@@ -17,6 +17,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -38,7 +39,7 @@ func run() error {
 		grpcPort = "9090"
 	}
 
-	// Initialize Database Registry & connection pool for auth and exercise modules
+	// Initialize Database Registry & connection pools
 	dbRegistry := database.GetRegistry()
 	defer dbRegistry.CloseAll()
 
@@ -57,6 +58,14 @@ func run() error {
 		return fmt.Errorf("initialize exercise database pool: %w", err)
 	}
 	log.Println("Initialized isolated Exercise Database Pool successfully.")
+
+	workoutDB, err := dbRegistry.GetPool("workout_execution")
+	if err != nil {
+		log.Println("Warning: workout_execution database pool not found, falling back to auth pool.")
+		workoutDB = db
+	} else {
+		log.Println("Initialized isolated Workout Execution Database Pool successfully.")
+	}
 
 	// Listen on gRPC port
 	lis, err := net.Listen("tcp", ":"+grpcPort)
@@ -79,7 +88,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize Auth Module (Composition Root bootstrap)
+	// Initialize Auth Module
 	shutdown, err := auth.Initialize(ctx, auth.ModuleDeps{
 		DB:                db,
 		GRPCServer:        grpcServer,
@@ -101,6 +110,17 @@ func run() error {
 		return fmt.Errorf("initialize exercise module: %w", err)
 	}
 	defer shutdownExercise()
+
+	// Initialize Workout Execution Module
+	shutdownWorkout, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
+		DB:            workoutDB,
+		GRPCServer:    grpcServer,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize workout execution module: %w", err)
+	}
+	defer shutdownWorkout()
 
 	errChan := make(chan error, 2)
 	go func() {
@@ -125,6 +145,11 @@ func run() error {
 	err = exercise.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
 	if err != nil {
 		return fmt.Errorf("register exercise gateway: %w", err)
+	}
+
+	err = workoutexecution.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
+	if err != nil {
+		return fmt.Errorf("register workout execution gateway: %w", err)
 	}
 
 	mux.Handle("/", gwmux)
