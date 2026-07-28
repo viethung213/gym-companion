@@ -50,7 +50,7 @@
 - **Context liên quan**:
   - Đọc `BiologicalMetrics`, `Injury`, `PrimaryGoal`, `AvailableEquipment`, `PreferredMuscleGroups`, `AvailableSlots` từ `User Profile`.
   - Đọc thông tin bài tập được quản lý bởi `Workout Execution & Motion`.
-  - Lắng nghe `WorkoutSessionCompleted` từ `Workout Execution`.
+  - Lắng nghe `WorkoutSessionCompleted` (nghiệm thu COMPLETED) và `WorkoutSessionAborted` (chuyển SKIPPED khi timeout/hủy) từ `Workout Execution`.
   - Gọi Shared Infrastructure để gửi Push Notification.
 
 ---
