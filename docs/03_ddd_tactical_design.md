@@ -54,20 +54,23 @@
   - `SessionPlanExecuted`: Phát ra ngay khi người dùng hoàn thành một buổi tập (`SessionPlan.status` chuyển thành `COMPLETED`).
 - **Invariants (Các ràng buộc điều kiện bất biến)**:
   - **Vòng đời Lộ trình (Roadmap Lifecycle)**: Trạng thái của Aggregate Root `Roadmap` chỉ đi từ `ACTIVE` $\rightarrow$ `COMPLETED` (khi hoàn thành 4 tuần).
-  - **Phân bổ ngày tập/nghỉ tuần**: Mọi `WeekPlan` phải có tối thiểu 1 ngày nghỉ hoàn toàn (`is_rest_day = true`) và tối đa 6 ngày tập (`BR-AC-01`).
-  - **Bảo toàn lịch khi bỏ tập**: Buổi tập trôi qua không thực hiện sẽ tự động chuyển sang trạng thái `SKIPPED`, tuyệt đối không đẩy dời lịch của các `SessionPlan` ngày tiếp theo (`BR-AC-03`).
+  - **Giới hạn số buổi tập tuần (`BR-AC-01`)**: Lịch tập tối đa **6 buổi/tuần**.
+  - **Xử lý Bỏ tập (`BR-AC-03`)**: Ngày tập trôi qua mà không thực hiện sẽ tự động chuyển sang trạng thái **`SKIPPED`** (tính 0 set hoàn thành vào $SCR$). Lịch tập của các ngày tiếp theo giữ nguyên, tuyệt đối không dồn dời lịch.
 
 #### [Domain Service] `AdaptiveCoachEngine`
-- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4), thích ứng sau phục hồi chấn thương (`BR-AC-09`), và thực thi quy tắc thích ứng định kỳ dựa trên $SCR$ và $\Delta RPE$ (`BR-AC-04`).
+- **Nhiệm vụ**: Phát hiện, đánh giá và thực thi các quy tắc thích ứng huấn luyện.
 - **Input**: `Roadmap`, lịch sử `WorkoutSession`.
-- **Signal B1** (BR-AC-05): Bỏ tập 3 buổi liên tiếp (hoặc không mở app 7 ngày) → Đề xuất (a) tập tiếp, (b) đặt lại lịch tuần.
-- **Signal B2** (BR-AC-06): Bỏ tập cùng 1 ngày trong tuần ≥ 3 lần liên tiếp → Đề xuất dời slot.
-- **Signal B3** (BR-AC-07): Tập ngoài lịch (ngày nghỉ hoặc buổi thứ 2+ trong ngày) → Check-in hỏi nguyên nhân (quá nhẹ / thừa thời gian / quá sức).
-- **Signal B4** (BR-AC-08): 1RM không tăng 2 tuần liên tiếp (khi $SCR \ge 80\%$) → Đề xuất các phương án phá Plateau (đổi biến thể bài tập / dải rep / thứ tự bài).
-- **Post-Injury Adaptation** (BR-AC-09): Áp dụng cơ chế bảo vệ 3 buổi đầu khi khớp chấn thương phục hồi (giới hạn $\le 50\%$ tạ PR, ưu tiên Machine/Cable, điều kiện $RPE \le 7$).
+- **Quy tắc thực thi**:
+  - [BR-AC-04](NGHIEP_VU_COT_LOI_BABOK.md#L135): Trigger A — Quy tắc Thích ứng & Điều chỉnh Định kỳ.
+  - [BR-AC-05](NGHIEP_VU_COT_LOI_BABOK.md#L136): Signal B1 — Bỏ tập cấp tính / Mất tích.
+  - [BR-AC-06](NGHIEP_VU_COT_LOI_BABOK.md#L137): Signal B2 — Kẹt lịch cố định (Pattern Mismatch).
+  - [BR-AC-07](NGHIEP_VU_COT_LOI_BABOK.md#L138): Signal B3 — Tập ngoài lịch (Unscheduled Workout).
+  - [BR-AC-08](NGHIEP_VU_COT_LOI_BABOK.md#L139): Signal B4 — Cơ bắp bị chai lỳ (Plateau).
+  - [BR-AC-09](NGHIEP_VU_COT_LOI_BABOK.md#L140): Thích ứng sau phục hồi chấn thương (Post-Injury Adaptation).
 
 #### [Domain Service] `OverloadValidator`
-- **Nhiệm vụ**: Kiểm soát giới hạn biên độ điều chỉnh tải trọng ($\pm 30\%$, `BR-AC-02`).
+- **Nhiệm vụ**: Kiểm soát giới hạn biên độ điều chỉnh tải trọng.
+- **Quy tắc thực thi**: [BR-AC-02](NGHIEP_VU_COT_LOI_BABOK.md#L129) — Giới hạn điều chỉnh tải trọng $\pm 30\%$.
 
 ---
 

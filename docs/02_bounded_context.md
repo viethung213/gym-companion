@@ -38,15 +38,15 @@
 - **Aggregates**: `Roadmap` (Aggregate Root quản lý 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan`)
 - **Domain Services**: `AdaptiveCoachEngine`, `OverloadValidator`
 - **Quy tắc nghiệp vụ**:
-  - BR-AC-01
-  - BR-AC-02
-  - BR-AC-03
-  - BR-AC-04
-  - BR-AC-05
-  - BR-AC-06
-  - BR-AC-07
-  - BR-AC-08
-  - BR-AC-09
+  - [BR-AC-01](NGHIEP_VU_COT_LOI_BABOK.md#L128)
+  - [BR-AC-02](NGHIEP_VU_COT_LOI_BABOK.md#L129)
+  - [BR-AC-03](NGHIEP_VU_COT_LOI_BABOK.md#L134)
+  - [BR-AC-04](NGHIEP_VU_COT_LOI_BABOK.md#L135)
+  - [BR-AC-05](NGHIEP_VU_COT_LOI_BABOK.md#L136)
+  - [BR-AC-06](NGHIEP_VU_COT_LOI_BABOK.md#L137)
+  - [BR-AC-07](NGHIEP_VU_COT_LOI_BABOK.md#L138)
+  - [BR-AC-08](NGHIEP_VU_COT_LOI_BABOK.md#L139)
+  - [BR-AC-09](NGHIEP_VU_COT_LOI_BABOK.md#L140)
 - **Context liên quan**:
   - Đọc `BiologicalMetrics`, `Injury`, `PrimaryGoal`, `AvailableEquipment`, `PreferredMuscleGroups`, `AvailableSlots` từ `User Profile`.
   - Đọc thông tin bài tập được quản lý bởi `Workout Execution & Motion`.

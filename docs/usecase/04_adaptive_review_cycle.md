@@ -1,4 +1,4 @@
-# UC-04 Adaptive Review Cycle
+﻿# UC-04 Adaptive Review Cycle
 
 > Nguồn: [BRD](../NGHIEP_VU_COT_LOI_BABOK.md) · [Bounded Context](../02_bounded_context.md) · [Tactical Design](../03_ddd_tactical_design.md)
 
@@ -16,10 +16,10 @@
 
 **Main Flow**
 1. System tính Tỷ lệ hoàn thành Set ($SCR = \frac{\text{Số Set thực tế}}{\text{Số Set giao}} \times 100\%$) và Độ lệch mệt mỏi ($\Delta RPE = RPE_{\text{Thực tế}} - RPE_{\text{Target}}$).
-2. System áp dụng quy tắc thích ứng định kỳ `BR-AC-04`:
+2. System áp dụng quy tắc thích ứng định kỳ [BR-AC-04](../NGHIEP_VU_COT_LOI_BABOK.md#L135):
    - **Tăng tải lũy tiến** ($SCR \ge 80\%$ và $-1 \le \Delta RPE \le +1$): Tự động tăng mức tạ gợi ý $+2.5\% \rightarrow +5\%$ cho tuần kế tiếp.
    - **Quản lý mệt mỏi & Deload** ($RPE_{\text{Thực tế}} \ge 9.0$ liên tục 3 buổi hoặc $\Delta RPE \ge +2.0$): Tự động kích hoạt tuần Deload (giảm 30% volume & 10% tạ).
-   - **Thích �23. System cập nhật `prescription` bài tập của các `SessionPlan` tuần kế tiếp, phát `RoadmapAdjusted`.
+   - **Thích �23. System cập nhật `prescription` bài tập của các `SessionPlan` tuần kế tiếp, phát `RoadmapAdjusted`.
 
 **Alternative Flow**
 - A1: User từ chối giảm số buổi tập khi $SCR < 50\%$ ➔ System giữ nguyên cấu trúc số buổi cũ, nhưng tự động chuyển sang giáo án Express 30 phút để hỗ trợ hoàn thành.
@@ -145,7 +145,7 @@
 
 **Postcondition**: Người tập quay lại chu kỳ tăng tải bình thường sau khi phục hồi an toàn.
 
-**Domain Events**: `RoadmapAdjusted`�t hiện Signal B4 khi kết thúc buổi tập cuối Tuần 2.
+**Domain Events**: `RoadmapAdjusted`�t hiện Signal B4 khi kết thúc buổi tập cuối Tuần 2.
 2. System gửi Push Notification / In-App Alert thông báo cho User.
 3. Khi User tương tác qua gRPC Stream, System đề xuất 3 phương án phá Plateau:
    - (a) Đổi biến thể bài tập tương đương.
