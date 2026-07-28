@@ -31,7 +31,7 @@ type DialogueSeverities struct {
 
 // DialogueEngineConfig holds audio feedback rules and cooldowns for a specific coach personality.
 type DialogueEngineConfig struct {
-	PersonalityID string                         `json:"personalityId"`
-	Cooldowns     map[string]float32             `json:"cooldowns"`
+	PersonalityID string                        `json:"personalityId"`
+	Cooldowns     map[string]float32            `json:"cooldowns"`
 	DialogueMap   map[string]DialogueSeverities `json:"dialogueMap"`
 }

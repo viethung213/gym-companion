@@ -317,8 +317,8 @@ func (s *WorkoutSession) AddErrors(errs []SessionError) {
 // CalculateTotalVolume sums weight * actualReps for all sets.
 func (s *WorkoutSession) CalculateTotalVolume() float32 {
 	var vol float32
-	for _, set := range s.sets {
-		vol += set.Weight * float32(set.ActualReps)
+	for i := range s.sets {
+		vol += s.sets[i].Weight * float32(s.sets[i].ActualReps)
 	}
 	return vol
 }
@@ -335,7 +335,8 @@ func (s *WorkoutSession) CalculateSummary() vo.SessionSummary {
 	var totalFormScore float32
 	var aiSetCount int
 
-	for _, set := range s.sets {
+	for i := range s.sets {
+		set := &s.sets[i]
 		totalVolume += set.Weight * float32(set.ActualReps)
 		totalRPE += set.RPE
 		if set.FormScore != nil {
@@ -355,7 +356,7 @@ func (s *WorkoutSession) CalculateSummary() vo.SessionSummary {
 }
 
 // Complete transitions status to COMPLETED and emits WorkoutSessionCompleted event.
-func (s *WorkoutSession) Complete(confirmOverload bool, isOverloaded bool) error {
+func (s *WorkoutSession) Complete(confirmOverload, isOverloaded bool) error {
 	if s.status != StatusInProgress {
 		return derror.ErrSessionNotInProgress
 	}
@@ -374,7 +375,7 @@ func (s *WorkoutSession) Complete(confirmOverload bool, isOverloaded bool) error
 	s.updatedAt = now
 
 	summary := s.CalculateSummary()
-	s.addDomainEvent(event.WorkoutSessionCompleted{
+	s.addDomainEvent(&event.WorkoutSessionCompleted{
 		SessionID:   s.id,
 		UserID:      s.userID,
 		CompletedAt: now,
@@ -395,7 +396,7 @@ func (s *WorkoutSession) Abort(reason string) error {
 	s.endedAt = &now
 	s.updatedAt = now
 
-	s.addDomainEvent(event.WorkoutSessionAborted{
+	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
 		Reason:      reason,
@@ -417,7 +418,7 @@ func (s *WorkoutSession) AbortAnomalous(reason string) error {
 	s.endedAt = &now
 	s.updatedAt = now
 
-	s.addDomainEvent(event.WorkoutSessionAborted{
+	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
 		Reason:      reason,
@@ -432,7 +433,7 @@ func (s *WorkoutSession) AbortAnomalous(reason string) error {
 // posture error was the last recorded event and no user interaction has
 // occurred for the configured inactivity threshold.
 // lastCriticalAt is the timestamp of the most recent critical error.
-func (s *WorkoutSession) MarkCriticalInactivity(now time.Time, lastCriticalAt time.Time) error {
+func (s *WorkoutSession) MarkCriticalInactivity(now, lastCriticalAt time.Time) error {
 	if s.status != StatusInProgress {
 		return derror.ErrSessionNotInProgress
 	}
@@ -442,11 +443,9 @@ func (s *WorkoutSession) MarkCriticalInactivity(now time.Time, lastCriticalAt ti
 	s.endedAt = &ended
 	s.updatedAt = now
 
-	reason := fmt.Sprintf(
-		"CRITICAL_INACTIVITY: no user interaction after critical posture error at %s",
-		lastCriticalAt.UTC().Format(time.RFC3339),
-	)
-	s.addDomainEvent(event.WorkoutSessionAborted{
+	reason := "CRITICAL_INACTIVITY: no user interaction after critical posture error at " +
+		lastCriticalAt.UTC().Format(time.RFC3339)
+	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
 		Reason:      reason,

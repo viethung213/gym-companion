@@ -15,7 +15,7 @@ type WorkoutSessionStarted struct {
 }
 
 // EventName returns the CloudEvent type for WorkoutSessionStarted.
-func (e WorkoutSessionStarted) EventName() string {
+func (e *WorkoutSessionStarted) EventName() string {
 	return "contracts.core.workout_execution.v1.event.WorkoutSessionStarted"
 }
 
@@ -28,7 +28,7 @@ type WorkoutSessionCompleted struct {
 }
 
 // EventName returns the CloudEvent type for WorkoutSessionCompleted.
-func (e WorkoutSessionCompleted) EventName() string {
+func (e *WorkoutSessionCompleted) EventName() string {
 	return "contracts.core.workout_execution.v1.event.WorkoutSessionCompleted"
 }
 
@@ -42,7 +42,7 @@ type WorkoutSessionAborted struct {
 }
 
 // EventName returns the CloudEvent type for WorkoutSessionAborted.
-func (e WorkoutSessionAborted) EventName() string {
+func (e *WorkoutSessionAborted) EventName() string {
 	return "contracts.core.workout_execution.v1.event.WorkoutSessionAborted"
 }
 
@@ -58,18 +58,18 @@ type NewPersonalRecordAchieved struct {
 }
 
 // EventName returns the CloudEvent type for NewPersonalRecordAchieved.
-func (e NewPersonalRecordAchieved) EventName() string {
+func (e *NewPersonalRecordAchieved) EventName() string {
 	return "contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved"
 }
 
 // BodyMetricUpdated is published if user updates weight at the end of a session.
 type BodyMetricUpdated struct {
-	UserID    string    `json:"userId"`
-	WeightKg  float32   `json:"weightKg"`
+	UserID     string    `json:"userId"`
+	WeightKg   float32   `json:"weightKg"`
 	RecordedAt time.Time `json:"recordedAt"`
 }
 
 // EventName returns the CloudEvent type for BodyMetricUpdated.
-func (e BodyMetricUpdated) EventName() string {
+func (e *BodyMetricUpdated) EventName() string {
 	return "contracts.core.workout_execution.v1.event.BodyMetricUpdated"
 }

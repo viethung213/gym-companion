@@ -69,7 +69,7 @@ func NewPersonalRecord(
 		AchievedAt:   achievedAt,
 	})
 
-	return pr;
+	return pr
 }
 
 // ReconstitutePersonalRecord restores PersonalRecord state from database.

@@ -48,7 +48,10 @@ func NewStartWorkoutSessionHandler(
 }
 
 // Handle executes the StartWorkoutSession command.
-func (h *StartWorkoutSessionHandler) Handle(ctx context.Context, cmd StartWorkoutSessionCommand) (*StartWorkoutSessionResult, error) {
+func (h *StartWorkoutSessionHandler) Handle(
+	ctx context.Context,
+	cmd StartWorkoutSessionCommand,
+) (*StartWorkoutSessionResult, error) {
 	if cmd.UserID == "" || cmd.PlanID == "" {
 		return nil, apperror.ErrInvalidInput
 	}
@@ -62,9 +65,9 @@ func (h *StartWorkoutSessionHandler) Handle(ctx context.Context, cmd StartWorkou
 	}
 
 	if h.planClient != nil {
-		exists, err := h.planClient.ValidatePlanExists(ctx, cmd.UserID, cmd.PlanID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", apperror.ErrDailyPlanNotFound, err)
+		exists, planErr := h.planClient.ValidatePlanExists(ctx, cmd.UserID, cmd.PlanID)
+		if planErr != nil {
+			return nil, fmt.Errorf("%w: %w", apperror.ErrDailyPlanNotFound, planErr)
 		}
 		if !exists {
 			return nil, apperror.ErrDailyPlanNotFound

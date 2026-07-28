@@ -11,7 +11,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
 )
 
-// ProcessCompletedSessionForPRHandler handles async 1RM personal record calculation upon session completion.
+// ProcessCompletedSessionForPRHandler handles async 1RM personal record calculation
+// upon session completion.
 type ProcessCompletedSessionForPRHandler struct {
 	sessionRepo repository.WorkoutSessionRepository
 	prRepo      repository.PersonalRecordRepository
@@ -19,7 +20,7 @@ type ProcessCompletedSessionForPRHandler struct {
 	txManager   port.TxManager
 }
 
-// NewProcessCompletedSessionForPRHandler constructs handler.
+// NewProcessCompletedSessionForPRHandler creates a new handler instance.
 func NewProcessCompletedSessionForPRHandler(
 	sessionRepo repository.WorkoutSessionRepository,
 	prRepo repository.PersonalRecordRepository,
@@ -34,8 +35,11 @@ func NewProcessCompletedSessionForPRHandler(
 	}
 }
 
-// HandleProcess executes 1RM evaluation for a completed session.
-func (h *ProcessCompletedSessionForPRHandler) HandleProcess(ctx context.Context, sessionID, userID string) error {
+// HandleProcess evaluates 1RM PRs for all sets in a completed session.
+func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
+	ctx context.Context,
+	sessionID, userID string,
+) error {
 	session, err := h.sessionRepo.FindByID(ctx, sessionID)
 	if err != nil || session == nil {
 		return fmt.Errorf("session not found for PR calculation: %w", err)
@@ -47,7 +51,9 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(ctx context.Context,
 	}
 
 	bestSets := make(map[string]aggregate.WorkoutSetLog)
-	for _, set := range session.Sets() {
+	sets := session.Sets()
+	for i := range sets {
+		set := sets[i]
 		if set.ActualReps <= 0 || set.Weight <= 0 {
 			continue
 		}
@@ -66,8 +72,8 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(ctx context.Context,
 
 	for exerciseID, set := range bestSets {
 		formVerified := set.FormScore != nil && *set.FormScore >= 70.0
-		existingPR, err := h.prRepo.FindByUserIDAndExerciseID(ctx, userID, exerciseID)
-		if err != nil {
+		existingPR, findErr := h.prRepo.FindByUserIDAndExerciseID(ctx, userID, exerciseID)
+		if findErr != nil {
 			continue
 		}
 
@@ -82,7 +88,9 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(ctx context.Context,
 
 		if existingPR == nil {
 			prID := uuid.NewString()
-			pr = aggregate.NewPersonalRecord(prID, userID, exerciseID, set.Weight, set.ActualReps, formVerified, t)
+			pr = aggregate.NewPersonalRecord(
+				prID, userID, exerciseID, set.Weight, set.ActualReps, formVerified, t,
+			)
 		} else {
 			pr = existingPR
 			updated := pr.UpdateIfHigher(set.Weight, set.ActualReps, formVerified, t)
@@ -91,20 +99,20 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(ctx context.Context,
 			}
 		}
 
-		err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-			if err := h.prRepo.Save(txCtx, pr); err != nil {
-				return err
+		txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+			if saveErr := h.prRepo.Save(txCtx, pr); saveErr != nil {
+				return saveErr
 			}
 			events := pr.PopEvents()
 			if len(events) > 0 && h.outbox != nil {
-				if err := h.outbox.WriteEvents(txCtx, "PersonalRecord", pr.ID(), events); err != nil {
-					return err
+				if writeErr := h.outbox.WriteEvents(txCtx, "PersonalRecord", pr.ID(), events); writeErr != nil {
+					return writeErr
 				}
 			}
 			return nil
 		})
-		if err != nil {
-			return fmt.Errorf("failed to save PR for exercise %s: %w", exerciseID, err)
+		if txErr != nil {
+			return fmt.Errorf("failed to save PR for exercise %s: %w", exerciseID, txErr)
 		}
 	}
 

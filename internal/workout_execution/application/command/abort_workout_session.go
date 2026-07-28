@@ -43,7 +43,10 @@ func NewAbortWorkoutSessionHandler(
 }
 
 // Handle executes session abortion.
-func (h *AbortWorkoutSessionHandler) Handle(ctx context.Context, cmd AbortWorkoutSessionCommand) (*AbortWorkoutSessionResult, error) {
+func (h *AbortWorkoutSessionHandler) Handle(
+	ctx context.Context,
+	cmd AbortWorkoutSessionCommand,
+) (*AbortWorkoutSessionResult, error) {
 	if cmd.SessionID == "" {
 		return nil, apperror.ErrInvalidInput
 	}
@@ -56,25 +59,25 @@ func (h *AbortWorkoutSessionHandler) Handle(ctx context.Context, cmd AbortWorkou
 		return nil, derror.ErrWorkoutSessionNotFound
 	}
 
-	if err := session.Abort(cmd.Reason); err != nil {
-		return nil, err
+	if abortErr := session.Abort(cmd.Reason); abortErr != nil {
+		return nil, abortErr
 	}
 
-	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err := h.sessionRepo.Save(txCtx, session); err != nil {
-			return err
+	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if saveErr := h.sessionRepo.Save(txCtx, session); saveErr != nil {
+			return saveErr
 		}
 		events := session.PopEvents()
 		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); err != nil {
-				return err
+			if writeErr := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); writeErr != nil {
+				return writeErr
 			}
 		}
 		return nil
 	})
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to abort session tx: %w", err)
+	if txErr != nil {
+		return nil, fmt.Errorf("failed to abort session tx: %w", txErr)
 	}
 
 	var abortedAtStr string

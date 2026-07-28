@@ -10,8 +10,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 )
 
-// EventNameProvider interface to extract event name string.
-type EventNameProvider interface {
+// NameProvider interface to extract event name string.
+type NameProvider interface {
 	EventName() string
 }
 
@@ -39,7 +39,7 @@ func (w *OutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregate
 
 func (w *OutboxWriter) writeSingleEvent(ctx context.Context, aggregateType, aggregateID string, ev interface{}) error {
 	eventType := "contracts.core.workout_execution.v1.event.UnknownEvent"
-	if nameProvider, ok := ev.(EventNameProvider); ok {
+	if nameProvider, ok := ev.(NameProvider); ok {
 		eventType = nameProvider.EventName()
 	}
 

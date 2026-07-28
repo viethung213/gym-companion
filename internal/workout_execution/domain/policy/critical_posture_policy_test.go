@@ -9,6 +9,8 @@ import (
 )
 
 func TestIsCritical(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		give aggregate.SessionError
@@ -51,8 +53,10 @@ func TestIsCritical(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got := policy.IsCritical(tt.give)
+			t.Parallel()
+			got := policy.IsCritical(&tt.give)
 			if got != tt.want {
 				t.Errorf("IsCritical() = %v, want %v (errorCode=%q, severity=%q)",
 					got, tt.want, tt.give.ErrorCode, tt.give.Severity)

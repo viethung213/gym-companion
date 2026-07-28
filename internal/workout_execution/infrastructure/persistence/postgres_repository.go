@@ -16,8 +16,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-
-
 func getDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
 	return GetDB(ctx, defaultDB)
 }
@@ -95,8 +93,8 @@ func (r *PostgresWorkoutSessionRepository) FindTimedOutSessions(ctx context.Cont
 	}
 
 	res := make([]*aggregate.WorkoutSession, len(models))
-	for i, m := range models {
-		res[i] = SessionToDomain(&m)
+	for i := range models {
+		res[i] = SessionToDomain(&models[i])
 	}
 	return res, nil
 }
@@ -125,13 +123,17 @@ func (r *PostgresWorkoutSessionRepository) FindSessionsWithCriticalInactivity(
 	}
 
 	res := make([]*aggregate.WorkoutSession, len(models))
-	for i, m := range models {
-		res[i] = SessionToDomain(&m)
+	for i := range models {
+		res[i] = SessionToDomain(&models[i])
 	}
 	return res, nil
 }
 
-func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(ctx context.Context, userID string, limit, offset int) ([]*aggregate.WorkoutSession, error) {
+func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(
+	ctx context.Context,
+	userID string,
+	limit, offset int,
+) ([]*aggregate.WorkoutSession, error) {
 	db := getDB(ctx, r.db)
 	var models []WorkoutSessionModel
 	err := db.Preload("Sets.Reps").Preload("Errors").
@@ -144,14 +146,18 @@ func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(ctx context.Conte
 	}
 
 	res := make([]*aggregate.WorkoutSession, len(models))
-	for i, m := range models {
-		res[i] = SessionToDomain(&m)
+	for i := range models {
+		res[i] = SessionToDomain(&models[i])
 	}
 	return res, nil
 }
 
 // GetRecentVolumesForMuscleGroup implements service.SessionVolumeHistoryProvider.
-func (r *PostgresWorkoutSessionRepository) GetRecentVolumesForMuscleGroup(ctx context.Context, userID, muscleGroup string, limit int) ([]float32, error) {
+func (r *PostgresWorkoutSessionRepository) GetRecentVolumesForMuscleGroup(
+	ctx context.Context,
+	userID, _ string,
+	limit int,
+) ([]float32, error) {
 	db := getDB(ctx, r.db)
 	var models []WorkoutSessionModel
 	err := db.Where("user_id = ? AND status = ?", userID, "COMPLETED").
@@ -161,8 +167,8 @@ func (r *PostgresWorkoutSessionRepository) GetRecentVolumesForMuscleGroup(ctx co
 	}
 
 	vols := make([]float32, len(models))
-	for i, m := range models {
-		vols[i] = m.TotalVolume
+	for i := range models {
+		vols[i] = models[i].TotalVolume
 	}
 	return vols, nil
 }
@@ -192,7 +198,10 @@ func (r *PostgresPersonalRecordRepository) Save(ctx context.Context, pr *aggrega
 	return nil
 }
 
-func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseID(ctx context.Context, userID, exerciseID string) (*aggregate.PersonalRecord, error) {
+func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseID(
+	ctx context.Context,
+	userID, exerciseID string,
+) (*aggregate.PersonalRecord, error) {
 	db := getDB(ctx, r.db)
 	var model PersonalRecordModel
 	err := db.First(&model, "user_id = ? AND exercise_id = ?", userID, exerciseID).Error
@@ -205,7 +214,11 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseID(ctx context
 	return PersonalRecordToDomain(&model), nil
 }
 
-func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseIDs(ctx context.Context, userID string, exerciseIDs []string) ([]*aggregate.PersonalRecord, error) {
+func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseIDs(
+	ctx context.Context,
+	userID string,
+	exerciseIDs []string,
+) ([]*aggregate.PersonalRecord, error) {
 	db := getDB(ctx, r.db)
 	var models []PersonalRecordModel
 	q := db.Where("user_id = ?", userID)
@@ -218,8 +231,8 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseIDs(ctx contex
 	}
 
 	res := make([]*aggregate.PersonalRecord, len(models))
-	for i, m := range models {
-		res[i] = PersonalRecordToDomain(&m)
+	for i := range models {
+		res[i] = PersonalRecordToDomain(&models[i])
 	}
 	return res, nil
 }

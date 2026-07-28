@@ -110,7 +110,9 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 // error in the session's error list, or the zero time if none found.
 func findLastCriticalErrorTime(session *aggregate.WorkoutSession) time.Time {
 	var last time.Time
-	for _, e := range session.Errors() {
+	errs := session.Errors()
+	for i := range errs {
+		e := &errs[i]
 		if policy.IsCritical(e) && e.Timestamp.After(last) {
 			last = e.Timestamp
 		}

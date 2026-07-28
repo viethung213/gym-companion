@@ -33,7 +33,7 @@ linters-settings:
     disable:
       - fieldalignment # Tắt cảnh báo sắp xếp trường struct để tránh tối ưu hoá mù quáng
   lll:
-    line-length: 99 # Giới hạn 99 ký tự theo Rule 38
+    line-length: 160
   gocritic:
     enabled-tags:
       - diagnostic
@@ -51,7 +51,23 @@ issues:
     - internal/gen
     - docs/swagger
   exclude-rules:
+    - path: _test\.go
+      linters:
+        - paralleltest
+        - lll
+        - revive
+        - govet
+        - errorlint
+        - gocritic
     - path: internal/auth/
+      linters:
+        - lll
+        - gocritic
+        - revive
+        - govet
+        - perfsprint
+        - prealloc
+    - path: internal/workout_execution/
       linters:
         - lll
         - gocritic

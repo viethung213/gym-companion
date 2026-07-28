@@ -469,7 +469,6 @@ func TestPostgresRepository_CanceledContextAndLockConflict(t *testing.T) {
 	tx := db.Begin()
 	_ = tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error // Hold lock in tx
 
-
 	// Call ExecuteInLock from main DB connection; pg_try_advisory_xact_lock returns false
 	err := outboxRepo.ExecuteInLock(context.Background(), lockID, func(txCtx context.Context) error {
 		t.Error("callback should not run when lock is not acquired")

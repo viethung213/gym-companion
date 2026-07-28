@@ -58,7 +58,10 @@ func NewCompleteWorkoutSessionHandler(
 }
 
 // Handle executes session completion.
-func (h *CompleteWorkoutSessionHandler) Handle(ctx context.Context, cmd CompleteWorkoutSessionCommand) (*CompleteWorkoutSessionResult, error) {
+func (h *CompleteWorkoutSessionHandler) Handle(
+	ctx context.Context,
+	cmd CompleteWorkoutSessionCommand,
+) (*CompleteWorkoutSessionResult, error) {
 	if cmd.SessionID == "" {
 		return nil, apperror.ErrInvalidInput
 	}
@@ -77,22 +80,22 @@ func (h *CompleteWorkoutSessionHandler) Handle(ctx context.Context, cmd Complete
 		firstExerciseID := session.Sets()[0].ExerciseID
 		muscleGroup := "Chest" // Default fallback
 		if h.exerciseClient != nil {
-			mg, err := h.exerciseClient.GetExerciseMuscleGroup(ctx, firstExerciseID)
-			if err == nil && mg != "" {
+			mg, clientErr := h.exerciseClient.GetExerciseMuscleGroup(ctx, firstExerciseID)
+			if clientErr == nil && mg != "" {
 				muscleGroup = mg
 			}
 		}
 
 		vol := session.CalculateTotalVolume()
-		overloaded, _, err := h.loadGuard.IsOverloaded(ctx, session.UserID(), muscleGroup, vol)
-		if err == nil {
+		overloaded, _, guardErr := h.loadGuard.IsOverloaded(ctx, session.UserID(), muscleGroup, vol)
+		if guardErr == nil {
 			isOverloaded = overloaded
 		}
 	}
 
 	// 2. Transition domain state to COMPLETED
-	if err := session.Complete(cmd.ConfirmOverload, isOverloaded); err != nil {
-		return nil, err
+	if completeErr := session.Complete(cmd.ConfirmOverload, isOverloaded); completeErr != nil {
+		return nil, completeErr
 	}
 
 	// 3. User Weight Update (UC-03.4 Alternative Flow A3)

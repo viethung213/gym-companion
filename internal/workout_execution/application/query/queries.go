@@ -31,7 +31,7 @@ func NewGetMotionSpecificationQueryHandler(motionRepo repository.MotionSpecifica
 }
 
 // Handle executes query.
-func (h *GetMotionSpecificationQueryHandler) Handle(ctx context.Context, exerciseID, coachPersonality string) (*aggregate.MotionSpecification, error) {
+func (h *GetMotionSpecificationQueryHandler) Handle(ctx context.Context, exerciseID, _ string) (*aggregate.MotionSpecification, error) {
 	if exerciseID == "" {
 		return nil, derror.ErrMotionSpecNotFound
 	}
