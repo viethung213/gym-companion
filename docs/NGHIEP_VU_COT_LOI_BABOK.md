@@ -71,7 +71,7 @@
 ### Module 2: AI Coach cá nhân
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
-| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (28 ngày tập) phân bổ nhóm cơ & RPE target theo 4 pha (Accumulation, Overload, Peak, Deload) và các giáo án chi tiết dựa trên `available_slots`, `primary_goal`, `preferred_muscle_groups`. | M |
+| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (28 ngày tập) phân bổ nhóm cơ & RPE target theo 4 pha (Accumulation, Overload, Peak, Deload) và toàn bộ giáo án chi tiết dựa trên `available_slots`, `primary_goal`, `preferred_muscle_groups`, `available_equipment`. | M |
 | **FR-AC-02** | **Tự động điều chỉnh**: Phân tích hiệu suất tập để tăng/giảm tạ | M |
 | **FR-AC-03** | **Bài tập thay thế**: Loại bỏ bài tác động vào vùng chấn thương đột xuất cho đến khi báo phục hồi. | S |
 | **FR-AC-04** | **Đồng hành**: Gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thực tế (PR, quay lại sau nghỉ dài). | S |
