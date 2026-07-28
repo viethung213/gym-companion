@@ -105,3 +105,19 @@ internal/coaching/
 | `search_eligible_exercises` | Tìm bài tập hợp lệ theo thiết bị & nhóm cơ |
 | `replace_injured_exercises` | Tìm bài tập thay thế an toàn né vùng chấn thương |
 | `get_exercise_history` | Đọc lịch sử 1RM & tạ PR gần nhất |
+
+---
+
+## 5. Danh mục Sự kiện Bất đồng bộ (Event Integration Contracts)
+
+### Consumed Events (Sự kiện đầu vào)
+- `contracts.supporting.profile.v1.event.ProfileCompletedEventPayload` $\rightarrow$ Kích hoạt `InitiateRoadmap`.
+- `contracts.supporting.profile.v1.event.ProfileUpdated` $\rightarrow$ Kích hoạt `RegenerateSchedule` (FR-AC-06).
+- `contracts.supporting.profile.v1.event.InjuryReported` / `InjuryRecovered` $\rightarrow$ Kích hoạt thích ứng chấn thương.
+- `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` $\rightarrow$ Nghiệm thu `SessionPlan` (`status = COMPLETED`) và tính $SCR$, $\Delta RPE$.
+- **`contracts.core.workout_execution.v1.event.WorkoutSessionAborted`** $\rightarrow$ **Cập nhật `SessionPlan.status = SKIPPED`** khi học viên bỏ dở buổi tập / bị timeout.
+
+### Produced Events (Sự kiện đầu ra)
+- `contracts.core.coaching.v1.event.RoadmapInitiatedEventPayload` $\rightarrow$ Báo tin khởi tạo Lộ trình 4 tuần.
+- `contracts.core.coaching.v1.event.RoadmapAdjustedEventPayload` $\rightarrow$ Báo tin re-generate giáo án tương lai.
+- `contracts.core.coaching.v1.event.SessionPlanExecutedEventPayload` $\rightarrow$ Báo tin hoàn thành buổi tập (kèm chỉ số $SCR$ & $\Delta RPE$).
