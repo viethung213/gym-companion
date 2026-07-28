@@ -7,110 +7,83 @@
 
 ---
 
-### UC-02.1 InitiateWorkoutRoadmap
+### UC-02.1 InitiateRoadmap
 
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | `UserProfileCompleted` event được nhận. `ActiveCoachEnabled = true`. |
+| **Precondition** | Event `UserProfileCompleted` được nhận. `ActiveCoachEnabled = true`. |
 
 **Main Flow**
-1. System đọc `BiologicalMetrics`, `primary_goal`, `preferred_muscle_groups`, `available_equipment` và `available_slots` từ `User`.
-2. System tính `FitnessScore` và xác định giai đoạn khởi điểm.
-3. System tạo `WorkoutRoadmap` (4 tuần) với `RoadmapPhase` và `CompletionRate = 0`.
-4. System tạo `WeeklySchedule` đầu tiên (giai đoạn Accumulation - Tích lũy, RPE 6–7) với `MuscleSplit` phân bổ theo `primary_goal`, ưu tiên `preferred_muscle_groups` và gán vào các ngày rảnh trong `available_slots`, tuân thủ `BR-AC-01` và `BR-AC-09`.
-5. System gọi `OverloadValidator` (Go Upper Safety Envelope) để xác nhận giới hạn biên độ điều chỉnh tải trọng hợp lệ ($\pm 30\%$, BR-AC-02).
-6. System phát `RoadmapInitiated`.
+1. System đọc `biological_metrics`, `primary_goal`, `preferred_muscle_groups`, `available_equipment` và `available_slots` từ `User`.
+2. System khởi tạo Baseline RPE 6–7 cho lộ trình làm quen ban đầu.
+3. System tạo `Roadmap` 4 tuần (28 ngày) với `status = ACTIVE`.
+4. System tạo 4 `WeekPlan` tương ứng 4 tuần, phân bổ theo 4 pha tiến trình chuẩn: Tuần 1 (Accumulation RPE 6–7), Tuần 2 (Overload RPE 7–8), Tuần 3 (Peak RPE 8–9), Tuần 4 (Deload RPE 5–6 giảm 30% volume & 10% tạ).
+5. System phân bổ 28 `DayPlan` tương ứng 28 ngày trên lịch (lưu `scheduled_date`, `is_rest_day`, `available_slots`).
+6. Với các ngày tập (`is_rest_day = false`), System khởi tạo `SessionPlan` gắn theo từng khung giờ rảnh (`slot_time`), chứa `prescription` bài tập (warm-up, main, cool-down, set, rep, weight, target RPE) với `status = PENDING`.
+7. System gọi `OverloadValidator` kiểm soát giới hạn điều chỉnh tải trọng ($\pm 30\%$, tối đa $+5\text{kg}$ bài free-weight nặng, `BR-AC-02`).
+8. System lưu `Roadmap` (gồm 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan`) và phát event `RoadmapInitiated`.
 
 **Alternative Flow**
-- A1: User có `Injury` active → System loại bỏ bài tập tác động vùng chấn thương khi sinh lịch tuần.
-- A2: `preferred_muscle_groups` rỗng → System tự động áp dụng `MuscleSplit` phân bổ cân bằng chuẩn (Standard Push/Pull/Legs hoặc Upper/Lower split).
+- A1: User có `Injury` active → System loại bỏ bài tập tác động vùng chấn thương khi sinh giáo án `prescription`.
+- A2: `preferred_muscle_groups` rỗng → System tự động áp dụng `MuscleSplit` cân bằng chuẩn (Push/Pull/Legs hoặc Upper/Lower split).
 
 **Error / Edge Cases**
-- E1: `BiologicalMetrics` không đủ dữ liệu → không sinh được lộ trình, yêu cầu hoàn thiện hồ sơ.
-- E2: `OverloadValidator` từ chối bài tập (vượt trần 30%) → tự điều chỉnh tạ xuống trần hợp lệ và tiếp tục.
+- E1: `biological_metrics` không đủ dữ liệu → Hủy quy trình, yêu cầu hoàn thiện hồ sơ.
+- E2: `OverloadValidator` từ chối bài tập (vượt trần 30%) → Hạ mức tạ về trần tối đa hợp lệ và tiếp tục.
 
-**Postcondition**: `WorkoutRoadmap` và `WeeklySchedule` tuần 1 được tạo. Chưa sinh `DailyWorkoutPlan`.  
-> *`CoachingService.InitiateRoadmap()` gọi `WorkoutRoadmapRepository.Save()` và `WeeklyScheduleRepository.Save()`.*
+**Postcondition**: `Roadmap` 4 tuần và các `SessionPlan` (chứa `prescription` NOT NULL) được khởi tạo sẵn sàng trong cơ sở dữ liệu.  
+> *`CoachingService.InitiateRoadmap()` gọi `RoadmapRepository.Save()`.*
 
-**Domain Events**: `RoadmapInitiated` · `WeeklyScheduleGenerated`
+**Domain Events**: `RoadmapInitiated`
 
 ---
 
-### UC-02.2 GenerateDailyWorkoutPlan (JIT)
+### UC-02.2 ExecuteSessionPlan
 
 | | |
 |---|---|
-| **Actor** | System (AI Coach) |
-| **Precondition** | Đến ngày tập theo `WeeklySchedule`. `DailyWorkoutPlan` chưa tồn tại cho ngày hôm nay. Trạng thái buổi tập trước đã được xử lý (hoặc tự động chuyển `Skipped`). |
+| **Actor** | System (AI Coach) · User |
+| **Precondition** | `Roadmap` đang ở trạng thái `ACTIVE`. Đến khung giờ tập theo lịch (`scheduled_date = today`, `slot_time`). |
 
 **Main Flow**
-1. User mở ứng dụng trong ngày tập, System hiển thị câu hỏi tương tác ngắn (Check-in pop-up) về tình trạng sức khỏe hôm nay (chấn thương mới, độ phục hồi/giờ ngủ).
-2. System kiểm tra trạng thái buổi tập trước đó theo lịch. Nếu buổi trước bị bỏ tập:
-   - System tự động đánh dấu buổi tập cũ là `Skipped` (`BR-AC-03`), tiếp tục sinh giáo án cho ngày hôm nay theo đúng lịch.
-3. System sinh `WorkoutPrescription` (bài tập, set, rep, tạ gợi ý, `rest_set_sec`, `rest_exercise_sec`, `target_rpe` theo Phase của tuần, warm-up/cool-down) dựa trên `MuscleSplit` của ngày hôm nay, `PersonalRecord` (1RM) hiện tại và chỉ chọn các bài tập có dụng cụ thuộc `available_equipment`.
-4. System kiểm tra `Injury` active — loại bỏ bài tập tác động vùng chấn thương và thay thế bằng bài tương đương.
-5. System tạo `DailyWorkoutPlan`, phát `DailyWorkoutPlanGenerated`.
+1. User mở ứng dụng trong khung giờ tập. System đọc trực tiếp `SessionPlan` của buổi tập hôm nay từ cơ sở dữ liệu.
+2. System kiểm tra trạng thái các buổi tập trước đó. Nếu buổi trước chưa thực hiện ➔ Tự động đánh dấu buổi cũ là `SKIPPED` (`BR-AC-03`), các set bỏ lỡ tính $0$ vào $SCR$, giữ nguyên giáo án buổi hôm nay.
+3. System hiển thị câu hỏi Check-in ngắn về tình trạng sức khỏe hôm nay (chấn thương mới, mệt mỏi/giờ ngủ).
+4. User xác nhận giáo án `prescription` buổi tập hôm nay và bắt đầu tập (chuyển sang UC-03 Workout Execution).
+5. Sau khi kết thúc buổi tập, System cập nhật `status = COMPLETED` cho `SessionPlan` buổi hôm nay.
 
 **Alternative Flow**
-- A1: User mở app và hỏi trạng thái hôm nay qua chatbot — System hỏi 1–2 câu về thiết bị, dị ứng nếu chưa có trong `ChatbotContext`.
-- A2: Ngày hôm nay là ngày nghỉ theo lịch → không sinh giáo án, thông báo "Hôm nay nghỉ phục hồi".
-- A3: Buổi tập gần nhất bị tự động đóng vì không tương tác (Anomalous Session - đánh dấu từ UC-03.4) → System truyền cờ `anomalous_session_detected = true` vào Prompt để Gemini LLM tự chủ sinh giáo án phục hồi nhẹ (Active Recovery BR-WL-01).
+- A1: Check-in phát hiện chấn thương mới hoặc mệt mỏi cấp tính ($\Delta RPE \ge +2.0$) ➔ System kích hoạt Re-generate `prescription` riêng cho `SessionPlan` hôm nay (giảm tải hoặc đổi bài phục hồi nhẹ).
+- A2: Ngày hôm nay là ngày nghỉ theo lịch (`is_rest_day = true`) ➔ System thông báo "Hôm nay nghỉ phục hồi". Khi trôi qua ngày nghỉ, status tự động chuyển `COMPLETED`.
 
 **Error / Edge Cases**
-- E1: Không tìm thấy `WeeklySchedule` cho ngày hôm nay → báo lỗi, đề xuất tạo lịch mới.
-- E2: Toàn bộ bài tập bị loại bỏ do chấn thương → sinh giáo án phục hồi nhẹ (active recovery), không tập nặng.
-- E3: `PersonalRecord` chưa có (user mới) → dùng tạ gợi ý mặc định theo `BiologicalMetrics`.
+- E1: `SessionPlan` không tồn tại do lỗi dữ liệu ➔ System tự động khởi tạo JIT `SessionPlan` bổ sung cho khung giờ hôm nay.
 
-**Postcondition**: `DailyWorkoutPlan` với `WorkoutPrescription` đầy đủ sẵn sàng để user thực thi.  
-> *`CoachingService.GenerateDailyPlan()` gọi `DailyWorkoutPlanRepository.Save()` và `WorkoutPerformanceRepository.GetLatest1RM()`.*
+**Postcondition**: Buổi tập hôm nay được thực thi thành công và `SessionPlan.status` cập nhật thành `COMPLETED`.  
+> *`CoachingService.GetSessionPlan()` đọc trực tiếp từ `RoadmapRepository`.*
 
-**Domain Events**: `DailyWorkoutPlanGenerated`
+**Domain Events**: `SessionPlanExecuted`
 
 ---
 
-### UC-02.3 GenerateNextWeeklySchedule
+### UC-02.3 RegenerateScheduleOnProfileUpdated
 
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | Lịch tuần hiện tại chuẩn bị kết thúc (hoặc kết thúc). `WorkoutRoadmap` đang ở trạng thái `Active`. |
-
-**Main Flow**
-1. System đọc lịch sử tập luyện thực tế của tuần vừa rồi.
-2. System sinh `WeeklySchedule` tiếp theo (tuần 2 - Overload RPE 7–8, tuần 3 - Peak RPE 8–9, hoặc tuần 4 - Supercompensation/Deload RPE 5–6 giảm 40–50% volume với cờ `is_deload_week = true`), tuân thủ `BR-AC-01` và `BR-AC-09`.
-3. System gọi `OverloadValidator` kiểm soát giới hạn biên độ điều chỉnh tải trọng ($\pm 30\%$, BR-AC-02).
-4. System lưu `WeeklySchedule` mới và phát `WeeklyScheduleGenerated`.
-
-**Alternative Flow**
-- A1: `OverloadValidator` từ chối bài tập (vượt trần 30%) → tự động hạ về trần tối đa hợp lệ.
-
-**Error / Edge Cases**
-- E1: Dữ liệu bị lỗi hoặc tuần trước bị bỏ qua hoàn toàn → Dùng thiết lập mặc định theo Lộ trình.
-
-**Postcondition**: `WeeklySchedule` tuần tiếp theo được tạo sẵn sàng để sinh giáo án hàng ngày.
-> *`CoachingService.GenerateWeeklySchedule()` gọi `WeeklyScheduleRepository.Save()` và phát `WeeklyScheduleGenerated`.*
-
-**Domain Events**: `WeeklyScheduleGenerated`
-
----
-
-### UC-02.4 ReevaluateScheduleOnProfileUpdated
-
-| | |
-|---|---|
-| **Actor** | System (AI Coach) |
-| **Precondition** | Event `ProfileUpdated` được nhận. `WorkoutRoadmap` đang ở trạng thái `Active`. |
+| **Precondition** | Event `ProfileUpdated` hoặc tín hiệu điều chỉnh (`Signal B1–B4`, `Trigger A BR-AC-04`) được nhận. `Roadmap` đang ở trạng thái `ACTIVE`. |
 
 **Main Flow**
 1. System đọc thông tin snapshot mới từ `User` (`available_equipment`, `available_slots`, `preferred_muscle_groups`, `primary_goal`).
-2. System kích hoạt Re-evaluation cho `WeeklySchedule` bắt đầu từ ngày tập tiếp theo:
-   - Cập nhật danh mục bài tập tương thích với `available_equipment` mới.
-   - Điều chỉnh ngày tập trong tuần theo `available_slots` mới.
-   - Phân bổ lại `MuscleSplit` theo `preferred_muscle_groups` và `primary_goal`.
-3. System cập nhật `WeeklySchedule` và phát `WeeklyScheduleGenerated`.
+2. System xác định danh sách các buổi tập chưa thực thi (`scheduled_date >= today` và `status = PENDING`).
+3. System kích hoạt Re-generation cho `prescription` của các `SessionPlan` chưa thực thi:
+   - Cập nhật bài tập tương thích với `available_equipment` mới.
+   - Điều chỉnh phân bổ ngày tập theo `available_slots` mới.
+   - Điều chỉnh `MuscleSplit` theo `preferred_muscle_groups` và `primary_goal`.
+4. System lưu thông tin cập nhật vào `Roadmap` và phát event `RoadmapAdjusted`.
 
-**Postcondition**: `WeeklySchedule` được điều chỉnh từ ngày tập tiếp theo.  
-> *`CoachingService.ReevaluateSchedule()` cập nhật `WeeklyScheduleRepository.Save()` và publish `WeeklyScheduleGenerated`.*
+**Postcondition**: Toàn bộ giáo án các buổi tập chưa thực thi trong 4 tuần được cập nhật.  
+> *`CoachingService.RegenerateSchedule()` gọi `RoadmapRepository.Save()` và phát `RoadmapAdjusted`.*
 
-**Domain Events**: `WeeklyScheduleGenerated`
+**Domain Events**: `RoadmapAdjusted`

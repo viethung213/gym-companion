@@ -96,6 +96,6 @@
 **Main Flow**
 1. User cập nhật các trường thông tin trong Profile (`primary_goal`, `available_equipment`, `preferred_muscle_groups`, `available_slots`).
 2. System cập nhật thông tin và phát `ProfileUpdated`.
-3. `Coaching Context` nhận `ProfileUpdated` và tự động kích hoạt Re-evaluation cho `WeeklySchedule` bắt đầu từ ngày tập tiếp theo.
+3. `Coaching Context` nhận `ProfileUpdated` và tự động kích hoạt Re-generation (FR-AC-06) cho các `SessionPlan` bắt đầu từ ngày tập tiếp theo.
 
 **Domain Events**: `ProfileUpdated`

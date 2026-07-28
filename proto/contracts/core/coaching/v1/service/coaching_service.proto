@@ -11,8 +11,8 @@ import "contracts/core/coaching/v1/message/coaching_messages.proto";
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
     title: "AI Workout Coaching API"
-    version: "1.0"
-    description: "API for workout roadmap planning, weekly scheduling, daily workout plans, and adaptive coaching review."
+    version: "1.18"
+    description: "API for 4-week workout roadmap planning, weekly scheduling, daily plan execution, and adaptive coaching review."
   }
   security_definitions: {
     security: {
@@ -34,57 +34,47 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service CoachingService {
-  // Create the initial four-week roadmap and first weekly schedule.
+  // Create the complete 4-week roadmap with initial session plans.
   rpc InitiateRoadmap (contracts.core.coaching.v1.message.InitiateRoadmapRequest) returns (contracts.core.coaching.v1.message.InitiateRoadmapResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/workout-roadmaps"
+      post: "/api/v1/users/{user_id}/roadmaps"
       body: "payload"
     };
   }
 
   // List roadmaps for a user, optionally filtered by status.
-  rpc ListWorkoutRoadmaps (contracts.core.coaching.v1.message.ListWorkoutRoadmapsRequest) returns (contracts.core.coaching.v1.message.ListWorkoutRoadmapsResponse) {
+  rpc ListRoadmaps (contracts.core.coaching.v1.message.ListRoadmapsRequest) returns (contracts.core.coaching.v1.message.ListRoadmapsResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/workout-roadmaps"
+      get: "/api/v1/users/{user_id}/roadmaps"
     };
   }
 
   // Get one roadmap by id.
-  rpc GetWorkoutRoadmap (contracts.core.coaching.v1.message.GetWorkoutRoadmapRequest) returns (contracts.core.coaching.v1.message.GetWorkoutRoadmapResponse) {
+  rpc GetRoadmap (contracts.core.coaching.v1.message.GetRoadmapRequest) returns (contracts.core.coaching.v1.message.GetRoadmapResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/workout-roadmaps/{roadmap_id}"
+      get: "/api/v1/users/{user_id}/roadmaps/{roadmap_id}"
     };
   }
 
   // Get the single active roadmap for a user.
   rpc GetActiveRoadmap (contracts.core.coaching.v1.message.GetActiveRoadmapRequest) returns (contracts.core.coaching.v1.message.GetActiveRoadmapResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/workout-roadmaps/active"
+      get: "/api/v1/users/{user_id}/roadmaps/active"
     };
   }
 
-  // Get pre-workout check-in questions dynamically generated for today's session.
-  rpc GetPreWorkoutCheckIn (contracts.core.coaching.v1.message.GetPreWorkoutCheckInRequest) returns (contracts.core.coaching.v1.message.GetPreWorkoutCheckInResponse) {
+  // Get a specific session plan by id.
+  rpc GetSessionPlan (contracts.core.coaching.v1.message.GetSessionPlanRequest) returns (contracts.core.coaching.v1.message.GetSessionPlanResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/pre-workout-checkin"
+      get: "/api/v1/users/{user_id}/session-plans/{session_plan_id}"
     };
   }
 
-  // Submit answers for the pre-workout check-in.
-  rpc SubmitPreWorkoutCheckIn (contracts.core.coaching.v1.message.SubmitPreWorkoutCheckInRequest) returns (contracts.core.coaching.v1.message.SubmitPreWorkoutCheckInResponse) {
+  // Re-generate future unexecuted session plans when profile/adaptation rules trigger (FR-AC-06).
+  rpc RegenerateSchedule (contracts.core.coaching.v1.message.RegenerateScheduleRequest) returns (contracts.core.coaching.v1.message.RegenerateScheduleResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/pre-workout-checkin:submit"
+      post: "/api/v1/users/{user_id}/roadmaps/{roadmap_id}:regenerate"
       body: "*"
-    };
-  }
-
-  // Get today's detailed workout plan.
-  // TODO: In the future, this RPC will be refactored into a Server Streaming RPC to support Warm-up Rendering
-  // and progressive JIT streaming (as defined in ADR-01):
-  // rpc GetDailyWorkoutPlan (GetDailyWorkoutPlanRequest) returns (stream GetDailyWorkoutPlanResponse);
-  rpc GetDailyWorkoutPlan (contracts.core.coaching.v1.message.GetDailyWorkoutPlanRequest) returns (contracts.core.coaching.v1.message.GetDailyWorkoutPlanResponse) {
-    option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/daily-workout-plans/today"
     };
   }
 }

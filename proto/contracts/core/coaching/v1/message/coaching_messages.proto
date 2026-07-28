@@ -13,20 +13,11 @@ enum RoadmapStatus {
   ROADMAP_STATUS_COMPLETED = 2;
 }
 
-enum WorkoutDayStatus {
-  WORKOUT_DAY_STATUS_UNSPECIFIED = 0;
-  WORKOUT_DAY_STATUS_TRAINING = 1;     // Ngày có lịch tập
-  WORKOUT_DAY_STATUS_REST = 2;         // Ngày nghỉ phục hồi
-  WORKOUT_DAY_STATUS_SKIPPED = 3;      // Lịch là tập nhưng bỏ lỡ (không tập)
-  WORKOUT_DAY_STATUS_RESCHEDULED = 4;  // Chủ động dời lịch sang ngày khác
-}
-
-enum DailyPlanStatus {
-  DAILY_PLAN_STATUS_UNSPECIFIED = 0;
-  DAILY_PLAN_STATUS_DRAFT = 1;
-  DAILY_PLAN_STATUS_ACTIVE = 2;
-  DAILY_PLAN_STATUS_COMPLETED = 3;
-  DAILY_PLAN_STATUS_SKIPPED = 4;
+enum SessionPlanStatus {
+  SESSION_PLAN_STATUS_UNSPECIFIED = 0;
+  SESSION_PLAN_STATUS_PENDING = 1;   // Chưa tập / chờ tập
+  SESSION_PLAN_STATUS_COMPLETED = 2; // Đã hoàn thành buổi tập
+  SESSION_PLAN_STATUS_SKIPPED = 3;   // Đã bỏ qua / không tập
 }
 
 message InitiateRoadmapRequest {
@@ -39,29 +30,28 @@ message InitiateRoadmapPayload {
 }
 
 message InitiateRoadmapResponse {
-  WorkoutRoadmap roadmap = 1;
-  WeeklySchedule first_weekly_schedule = 2;
+  Roadmap roadmap = 1;
 }
 
-message ListWorkoutRoadmapsRequest {
+message ListRoadmapsRequest {
   string user_id = 1;
   RoadmapStatus status = 2;
   int32 page_size = 3;
   string page_token = 4;
 }
 
-message ListWorkoutRoadmapsResponse {
-  repeated WorkoutRoadmap roadmaps = 1;
+message ListRoadmapsResponse {
+  repeated Roadmap roadmaps = 1;
   string next_page_token = 2;
 }
 
-message GetWorkoutRoadmapRequest {
+message GetRoadmapRequest {
   string user_id = 1;
   string roadmap_id = 2;
 }
 
-message GetWorkoutRoadmapResponse {
-  WorkoutRoadmap roadmap = 1;
+message GetRoadmapResponse {
+  Roadmap roadmap = 1;
 }
 
 message GetActiveRoadmapRequest {
@@ -69,77 +59,72 @@ message GetActiveRoadmapRequest {
 }
 
 message GetActiveRoadmapResponse {
-  WorkoutRoadmap roadmap = 1;
-  WeeklySchedule current_weekly_schedule = 2;
+  Roadmap roadmap = 1;
 }
 
-message GetPreWorkoutCheckInRequest {
+message GetSessionPlanRequest {
   string user_id = 1;
+  string session_plan_id = 2;
 }
 
-message GetPreWorkoutCheckInResponse {
-  string check_in_id = 1;
-  repeated CheckInQuestion questions = 2;
+message GetSessionPlanResponse {
+  SessionPlan session_plan = 1;
 }
 
-message SubmitPreWorkoutCheckInRequest {
+message RegenerateScheduleRequest {
   string user_id = 1;
-  string check_in_id = 2;
-  repeated CheckInAnswer answers = 3;
+  string roadmap_id = 2;
+  string reason = 3;
 }
 
-message SubmitPreWorkoutCheckInResponse {
-  bool requires_regeneration = 1;
-  string coach_feedback = 2;
+message RegenerateScheduleResponse {
+  Roadmap roadmap = 1;
 }
 
-message GetDailyWorkoutPlanRequest {
-  string user_id = 1;
-  google.type.Date scheduled_date = 2;
-}
-
-message GetDailyWorkoutPlanResponse {
-  DailyWorkoutPlan daily_workout_plan = 1;
-}
-
-message WorkoutRoadmap {
+message Roadmap {
   string roadmap_id = 1;
   string user_id = 2;
   RoadmapStatus status = 3;
   google.type.Date start_date = 4;
   google.type.Date end_date = 5;
+  repeated WeekPlan week_plans = 6;
 }
 
-message WeeklySchedule {
-  string weekly_schedule_id = 1;
+message WeekPlan {
+  string week_plan_id = 1;
   string roadmap_id = 2;
   string user_id = 3;
   int32 week_number = 4;
   google.type.Date start_date = 5;
   google.type.Date end_date = 6;
   string muscle_split_type = 7;
-  repeated ScheduleDay schedule_days = 8;
+  repeated DayPlan day_plans = 8;
 }
 
-message ScheduleDay {
-  google.type.Date scheduled_date = 1;
-  string day_of_week = 2;
-  WorkoutDayStatus status = 3;
-  repeated string target_muscle_groups = 4;
-  string daily_workout_plan_id = 5;
-}
-
-message DailyWorkoutPlan {
-  string daily_workout_plan_id = 1;
-  string user_id = 2;
+message DayPlan {
+  string day_plan_id = 1;
+  string week_plan_id = 2;
   string roadmap_id = 3;
-  string weekly_schedule_id = 4;
+  string user_id = 4;
   google.type.Date scheduled_date = 5;
-  DailyPlanStatus status = 6;
-  WorkoutPrescription workout_prescription = 7;
-  string reasoning_explanation = 8;
-  string adjustment_explanation = 9;
-  google.protobuf.Timestamp generated_at = 10;
+  bool is_rest_day = 6;
+  repeated string available_slots = 7;
+  repeated SessionPlan session_plans = 8;
+}
+
+message SessionPlan {
+  string session_plan_id = 1;
+  string day_plan_id = 2;
+  string week_plan_id = 3;
+  string roadmap_id = 4;
+  string user_id = 5;
+  google.type.Date scheduled_date = 6;
+  string slot_time = 7;
+  SessionPlanStatus status = 8;
+  repeated string target_muscle_groups = 9;
+  WorkoutPrescription prescription = 10;
+  string reasoning_explanation = 11;
+  google.protobuf.Timestamp generated_at = 12;
 }
 
 message WorkoutPrescription {
