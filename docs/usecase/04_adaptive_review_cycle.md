@@ -7,41 +7,39 @@
 
 ---
 
-### UC-04.1 EvaluateEndOfCycleCompletionRate
+### UC-04.1 EvaluateWeeklyAdaptiveCycle
 
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | Lộ trình 4 tuần vừa kết thúc. |
+| **Precondition** | Hoàn thành 1 tuần tập (hoặc cuối chu kỳ 4 tuần). |
 
 **Main Flow**
-1. System tính `CompletionRate` (CR) = số buổi hoàn thành / tổng số buổi đã lên lịch (loại trừ `AnomalousSession`).
-2. System áp dụng quy tắc BR-AC-04:
-   - CR < 40%: Hỏi lý do, chờ phản hồi, đề xuất giảm số buổi/tuần và rút ngắn thời lượng. Nếu user đồng ý → cấu hình lại; nếu từ chối → chuyển sang **A1**.
-   - 40% ≤ CR < 70%: Giảm tải lượng 10–15%, chèn xen kẽ buổi Express 30 phút. Tự sinh lộ trình mới.
-   - 70% ≤ CR < 90%: Giữ cấu trúc, tăng Progressive Overload ≤ 10%. Tự sinh lộ trình mới.
-   - CR ≥ 90%: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". Nếu user đồng ý → thêm buổi; nếu từ chối → chuyển sang **A1**.
-3. System tạo `WorkoutRoadmap` mới, phát `RoadmapInitiated`.
+1. System tính Tỷ lệ hoàn thành Set ($SCR = \frac{\text{Số Set thực tế}}{\text{Số Set giao}} \times 100\%$) và Độ lệch mệt mỏi ($\Delta RPE = RPE_{\text{Thực tế}} - RPE_{\text{Target}}$).
+2. System áp dụng quy tắc thích ứng định kỳ `BR-AC-04`:
+   - **Tăng tải lũy tiến** ($SCR \ge 80\%$ và $-1 \le \Delta RPE \le +1$): Tự động tăng mức tạ gợi ý $+2.5\% \rightarrow +5\%$ cho tuần kế tiếp.
+   - **Quản lý mệt mỏi & Deload** ($RPE_{\text{Thực tế}} \ge 9.0$ liên tục 3 buổi hoặc $\Delta RPE \ge +2.0$): Tự động kích hoạt tuần Deload (giảm 30% volume & 10% tạ).
+   - **Thích �23. System cập nhật `prescription` bài tập của các `SessionPlan` tuần kế tiếp, phát `RoadmapAdjusted`.
 
 **Alternative Flow**
-- A1: User từ chối đề xuất thay đổi số buổi tập (khi CR < 40% hoặc CR ≥ 90%) → System giữ nguyên cấu trúc số buổi/tuần cũ của lộ trình, nhưng tự động điều chỉnh Progressive Overload (tăng/giảm mức tạ hoặc volume tạ gợi ý) tương ứng để đảm bảo tính an toàn và thích ứng.
+- A1: User từ chối giảm số buổi tập khi $SCR < 50\%$ ➔ System giữ nguyên cấu trúc số buổi cũ, nhưng tự động chuyển sang giáo án Express 30 phút để hỗ trợ hoàn thành.
 
 **Error / Edge Cases**
-- E1: CR < 40% và user không phản hồi sau 48h → tự áp dụng phương án giảm tải mặc định.
+- E1: $SCR < 50\%$ và user không phản hồi sau 48h ➔ Tự áp dụng phương án chuyển sang giáo án Express 30 phút.
 
-**Postcondition**: Lộ trình mới được khởi tạo.  
-> *`AdaptiveCoachEngine.EvaluateEndOfCycle()` đọc `WorkoutRoadmapRepository` và `WorkoutSessionRepository`.*
+**Postcondition**: Giáo án tuần kế tiếp được cập nhật thích ứng theo $SCR$ và $\Delta RPE$.  
+> *`AdaptiveCoachEngine.EvaluateWeeklyCycle()` đọc `RoadmapRepository` và `WorkoutSessionRepository`.*
 
-**Domain Events**: `RoadmapAdjusted` · `RoadmapInitiated`
+**Domain Events**: `RoadmapAdjusted`
 
 ---
 
-### UC-04.2 DetectSignalB1 — Không hoạt động
+### UC-04.2 DetectSignalB1 — Bỏ tập cấp tính / Mất tích
 
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | User không có `WorkoutSession` nào trong 7 ngày liên tiếp. |
+| **Precondition** | User bỏ tập 3 buổi liên tiếp (hoặc không có `WorkoutSession` trong 7 ngày). |
 
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B1.
@@ -49,22 +47,18 @@
 3. User phản hồi, chọn phương án:
    - (a) Tiếp tục từ buổi bỏ gần nhất.
    - (b) Đặt lại lịch tuần này.
-   - (c) Tạm dừng lộ trình (Pause).
 4. System thực thi phương án đã chọn.
-
-**Alternative Flow**
-- A1: Chọn Pause → `WorkoutRoadmap` chuyển sang `Paused`. Tối đa 4 tuần. Sau 4 tuần tự chuyển lại `Active` và hỏi lại user.
 
 **Error / Edge Cases**
 - E1: User không phản hồi trong 24h → không tự thay đổi lịch, gửi nhắc lại sau 24h.
 
 **Postcondition**: Lịch tập được cập nhật theo lựa chọn của user (hoặc giữ nguyên nếu không phản hồi).
 
-**Domain Events**: `RoadmapPaused` | `RoadmapAdjusted`
+**Domain Events**: `RoadmapAdjusted`
 
 ---
 
-### UC-04.3 DetectSignalB2 — Lịch không tương thích
+### UC-04.3 DetectSignalB2 — Kẹt lịch cố định
 
 | | |
 |---|---|
@@ -74,7 +68,7 @@
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B2.
 2. System đề xuất dời slot ngày đó sang ngày khác còn trống trong tuần.
-3. If user đồng ý → Re-generate các giáo án chưa thực thi trong `WorkoutRoadmap`, phát `RoadmapAdjusted`.
+3. Nếu user đồng ý → Cập nhật phân bổ ngày tập trong `DayPlan`, phát `RoadmapAdjusted`.
 4. Nếu user từ chối → giữ nguyên, không hỏi lại về vấn đề này.
 
 **Error / Edge Cases**
@@ -84,41 +78,84 @@
 
 ---
 
-### UC-04.4 DetectSignalB3 — Overtraining
+### UC-04.4 DetectSignalB3 — Tập ngoài lịch (Unscheduled Workout)
 
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | User tập ≥ 2 buổi/ngày hoặc Session RPE (điểm đánh giá nỗ lực cả buổi tập do người dùng khai báo) trung bình ≥ 8.5 liên tục ≥ 5 buổi. |
+| **Precondition** | User tập vào ngày nghỉ (`is_rest_day = true`) hoặc tập buổi thứ 2+ trong cùng 1 ngày. |
 
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B3.
-2. System cảnh báo nguy cơ quá tải, đề xuất Active Recovery.
-3. System bắt buộc chèn 1 ngày nghỉ vào `WorkoutRoadmap` cho ngày kế tiếp và Re-generate giáo án các ngày chưa thực thi.
+2. System gửi tin nhắn Check-in hỏi lý do (Tập quá nhẹ / Thừa thời gian / Tập quá sức).
+3. System xử lý thích ứng theo lý do user chọn:
+   - Do bài tập quá nhẹ ➔ Tăng tạ gợi ý $+10\% \rightarrow +15\%$ cho các buổi sau.
+   - Do thừa thời gian ➔ Ghi nhận buổi tập, giữ nguyên lịch trình (hoặc gợi ý tăng buổi tập/tuần nếu chọn đổi lịch).
+   - Do tập quá sức / Nguy hiểm ➔ Cảnh báo chấn thương và chèn 1 ngày nghỉ phục hồi (`is_rest_day = true`).
 
 **Error / Edge Cases**
-- E1: User từ chối ngày nghỉ → System vẫn chèn (bắt buộc, không cho bypass).
+- E1: User không phản hồi tin nhắn Check-in ➔ Giữ nguyên buổi tập đã ghi nhận và giữ lịch trình hiện tại.
 
 **Domain Events**: `RoadmapAdjusted`
 
 ---
 
-### UC-04.5 DetectSignalB4 — Plateau
+### UC-04.5 DetectSignalB4 — Cơ bắp bị chai lỳ (Plateau)
 
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | 1RM và FormScore trung bình không tăng trong 3 tuần liên tiếp có CR ≥ 70%. |
+| **Precondition** | Sức mạnh ước tính (1RM) của bài tập chính không tăng trong 2 tuần liên tiếp (chỉ tính các tuần có $SCR \ge 80\%$). |
 
 **Main Flow**
-1. `AdaptiveCoachEngine` phát hiện Signal B4.
-2. System đề xuất 3 phương án:
-   - (a) Deload Week: giảm 40% tải lượng 1 tuần.
-   - (b) Đổi biến thể bài tập tương đương.
-   - (c) Tăng số set, giữ nguyên tạ.
-3. User chọn phương án. System cập nhật `DailyWorkoutPlan` kế tiếp.
+1. `AdaptiveCoachEngine` phát hiện Signal B4 khi kết thúc buổi tập cuối Tuần 2.
+2. System gửi Push Notification / In-App Alert thông báo cho User.
+3. Khi User tương tác qua gRPC Stream, System đề xuất 3 phương án phá Plateau:
+   - (a) Đổi biến thể bài tập tương đương.
+   - (b) Điều chỉnh dải Rep/Set (VD: chuyển từ 8–10 reps sang 4–6 reps heavy).
+   - (c) Thay đổi thứ tự bài tập trong buổi tập.
+4. User chọn phương án và bấm Confirm ➔ System cập nhật `prescription` trong `SessionPlan` của các tuần tới.
 
 **Error / Edge Cases**
-- E1: User không chọn trong 48h → tự áp dụng Deload Week (an toàn nhất).
+- E1: User không tương tác ➔ Tự động áp dụng đổi biến thể bài tập tương đương cho tuần tới.
+
+**Postcondition**: Bài tập tuần tới được làm mới để phá vỡ giai đoạn đình trệ.
+
+**Domain Events**: `RoadmapAdjusted`
+
+---
+
+### UC-04.6 AdaptPostInjuryRecovery — Thích ứng sau phục hồi chấn thương
+
+| | |
+|---|---|
+| **Actor** | System (AI Coach) |
+| **Precondition** | Một chấn thương được xác nhận phục hồi (`recovered`). |
+
+**Main Flow**
+1. System áp dụng cơ chế bảo vệ trong **3 buổi tập đầu tiên** liên quan đến nhóm cơ của khớp vừa phục hồi:
+   - Giới hạn mức tạ gợi ý tối đa không vượt quá **50%** mức tạ PR trước chấn thương.
+   - Ưu tiên gợi ý bài Bodyweight hoặc Machine/Cable (đường chuyển động cố định).
+2. Với mỗi buổi tập bảo vệ hoàn thành:
+   - Nếu đạt $RPE \le 7$ (với bài dùng AI Camera bổ sung thêm $Form\ Score \ge 80\%$) ➔ Ghi nhận 1 buổi bảo vệ thành công.
+3. Sau khi hoàn thành đủ 3 buổi bảo vệ đạt chuẩn ➔ System mở lại cơ chế Progressive Overload bình thường.
+
+**Error / Edge Cases**
+- E1: Sau 3 buổi mà $RPE > 7$ hoặc $Form\ Score < 80\%$ ➔ Kéo dài giai đoạn bảo vệ cho đến khi đạt đủ điều kiện an toàn.
+
+**Postcondition**: Người tập quay lại chu kỳ tăng tải bình thường sau khi phục hồi an toàn.
+
+**Domain Events**: `RoadmapAdjusted`�t hiện Signal B4 khi kết thúc buổi tập cuối Tuần 2.
+2. System gửi Push Notification / In-App Alert thông báo cho User.
+3. Khi User tương tác qua gRPC Stream, System đề xuất 3 phương án phá Plateau:
+   - (a) Đổi biến thể bài tập tương đương.
+   - (b) Điều chỉnh dải Rep/Set (VD: chuyển từ 8–10 reps sang 4–6 reps heavy).
+   - (c) Thay đổi thứ tự bài tập trong buổi tập.
+4. User chọn phương án và bấm Confirm ➔ System cập nhật `prescription` trong `ScheduleDay` của các tuần tới.
+
+**Error / Edge Cases**
+- E1: User không tương tác ➔ Tự động áp dụng đổi biến thể bài tập tương đương cho tuần tới.
+
+**Postcondition**: Bài tập tuần tới được làm mới để phá vỡ giai đoạn đình trệ.
 
 **Domain Events**: `RoadmapAdjusted`
