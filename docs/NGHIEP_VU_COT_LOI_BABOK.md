@@ -1,16 +1,17 @@
 # ĐẶC TẢ YÊU CẦU NGHIỆP VỤ CỐT LÕI (CORE BRD) - FITAI
-### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.7.0-OPT (Tối ưu Token)
+### TIÊU CHUẨN: BABOK® GUIDE V3.0 Compliant | Phiên bản: 1.18.0
 
 ---
 
 ## KIỂM SOÁT TÀI LIỆU
-- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 03/07/2026
+- **Mã tài liệu**: FITAI-BRD-CORE-001 | **Ngày hiệu lực**: 28/07/2026
 - **Trạng thái**: Approved | **Phân loại**: Internal Confidential
 - **Lịch sử đổi mới chính**:
   * v1.0 (27/06/2026): Hoàn thiện 7 module nghiệp vụ gốc.
   * v1.3 (01/07/2026): Chuyển sang cơ chế sinh lộ trình tổng quan & sinh giáo án chi tiết theo buổi.
   * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
   * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn) và tư vấn món ăn ngoài.
+  * v1.18 (28/07/2026): Chuẩn hóa Lộ trình cố định 4 tuần, mô hình 4 tầng (Roadmap -> WeekPlan -> DayPlan -> SessionPlan), quy tắc thích ứng SCR & ΔRPE, Signal B1-B4, thích ứng sau chấn thương, và loại bỏ hoàn toàn fitness_level, Pause, Cancel.
 
 ---
 
@@ -37,28 +38,23 @@
 ## 3. BẢN ĐỒ QUY TRÌNH NGHIỆP VỤ
 
 ### 3.1 Quy trình Khởi tạo (Onboarding & Planning)
-1. User nhập thông tin cơ bản, chỉ số cơ thể, mục tiêu (Tăng cơ/Giảm mỡ) & khung giờ tập cố định.
+1. User nhập thông tin cơ bản, chỉ số cơ thể, mục tiêu ( Tăng cơ/Giảm mỡ ), nhóm cơ ưu tiên & khung giờ rảnh, dụng cụ có sẵn.
 2. User khai báo chấn thương cũ hoặc bệnh lý mãn tính.
-3. AI Coach tính toán `User Fitness Score` & khởi tạo Lộ trình tổng quan 4 tuần, Lịch tập tuần và Gợi ý dinh dưỡng.
+3. khởi tạo Lộ trình 4 tuần (Accumulation, Overload, Peak, Deload) chi tiết (bài tập, set, rep, tạ gợi ý, thời gian nghỉ) tương ứng các thời gian rảnh và Gợi ý dinh dưỡng.
 
 ### 3.2 Quy trình Luyện tập (Workout Execution)
 1. User check-in & cấu hình playlist âm nhạc (phát chạy ngầm xuyên suốt buổi tập).
-2. **Khởi động (Warm-up)**: Nếu giáo án có Warm-up, hệ thống hiển thị bài tập khởi động (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Warm-up** để bỏ qua.
+2. **Khởi động (Warm-up)**.
 3. **Thực hiện bài tập chính**: Cả hai nhánh AI và Phi AI đều được thiết kế đồng nhất (cùng có nhạc nền chạy ngầm, timer đếm ngược, tuỳ chọn xem/nghe hướng dẫn on-demand). Sự khác biệt duy nhất là việc kích hoạt module AI Camera:
    - **Đối với bài tập có hỗ trợ AI Camera (Nhánh AI)**: Bật camera trước/sau, căn chỉnh khoảng cách (1.5m - 2m) và ánh sáng. AI Camera tracking khung xương (17 điểm), ước lượng tạ thực tế, đếm rep, tính ROM %, chấm Form Score. Nếu sai tư thế: Audio Ducking (giảm nhạc nền) + Phát giọng nói sửa lỗi thời gian thực (độ trễ <500ms). User xác nhận kết quả set (hệ thống tự động điền rep, tạ, Form Score).
    - **Đối với bài tập phi AI (Nhánh tự ghi nhận)**: Tắt camera. User tự thực hiện theo nhịp của mình và tự nhập kết quả set thủ công khi hoàn thành (Form Score ghi nhận N/A).
-4. **Dãn cơ (Cooldown)**: Trước khi kết thúc buổi tập, nếu giáo án có Cooldown, hệ thống hiển thị bài tập dãn cơ (hỗ trợ cả luồng AI và Phi AI) kèm tuỳ chọn **Skip Cooldown** để bỏ qua.
+4. **Dãn cơ (Cooldown)**.
 5. Nghỉ ngơi → Lặp lại cho đến khi hoàn thành giáo án → Nhận Post-session Report sau khi kết thúc buổi tập.
+6. Trong quá trình tập luyện nếu user có chấn thương thì lập tức dừng buổi tập.
 
-### 3.3 Quy trình Sinh giáo án theo buổi (Just-In-Time Workout Generation)
-1. Trigger: Đến ngày tập / User mở app.
-2. AI Coach hỏi/nhận trạng thái sức khỏe (chấn thương mới, độ phục hồi) & phân tích dữ liệu RPE/Form buổi trước.
-3. AI Coach tự động sinh giáo án chi tiết hôm nay (bài tập, set, rep, tạ gợi ý).
-4. User nhận giáo án và chuẩn bị thực hiện (chuyển sang Quy trình 3.2).
-
-### 3.4 Quy trình Đánh giá & Điều chỉnh Lộ trình (Adaptive Review Cycle)
-1. **Trigger A (Cuối chu kỳ 4 tuần)**: AI Coach tính Completion Rate (CR) để tự động nâng/hạ hoặc cấu hình lại lộ trình 4 tuần kế tiếp theo quy tắc **BR-AC-04**.
-2. **Trigger B (Giữa chu kỳ - Event-driven)**: Hệ thống liên tục quét 4 tín hiệu hành vi độc lập (Không hoạt động, Lịch không tương thích, Tập quá tải, Tiến bộ đình trệ) để đề xuất điều chỉnh nhanh giáo án theo các quy tắc **BR-AC-05** -> **BR-AC-08**.
+### 3.3 Quy trình Đánh giá & Điều chỉnh Lộ trình (Adaptive Review Cycle)
+1. **Trigger A (Cuối chu kỳ 4 tuần)**: AI Coach tính Tỷ lệ hoàn thành Set ($SCR = \frac{\text{Số Set thực tế}}{\text{Số Set giao}} \times 100\%$) và Độ lệch mệt mỏi ($\Delta RPE = RPE_{\text{Thực tế}} - RPE_{\text{Target}}$) để tự động điều chỉnh tạ và cấu hình lại lộ trình theo quy tắc **BR-AC-04**.
+2. **Trigger B (Giữa chu kỳ - Event-driven)**: Hệ thống liên tục quét 4 tín hiệu hành vi độc lập (Không hoạt động, Lịch không tương thích, Tập quá tải, Tiến bộ đình trệ) hoặc khi User cập nhật hồ sơ (`ProfileUpdated`) để đề xuất **Re-generate các giáo án chưa tập (`scheduled_date >= today`)** trong 4 tuần theo các quy tắc **BR-AC-05** -> **BR-AC-08**.
 
 ---
 
@@ -75,13 +71,13 @@
 ### Module 2: AI Coach cá nhân
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
 |---|---|---|
-| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (mốc định hướng) & Lịch tập tuần (phân bổ cơ). Không sinh chi tiết bài ở bước này. | M |
-| **FR-AC-02** | **Tự động điều chỉnh**: Phân tích hiệu suất tập để tăng/giảm tạ, thay bài tập hoặc chèn Deload Week. | M |
+| **FR-AC-01** | **Khởi tạo kế hoạch**: Sinh Lộ trình 4 tuần (28 ngày tập) phân bổ nhóm cơ & RPE target theo 4 pha (Accumulation, Overload, Peak, Deload) và toàn bộ giáo án chi tiết dựa trên `available_slots`, `primary_goal`, `preferred_muscle_groups`, `available_equipment`. | M |
+| **FR-AC-02** | **Tự động điều chỉnh**: Phân tích hiệu suất tập để tăng/giảm tạ | M |
 | **FR-AC-03** | **Bài tập thay thế**: Loại bỏ bài tác động vào vùng chấn thương đột xuất cho đến khi báo phục hồi. | S |
 | **FR-AC-04** | **Đồng hành**: Gửi tin nhắn động viên cá nhân hóa dựa trên dữ liệu thực tế (PR, quay lại sau nghỉ dài). | S |
-| **FR-AC-05** | **Phong cách Coach**: Cho chọn Drill Sergeant (nghiêm khắc), Best Friend (thân thiện), Data Analyst (khoa học). | C |
-| **FR-AC-06** | **Sinh giáo án theo buổi**: Sinh bài tập, set, rep, tạ gợi ý trước buổi tập. AI Coach hỏi 1-2 câu ngắn về thiết bị & dị ứng thực phẩm theo ngữ cảnh nếu chưa có thông tin. | M |
-| **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án (hỗ trợ cả AI và Phi AI, cho phép user bỏ qua/Skip). | M |
+| **FR-AC-05** | **Phong cách Coach**: Cho chọn nghiêm khắc, thân thiện, khoa học. | C |
+| **FR-AC-06** | **Re-generate linh hoạt**: Khi có thay đổi hồ sơ hoặc sức khỏe ➔ Re-generate các giáo án chưa thực thi (`scheduled_date >= today`). | M |
+| **FR-AC-07** | **Warm-up/Cool-down**: Tự chèn khởi động (5-10') và giãn cơ (5') theo nhóm cơ sẽ tập của giáo án cho phép user bỏ qua. | M |
 
 ### Module 3: AI Camera Coach (Phân tích tư thế)
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
@@ -129,19 +125,19 @@
 | Mã | Module | Nội dung quy tắc nghiệp vụ |
 |---|---|---|
 | **BR-UM-01** | Hồ sơ | Hồ sơ sức khỏe phải hoàn thiện **$\ge 80\%$** trước khi kích hoạt AI Coach và sinh lộ trình tập đầu tiên. |
-| **BR-AC-01** | Tập luyện | Lịch tập tối đa **6 buổi/tuần**; bắt buộc có ít nhất **1 ngày nghỉ hoàn toàn** trong tuần để phục hồi cơ bắp. |
-| **BR-AC-02** | Tiến độ | Giới hạn thay đổi tải lượng do AI đề xuất:<br>- **Progressive Overload định kỳ**: Tăng không quá **10%** tổng volume tuần trước đó.<br>- **Fast-Track (Tăng tải nhanh)**: Tăng tối đa **30%** volume/mức tạ cao nhất lịch sử bài tập đó (kích hoạt khi baseline chưa ổn định, RPE $\le 6$, Form $\ge 80\%$, và volume thực tế vượt gợi ý $> 15\%$).<br>- **Down-Track (Giảm tải nhanh)**: Giảm từ **10-15%** volume/mức tạ gợi ý cho buổi tập tiếp theo của nhóm cơ đó (kích hoạt khi RPE trung bình của buổi tập $\ge 9$ hoặc Form Score trung bình $< 70\%$). |
+| **BR-AC-01** | Tập luyện | Lịch tập tối đa **6 buổi/tuần** |
+| **BR-AC-02** | Tiến độ | **Giới hạn**:<br>Mọi điều chỉnh mức tạ/tải trọng đều bị giới hạn tối đa trong khoảng **$\pm 30\%$** so với mức tạ cao nhất trong lịch sử hoặc mức tạ gợi ý gần nhất của bài tập đó. |
 | **BR-CC-01** | AI Camera | Rep hợp lệ để đếm số khi biên độ chuyển động (ROM) khớp đạt ít nhất **$\ge 70\%$** so với biên độ tiêu chuẩn. |
 | **BR-CC-02** | Chống gian lận | Tỷ lệ frame nhận diện khớp hợp lệ < 50% trong buổi tập dưới camera → Đánh dấu "Không đạt chuẩn xác thực" (Chỉ áp dụng khi sử dụng AI Camera, trừ bài nằm sàn/phòng tối được chuyển sang ghi nhận thủ công). |
 | **BR-NU-01** | Dinh dưỡng | AI Nutrition tuyệt đối không gợi ý thực đơn tổng năng lượng dưới **1,200 kcal/ngày** cho bất kỳ đối tượng nào. |
 | **BR-NU-02** | Dinh dưỡng | Nguồn protein chính đã ăn trong Meal History sẽ bị khóa không gợi ý lại trong vòng **7 ngày tiếp theo**. |
-| **BR-AC-03** | Tập luyện | Giáo án các buổi bỏ tập đánh dấu là "Bỏ qua", **không tự động dồn/bù** vào ngày tiếp theo nếu chưa có xác nhận từ người dùng. |
-| **BR-AC-04** | Lộ trình | **Quy tắc điều chỉnh CR cuối chu kỳ (Trigger A)**:<br>- **CR < 40%**: Hỏi lý do bỏ tập, chờ phản hồi mới đề xuất giảm số buổi/tuần và rút ngắn thời lượng giáo án.<br>- **40% <= CR < 70%**: Giữ nguyên số buổi, giảm tải lượng 10-15%, chèn xen kẽ buổi Express 30 phút. Tự động sinh lộ trình mới.<br>- **70% <= CR < 90%**: Giữ nguyên cấu trúc, tăng Progressive Overload <= 10% theo BR-AC-02. Tự sinh lộ trình.<br>- **CR >= 90%**: Đề xuất tăng cường độ hoặc thêm 1 buổi/tuần (không vượt BR-AC-01), gắn badge "Xuất sắc". |
-| **BR-AC-05** | Lộ trình | **Signal B1 (Không hoạt động 7 ngày liên tiếp)**: AI Coach gửi tin nhắn check-in theo phong cách đã chọn, đề xuất 3 phương án: (a) tập tiếp từ buổi bỏ gần nhất, (b) đặt lại lịch tuần này, (c) tạm dừng lộ trình (Pause tối đa 4 tuần). Không tự chỉnh lịch nếu user chưa phản hồi. |
-| **BR-AC-06** | Lịch tập | **Signal B2 (Lịch không tương thích)**: User bỏ tập cùng 1 ngày trong tuần $\ge 3$ lần liên tiếp → AI đề xuất dời slot ngày đó sang ngày khác. Nếu đồng ý thì cập nhật lịch tuần, nếu từ chối thì giữ nguyên và không hỏi lại. |
-| **BR-AC-07** | Tập luyện | **Signal B3 (Tập quá tải - Overtraining)**: Kích hoạt khi user tập $\ge 2$ buổi/ngày hoặc RPE trung bình $\ge 8.5$ liên tục $\ge 5$ buổi → Cảnh báo quá tải, bắt buộc chèn 1 ngày nghỉ trong lịch kế tiếp, gợi ý Active Recovery. |
-| **BR-AC-08** | Lộ trình | **Signal B4 (Tiến bộ đình trệ - Plateau)**: Sức mạnh (1RM) và Form trung bình không tăng trong 3 tuần liên tiếp (chỉ tính tuần có CR $\ge 70\%$) → AI Coach gợi ý chọn: (a) Deload Week (giảm 40% tải lượng 1 tuần), (b) Đổi biến thể bài tập tương đương, (c) Tăng set giữ tạ. |
-| **BR-AC-09** | Tập luyện | **Thích ứng sau phục hồi (Post-Injury Adaptation)**: Khi một khớp chấn thương được xác nhận phục hồi (`recovered`), hệ thống áp dụng cơ chế bảo vệ trong **3 buổi tập đầu tiên** liên quan đến nhóm cơ của khớp đó: (1) Giới hạn tải lượng gợi ý tối đa không vượt quá **50%** mức tạ cao nhất lịch sử (PR) trước chấn thương. (2) Ưu tiên gợi ý các bài tập dùng Bodyweight hoặc Machine/Cable (đường chuyển động cố định) thay vì bài Free Weight tự do. (3) Chỉ cho phép quay lại Progressive Overload bình thường khi đạt RPE $\le 7$ và Form Score $\ge 80\%$ liên tục trong 3 buổi tập bảo vệ này. |
+| **BR-AC-03** | Tập luyện | **Xử lý Bỏ tập**: Ngày tập trôi qua mà không thực hiện sẽ tự động chuyển sang trạng thái **`SKIPPED`** (tính 0 set hoàn thành vào $SCR$). |
+| **BR-AC-04** | Lộ trình | **Quy tắc Thích ứng & Điều chỉnh Định kỳ (Trigger A)**:<br>Chạy cuối mỗi tuần/chu kỳ dựa trên $SCR = \frac{\text{Số Set thực tế}}{\text{Số Set giao}} \times 100\%$ và $\Delta RPE = RPE_{\text{Thực tế}} - RPE_{\text{Target}}$:<br>1. **Tăng tải lũy tiến**: Khi $SCR \ge 80\%$ và $-1 \le \Delta RPE \le +1$ $\rightarrow$ Tự động tăng mức tạ gợi ý $+2.5\% \rightarrow +5\%$ cho tuần kế tiếp.<br>2. **Quản lý mệt mỏi & Deload**: Khi $RPE_{\text{Thực tế}} \ge 9.0$ liên tục 3 buổi hoặc $\Delta RPE \ge +2.0$ $\rightarrow$ Tự động kích hoạt tuần Deload (giảm 30% volume & 10% tạ).<br>3. **Thích ứng Lịch bận kéo dài**: Khi $SCR < 50\%$ trong 2 tuần liên tiếp $\rightarrow$ AI Coach đề xuất giảm 1 buổi/tuần hoặc chuyển sang giáo án Express 30 phút. |
+| **BR-AC-05** | Lộ trình | **Signal B1 (Bỏ tập cấp tính / Mất tích)**: User bỏ tập 3 buổi liên tiếp (hoặc không mở app 7 ngày) $\rightarrow$ AI Coach gửi tin nhắn check-in theo phong cách đã chọn, đề xuất: (a) tập tiếp từ buổi bỏ gần nhất, (b) đặt lại lịch tuần này. Không tự chỉnh lịch nếu user chưa phản hồi. |
+| **BR-AC-06** | Lịch tập | **Signal B2 (Kẹt lịch cố định / Pattern Mismatch)**: User bỏ tập cùng 1 ngày trong tuần $\ge 3$ lần liên tiếp $\rightarrow$ AI đề xuất dời slot ngày đó sang ngày khác. Nếu đồng ý thì cập nhật lịch tuần, nếu từ chối thì giữ nguyên và không hỏi lại. |
+| **BR-AC-07** | Tập luyện | **Signal B3 (Tập ngoài lịch / Unscheduled Workout)**:<br>Kích hoạt khi user thực hiện buổi tập ngoài lịch (tập vào ngày nghỉ hoặc tập buổi thứ 2+ trong cùng ngày). AI Coach gửi tin nhắn Check-in phân loại nguyên nhân:<br>• **Do bài tập quá nhẹ**: Tự động tăng mức tạ gợi ý $+10\% \rightarrow +15\%$ cho các buổi sau.<br>• **Do dư thừa thời gian**: Ghi nhận buổi tập, giữ nguyên lịch trình (hoặc đề xuất tăng buổi tập cố định nếu muốn đổi lịch lâu dài).<br>• **Do tập quá sức / Nguy hiểm**: Cảnh báo nguy cơ chấn thương và chèn 1 ngày nghỉ phục hồi. |
+| **BR-AC-08** | Lộ trình | **Signal B4 (Cơ bắp bị chai lỳ / Plateau)**:<br>Kích hoạt khi Sức mạnh ước tính (1RM) của bài tập chính không tăng trong 2 tuần liên tiếp (chỉ tính các tuần có $SCR \ge 80\%$). AI Coach gửi tin nhắn đề xuất các phương án phá Plateau:<br>• **Đổi biến thể bài tập tương đương** (VD: Barbell Bench Press $\rightarrow$ Dumbbell Press).<br>• **Điều chỉnh dải Rep/Set** (VD: Chuyển từ 8–10 reps sang 4–6 reps heavy).<br>• **Thay đổi thứ tự bài tập** trong buổi tập. |
+| **BR-AC-09** | Tập luyện | **Thích ứng sau phục hồi (Post-Injury Adaptation)**: Khi một khớp chấn thương được xác nhận phục hồi (`recovered`), hệ thống áp dụng cơ chế bảo vệ trong **3 buổi tập đầu tiên** liên quan đến nhóm cơ của khớp đó: (1) Giới hạn tải lượng gợi ý tối đa không vượt quá **50%** mức tạ cao nhất lịch sử (PR) trước chấn thương. (2) Ưu tiên gợi ý các bài tập dùng Bodyweight hoặc Machine/Cable (đường chuyển động cố định) thay vì bài Free Weight tự do. (3) Chỉ cho phép quay lại Progressive Overload bình thường khi đạt RPE $\le 7$ (với bài tập dùng AI Camera bổ sung thêm điều kiện Form Score $\ge 80\%$; với bài tập Phi AI chỉ cần RPE $\le 7$) liên tục trong 3 buổi tập bảo vệ này. |
 | **BR-WL-01** | Buổi tập | **Giới hạn thời gian**: Cảnh báo kết thúc sau 90 phút (người mới) hoặc 180 phút (người cũ). Đạt 240 phút không tương tác → Tự động đóng buổi tập, lưu nhãn `Anomalous Session`, loại dữ liệu khỏi tính Overload, buổi sau bắt buộc Recovery. |
 | **BR-WL-02** | Buổi tập | **Phát hiện tải lượng luyện tập (Training Load) bất thường**: Tải lượng buổi tập > 250% trung bình 5 buổi gần nhất có cùng nhóm cơ/mục tiêu → Yêu cầu xác nhận trước khi lưu; bắt buộc chèn $\ge 1$ ngày nghỉ hoàn toàn cho nhóm cơ đó. |
 | **BR-WL-03** | Buổi tập | **Ghi nhận bài tập phi AI**: Đảm bảo tính liên tục của dữ liệu hiệu suất tổng thể. Các bài tập phi AI không ghi nhận điểm Form Score (báo N/A/Trống), chỉ ghi nhận số set, rep/thời gian thực tế và mức tạ (do người dùng tự nhập) để làm cơ sở tính Tải lượng tập luyện (Training Load) và Overload. |
@@ -151,7 +147,7 @@
 
 ## 6. YÊU CẦU DỮ LIỆU NGHIỆP VỤ (DATA)
 - **Đầu vào (Inputs)**:
-  * Profile: Chỉ số cơ thể, mục tiêu, chấn thương/bệnh lý, `experience_level`, khung giờ cố định. (`equipment_list` & `food_restrictions` thu thập dần qua chatbot).
+  * Profile: Chỉ số cơ thể, mục tiêu, chấn thương/bệnh lý, khung giờ cố định, danh sách dụng cụ khả dụng (`available_equipment`). (`food_restrictions` thu thập dần qua chatbot).
   * Video: Luồng video $\ge 720\text{p}$, $30\text{fps}$.
   * RPE: Đánh giá gắng sức (1-10) sau set/buổi.
   * Nhật ký ăn uống (Meal Logs).

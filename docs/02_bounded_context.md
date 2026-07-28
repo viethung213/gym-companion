@@ -21,13 +21,13 @@
 ## 2. Đặc Tả Từng Bounded Context
 
 ### 1. User Profile Context
-- **Trách nhiệm**: Xác thực tài khoản, quản lý chỉ số cơ thể và lịch sử (cân nặng, % mỡ, số đo, ảnh tiến trình), quản lý chấn thương và khung giờ tập. [FR-UM-01, FR-UM-02, FR-PT-01]
+- **Trách nhiệm**: Xác thực tài khoản, quản lý chỉ số cơ thể và lịch sử (cân nặng, % mỡ, số đo, ảnh tiến trình), quản lý chấn thương, dụng cụ có sẵn (`available_equipment`), mục tiêu chính (`primary_goal`), nhóm cơ ưu tiên (`preferred_muscle_groups`), và khung giờ rảnh (`available_slots`). [FR-UM-01, FR-UM-02, FR-PT-01]
 - **Không trách nhiệm**: Không tính Fitness Score, không sinh lộ trình, không chạy timer buổi tập.
 - **Aggregates**: `User`, `BodyMetricsHistory`
 - **Quy tắc nghiệp vụ**:
   - BR-UM-01: Hồ sơ đạt ≥ 80% mới kích hoạt AI Coach và tạo lộ trình.
 - **Context liên quan**:
-  - Cung cấp `BiologicalMetrics`, `Injury` cho `Coaching` và `Nutrition`.
+  - Cung cấp `BiologicalMetrics`, `Injury`, `PrimaryGoal`, `AvailableEquipment`, `PreferredMuscleGroups`, `AvailableSlots` cho `Coaching` và `Nutrition`.
   - Lắng nghe Event `BodyMetricUpdated` từ `Workout Execution` để cập nhật lịch sử chỉ số.
 
 ---
@@ -35,19 +35,20 @@
 ### 2. Coaching & Planning Context
 - **Trách nhiệm**: Lập lộ trình 4 tuần, lịch tuần, giáo án JIT chi tiết; thực thi thích ứng (Signal B1–B4, CR cuối chu kỳ); quản lý phong cách Coach và nhắc lịch. [FR-AC-01 → FR-AC-07, FR-UM-04]
 - **Không trách nhiệm**: Không ghi nhận thực tế buổi tập, không đếm rep, không tính 1RM.
-- **Aggregates**: `WorkoutRoadmap`, `WeeklySchedule`, `DailyWorkoutPlan`
+- **Aggregates**: `Roadmap` (Aggregate Root quản lý 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan`)
 - **Domain Services**: `AdaptiveCoachEngine`, `OverloadValidator`
 - **Quy tắc nghiệp vụ**:
-  - BR-AC-01: Tối đa 6 buổi/tuần, ≥ 1 ngày nghỉ.
-  - BR-AC-02: Progressive Overload ≤ 10% volume/tuần.
-  - BR-AC-03: Buổi bỏ tập = "Bỏ qua", không tự dồn bù.
-  - BR-AC-04: Quy tắc CR cuối chu kỳ (4 mức: <40%, 40–70%, 70–90%, ≥90%).
-  - BR-AC-05: Signal B1 — Không hoạt động 7 ngày.
-  - BR-AC-06: Signal B2 — Lịch không tương thích.
-  - BR-AC-07: Signal B3 — Overtraining (≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi).
-  - BR-AC-08: Signal B4 — Plateau (1RM + Form không tăng 3 tuần liên tiếp với CR ≥ 70%).
+  - [BR-AC-01](NGHIEP_VU_COT_LOI_BABOK.md#L128)
+  - [BR-AC-02](NGHIEP_VU_COT_LOI_BABOK.md#L129)
+  - [BR-AC-03](NGHIEP_VU_COT_LOI_BABOK.md#L134)
+  - [BR-AC-04](NGHIEP_VU_COT_LOI_BABOK.md#L135)
+  - [BR-AC-05](NGHIEP_VU_COT_LOI_BABOK.md#L136)
+  - [BR-AC-06](NGHIEP_VU_COT_LOI_BABOK.md#L137)
+  - [BR-AC-07](NGHIEP_VU_COT_LOI_BABOK.md#L138)
+  - [BR-AC-08](NGHIEP_VU_COT_LOI_BABOK.md#L139)
+  - [BR-AC-09](NGHIEP_VU_COT_LOI_BABOK.md#L140)
 - **Context liên quan**:
-  - Đọc `BiologicalMetrics`, `Injury` từ `User Profile`.
+  - Đọc `BiologicalMetrics`, `Injury`, `PrimaryGoal`, `AvailableEquipment`, `PreferredMuscleGroups`, `AvailableSlots` từ `User Profile`.
   - Đọc thông tin bài tập được quản lý bởi `Workout Execution & Motion`.
   - Lắng nghe `WorkoutSessionCompleted` từ `Workout Execution`.
   - Gọi Shared Infrastructure để gửi Push Notification.

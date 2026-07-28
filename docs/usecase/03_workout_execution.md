@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Actor** | User |
-| **Precondition** | `DailyWorkoutPlan` đã tồn tại. Không có `WorkoutSession` nào đang `InProgress` cho User. |
+| **Precondition** | `SessionPlan` đã tồn tại. Không có `WorkoutSession` nào đang `InProgress` cho User. |
 
 **Main Flow**
 1. User check-in, chọn playlist âm nhạc (phát chạy ngầm xuyên suốt session).
@@ -24,7 +24,7 @@
 
 **Error / Edge Cases**
 - E1: Đã có session `InProgress` → từ chối, hiển thị tuỳ chọn tiếp tục hoặc đóng session cũ.
-- E2: Không tìm thấy `DailyWorkoutPlan` hôm nay → kích hoạt UC-02.2 trước.
+- E2: Không tìm thấy `SessionPlan` hôm nay → kích hoạt UC-02.2 trước.
 
 **Postcondition**: `WorkoutSession` `InProgress`.  
 
@@ -104,14 +104,14 @@
    - Nếu giáo án có bài dãn cơ (`Cooldown`), hệ thống hiển thị giao diện dãn cơ (chạy qua UC-03.2 hoặc UC-03.3) kèm nút **Skip Cooldown**.
    - Nếu không có Cooldown hoặc User nhấn Skip, tiếp tục luồng hoàn thành.
 3. System gọi `TrainingLoadGuard`: so sánh tổng volume buổi này với trung bình 5 buổi gần nhất cùng nhóm cơ.
-   - Nếu vượt 250% → yêu cầu user xác nhận trước khi lưu, chèn ≥ 1 ngày nghỉ vào `WeeklySchedule`.
+   - Nếu vượt 250% → yêu cầu user xác nhận trước khi lưu, chèn ≥ 1 ngày nghỉ vào `DayPlan`.
 4. System tính `SessionSummary` (tổng set, volume, FormScore trung bình).
 5. System cập nhật `WorkoutSession` sang `Completed`, phát `WorkoutSessionCompleted`.
 6. System hiển thị Post-session Report.
 
 **Alternative Flow**
 - A1: Buổi tập vượt 240 phút không tương tác → System tự đóng, ghi nhãn `AnomalousSession`, loại khỏi tính Overload.
-- A2: Buổi tập vượt 90 phút (người mới) hoặc 180 phút (người cũ) → cảnh báo, user có thể tiếp tục hoặc kết thúc.
+- A2: Buổi tập vượt 90 phút → cảnh báo thời lượng tập kéo dài, user có thể tiếp tục hoặc kết thúc.
 - A3: User cập nhật cân nặng hiện tại của mình lúc kết thúc buổi tập → System ghi nhận chỉ số cơ thể mới, phát event `BodyMetricUpdated`.
 
 **Error / Edge Cases**

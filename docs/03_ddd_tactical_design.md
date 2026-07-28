@@ -12,8 +12,10 @@
   - `Injury`: Vùng cơ bị thương, ngày báo, trạng thái (`Active` | `Recovered`).
 - **Value Objects**:
   - `BiologicalMetrics`: Tuổi, giới tính, chiều cao, cân nặng hiện tại, tỷ lệ mỡ.
-  - `TrainingScheduleSlot`: Khung giờ tập cố định.
-  - `ChatbotContext`: Thiết bị có sẵn, dị ứng thức ăn.
+  - `PrimaryGoal`: Mục tiêu chính (`PRIMARY_GOAL_MUSCLE_GAIN` hoặc `PRIMARY_GOAL_FAT_LOSS`).
+  - `AvailableEquipment`: Danh sách dụng cụ có sẵn (luôn mặc định chứa `BODYWEIGHT`).
+  - `PreferredMuscleGroups`: Danh sách nhóm cơ ưu tiên.
+  - `AvailableSlots`: Khung giờ rảnh trong tuần.
   - `CoachPersonality`: Phong cách Coach (`DrillSergeant` | `BestFriend` | `DataAnalyst`).
 - **Repository**: `UserRepository`
 - **Domain Events**:
@@ -38,52 +40,37 @@
 
 ## 2. Context AI Coaching & Planning
 
-#### Aggregate Root: `WorkoutRoadmap`
-- **Nhiệm vụ**: Kiểm soát lộ trình tập luyện 4 tuần và trạng thái chu kỳ.
-- **Value Objects**:
-  - `RoadmapPhase`: Giai đoạn hiện tại và Progressive Overload target.
-  - `CompletionRate`: Tỷ lệ hoàn thành tính cuối chu kỳ (CR).
-- **Repository**: `WorkoutRoadmapRepository`
+#### Aggregate Root: `Roadmap`
+- **Nhiệm vụ**: Quản lý toàn bộ Lộ trình 4 tuần (28 ngày), 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan` theo khung giờ `available_slots`.
+- **Entities & Value Objects**:
+  - `WeekPlan` (Entity): Đại diện cho 1 tuần tập (chứa 7 `DayPlan` và `muscle_split_type`).
+  - `DayPlan` (Entity): Quản lý 1 ngày trên lịch (`scheduled_date`, `is_rest_day`, `available_slots`).
+  - `SessionPlan` (Entity): Kế hoạch buổi tập gắn theo khung giờ rảnh trong ngày (`slot_time`, `status`: `PENDING`, `COMPLETED`, `SKIPPED`, `prescription` JSONB).
+  - `RoadmapPhase`: Giai đoạn hiện tại (`Accumulation`, `Overload`, `Peak`, `Deload`) và RPE target.
+- **Repository**: `RoadmapRepository`
 - **Domain Events**:
-  - `RoadmapInitiated`: Khởi tạo lộ trình đầu tiên.
-  - `RoadmapAdjusted`: Điều chỉnh lộ trình (Trigger A).
-  - `RoadmapPaused`: Tạm dừng lộ trình (Signal B1, tối đa 4 tuần).
-  - `RoadmapResumed`: Tiếp tục lộ trình sau khi tạm dừng.
-- **Invariants**:
-  - Lifecycle: `Active` → `Paused` → `Resumed` → `Completed`.
-  - `RoadmapPaused` tối đa 4 tuần, sau đó tự chuyển về `Active` hoặc hỏi lại user.
-
-#### Aggregate Root: `WeeklySchedule`
-- **Nhiệm vụ**: Lịch tập/nghỉ của một tuần cụ thể, tham chiếu `WorkoutRoadmapId` bằng ID.
-- **Value Objects**:
-  - `MuscleSplit`: Nhóm cơ phân bổ cho từng ngày tập.
-  - `DailyPlanIds`: Danh sách ID tham chiếu tới các `DailyWorkoutPlan`.
-- **Repository**: `WeeklyScheduleRepository`
-- **Domain Events**:
-  - `WeeklyScheduleGenerated`: Tạo lịch tuần mới.
-  - `ScheduleDayRescheduled`: Dời ngày tập (Signal B2).
-- **Invariants**:
-  - Tối thiểu 1 ngày nghỉ hoàn toàn, tối đa 6 ngày tập trong tuần (BR-AC-01).
-  - Buổi bỏ tập đánh dấu "Bỏ qua", không tự dồn bù chưa có xác nhận (BR-AC-03).
-
-#### Aggregate Root: `DailyWorkoutPlan`
-- **Nhiệm vụ**: Giáo án chi tiết một buổi tập, sinh JIT để tránh lock `WeeklySchedule`.
-- **Value Objects**:
-  - `WorkoutPrescription`: Bài tập, set, rep, tạ gợi ý, warm-up/cool-down.
-- **Repository**: `DailyWorkoutPlanRepository`
-- **Domain Events**:
-  - `DailyWorkoutPlanGenerated`: Giáo án đã được sinh.
+  - `RoadmapInitiated`: Khởi tạo thành công lộ trình 4 tuần (gồm 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan` ban đầu).
+  - `RoadmapAdjusted`: Phát ra khi hệ thống tự động re-generate hoặc điều chỉnh lại giáo án các buổi tập chưa thực thi (`status = PENDING`) do tín hiệu thích ứng (Signal B1-B4, Trigger A) hoặc do người dùng cập nhật Profile. Các phân hệ khác (VD: Dinh dưỡng, Nhắc lịch) lắng nghe event này để cập nhật kế hoạch tương ứng.
+  - `SessionPlanExecuted`: Phát ra ngay khi người dùng hoàn thành một buổi tập (`SessionPlan.status` chuyển thành `COMPLETED`).
+- **Invariants (Các ràng buộc điều kiện bất biến)**:
+  - **Vòng đời Lộ trình (Roadmap Lifecycle)**: Trạng thái của Aggregate Root `Roadmap` chỉ đi từ `ACTIVE` $\rightarrow$ `COMPLETED` (khi hoàn thành 4 tuần).
+  - **Giới hạn số buổi tập tuần (`BR-AC-01`)**: Lịch tập tối đa **6 buổi/tuần**.
+  - **Xử lý Bỏ tập (`BR-AC-03`)**: Ngày tập trôi qua mà không thực hiện sẽ tự động chuyển sang trạng thái **`SKIPPED`** (tính 0 set hoàn thành vào $SCR$). Lịch tập của các ngày tiếp theo giữ nguyên, tuyệt đối không dồn dời lịch.
 
 #### [Domain Service] `AdaptiveCoachEngine`
-- **Nhiệm vụ**: Phát hiện và xử lý 4 tín hiệu hành vi (Signal B1–B4) và đánh giá CR cuối chu kỳ (BR-AC-04).
-- **Input**: `WorkoutRoadmap`, `WeeklySchedule`, lịch sử `WorkoutSession`.
-- **Signal B1** (BR-AC-05): Không hoạt động 7 ngày → Đề xuất 3 phương án (tiếp tục / đặt lại / tạm dừng).
-- **Signal B2** (BR-AC-06): Bỏ tập cùng ngày ≥ 3 lần liên tiếp → Đề xuất dời slot.
-- **Signal B3** (BR-AC-07): ≥ 2 buổi/ngày hoặc RPE ≥ 8.5 liên tục ≥ 5 buổi → Cảnh báo, chèn nghỉ bắt buộc.
-- **Signal B4** (BR-AC-08): 1RM + Form không tăng 3 tuần liên tiếp (CR ≥ 70%) → Đề xuất Deload / đổi bài / tăng set.
+- **Nhiệm vụ**: Phát hiện, đánh giá và thực thi các quy tắc thích ứng huấn luyện.
+- **Input**: `Roadmap`, lịch sử `WorkoutSession`.
+- **Quy tắc thực thi**:
+  - [BR-AC-04](NGHIEP_VU_COT_LOI_BABOK.md#L135): Trigger A — Quy tắc Thích ứng & Điều chỉnh Định kỳ.
+  - [BR-AC-05](NGHIEP_VU_COT_LOI_BABOK.md#L136): Signal B1 — Bỏ tập cấp tính / Mất tích.
+  - [BR-AC-06](NGHIEP_VU_COT_LOI_BABOK.md#L137): Signal B2 — Kẹt lịch cố định (Pattern Mismatch).
+  - [BR-AC-07](NGHIEP_VU_COT_LOI_BABOK.md#L138): Signal B3 — Tập ngoài lịch (Unscheduled Workout).
+  - [BR-AC-08](NGHIEP_VU_COT_LOI_BABOK.md#L139): Signal B4 — Cơ bắp bị chai lỳ (Plateau).
+  - [BR-AC-09](NGHIEP_VU_COT_LOI_BABOK.md#L140): Thích ứng sau phục hồi chấn thương (Post-Injury Adaptation).
 
 #### [Domain Service] `OverloadValidator`
-- **Nhiệm vụ**: Kiểm tra volume `WeeklySchedule` mới không vượt 10% volume thực tế tuần trước (BR-AC-02).
+- **Nhiệm vụ**: Kiểm soát giới hạn biên độ điều chỉnh tải trọng.
+- **Quy tắc thực thi**: [BR-AC-02](NGHIEP_VU_COT_LOI_BABOK.md#L129) — Giới hạn điều chỉnh tải trọng $\pm 30\%$.
 
 ---
 

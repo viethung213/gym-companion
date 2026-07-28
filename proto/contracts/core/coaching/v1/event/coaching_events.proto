@@ -5,60 +5,28 @@ package contracts.core.coaching.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event;coachingv1event";
 
 import "google/protobuf/timestamp.proto";
-import "google/type/date.proto";
+import "proto/contracts/core/coaching/v1/message/coaching_messages.proto";
 
-message RoadmapInitiated {
+message RoadmapInitiatedEventPayload {
   string roadmap_id = 1;
   string user_id = 2;
-  google.type.Date start_date = 3;
-  google.type.Date end_date = 4;
-  google.protobuf.Timestamp initiated_at = 5;
+  google.protobuf.Timestamp initiated_at = 3;
+  message.Roadmap roadmap = 4;
 }
 
-message WeeklyScheduleGenerated {
-  string weekly_schedule_id = 1;
-  string roadmap_id = 2;
-  string user_id = 3;
-  int32 week_number = 4;
-  google.type.Date start_date = 5;
-  google.type.Date end_date = 6;
-  google.protobuf.Timestamp generated_at = 7;
-}
-
-message DailyWorkoutPlanGenerated {
-  string daily_workout_plan_id = 1;
-  string weekly_schedule_id = 2;
-  string roadmap_id = 3;
-  string user_id = 4;
-  google.type.Date scheduled_date = 5;
-  google.protobuf.Timestamp generated_at = 6;
-}
-
-message RoadmapAdjusted {
+message RoadmapAdjustedEventPayload {
   string roadmap_id = 1;
   string user_id = 2;
   string reason = 3;
   google.protobuf.Timestamp adjusted_at = 4;
+  message.Roadmap roadmap = 5;
 }
 
-message RoadmapCompleted {
-  string roadmap_id = 1;
-  string user_id = 2;
-  google.protobuf.Timestamp completed_at = 3;
-}
-
-message DailyWorkoutPlanRegenerated {
-  string daily_workout_plan_id = 1;
-  string weekly_schedule_id = 2;
-  string roadmap_id = 3;
-  string user_id = 4;
-  google.type.Date scheduled_date = 5;
-  string reason = 6; // Ví dụ: "injury_reported", "equipment_missing"
-  google.protobuf.Timestamp regenerated_at = 7;
-}
-
-message PreWorkoutCheckInSubmitted {
-  string user_id = 1;
-  string check_in_id = 2;
-  google.protobuf.Timestamp submitted_at = 3;
+message SessionPlanExecutedEventPayload {
+  string session_plan_id = 1;
+  string roadmap_id = 2;
+  string user_id = 3;
+  google.protobuf.Timestamp executed_at = 4;
+  float session_scr = 5;
+  float session_delta_rpe = 6;
 }
