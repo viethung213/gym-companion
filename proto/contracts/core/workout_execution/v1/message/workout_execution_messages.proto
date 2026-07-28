@@ -141,6 +141,10 @@ message GetPersonalRecordsResponse {
   repeated PersonalRecord records = 1;
 }
 
+message AdminGetPersonalRecordsResponse {
+  repeated PersonalRecord records = 1;
+}
+
 message GetWorkoutSessionErrorsRequest {
   string session_id = 1;
 }
@@ -170,5 +174,9 @@ message WorkoutSessionSummary {
 }
 
 message GetWorkoutHistoryResponse {
+  repeated WorkoutSessionSummary sessions = 1;
+}
+
+message AdminGetWorkoutHistoryResponse {
   repeated WorkoutSessionSummary sessions = 1;
 }

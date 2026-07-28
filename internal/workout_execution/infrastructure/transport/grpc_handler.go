@@ -338,7 +338,7 @@ func (h *GRPCHandler) GetWorkoutHistory(ctx context.Context, req *workoutexecuti
 	}, nil
 }
 
-func (h *GRPCHandler) AdminGetPersonalRecords(ctx context.Context, req *workoutexecutionv1message.AdminGetPersonalRecordsRequest) (*workoutexecutionv1message.GetPersonalRecordsResponse, error) {
+func (h *GRPCHandler) AdminGetPersonalRecords(ctx context.Context, req *workoutexecutionv1message.AdminGetPersonalRecordsRequest) (*workoutexecutionv1message.AdminGetPersonalRecordsResponse, error) {
 	if _, err := requireAdminOrCoach(ctx); err != nil {
 		return nil, err
 	}
@@ -364,12 +364,12 @@ func (h *GRPCHandler) AdminGetPersonalRecords(ctx context.Context, req *workoute
 		}
 	}
 
-	return &workoutexecutionv1message.GetPersonalRecordsResponse{
+	return &workoutexecutionv1message.AdminGetPersonalRecordsResponse{
 		Records: pbRecords,
 	}, nil
 }
 
-func (h *GRPCHandler) AdminGetWorkoutHistory(ctx context.Context, req *workoutexecutionv1message.AdminGetWorkoutHistoryRequest) (*workoutexecutionv1message.GetWorkoutHistoryResponse, error) {
+func (h *GRPCHandler) AdminGetWorkoutHistory(ctx context.Context, req *workoutexecutionv1message.AdminGetWorkoutHistoryRequest) (*workoutexecutionv1message.AdminGetWorkoutHistoryResponse, error) {
 	if _, err := requireAdminOrCoach(ctx); err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func (h *GRPCHandler) AdminGetWorkoutHistory(ctx context.Context, req *workoutex
 		}
 	}
 
-	return &workoutexecutionv1message.GetWorkoutHistoryResponse{
+	return &workoutexecutionv1message.AdminGetWorkoutHistoryResponse{
 		Sessions: pbSessions,
 	}, nil
 }

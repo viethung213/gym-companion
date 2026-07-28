@@ -111,14 +111,14 @@ service AdminWorkoutExecutionService {
   };
 
   // Admin/HLV lấy danh sách kỷ lục cá nhân (1RM) của một người dùng chỉ định
-  rpc AdminGetPersonalRecords (contracts.core.workout_execution.v1.message.AdminGetPersonalRecordsRequest) returns (contracts.core.workout_execution.v1.message.GetPersonalRecordsResponse) {
+  rpc AdminGetPersonalRecords (contracts.core.workout_execution.v1.message.AdminGetPersonalRecordsRequest) returns (contracts.core.workout_execution.v1.message.AdminGetPersonalRecordsResponse) {
     option (google.api.http) = {
       get: "/api/v1/admin/execution/users/{user_id}/prs"
     };
   }
 
   // Admin/HLV lấy lịch sử các buổi tập của một người dùng chỉ định
-  rpc AdminGetWorkoutHistory (contracts.core.workout_execution.v1.message.AdminGetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutHistoryResponse) {
+  rpc AdminGetWorkoutHistory (contracts.core.workout_execution.v1.message.AdminGetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.AdminGetWorkoutHistoryResponse) {
     option (google.api.http) = {
       get: "/api/v1/admin/execution/users/{user_id}/history"
     };
