@@ -45,7 +45,7 @@ func TestLogoutHandler_BOLA_Failure(t *testing.T) {
 	_ = sessRepo.Save(ctx, token, userID, time.Now().Add(1*time.Hour))
 
 	handler := NewLogoutHandler(sessRepo)
-	
+
 	// Try logout with mismatched user id (BOLA)
 	err := handler.Handle(ctx, LogoutCommand{
 		RefreshToken: token,

@@ -64,3 +64,9 @@ message LoginWithOAuthRequest {
   string redirect_uri = 3; // The redirect URL used during the initial request
   string state = 4;
 }
+
+message LoginWithOAuthResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  string user_id = 3;
+}

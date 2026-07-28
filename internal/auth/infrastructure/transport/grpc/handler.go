@@ -200,7 +200,7 @@ func (h *GRPCHandler) GetJWKS(
 func (h *GRPCHandler) LoginWithOAuth(
 	ctx context.Context,
 	req *authv1message.LoginWithOAuthRequest,
-) (*authv1message.LoginResponse, error) {
+) (*authv1message.LoginWithOAuthResponse, error) {
 	accessToken, refreshToken, userID, err := h.oauthLoginHandler.Handle(
 		ctx,
 		command.OAuthLoginCommand{
@@ -214,7 +214,7 @@ func (h *GRPCHandler) LoginWithOAuth(
 		return nil, status.Errorf(codes.Unauthenticated, "oauth login failed: %v", err)
 	}
 
-	return &authv1message.LoginResponse{
+	return &authv1message.LoginWithOAuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		UserId:       userID,
