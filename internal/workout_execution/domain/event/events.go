@@ -23,6 +23,7 @@ func (e *WorkoutSessionStarted) EventName() string {
 type WorkoutSessionCompleted struct {
 	SessionID   string            `json:"sessionId"`
 	UserID      string            `json:"userId"`
+	PlanID      string            `json:"planId"`
 	CompletedAt time.Time         `json:"completedAt"`
 	Summary     vo.SessionSummary `json:"summary"`
 }
@@ -36,6 +37,7 @@ func (e *WorkoutSessionCompleted) EventName() string {
 type WorkoutSessionAborted struct {
 	SessionID   string    `json:"sessionId"`
 	UserID      string    `json:"userId"`
+	PlanID      string    `json:"planId"`
 	Reason      string    `json:"reason"`
 	IsAnomalous bool      `json:"isAnomalous"`
 	AbortedAt   time.Time `json:"abortedAt"`

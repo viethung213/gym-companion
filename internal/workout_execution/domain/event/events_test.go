@@ -16,12 +16,12 @@ func TestDomainEventNames(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	ev2 := event.WorkoutSessionCompleted{SessionID: "s1", UserID: "u1", CompletedAt: now, Summary: vo.SessionSummary{}}
+	ev2 := event.WorkoutSessionCompleted{SessionID: "s1", UserID: "u1", PlanID: "p1", CompletedAt: now, Summary: vo.SessionSummary{}}
 	if got, want := ev2.EventName(), "contracts.core.workout_execution.v1.event.WorkoutSessionCompleted"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	ev3 := event.WorkoutSessionAborted{SessionID: "s1", UserID: "u1", Reason: "stop", IsAnomalous: false, AbortedAt: now}
+	ev3 := event.WorkoutSessionAborted{SessionID: "s1", UserID: "u1", PlanID: "p1", Reason: "stop", IsAnomalous: false, AbortedAt: now}
 	if got, want := ev3.EventName(), "contracts.core.workout_execution.v1.event.WorkoutSessionAborted"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

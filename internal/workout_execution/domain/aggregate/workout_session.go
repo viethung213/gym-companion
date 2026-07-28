@@ -378,6 +378,7 @@ func (s *WorkoutSession) Complete(confirmOverload, isOverloaded bool) error {
 	s.addDomainEvent(&event.WorkoutSessionCompleted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		CompletedAt: now,
 		Summary:     summary,
 	})
@@ -399,6 +400,7 @@ func (s *WorkoutSession) Abort(reason string) error {
 	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		Reason:      reason,
 		IsAnomalous: false,
 		AbortedAt:   now,
@@ -421,6 +423,7 @@ func (s *WorkoutSession) AbortAnomalous(reason string) error {
 	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		Reason:      reason,
 		IsAnomalous: true,
 		AbortedAt:   now,
