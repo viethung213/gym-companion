@@ -84,7 +84,7 @@ func generateTestKey(t *testing.T) *port.JWKRecord {
 	}
 }
 
-func validateTokenHelper(t *testing.T, tokenStr string, key *port.JWKRecord) (string, []string, error) {
+func validateTokenHelper(t *testing.T, tokenStr string, key *port.JWKRecord) (string, string, error) {
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -96,25 +96,20 @@ func validateTokenHelper(t *testing.T, tokenStr string, key *port.JWKRecord) (st
 		return pubKey, nil
 	})
 	if err != nil {
-		return "", nil, err
+		return "", "", err
 	}
 	if !token.Valid {
-		return "", nil, fmt.Errorf("invalid token")
+		return "", "", fmt.Errorf("invalid token")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid claims")
+		return "", "", fmt.Errorf("invalid claims")
 	}
 
 	userID := claims["sub"].(string)
-	var roles []string
-	if rs, ok := claims["roles"].([]interface{}); ok {
-		for _, r := range rs {
-			roles = append(roles, r.(string))
-		}
-	}
-	return userID, roles, nil
+	role, _ := claims["role"].(string)
+	return userID, role, nil
 }
 
 func TestJWTSigner_GenerateAndValidate(t *testing.T) {
@@ -154,7 +149,7 @@ func TestJWTSigner_GenerateAndValidate(t *testing.T) {
 		t.Error("expected expiresAt to be in the future")
 	}
 
-	gotUserID, gotRoles, err := validateTokenHelper(t, tokenStr, key)
+	gotUserID, gotRole, err := validateTokenHelper(t, tokenStr, key)
 	if err != nil {
 		t.Fatalf("token validation failed: %v", err)
 	}
@@ -163,8 +158,8 @@ func TestJWTSigner_GenerateAndValidate(t *testing.T) {
 		t.Errorf("got userID %s, want %s", got, want)
 	}
 
-	if len(gotRoles) != 1 || gotRoles[0] != user.Role() {
-		t.Errorf("got roles %v, want [%s]", gotRoles, user.Role())
+	if gotRole != user.Role() {
+		t.Errorf("got role %s, want %s", gotRole, user.Role())
 	}
 }
 

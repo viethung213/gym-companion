@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/auth/application"
@@ -58,18 +59,24 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 		return "", "", "", fmt.Errorf("unsupported oauth provider: %s", cmd.Provider)
 	}
 
-	// Validate OAuth2 state to prevent CSRF attacks
+	// 1. Validate OAuth2 state to prevent CSRF attacks
 	if err := h.oauthServ.ValidateState(ctx, cmd.State); err != nil {
 		return "", "", "", fmt.Errorf("oauth state validation failed: %w", err)
 	}
 
-	// 1. Exchange OAuth code for User Profile
+	// 2. Pre-check active signing key BEFORE exchanging code or modifying DB
+	activeKey, err := h.keyRepo.GetActiveKey(ctx)
+	if err != nil {
+		return "", "", "", fmt.Errorf("active signing key not found: %w", err)
+	}
+
+	// 3. Exchange OAuth code for User Profile
 	profile, err := h.oauthServ.ExchangeCodeForProfile(ctx, cmd.Provider, cmd.Code, cmd.RedirectURI)
 	if err != nil {
 		return "", "", "", fmt.Errorf("oauth exchange failed: %w", err)
 	}
 
-	// 2. Query user by GoogleID / FacebookID / Email
+	// 4. Query user by GoogleID / FacebookID / Email
 	var user *aggregate.User
 	if cmd.Provider == "google" {
 		user, err = h.userRepo.FindByGoogleID(ctx, profile.ID)
@@ -77,29 +84,28 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 		user, err = h.userRepo.FindByFacebookID(ctx, profile.ID)
 	}
 
-	// 3. Register user or link account inside database transaction
-	if err != nil || user == nil {
-		// Try to find user by email to link social provider
-		user, err = h.userRepo.FindByEmail(ctx, profile.Email)
-		if err == nil && user != nil {
-			// Link account
-			if cmd.Provider == "google" {
-				user.LinkGoogle(profile.ID)
-			} else if cmd.Provider == "facebook" {
-				user.LinkFacebook(profile.ID)
-			}
+	var accessToken, refreshTokenStr string
+	var expiresAt time.Time
 
-			err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-				return h.userRepo.Update(txCtx, user)
-			})
-			if err != nil {
-				return "", "", "", fmt.Errorf("link oauth account: %w", err)
-			}
-		} else {
-			// Register new user
-			err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-				var regErr error
+	// 5. Execute User registration/linking, Token generation, and Session saving in a SINGLE Atomic Transaction
+	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err != nil || user == nil {
+			// Try to find user by email to link social provider
+			existingUser, findErr := h.userRepo.FindByEmail(txCtx, profile.Email)
+			if findErr == nil && existingUser != nil {
+				user = existingUser
+				if cmd.Provider == "google" {
+					user.LinkGoogle(profile.ID)
+				} else if cmd.Provider == "facebook" {
+					user.LinkFacebook(profile.ID)
+				}
+				if updateErr := h.userRepo.Update(txCtx, user); updateErr != nil {
+					return fmt.Errorf("link oauth account: %w", updateErr)
+				}
+			} else {
+				// Register new user
 				newUserID := uuid.New().String()
+				var regErr error
 				user, regErr = aggregate.RegisterUser(
 					newUserID,
 					profile.Email,
@@ -116,49 +122,46 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 					user.LinkFacebook(profile.ID)
 				}
 
-				if err := h.userRepo.Create(txCtx, user); err != nil {
-					return fmt.Errorf("save new user: %w", err)
+				if createErr := h.userRepo.Create(txCtx, user); createErr != nil {
+					return fmt.Errorf("save new user: %w", createErr)
 				}
 
 				// Publish domain events
 				for _, ev := range user.DomainEvents() {
-					if err := h.publisher.Write(txCtx, ev); err != nil {
-						return fmt.Errorf("dispatch domain event: %w", err)
+					if pubErr := h.publisher.Write(txCtx, ev); pubErr != nil {
+						return fmt.Errorf("dispatch domain event: %w", pubErr)
 					}
 				}
-
-				return nil
-			})
-			if err != nil {
-				return "", "", "", err
-			}
-			if user != nil {
-				user.ClearDomainEvents()
 			}
 		}
-	}
 
-	// 4. Fetch active key for signing
-	activeKey, err := h.keyRepo.GetActiveKey(ctx)
+		// Generate Access Token
+		var tokenErr error
+		accessToken, _, tokenErr = h.tokenServ.GenerateAccessToken(txCtx, user, activeKey.ID)
+		if tokenErr != nil {
+			return fmt.Errorf("generate access token: %w", tokenErr)
+		}
+
+		// Generate Refresh Token
+		refreshTokenStr, expiresAt, tokenErr = h.tokenServ.GenerateRefreshToken(txCtx, user)
+		if tokenErr != nil {
+			return fmt.Errorf("generate refresh token: %w", tokenErr)
+		}
+
+		// Save Session
+		if sessErr := h.sessRepo.Save(txCtx, refreshTokenStr, user.ID(), expiresAt); sessErr != nil {
+			return fmt.Errorf("save session: %w", sessErr)
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		return "", "", "", fmt.Errorf("active signing key not found: %w", err)
+		return "", "", "", err
 	}
 
-	// 5. Generate Access Token
-	accessToken, _, err := h.tokenServ.GenerateAccessToken(ctx, user, activeKey.ID)
-	if err != nil {
-		return "", "", "", fmt.Errorf("generate access token: %w", err)
-	}
-
-	// 6. Generate Refresh Token
-	refreshTokenStr, expiresAt, err := h.tokenServ.GenerateRefreshToken(ctx, user)
-	if err != nil {
-		return "", "", "", fmt.Errorf("generate refresh token: %w", err)
-	}
-
-	// 7. Save Session
-	if err := h.sessRepo.Save(ctx, refreshTokenStr, user.ID(), expiresAt); err != nil {
-		return "", "", "", fmt.Errorf("save session: %w", err)
+	if user != nil {
+		user.ClearDomainEvents()
 	}
 
 	return accessToken, refreshTokenStr, user.ID(), nil
