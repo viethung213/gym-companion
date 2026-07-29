@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
+
+import "google/protobuf/timestamp.proto";
+
+message ProfileUpdated {
+  string user_id = 1;
+  float weight_kg = 2;
+  float height_cm = 3;
+  string date_of_birth = 4;
+  string gender = 5;
+  repeated string goals = 6;
+  float completion_rate = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
