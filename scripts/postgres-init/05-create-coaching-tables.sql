@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS coaching.day_plans (
     roadmap_id       VARCHAR(255) NOT NULL,
     user_id          VARCHAR(255) NOT NULL,
     scheduled_date   DATE         NOT NULL,
-    is_rest_day      BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_day_week_date UNIQUE (week_plan_id, scheduled_date)
 );

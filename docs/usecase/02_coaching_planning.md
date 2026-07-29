@@ -19,10 +19,10 @@
 2. System khởi tạo Baseline RPE 6–7 cho lộ trình làm quen ban đầu.
 3. System tạo `Roadmap` 4 tuần (28 ngày) với `status = ACTIVE`.
 4. System tạo 4 `WeekPlan` tương ứng 4 tuần, phân bổ theo 4 pha tiến trình chuẩn: Tuần 1 (Accumulation RPE 6–7), Tuần 2 (Overload RPE 7–8), Tuần 3 (Peak RPE 8–9), Tuần 4 (Deload RPE 5–6 giảm 30% volume & 10% tạ).
-5. System phân bổ 28 `DayPlan` tương ứng 28 ngày trên lịch (lưu `scheduled_date`, `is_rest_day`, `available_slots`).
-6. Với các ngày tập (`is_rest_day = false`), System khởi tạo `SessionPlan` gắn theo từng khung giờ rảnh (`slot_time`), chứa `prescription` bài tập (warm-up, main, cool-down, set, rep, weight, target RPE) với `status = PENDING`.
+5. System khởi tạo `DayPlan` tương ứng các ngày có lịch tập trên lịch (lưu `scheduled_date`, `available_slots`). Các ngày không có lịch tập được ngầm hiểu là ngày nghỉ phục hồi (implicit rest day).
+6. Với các ngày tập, System khởi tạo `SessionPlan` gắn theo từng khung giờ rảnh (`slot_time`), chứa `prescription` bài tập (warm-up, main, cool-down, set, rep, weight, target RPE) với `status = PENDING`.
 7. System gọi `OverloadValidator` kiểm soát giới hạn điều chỉnh tải trọng ($\pm 30\%$, tối đa $+5\text{kg}$ bài free-weight nặng, `BR-AC-02`).
-8. System lưu `Roadmap` (gồm 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan`) và phát event `RoadmapInitiated`.
+8. System lưu `Roadmap` (gồm 4 `WeekPlan` và các `DayPlan` ngày tập) và phát event `RoadmapInitiated`.
 
 **Alternative Flow**
 - A1: User có `Injury` active → System loại bỏ bài tập tác động vùng chấn thương khi sinh giáo án `prescription`.
@@ -55,7 +55,7 @@
 
 **Alternative Flow**
 - A1: Check-in phát hiện chấn thương mới hoặc mệt mỏi cấp tính ($\Delta RPE \ge +2.0$) ➔ System kích hoạt Re-generate `prescription` riêng cho `SessionPlan` hôm nay (giảm tải hoặc đổi bài phục hồi nhẹ).
-- A2: Ngày hôm nay là ngày nghỉ theo lịch (`is_rest_day = true`) ➔ System thông báo "Hôm nay nghỉ phục hồi". Khi trôi qua ngày nghỉ, status tự động chuyển `COMPLETED`.
+- A2: Ngày hôm nay là ngày nghỉ theo lịch ➔ System thông báo "Hôm nay nghỉ phục hồi".
 
 **Error / Edge Cases**
 - E1: `SessionPlan` không tồn tại do lỗi dữ liệu ➔ System tự động khởi tạo JIT `SessionPlan` bổ sung cho khung giờ hôm nay.

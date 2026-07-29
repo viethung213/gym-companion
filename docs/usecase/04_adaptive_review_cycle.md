@@ -1,4 +1,4 @@
-﻿# UC-04 Adaptive Review Cycle
+# UC-04 Adaptive Review Cycle
 
 > Nguồn: [BRD](../NGHIEP_VU_COT_LOI_BABOK.md) · [Bounded Context](../02_bounded_context.md) · [Tactical Design](../03_ddd_tactical_design.md)
 
@@ -83,7 +83,7 @@
 | | |
 |---|---|
 | **Actor** | System (AI Coach) |
-| **Precondition** | User tập vào ngày nghỉ (`is_rest_day = true`) hoặc tập buổi thứ 2+ trong cùng 1 ngày. |
+| **Precondition** | User tập vào ngày nghỉ (ngày không có lịch tập) hoặc tập buổi thứ 2+ trong cùng 1 ngày. |
 
 **Main Flow**
 1. `AdaptiveCoachEngine` phát hiện Signal B3.
@@ -91,7 +91,7 @@
 3. System xử lý thích ứng theo lý do user chọn:
    - Do bài tập quá nhẹ ➔ Tăng tạ gợi ý $+10\% \rightarrow +15\%$ cho các buổi sau.
    - Do thừa thời gian ➔ Ghi nhận buổi tập, giữ nguyên lịch trình (hoặc gợi ý tăng buổi tập/tuần nếu chọn đổi lịch).
-   - Do tập quá sức / Nguy hiểm ➔ Cảnh báo chấn thương và chèn 1 ngày nghỉ phục hồi (`is_rest_day = true`).
+   - Do tập quá sức / Nguy hiểm ➔ Cảnh báo chấn thương và thêm 1 ngày nghỉ phục hồi.
 
 **Error / Edge Cases**
 - E1: User không phản hồi tin nhắn Check-in ➔ Giữ nguyên buổi tập đã ghi nhận và giữ lịch trình hiện tại.

@@ -72,31 +72,30 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *port.CoachCont
 
 		trainingDays := selectTrainingDays(cc.Profile.AvailableSlots, seed)
 		for di := 0; di < roadmap.DaysPerWeek; di++ {
+			if !trainingDays[di] {
+				continue
+			}
 			date := weekStart.AddDate(0, 0, di)
 			dayID := m.ids.NewID()
-			isRest := !trainingDays[di]
 			dp, err := roadmap.NewDayPlan(&roadmap.DayPlanInfo{
 				DayPlanID:     dayID,
 				WeekPlanID:    weekPlanID,
 				RoadmapID:     roadmapID,
 				UserID:        cc.UserID,
 				ScheduledDate: date,
-				IsRestDay:     isRest,
 			})
 			if err != nil {
 				return nil, err
 			}
-			if !isRest {
-				sp, err := m.buildSessionPlan(
-					roadmapID, weekPlanID, dayID, cc.UserID,
-					date, spec, cc.InjuryStatus, now,
-				)
-				if err != nil {
-					return nil, err
-				}
-				if err := dp.AddSession(sp); err != nil {
-					return nil, err
-				}
+			sp, err := m.buildSessionPlan(
+				roadmapID, weekPlanID, dayID, cc.UserID,
+				date, spec, cc.InjuryStatus, now,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if err := dp.AddSession(sp); err != nil {
+				return nil, err
 			}
 			if err := wp.AddDay(dp); err != nil {
 				return nil, err

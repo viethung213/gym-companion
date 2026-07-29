@@ -112,7 +112,6 @@ message DayPlan {
   string roadmap_id = 3;
   string user_id = 4;
   google.type.Date scheduled_date = 5;
-  bool is_rest_day = 6;
   repeated SessionPlan session_plans = 7;
 }
 

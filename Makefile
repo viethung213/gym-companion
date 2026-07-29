@@ -1,4 +1,4 @@
-.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
+.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go seed-exercise db-init-all
 
 # Lệnh chạy docker compose của Buf CLI
 BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
@@ -175,8 +175,13 @@ db-init-go:
 		go run $$file; \
 	done
 
+# Seed 100 bài tập từ standalone 06-seed-exercises.sql vào exercise schema
+seed-exercise:
+	@echo "Seeding 100 exercises into exercise schema..."
+	go run cmd/seed/main.go
+
 # Chạy tất cả các loại script khởi tạo dữ liệu trong dự án
-db-init-all: db-init-postgres db-init-go
+db-init-all: db-init-postgres db-init-go seed-exercise
 	@echo "All database initialization scripts completed."
 
 # =====================================================================

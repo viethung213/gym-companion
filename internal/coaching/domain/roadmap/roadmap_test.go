@@ -22,7 +22,6 @@ func newDay(id string, date time.Time, weekPlanID string, sessionCount int) *Day
 		RoadmapID:     "rm-1",
 		UserID:        "user-1",
 		ScheduledDate: date,
-		IsRestDay:     sessionCount == 0,
 	})
 	now := time.Now()
 	for i := 0; i < sessionCount; i++ {

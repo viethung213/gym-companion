@@ -41,15 +41,15 @@
 ## 2. Context AI Coaching & Planning
 
 #### Aggregate Root: `Roadmap`
-- **Nhiệm vụ**: Quản lý toàn bộ Lộ trình 4 tuần (28 ngày), 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan` theo khung giờ `available_slots`.
+- **Nhiệm vụ**: Quản lý toàn bộ Lộ trình 4 tuần (28 ngày), 4 `WeekPlan` và các `DayPlan` ngày tập theo khung giờ `available_slots`.
 - **Entities & Value Objects**:
-  - `WeekPlan` (Entity): Đại diện cho 1 tuần tập (chứa 7 `DayPlan` và `muscle_split_type`).
-  - `DayPlan` (Entity): Quản lý 1 ngày trên lịch (`scheduled_date`, `is_rest_day`, `available_slots`).
+  - `WeekPlan` (Entity): Đại diện cho 1 tuần tập (chứa các `DayPlan` ngày tập và `muscle_split_type`).
+  - `DayPlan` (Entity): Quản lý 1 ngày tập trên lịch (`scheduled_date`, `available_slots`). Các ngày không có `DayPlan` được ngầm hiểu là ngày nghỉ.
   - `SessionPlan` (Entity): Kế hoạch buổi tập gắn theo khung giờ rảnh trong ngày (`slot_time`, `status`: `PENDING`, `COMPLETED`, `SKIPPED`, `prescription` JSONB).
   - `RoadmapPhase`: Giai đoạn hiện tại (`Accumulation`, `Overload`, `Peak`, `Deload`) và RPE target.
 - **Repository**: `RoadmapRepository`
 - **Domain Events**:
-  - `RoadmapInitiated`: Khởi tạo thành công lộ trình 4 tuần (gồm 4 `WeekPlan`, 28 `DayPlan` và các `SessionPlan` ban đầu).
+  - `RoadmapInitiated`: Khởi tạo thành công lộ trình 4 tuần (gồm 4 `WeekPlan`, các `DayPlan` ngày tập và `SessionPlan` ban đầu).
   - `RoadmapAdjusted`: Phát ra khi hệ thống tự động re-generate hoặc điều chỉnh lại giáo án các buổi tập chưa thực thi (`status = PENDING`) do tín hiệu thích ứng (Signal B1-B4, Trigger A) hoặc do người dùng cập nhật Profile. Các phân hệ khác (VD: Dinh dưỡng, Nhắc lịch) lắng nghe event này để cập nhật kế hoạch tương ứng.
   - `SessionPlanExecuted`: Phát ra ngay khi người dùng hoàn thành một buổi tập (`SessionPlan.status` chuyển thành `COMPLETED`).
 - **Invariants (Các ràng buộc điều kiện bất biến)**:

@@ -200,7 +200,6 @@ func toPBDay(d *roadmap.DayPlan) *pbmsg.DayPlan {
 		RoadmapId:     info.RoadmapID,
 		UserId:        info.UserID,
 		ScheduledDate: dateToPB(info.ScheduledDate.Year(), int(info.ScheduledDate.Month()), info.ScheduledDate.Day()),
-		IsRestDay:     info.IsRestDay,
 	}
 	for _, s := range d.Sessions() {
 		pb.SessionPlans = append(pb.SessionPlans, toPBSession(s))

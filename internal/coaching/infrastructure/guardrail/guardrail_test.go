@@ -28,32 +28,29 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 		if err != nil {
 			t.Fatalf("wp: %v", err)
 		}
-		for d := 0; d < 7; d++ {
+		for d := 0; d < 3; d++ {
 			dp, _ := roadmap.NewDayPlan(&roadmap.DayPlanInfo{
 				DayPlanID:     "dp-" + itoa(w) + "-" + itoa(d),
 				WeekPlanID:    wp.ID(),
 				RoadmapID:     "rm-1",
 				UserID:        "user-1",
 				ScheduledDate: weekStart.AddDate(0, 0, d),
-				IsRestDay:     d >= 3, // 3 training days/week
 			})
-			if d < 3 {
-				sp, _ := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
-					SessionPlanID:      "sp-" + itoa(w) + "-" + itoa(d),
-					DayPlanID:          dp.ID(),
-					WeekPlanID:         wp.ID(),
-					RoadmapID:          "rm-1",
-					UserID:             "user-1",
-					ScheduledDate:      weekStart.AddDate(0, 0, d),
-					TargetMuscleGroups: []string{"chest"},
-					Prescription: roadmap.WorkoutPrescription{
-						MainExercises: []roadmap.PrescribedExercise{
-							{ExerciseID: "ex-bench", ExerciseName: "Bench", TargetSets: 3, TargetReps: 8, TargetWeight: 60, TargetRPE: 7},
-						},
+			sp, _ := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
+				SessionPlanID:      "sp-" + itoa(w) + "-" + itoa(d),
+				DayPlanID:          dp.ID(),
+				WeekPlanID:         wp.ID(),
+				RoadmapID:          "rm-1",
+				UserID:             "user-1",
+				ScheduledDate:      weekStart.AddDate(0, 0, d),
+				TargetMuscleGroups: []string{"chest"},
+				Prescription: roadmap.WorkoutPrescription{
+					MainExercises: []roadmap.PrescribedExercise{
+						{ExerciseID: "ex-bench", ExerciseName: "Bench", TargetSets: 3, TargetReps: 8, TargetWeight: 60, TargetRPE: 7},
 					},
-				}, time.Now())
-				_ = dp.AddSession(sp)
-			}
+				},
+			}, time.Now())
+			_ = dp.AddSession(sp)
 			_ = wp.AddDay(dp)
 		}
 		weeks = append(weeks, wp)

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
@@ -92,7 +91,6 @@ func toDayPlanRecord(d *roadmap.DayPlan) dayPlanRecord {
 		RoadmapID:     info.RoadmapID,
 		UserID:        info.UserID,
 		ScheduledDate: info.ScheduledDate,
-		IsRestDay:     info.IsRestDay,
 	}
 }
 
@@ -106,7 +104,6 @@ func fromDayPlanRecord(rec *dayPlanRecord, sessions []*roadmap.SessionPlan) (*ro
 		RoadmapID:     rec.RoadmapID,
 		UserID:        rec.UserID,
 		ScheduledDate: rec.ScheduledDate,
-		IsRestDay:     rec.IsRestDay,
 	}, sessions)
 }
 
@@ -196,5 +193,3 @@ func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error)
 	return roadmap.RehydrateSessionPlan(&info)
 }
 
-// Unused import guard.
-var _ = time.Time{}

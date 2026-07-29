@@ -59,7 +59,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 			dr := toDayPlanRecord(d)
 			if err := db.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "day_plan_id"}},
-				DoUpdates: clause.AssignmentColumns([]string{"scheduled_date", "is_rest_day"}),
+				DoUpdates: clause.AssignmentColumns([]string{"scheduled_date"}),
 			}).Create(&dr).Error; err != nil {
 				return fmt.Errorf("upsert day plan %s: %w", dr.DayPlanID, err)
 			}

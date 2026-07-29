@@ -8,12 +8,11 @@ import (
 
 // DayPlanInfo is the value-object snapshot of a DayPlan entity.
 type DayPlanInfo struct {
-	DayPlanID      string
-	WeekPlanID     string
-	RoadmapID      string
-	UserID         string
-	ScheduledDate  time.Time
-	IsRestDay      bool
+	DayPlanID     string
+	WeekPlanID    string
+	RoadmapID     string
+	UserID        string
+	ScheduledDate time.Time
 }
 
 // DayPlan is an entity holding N SessionPlans for a single calendar day.
@@ -57,9 +56,6 @@ func (d *DayPlan) ID() string { return d.info.DayPlanID }
 // ScheduledDate returns the calendar date of this day plan.
 func (d *DayPlan) ScheduledDate() time.Time { return d.info.ScheduledDate }
 
-// IsRestDay reports whether this day is marked as rest.
-func (d *DayPlan) IsRestDay() bool { return d.info.IsRestDay }
-
 // Sessions returns the current sessions.
 // Modifying the returned slice does not mutate the aggregate.
 func (d *DayPlan) Sessions() []*SessionPlan {
@@ -71,14 +67,10 @@ func (d *DayPlan) Sessions() []*SessionPlan {
 	return out
 }
 
-// AddSession appends a new SessionPlan. On rest days this returns an error
-// because the domain forbids workouts on rest days.
+// AddSession appends a new SessionPlan.
 func (d *DayPlan) AddSession(s *SessionPlan) error {
 	if s == nil {
 		return fmt.Errorf("%w: nil session plan", ErrInvalidRoadmap)
-	}
-	if d.info.IsRestDay {
-		return fmt.Errorf("%w: cannot add session on rest day", ErrInvalidRoadmap)
 	}
 	d.sessions = append(d.sessions, s)
 	return nil

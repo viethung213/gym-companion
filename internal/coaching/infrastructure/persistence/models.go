@@ -41,7 +41,6 @@ type dayPlanRecord struct {
 	RoadmapID     string    `gorm:"column:roadmap_id;not null"`
 	UserID        string    `gorm:"column:user_id;not null"`
 	ScheduledDate time.Time `gorm:"column:scheduled_date;not null;type:date"`
-	IsRestDay     bool      `gorm:"column:is_rest_day;not null;default:false"`
 	CreatedAt     time.Time `gorm:"column:created_at"`
 }
 
