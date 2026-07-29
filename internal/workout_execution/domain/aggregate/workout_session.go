@@ -269,6 +269,7 @@ func (s *WorkoutSession) CheckTimeoutAndAutoAbort(now time.Time) bool {
 		s.addDomainEvent(event.WorkoutSessionAborted{
 			SessionID:   s.id,
 			UserID:      s.userID,
+			PlanID:      s.planID,
 			Reason:      "Inactive session exceeded 240 minutes limit",
 			IsAnomalous: true,
 			AbortedAt:   now,
@@ -378,6 +379,7 @@ func (s *WorkoutSession) Complete(confirmOverload, isOverloaded bool) error {
 	s.addDomainEvent(&event.WorkoutSessionCompleted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		CompletedAt: now,
 		Summary:     summary,
 	})
@@ -399,6 +401,7 @@ func (s *WorkoutSession) Abort(reason string) error {
 	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		Reason:      reason,
 		IsAnomalous: false,
 		AbortedAt:   now,
@@ -421,6 +424,7 @@ func (s *WorkoutSession) AbortAnomalous(reason string) error {
 	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		Reason:      reason,
 		IsAnomalous: true,
 		AbortedAt:   now,
@@ -448,6 +452,7 @@ func (s *WorkoutSession) MarkCriticalInactivity(now, lastCriticalAt time.Time) e
 	s.addDomainEvent(&event.WorkoutSessionAborted{
 		SessionID:   s.id,
 		UserID:      s.userID,
+		PlanID:      s.planID,
 		Reason:      reason,
 		IsAnomalous: true,
 		AbortedAt:   now,
