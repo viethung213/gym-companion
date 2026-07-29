@@ -119,15 +119,15 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *port.CoachCont
 
 // RegeneratePending returns updated prescriptions for the given session IDs.
 // It uses the current roadmap snapshot to know phase & muscle groups.
-func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *port.CoachContext, sessionIDs []string, _ *port.Feedback) ([]roadmap.SessionPlanInfo, error) {
-	out := make([]roadmap.SessionPlanInfo, 0, len(sessionIDs))
+func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *port.CoachContext, sessionIDs []string, _ *port.Feedback) ([]*roadmap.SessionPlanInfo, error) {
+	out := make([]*roadmap.SessionPlanInfo, 0, len(sessionIDs))
 	if cc == nil || cc.CurrentRoadmap == nil {
 		return out, nil
 	}
 	spec := findPhaseSpec(cc.CurrentRoadmap.Phase)
 	now := m.clock.Now()
 	for _, id := range sessionIDs {
-		out = append(out, roadmap.SessionPlanInfo{
+		out = append(out, &roadmap.SessionPlanInfo{
 			SessionPlanID:      id,
 			UserID:             cc.UserID,
 			RoadmapID:          cc.CurrentRoadmap.RoadmapID,
@@ -143,7 +143,7 @@ func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *port.CoachCo
 
 // Adapt is used by Trigger A / signal handlers. Phase-1 mock returns the same
 // mapping as RegeneratePending but tags reasoning with the decisionReason.
-func (m *MockCoachAgent) Adapt(ctx context.Context, cc *port.CoachContext, decisionReason string, fb *Feedback) ([]roadmap.SessionPlanInfo, error) {
+func (m *MockCoachAgent) Adapt(ctx context.Context, cc *port.CoachContext, decisionReason string, fb *Feedback) ([]*roadmap.SessionPlanInfo, error) {
 	if cc == nil || cc.CurrentRoadmap == nil {
 		return nil, nil
 	}

@@ -83,8 +83,10 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	}
 
 	// Apply drafts in-place onto pending sessions (D3 invariant).
-	for i := range drafts {
-		d := &drafts[i]
+	for _, d := range drafts {
+		if d == nil {
+			continue
+		}
 		s, ok := rm.FindSession(d.SessionPlanID)
 		if !ok {
 			continue

@@ -93,7 +93,7 @@ Effect: Cập nhật trạng thái `SessionPlan` từ `PENDING` $\rightarrow$ `C
 
 Notes:
 - Cập nhật `SessionPlan.status = COMPLETED` trong DB Coaching.
-- KHÔNG tính toán SCR hay $\Delta RPE$ (`session_scr` và `session_delta_rpe` để `NULL`).
+- Tính toán $SCR$ và $\Delta RPE$ dựa trên số set thực tế và số set kê trong `prescription` người dùng đã chọn khi bấm tập, lưu vào `session_scr` và `session_delta_rpe`.
 - KHÔNG phát event `RoadmapAdjusted` và KHÔNG áp dụng BR-AC-01.
 
 ---

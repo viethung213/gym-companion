@@ -83,8 +83,10 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	}
 
 	// Apply drafts in-place onto the aggregate.
-	for i := range drafts {
-		draft := &drafts[i]
+	for _, draft := range drafts {
+		if draft == nil {
+			continue
+		}
 		s, ok := rm.FindSession(draft.SessionPlanID)
 		if !ok {
 			continue // Session may have been completed between load and generate — skip.
