@@ -13,7 +13,7 @@ Dịch vụ tuân thủ mô hình **Hexagonal Architecture (Ports & Adapters)** 
   - Định nghĩa các cổng lưu trữ và tiện ích mật mã (**Ports**): `UserRepository`, `KeyRepository`, `SessionRepository`, `KeyGenerator` và `OutboxRepository`.
   - Hoàn toàn độc lập, không import bất kỳ thư viện ngoài hay framework mã hóa/cấu trúc dữ liệu nào (không GORM tags, không JSON/DB tags, không logic sinh khóa trực tiếp).
 - **Application Layer (`internal/auth/application/`)**:
-  - Đóng vai trò điều phối (orchestration), chứa các Command/Query Handler và các interface dịch vụ bên ngoài (`TokenService`, `OAuthService`, và `TransactionManager`).
+  - Đóng vai trò điều phối (orchestration), chứa các Command/Query Handler và các interface/ports dịch vụ tại `port/` (`TokenService`, `OAuthService`, và `TransactionManager`).
 - **Shared Layer (`internal/shared/database/`)**:
   - Chứa **Database Connection Registry** quản lý tập trung, khởi tạo một lần duy nhất (Singleton, thread-safe, lazy-load) tất cả các connection pools (`*sql.DB`) cho toàn bộ các module trong hệ thống Modular Monolith.
 - **Infrastructure Layer (`internal/auth/infrastructure/`)**:
