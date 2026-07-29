@@ -37,20 +37,6 @@ CREATE TABLE IF NOT EXISTS auth.outbox_log (
 -- ------------------------------------------
 CREATE SCHEMA IF NOT EXISTS profile;
 
-CREATE TABLE IF NOT EXISTS profile.users (
-    user_id UUID PRIMARY KEY,
-    weight_kg NUMERIC(5,2),
-    height_cm NUMERIC(5,2),
-    age INT,
-    gender VARCHAR(20),
-    primary_goal VARCHAR(50) NOT NULL DEFAULT 'PRIMARY_GOAL_MUSCLE_GAIN',
-    available_equipment JSONB NOT NULL DEFAULT '["BODYWEIGHT"]',
-    preferred_muscle_groups JSONB NOT NULL DEFAULT '[]',
-    available_slots JSONB NOT NULL DEFAULT '[]',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS profile.outbox (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
