@@ -98,15 +98,22 @@ func ensureTablesExist(db *gorm.DB) {
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.outbox (
 		id VARCHAR(255) PRIMARY KEY,
+		event_id VARCHAR(255),
 		aggregate_type VARCHAR(255),
 		aggregate_id VARCHAR(255),
 		event_type VARCHAR(255) NOT NULL,
 		payload JSONB NOT NULL,
+		partition_key VARCHAR(255),
 		published BOOLEAN DEFAULT FALSE,
+		published_at TIMESTAMP WITH TIME ZONE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
+	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS event_id VARCHAR(255);`)
+	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_type VARCHAR(255);`)
+	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);`)
+	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS partition_key VARCHAR(255);`)
+	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_pub_created ON workout_execution.outbox (published, created_at);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ALTER COLUMN partition_key DROP NOT NULL;`)
 }
 
 func getTestDB(t *testing.T) *gorm.DB {
