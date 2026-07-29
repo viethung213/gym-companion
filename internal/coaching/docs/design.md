@@ -73,26 +73,54 @@ flowchart LR
 
 ## 3. Hexagonal Architecture (Ports & Adapters) Structure
 
-Module `internal/coaching/` được đóng gói độc lập theo mô hình Hexagonal Architecture:
+Module `internal/coaching/` được đóng gói độc lập theo mô hình Hexagonal Architecture. Toàn bộ agent-implementation (prompts, schemas, LLM adapter, retry loop, MCP-style tools) được gom vào 1 sub-module `agent/` sao cho coaching chỉ phụ thuộc vào 1 facade mỏng — có thể tách agent sang `internal/agent/` (hoặc repo/service khác) mà không đụng business code.
+
+> **Trạng thái:** Đây là cấu trúc đích. Refactor **chưa** thực hiện — code hiện tại còn phân tán (`application/contextbuilder/`, `infrastructure/ai/`, `infrastructure/guardrail/`, `application/port/coach_agent.go`).
 
 ```text
 internal/coaching/
 ├── domain/                         # Core Domain Logic (No external imports, No ORM tags)
 │   ├── roadmap/                    # Aggregate Root: Roadmap, WeekPlan, DayPlan, SessionPlan
 │   ├── service/                    # Domain Services: AdaptiveCoachEngine, OverloadValidator
+│   ├── guardrail/                  # Business rules BR-AC-01/02/09 (pure, no I/O)
 │   └── event/                      # Domain Events: RoadmapInitiated, RoadmapAdjusted
 ├── application/                    # Application Layer (Use Cases, Commands, Queries)
 │   ├── command/                    # InitiateRoadmapHandler, RegenerateScheduleHandler
 │   ├── query/                      # GetActiveRoadmapHandler, GetSessionPlanHandler
-│   ├── contextbuilder/             # ContextBuilder (Aggregate state from Profile & Execution)
-│   └── port/                       # Primary & Secondary Ports (Interfaces)
+│   ├── coachinput/                 # Assembler: Profile + sessions + roadmap snapshot → agent.CoachInput
+│   └── port/                       # Primary & Secondary Ports (Interfaces, incl. Coach facade)
+├── agent/                          # Self-contained AI agent module (extractable)
+│   ├── coach.go                    # Facade — impl of application/port.Coach
+│   ├── input.go                    # CoachInput (input contract)
+│   ├── output.go                   # AdHocHint, SuggestedSession
+│   ├── flow/                       # Per-agent definitions — source of truth cho "agent nào có tool gì"
+│   │   ├── flow.go                 #   type Flow { Name, Prompt, Schema, Tools, MaxRetries }
+│   │   ├── initiate_roadmap.go
+│   │   ├── regenerate.go
+│   │   ├── adapt.go
+│   │   └── suggest_ad_hoc.go
+│   ├── prompt/                     # Prompt templates (//go:embed .tmpl files)
+│   ├── schema/                     # JSON output schemas
+│   ├── tool/                       # Go-native tools; LLM adapter expose theo protocol nhà cung cấp
+│   │   ├── tool.go                 #   interface Tool + Registry
+│   │   ├── check_prescription.go   #   wrap domain/guardrail
+│   │   ├── lookup_pr.go
+│   │   ├── query_history.go
+│   │   └── exercise_catalog.go
+│   ├── llm/                        # LLM client abstraction
+│   │   ├── client.go               #   interface Client { Complete(ctx, req) (Resp, error) }
+│   │   ├── anthropic/              #   provider adapter (stub)
+│   │   ├── openai/                 #   provider adapter (stub)
+│   │   └── mock/                   #   deterministic mock cho test
+│   └── runtime/                    # Generic execution loop
+│       ├── runner.go               #   render prompt → llm.Complete → guardrail check → retry
+│       └── feedback.go
 ├── infrastructure/                 # Infrastructure Layer (Adapters)
-│   ├── persistence/                # PostgreSQL Repository & GORM/SQL Mappers
-│   ├── ai/                         # AI Coach Agent Adapter (LLM Client & Tools)
-│   └── guardrail/                  # Guardrail Enforcement Pipeline
+│   └── persistence/                # PostgreSQL Repository & GORM/SQL Mappers
 └── transport/                      # Transport Layer
     └── grpc/                       # gRPC Server implementation (CoachingServiceServer)
 ```
+
 
 ---
 
