@@ -1,4 +1,5 @@
 // Package query holds read-only handlers.
+
 package query
 
 import (

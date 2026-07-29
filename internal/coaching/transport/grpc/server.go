@@ -1,4 +1,5 @@
 // Package grpc implements the CoachingService gRPC endpoint.
+
 package grpc
 
 import (

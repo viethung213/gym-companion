@@ -298,6 +298,7 @@ type Feedback = agent.Feedback
 //
 
 //nolint:gocritic // hint is a value object copy to protect agent context immutability
+
 func (m *CoachAgent) SuggestAdHocSession(_ context.Context, cc *agent.CoachContext, hint agent.AdHocHint) (agent.SuggestedSession, error) {
 
 	if cc == nil {

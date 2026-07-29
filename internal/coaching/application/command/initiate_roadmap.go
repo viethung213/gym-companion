@@ -1,4 +1,5 @@
 // Package command holds application command handlers for the Coaching context.
+
 package command
 
 import (
