@@ -115,6 +115,7 @@ internal/coaching/
 - `contracts.supporting.profile.v1.event.InjuryReported` / `InjuryRecovered` $\rightarrow$ Kích hoạt thích ứng chấn thương.
 - `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` $\rightarrow$ Nghiệm thu `SessionPlan` (`status = COMPLETED`) và tính $SCR$, $\Delta RPE$.
 - **`contracts.core.workout_execution.v1.event.WorkoutSessionAborted`** $\rightarrow$ **Cập nhật `SessionPlan.status = SKIPPED`** khi học viên bỏ dở buổi tập / bị timeout.
+- **`contracts.core.workout_execution.v1.event.AdHocWorkoutCompleted`** *(dự kiến — phase-2, tracked ở #171)* $\rightarrow$ **Backfill** `SessionPlan` mới vào Roadmap `ACTIVE` với `status = COMPLETED` cho buổi tập ngoài lịch (Flow 2.1). `plan_id` do Workout Execution tự sinh khi user bấm "Bắt đầu tập" → coaching adopt làm `session_plan_id`. **Không apply BR-AC-01** khi backfill.
 
 ### Produced Events (Sự kiện đầu ra)
 - `contracts.core.coaching.v1.event.RoadmapInitiatedEventPayload` $\rightarrow$ Báo tin khởi tạo Lộ trình 4 tuần.
