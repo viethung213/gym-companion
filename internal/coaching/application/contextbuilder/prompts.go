@@ -8,8 +8,10 @@ import (
 
 // PromptRegistry renders the instruction template and returns the desired
 // JSON output schema hint for a given flow.
+// PromptRegistry renders the instruction template and returns the desired
+// JSON output schema hint for a given flow.
 type PromptRegistry interface {
-	Render(flow port.FlowType, cc port.CoachContext) (instructions string, schemaHint string, err error)
+	Render(flow port.FlowType, cc *port.CoachContext) (instructions string, schemaHint string, err error)
 }
 
 // StaticPromptRegistry is a simple, in-memory implementation good enough for
@@ -20,7 +22,10 @@ type StaticPromptRegistry struct{}
 func NewStaticPromptRegistry() *StaticPromptRegistry { return &StaticPromptRegistry{} }
 
 // Render implements PromptRegistry.
-func (r *StaticPromptRegistry) Render(flow port.FlowType, cc port.CoachContext) (string, string, error) {
+func (r *StaticPromptRegistry) Render(flow port.FlowType, cc *port.CoachContext) (string, string, error) {
+	if cc == nil {
+		return "", "", fmt.Errorf("nil CoachContext")
+	}
 	switch flow {
 	case port.FlowInitiate4Week:
 		return initiatePrompt(cc), schema4WeekRoadmap, nil
@@ -41,8 +46,10 @@ func (r *StaticPromptRegistry) Render(flow port.FlowType, cc port.CoachContext) 
 	}
 }
 
-//nolint:gocritic // hugeParam: CoachContext passed by value
-func initiatePrompt(cc port.CoachContext) string {
+func initiatePrompt(cc *port.CoachContext) string {
+	if cc == nil {
+		return ""
+	}
 	return fmt.Sprintf(`Task: Generate a 4-week training roadmap for user %s.
 Profile:
   Primary goal: %s
@@ -68,31 +75,39 @@ Output the roadmap as JSON conforming to the schema.`,
 	)
 }
 
-//nolint:gocritic // hugeParam: CoachContext passed by value
-func regeneratePrompt(cc port.CoachContext) string {
+func regeneratePrompt(cc *port.CoachContext) string {
+	if cc == nil {
+		return ""
+	}
 	return fmt.Sprintf(`Task: Regenerate PENDING sessions for user %s in response to profile/injury changes.
 Only touch sessions listed in current_roadmap.pending_sessions. Preserve COMPLETED sessions untouched.
 Respect the same guardrails as roadmap initiation.`,
 		cc.UserID)
 }
 
-//nolint:gocritic // hugeParam: CoachContext passed by value
-func adaptiveCyclePrompt(cc port.CoachContext) string {
+func adaptiveCyclePrompt(cc *port.CoachContext) string {
+	if cc == nil {
+		return ""
+	}
 	return fmt.Sprintf(`Task: Apply an adaptive-cycle adjustment (BR-AC-04) for user %s based on last week's metrics.
 The orchestrator has already decided which rule applies. Your job is to translate that decision into
 concrete SessionPlan prescriptions for the next week's PENDING sessions.`,
 		cc.UserID)
 }
 
-//nolint:gocritic // hugeParam: CoachContext passed by value
-func signalPrompt(cc port.CoachContext) string {
+func signalPrompt(cc *port.CoachContext) string {
+	if cc == nil {
+		return ""
+	}
 	return fmt.Sprintf(`Task: Respond to a behavioral signal (B1-B4) for user %s.
 Adjust upcoming PENDING sessions per the signal reason. Explain reasoning in the reasoning field of each session.`,
 		cc.UserID)
 }
 
-//nolint:gocritic // hugeParam: CoachContext passed by value
-func postInjuryPrompt(cc port.CoachContext) string {
+func postInjuryPrompt(cc *port.CoachContext) string {
+	if cc == nil {
+		return ""
+	}
 	return fmt.Sprintf(`Task: Post-injury protective adjustment (BR-AC-09) for user %s.
 For the next 3 sessions targeting the recovered muscle group:
   - Cap weight at 50%% of pre-injury PR.
@@ -101,8 +116,10 @@ For the next 3 sessions targeting the recovered muscle group:
 		cc.UserID)
 }
 
-//nolint:gocritic // hugeParam: CoachContext passed by value
-func suggestAdHocPrompt(cc port.CoachContext) string {
+func suggestAdHocPrompt(cc *port.CoachContext) string {
+	if cc == nil {
+		return ""
+	}
 	return fmt.Sprintf(`Task: Suggest a single ad-hoc workout for user %s.
 This is a read-only suggestion — nothing will be persisted. Respect:
   - Injuries: %d active

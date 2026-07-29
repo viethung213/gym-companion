@@ -31,18 +31,18 @@ func NewBuilder(profile port.UserProfileReader, workouts port.WorkoutSessionRead
 
 // Build produces a CoachContext for the given flow. currentRoadmap may be nil
 // (e.g. UC-02.1 InitiateRoadmap where no prior roadmap exists).
-func (b *Builder) Build(ctx context.Context, flow port.FlowType, userID string, currentRoadmap *roadmap.Roadmap, now time.Time) (port.CoachContext, error) {
+func (b *Builder) Build(ctx context.Context, flow port.FlowType, userID string, currentRoadmap *roadmap.Roadmap, now time.Time) (*port.CoachContext, error) {
 	profile, err := b.profile.GetProfile(ctx, userID)
 	if err != nil {
-		return port.CoachContext{}, err
+		return nil, err
 	}
 
 	sessions, err := b.workouts.GetRecentSessions(ctx, userID, now.Add(-b.lookback))
 	if err != nil {
-		return port.CoachContext{}, err
+		return nil, err
 	}
 
-	cc := port.CoachContext{
+	cc := &port.CoachContext{
 		Flow:           flow,
 		UserID:         userID,
 		Profile:        profile,
@@ -56,7 +56,7 @@ func (b *Builder) Build(ctx context.Context, flow port.FlowType, userID string, 
 
 	instr, schema, err := b.prompts.Render(flow, cc)
 	if err != nil {
-		return port.CoachContext{}, err
+		return nil, err
 	}
 	cc.Instructions = instr
 	cc.OutputSchemaHint = schema

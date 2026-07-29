@@ -12,6 +12,9 @@ import (
 // ---------- Roadmap ----------
 
 func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
+	if r == nil {
+		return roadmapRecord{}
+	}
 	info := r.Info()
 	return roadmapRecord{
 		RoadmapID: info.RoadmapID,
@@ -42,6 +45,9 @@ func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.
 // ---------- WeekPlan ----------
 
 func toWeekPlanRecord(w *roadmap.WeekPlan) weekPlanRecord {
+	if w == nil {
+		return weekPlanRecord{}
+	}
 	info := w.Info()
 	return weekPlanRecord{
 		WeekPlanID:      info.WeekPlanID,
@@ -76,6 +82,9 @@ func fromWeekPlanRecord(rec *weekPlanRecord, days []*roadmap.DayPlan) (*roadmap.
 // ---------- DayPlan ----------
 
 func toDayPlanRecord(d *roadmap.DayPlan) dayPlanRecord {
+	if d == nil {
+		return dayPlanRecord{}
+	}
 	info := d.Info()
 	return dayPlanRecord{
 		DayPlanID:     info.DayPlanID,
@@ -104,6 +113,9 @@ func fromDayPlanRecord(rec *dayPlanRecord, sessions []*roadmap.SessionPlan) (*ro
 // ---------- SessionPlan ----------
 
 func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
+	if s == nil {
+		return sessionPlanRecord{}, fmt.Errorf("nil SessionPlan")
+	}
 	info := s.Info()
 	prescBytes, err := json.Marshal(info.Prescription)
 	if err != nil {

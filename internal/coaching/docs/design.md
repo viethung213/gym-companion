@@ -40,8 +40,9 @@ flowchart LR
 2. Chọn list bài tập: **tự chọn** (FE gọi Exercise catalog) hoặc **yêu cầu Coach AI gợi ý** (FE gọi Coaching `SuggestAdHocSession` — read-only, không lưu DB).
 3. User được chỉnh sửa list (swap/add/remove/đổi sets/weight) trước khi bắt đầu.
 4. Bấm "Bắt đầu tập" → FE gọi Workout Execution.
-5. Xong buổi → Workout Execution phát event **`AdHocWorkoutCompleted`** (event mới, tách với `WorkoutSessionCompleted`).
-6. Coaching lắng nghe, backfill `SessionPlan status=COMPLETED` vào Roadmap `ACTIVE` (nếu có), phát `RoadmapAdjusted{reason: "ad_hoc_workout_completed"}`. **Không apply BR-AC-01**.
+5. Workout Execution khởi tạo buổi tập và phát event **`AdHocWorkoutStarted`** *(tracked ở #171)*. Coaching Context lắng nghe, tạo mới `SessionPlan status=PENDING` (`is_ad_hoc = true`) và lưu vào PostgreSQL. `plan_id` do Workout Execution tự sinh được adopt làm `session_plan_id`.
+6. Khi kết thúc buổi tập, Workout Execution phát event **`AdHocWorkoutCompleted`** *(hoặc `WorkoutSessionAborted`)*.
+7. Coaching Context lắng nghe, cập nhật trạng thái `SessionPlan status=COMPLETED` *(hoặc `SKIPPED`)* trong PostgreSQL. *(Không tính SCR / $\Delta RPE$, không phát `RoadmapAdjusted`, không apply BR-AC-01)*.
 
 ---
 
@@ -115,7 +116,8 @@ internal/coaching/
 - `contracts.supporting.profile.v1.event.InjuryReported` / `InjuryRecovered` $\rightarrow$ Kích hoạt thích ứng chấn thương.
 - `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` $\rightarrow$ Nghiệm thu `SessionPlan` (`status = COMPLETED`) và tính $SCR$, $\Delta RPE$.
 - **`contracts.core.workout_execution.v1.event.WorkoutSessionAborted`** $\rightarrow$ **Cập nhật `SessionPlan.status = SKIPPED`** khi học viên bỏ dở buổi tập / bị timeout.
-- **`contracts.core.workout_execution.v1.event.AdHocWorkoutCompleted`** *(dự kiến — phase-2, tracked ở #171)* $\rightarrow$ **Backfill** `SessionPlan` mới vào Roadmap `ACTIVE` với `status = COMPLETED` cho buổi tập ngoài lịch (Flow 2.1). `plan_id` do Workout Execution tự sinh khi user bấm "Bắt đầu tập" → coaching adopt làm `session_plan_id`. **Không apply BR-AC-01** khi backfill.
+- **`contracts.core.workout_execution.v1.event.AdHocWorkoutStarted`** *(dự kiến — phase-2, tracked ở #171)* $\rightarrow$ **Lưu mới** `SessionPlan` vào Roadmap `ACTIVE` với `status = PENDING` cho buổi tập ngoài lịch (Flow 2.1). `plan_id` do Workout Execution tự sinh khi user bấm "Bắt đầu tập" $\rightarrow$ Coaching adopt làm `session_plan_id`.
+- **`contracts.core.workout_execution.v1.event.AdHocWorkoutCompleted`** *(dự kiến — phase-2, tracked ở #171)* $\rightarrow$ **Cập nhật** `SessionPlan.status = COMPLETED` trong PostgreSQL cho buổi tập ngoài lịch (Flow 2.1). *(Không tính SCR / $\Delta RPE$, không phát `RoadmapAdjusted`, không apply BR-AC-01)*.
 
 ### Produced Events (Sự kiện đầu ra)
 - `contracts.core.coaching.v1.event.RoadmapInitiatedEventPayload` $\rightarrow$ Báo tin khởi tạo Lộ trình 4 tuần.

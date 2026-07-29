@@ -41,7 +41,10 @@ var defaultPhaseSpecs = []phaseSpec{
 
 // GenerateRoadmap creates a full 4-week roadmap. It is deterministic given
 // (userID, startDate, profile hash).
-func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc port.CoachContext, _ *port.Feedback) (*roadmap.Roadmap, error) {
+func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *port.CoachContext, _ *port.Feedback) (*roadmap.Roadmap, error) {
+	if cc == nil {
+		return nil, fmt.Errorf("nil CoachContext")
+	}
 	now := m.clock.Now()
 	roadmapID := m.ids.NewID()
 	startDate := nextMonday(now)
@@ -116,9 +119,9 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc port.CoachConte
 
 // RegeneratePending returns updated prescriptions for the given session IDs.
 // It uses the current roadmap snapshot to know phase & muscle groups.
-func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc port.CoachContext, sessionIDs []string, _ *port.Feedback) ([]roadmap.SessionPlanInfo, error) {
+func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *port.CoachContext, sessionIDs []string, _ *port.Feedback) ([]roadmap.SessionPlanInfo, error) {
 	out := make([]roadmap.SessionPlanInfo, 0, len(sessionIDs))
-	if cc.CurrentRoadmap == nil {
+	if cc == nil || cc.CurrentRoadmap == nil {
 		return out, nil
 	}
 	spec := findPhaseSpec(cc.CurrentRoadmap.Phase)
@@ -140,8 +143,8 @@ func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc port.CoachCon
 
 // Adapt is used by Trigger A / signal handlers. Phase-1 mock returns the same
 // mapping as RegeneratePending but tags reasoning with the decisionReason.
-func (m *MockCoachAgent) Adapt(ctx context.Context, cc port.CoachContext, decisionReason string, fb *Feedback) ([]roadmap.SessionPlanInfo, error) {
-	if cc.CurrentRoadmap == nil {
+func (m *MockCoachAgent) Adapt(ctx context.Context, cc *port.CoachContext, decisionReason string, fb *Feedback) ([]roadmap.SessionPlanInfo, error) {
+	if cc == nil || cc.CurrentRoadmap == nil {
 		return nil, nil
 	}
 	ids := make([]string, 0, len(cc.CurrentRoadmap.PendingSessions))
@@ -163,7 +166,10 @@ type Feedback = port.Feedback
 
 // SuggestAdHocSession returns a single-session suggestion. Read-only: no
 // persistence, no side effects. Deterministic given the hint + profile.
-func (m *MockCoachAgent) SuggestAdHocSession(ctx context.Context, cc port.CoachContext, hint port.AdHocHint) (port.SuggestedSession, error) {
+func (m *MockCoachAgent) SuggestAdHocSession(ctx context.Context, cc *port.CoachContext, hint port.AdHocHint) (port.SuggestedSession, error) {
+	if cc == nil {
+		return port.SuggestedSession{}, fmt.Errorf("nil CoachContext")
+	}
 	// Pick the phase to size volume/intensity from — prefer current roadmap phase,
 	// otherwise default to Accumulation (moderate).
 	phase := roadmap.PhaseAccumulation

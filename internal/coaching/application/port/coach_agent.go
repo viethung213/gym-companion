@@ -97,17 +97,17 @@ type SuggestedSession struct {
 // orchestrator passes Feedback on retry.
 type CoachAgent interface {
 	// GenerateRoadmap synthesizes a full 4-week draft for a new user.
-	GenerateRoadmap(ctx context.Context, cc CoachContext, fb *Feedback) (*roadmap.Roadmap, error)
+	GenerateRoadmap(ctx context.Context, cc *CoachContext, fb *Feedback) (*roadmap.Roadmap, error)
 
 	// RegeneratePending rewrites the given PENDING sessions in-place.
 	// The returned slice mirrors the ordering of input session IDs.
-	RegeneratePending(ctx context.Context, cc CoachContext, sessionIDs []string, fb *Feedback) ([]roadmap.SessionPlanInfo, error)
+	RegeneratePending(ctx context.Context, cc *CoachContext, sessionIDs []string, fb *Feedback) ([]roadmap.SessionPlanInfo, error)
 
 	// Adapt applies a specific AdaptationDecision (Trigger A / Signal B / injury) to
 	// the pending portion of the roadmap.
-	Adapt(ctx context.Context, cc CoachContext, decisionReason string, fb *Feedback) ([]roadmap.SessionPlanInfo, error)
+	Adapt(ctx context.Context, cc *CoachContext, decisionReason string, fb *Feedback) ([]roadmap.SessionPlanInfo, error)
 
 	// SuggestAdHocSession returns a single-session suggestion. Read-only:
 	// nothing is persisted, no domain event is emitted. FlowSuggestAdHocSession.
-	SuggestAdHocSession(ctx context.Context, cc CoachContext, hint AdHocHint) (SuggestedSession, error)
+	SuggestAdHocSession(ctx context.Context, cc *CoachContext, hint AdHocHint) (SuggestedSession, error)
 }

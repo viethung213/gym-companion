@@ -168,6 +168,9 @@ func toPBRoadmap(rm *roadmap.Roadmap) *pbmsg.Roadmap {
 }
 
 func toPBWeek(w *roadmap.WeekPlan) *pbmsg.WeekPlan {
+	if w == nil {
+		return nil
+	}
 	info := w.Info()
 	pb := &pbmsg.WeekPlan{
 		WeekPlanId:      info.WeekPlanID,
@@ -187,6 +190,9 @@ func toPBWeek(w *roadmap.WeekPlan) *pbmsg.WeekPlan {
 }
 
 func toPBDay(d *roadmap.DayPlan) *pbmsg.DayPlan {
+	if d == nil {
+		return nil
+	}
 	info := d.Info()
 	pb := &pbmsg.DayPlan{
 		DayPlanId:     info.DayPlanID,
@@ -203,6 +209,9 @@ func toPBDay(d *roadmap.DayPlan) *pbmsg.DayPlan {
 }
 
 func toPBSession(s *roadmap.SessionPlan) *pbmsg.SessionPlan {
+	if s == nil {
+		return nil
+	}
 	info := s.Info()
 	pb := &pbmsg.SessionPlan{
 		SessionPlanId:      info.SessionPlanID,

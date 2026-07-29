@@ -43,7 +43,7 @@ func TestMockCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
 		},
 	}
 
-	r, err := agent.GenerateRoadmap(context.Background(), cc, nil)
+	r, err := agent.GenerateRoadmap(context.Background(), &cc, nil)
 	if err != nil {
 		t.Fatalf("GenerateRoadmap: %v", err)
 	}
@@ -76,12 +76,12 @@ func TestMockCoachAgent_GenerateRoadmap_Deterministic(t *testing.T) {
 	}
 
 	a1 := NewMockCoachAgent(&counterIDs{}, clock)
-	r1, err := a1.GenerateRoadmap(context.Background(), cc, nil)
+	r1, err := a1.GenerateRoadmap(context.Background(), &cc, nil)
 	if err != nil {
 		t.Fatalf("gen1: %v", err)
 	}
 	a2 := NewMockCoachAgent(&counterIDs{}, clock)
-	r2, err := a2.GenerateRoadmap(context.Background(), cc, nil)
+	r2, err := a2.GenerateRoadmap(context.Background(), &cc, nil)
 	if err != nil {
 		t.Fatalf("gen2: %v", err)
 	}

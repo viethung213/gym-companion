@@ -56,6 +56,46 @@ Effect: Marks the SessionPlan referenced by `plan_id` as SKIPPED.
 Notes:
 - Per commit 85b9647, aborted workouts map to SKIPPED (no separate ABORTED state).
 
+### `contracts.core.workout_execution.v1.event.AdHocWorkoutStarted` (planned; tracked in #171)
+
+Handler: `command.CreateAdHocSessionHandler` (dự kiến)
+Effect: Khởi tạo & lưu mới `SessionPlan` vào PostgreSQL của Coaching với `status = PENDING` và `is_ad_hoc = true`.
+
+```json
+{
+  "session_id": "string (workout execution session id)",
+  "user_id":    "string",
+  "plan_id":    "string (coaching SessionPlan id do WE tự sinh)",
+  "started_at": "RFC3339 timestamp"
+}
+```
+
+Notes:
+- `plan_id` do Workout Execution sinh ra khi user bấm "Bắt đầu tập" ngoài lịch ➔ Coaching adopt làm `session_plan_id`.
+- Trạng thái ban đầu của `SessionPlan` trong DB Coaching là `PENDING`.
+
+### `contracts.core.workout_execution.v1.event.AdHocWorkoutCompleted` (planned; tracked in #171)
+
+Handler: `command.CompleteAdHocSessionHandler` (dự kiến)
+Effect: Cập nhật trạng thái `SessionPlan` từ `PENDING` $\rightarrow$ `COMPLETED` trong PostgreSQL của Coaching.
+
+```json
+{
+  "session_id":          "string",
+  "user_id":             "string",
+  "completed_at":        "RFC3339 timestamp",
+  "total_sets":          42,
+  "total_volume":        1234.5,
+  "average_rpe":         7.5,
+  "plan_id":             "coaching SessionPlan id"
+}
+```
+
+Notes:
+- Cập nhật `SessionPlan.status = COMPLETED` trong DB Coaching.
+- KHÔNG tính toán SCR hay $\Delta RPE$ (`session_scr` và `session_delta_rpe` để `NULL`).
+- KHÔNG phát event `RoadmapAdjusted` và KHÔNG áp dụng BR-AC-01.
+
 ---
 
 ## Profile → Coaching (planned; consumer not yet wired)

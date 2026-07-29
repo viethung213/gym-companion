@@ -200,6 +200,9 @@ func (r *RoadmapRepository) loadTree(ctx context.Context, rec *roadmapRecord) (*
 
 // toRoadmapRecordPtr is a small helper to avoid taking &foo of a function return.
 func toRoadmapRecordPtr(rm *roadmap.Roadmap) *roadmapRecord {
+	if rm == nil {
+		return nil
+	}
 	rec := toRoadmapRecord(rm)
 	return &rec
 }
