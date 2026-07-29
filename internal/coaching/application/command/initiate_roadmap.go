@@ -10,7 +10,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/guardrail"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 )
 
 // InitiateRoadmapCommand is the input to UC-02.1.

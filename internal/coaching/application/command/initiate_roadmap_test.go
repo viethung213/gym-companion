@@ -13,7 +13,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/guardrail"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 )
 
 // ---- mocks ----
