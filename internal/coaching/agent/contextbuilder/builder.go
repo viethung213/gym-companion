@@ -5,10 +5,11 @@ package contextbuilder
 
 import (
 	"context"
+	"time"
+
 	"github.com/viethung213/gym-companion/internal/coaching/agent"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
-	"time"
 )
 
 // Builder is a plain struct — inject its dependencies via NewBuilder.

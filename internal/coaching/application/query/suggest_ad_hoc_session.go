@@ -19,7 +19,6 @@ type SuggestAdHocSessionQuery struct {
 
 // SuggestAdHocSessionHandler runs the ad-hoc session recommendation flow.
 // Read-only: no roadmap mutation, no outbox event, no transaction.
-
 // The frontend decides what to do with the returned suggestion.
 type SuggestAdHocSessionHandler struct {
 	repo    port.RoadmapRepository

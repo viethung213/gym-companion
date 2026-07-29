@@ -1,6 +1,5 @@
 // Package consumer routes inbound events (Kafka CloudEvents) to command handlers.
 // Idempotency is enforced by coaching.outbox_log (D9): consumer checks event_id
-
 // before dispatching, and records the event after successful processing.
 package consumer
 

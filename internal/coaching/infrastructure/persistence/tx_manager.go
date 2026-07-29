@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"gorm.io/gorm"
+
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 )
 
 // SQLTransactionManager implements port.TransactionManager using GORM.

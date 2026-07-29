@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 )
 
 // OutboxRepository implements port.OutboxRepository.

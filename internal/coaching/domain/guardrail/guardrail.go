@@ -1,9 +1,7 @@
 // Package guardrail is the deterministic Go guardrail layer applied AFTER
 // (and optionally alongside) the LLM CoachAgent. Enforces BR-AC-01 (weekly
-
 // cap), BR-AC-02 (±30% weight band), BR-AC-09 (injury exclusion / protection).
 //
-
 // D6: The engine is designed stateless + pure so it can also be exposed as an
 // MCP tool for the Generator/Evaluator to consult during generation.
 package guardrail
@@ -48,7 +46,6 @@ type ReviewResult struct {
 
 // PRLookup returns the personal-record baseline weight for a given exercise
 // (typically supplied by ExerciseCatalogReader + WorkoutSessionReader in the
-
 // concrete adapter). Return baseline<=0 when no history exists.
 type PRLookup func(exerciseID string) float64
 

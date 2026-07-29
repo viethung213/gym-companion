@@ -178,7 +178,6 @@ func (r *Roadmap) validate() error {
 
 // ValidateFullStructure checks that the roadmap has exactly 4 weeks. Called by
 // InitiateRoadmapHandler before Save. Rehydration doesn't enforce this so that
-
 // partial reads work.
 func (r *Roadmap) ValidateFullStructure() error {
 	if len(r.weeks) != WeeksPerRoadmap {

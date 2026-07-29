@@ -140,7 +140,6 @@ func (s *SessionPlan) ScheduledDate() time.Time { return s.info.ScheduledDate }
 
 // MarkCompleted transitions PENDING → COMPLETED and records execution metrics.
 // scr is Session Completion Rate (0-100); deltaRPE is scalar per D7.
-
 // Idempotent: calling on an already-COMPLETED session is a no-op.
 func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error {
 	if s.info.Status == SessionPlanStatusCompleted {
@@ -170,7 +169,6 @@ func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error 
 
 // MarkSkipped transitions PENDING → SKIPPED. Used both for automatic skipping
 // when scheduled_date passes and for WorkoutSessionAborted events.
-
 // Idempotent: calling on an already-SKIPPED session is a no-op.
 func (s *SessionPlan) MarkSkipped() error {
 	if s.info.Status == SessionPlanStatusSkipped {

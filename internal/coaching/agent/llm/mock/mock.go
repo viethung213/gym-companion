@@ -1,6 +1,5 @@
 // Package mock is the deterministic rules-based CoachAgent used in phase-1
 // (no LLM). It also serves as the fallback when the real LLM adapter exceeds
-
 // its cost/time budget (D5).
 package mock
 
@@ -207,7 +206,6 @@ type Feedback = agent.Feedback
 
 // SuggestAdHocSession returns a single-session suggestion. Read-only: no
 // persistence.
-
 //
 //nolint:gocritic // hint is a value object copy to protect agent context immutability
 func (m *CoachAgent) SuggestAdHocSession(_ context.Context, cc *agent.CoachContext, hint agent.AdHocHint) (agent.SuggestedSession, error) {
@@ -256,7 +254,6 @@ func (m *CoachAgent) SuggestAdHocSession(_ context.Context, cc *agent.CoachConte
 
 	// If a duration cap is set, drop extra sets from the last main exercise until
 	// the estimated total time fits. Rough heuristic: 3 min per set + 5 min warmup
-
 	// + 5 min cooldown.
 
 	if hint.DurationMinutes > 0 {

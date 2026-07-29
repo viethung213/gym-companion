@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 )
@@ -30,7 +31,6 @@ func NewOutboxWriter(outbox port.OutboxRepository) *OutboxWriter {
 
 // Enqueue serializes each domain event into a CloudEvents envelope and stores
 // it in coaching.outbox with the given partition key. All writes should be
-
 // inside the caller's transaction.
 func (w *OutboxWriter) Enqueue(ctx context.Context, partitionKey string, events ...domainevent.Event) error {
 	for _, ev := range events {
