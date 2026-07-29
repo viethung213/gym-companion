@@ -227,19 +227,22 @@ func toPBPrescription(p roadmap.WorkoutPrescription) *pbmsg.WorkoutPrescription 
 		MainExercises: make([]*pbmsg.PrescribedExercise, 0, len(p.MainExercises)),
 		CoolDowns:     make([]*pbmsg.PrescribedExercise, 0, len(p.CoolDowns)),
 	}
-	for _, e := range p.WarmUps {
-		out.WarmUps = append(out.WarmUps, toPBExercise(e))
+	for i := range p.WarmUps {
+		out.WarmUps = append(out.WarmUps, toPBExercise(&p.WarmUps[i]))
 	}
-	for _, e := range p.MainExercises {
-		out.MainExercises = append(out.MainExercises, toPBExercise(e))
+	for i := range p.MainExercises {
+		out.MainExercises = append(out.MainExercises, toPBExercise(&p.MainExercises[i]))
 	}
-	for _, e := range p.CoolDowns {
-		out.CoolDowns = append(out.CoolDowns, toPBExercise(e))
+	for i := range p.CoolDowns {
+		out.CoolDowns = append(out.CoolDowns, toPBExercise(&p.CoolDowns[i]))
 	}
 	return out
 }
 
-func toPBExercise(e roadmap.PrescribedExercise) *pbmsg.PrescribedExercise {
+func toPBExercise(e *roadmap.PrescribedExercise) *pbmsg.PrescribedExercise {
+	if e == nil {
+		return nil
+	}
 	return &pbmsg.PrescribedExercise{
 		ExerciseId:      e.ExerciseID,
 		ExerciseName:    e.ExerciseName,

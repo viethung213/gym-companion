@@ -52,7 +52,7 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc port.CoachConte
 	for wi, spec := range defaultPhaseSpecs {
 		weekStart := startDate.AddDate(0, 0, wi*roadmap.DaysPerWeek)
 		weekPlanID := m.ids.NewID()
-		wp, err := roadmap.NewWeekPlan(roadmap.WeekPlanInfo{
+		wp, err := roadmap.NewWeekPlan(&roadmap.WeekPlanInfo{
 			WeekPlanID:      weekPlanID,
 			RoadmapID:       roadmapID,
 			UserID:          cc.UserID,
@@ -72,7 +72,7 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc port.CoachConte
 			date := weekStart.AddDate(0, 0, di)
 			dayID := m.ids.NewID()
 			isRest := !trainingDays[di]
-			dp, err := roadmap.NewDayPlan(roadmap.DayPlanInfo{
+			dp, err := roadmap.NewDayPlan(&roadmap.DayPlanInfo{
 				DayPlanID:     dayID,
 				WeekPlanID:    weekPlanID,
 				RoadmapID:     roadmapID,
@@ -102,7 +102,7 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc port.CoachConte
 		weeks = append(weeks, wp)
 	}
 
-	r, err := roadmap.NewRoadmap(roadmap.RoadmapInfo{
+	r, err := roadmap.NewRoadmap(&roadmap.RoadmapInfo{
 		RoadmapID: roadmapID,
 		UserID:    cc.UserID,
 		StartDate: startDate,
@@ -250,7 +250,7 @@ func (m *MockCoachAgent) buildSessionPlan(
 ) (*roadmap.SessionPlan, error) {
 	muscles := []string{"chest", "back"}
 	presc := buildPrescription(spec, injuries)
-	sp, err := roadmap.NewSessionPlan(roadmap.SessionPlanInfo{
+	sp, err := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
 		SessionPlanID:      m.ids.NewID(),
 		DayPlanID:          dayID,
 		WeekPlanID:         weekPlanID,

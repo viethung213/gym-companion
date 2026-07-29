@@ -93,7 +93,7 @@ func (r *RoadmapRepository) FindByID(ctx context.Context, roadmapID string) (*ro
 		}
 		return nil, fmt.Errorf("find roadmap: %w", err)
 	}
-	return r.loadTree(ctx, rec)
+	return r.loadTree(ctx, &rec)
 }
 
 // FindActiveByUser returns the (up to 1) ACTIVE roadmap for a user.
@@ -106,7 +106,7 @@ func (r *RoadmapRepository) FindActiveByUser(ctx context.Context, userID string)
 		}
 		return nil, fmt.Errorf("find active roadmap: %w", err)
 	}
-	return r.loadTree(ctx, rec)
+	return r.loadTree(ctx, &rec)
 }
 
 // ListByUser returns roadmaps for a user with optional status filter.
@@ -126,8 +126,8 @@ func (r *RoadmapRepository) ListByUser(ctx context.Context, userID string, statu
 		return nil, fmt.Errorf("list roadmaps: %w", err)
 	}
 	out := make([]*roadmap.Roadmap, 0, len(recs))
-	for _, rec := range recs {
-		rm, err := r.loadTree(ctx, rec)
+	for i := range recs {
+		rm, err := r.loadTree(ctx, &recs[i])
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +150,10 @@ func (r *RoadmapRepository) FindSessionByID(ctx context.Context, sessionPlanID s
 }
 
 // loadTree loads all descendants of the given roadmap record.
-func (r *RoadmapRepository) loadTree(ctx context.Context, rec roadmapRecord) (*roadmap.Roadmap, error) {
+func (r *RoadmapRepository) loadTree(ctx context.Context, rec *roadmapRecord) (*roadmap.Roadmap, error) {
+	if rec == nil {
+		return nil, fmt.Errorf("nil roadmapRecord")
+	}
 	db := r.getDB(ctx)
 	var wRecs []weekPlanRecord
 	if err := db.Where("roadmap_id = ?", rec.RoadmapID).Order("week_number ASC").Find(&wRecs).Error; err != nil {
@@ -166,7 +169,8 @@ func (r *RoadmapRepository) loadTree(ctx context.Context, rec roadmapRecord) (*r
 	}
 
 	sessionsByDay := map[string][]*roadmap.SessionPlan{}
-	for _, s := range sRecs {
+	for i := range sRecs {
+		s := &sRecs[i]
 		sp, err := fromSessionPlanRecord(s)
 		if err != nil {
 			return nil, err
@@ -174,7 +178,8 @@ func (r *RoadmapRepository) loadTree(ctx context.Context, rec roadmapRecord) (*r
 		sessionsByDay[s.DayPlanID] = append(sessionsByDay[s.DayPlanID], sp)
 	}
 	daysByWeek := map[string][]*roadmap.DayPlan{}
-	for _, d := range dRecs {
+	for i := range dRecs {
+		d := &dRecs[i]
 		dp, err := fromDayPlanRecord(d, sessionsByDay[d.DayPlanID])
 		if err != nil {
 			return nil, err
@@ -182,7 +187,8 @@ func (r *RoadmapRepository) loadTree(ctx context.Context, rec roadmapRecord) (*r
 		daysByWeek[d.WeekPlanID] = append(daysByWeek[d.WeekPlanID], dp)
 	}
 	weeks := make([]*roadmap.WeekPlan, 0, len(wRecs))
-	for _, w := range wRecs {
+	for i := range wRecs {
+		w := &wRecs[i]
 		wp, err := fromWeekPlanRecord(w, daysByWeek[w.WeekPlanID])
 		if err != nil {
 			return nil, err

@@ -15,7 +15,7 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 	for w := 0; w < 4; w++ {
 		weekStart := base.AddDate(0, 0, w*7)
 		phase := []roadmap.Phase{roadmap.PhaseAccumulation, roadmap.PhaseOverload, roadmap.PhasePeak, roadmap.PhaseDeload}[w]
-		wp, err := roadmap.NewWeekPlan(roadmap.WeekPlanInfo{
+		wp, err := roadmap.NewWeekPlan(&roadmap.WeekPlanInfo{
 			WeekPlanID: "wp-" + itoa(w+1),
 			RoadmapID:  "rm-1",
 			UserID:     "user-1",
@@ -29,7 +29,7 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 			t.Fatalf("wp: %v", err)
 		}
 		for d := 0; d < 7; d++ {
-			dp, _ := roadmap.NewDayPlan(roadmap.DayPlanInfo{
+			dp, _ := roadmap.NewDayPlan(&roadmap.DayPlanInfo{
 				DayPlanID:     "dp-" + itoa(w) + "-" + itoa(d),
 				WeekPlanID:    wp.ID(),
 				RoadmapID:     "rm-1",
@@ -38,7 +38,7 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 				IsRestDay:     d >= 3, // 3 training days/week
 			})
 			if d < 3 {
-				sp, _ := roadmap.NewSessionPlan(roadmap.SessionPlanInfo{
+				sp, _ := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
 					SessionPlanID:      "sp-" + itoa(w) + "-" + itoa(d),
 					DayPlanID:          dp.ID(),
 					WeekPlanID:         wp.ID(),
@@ -58,7 +58,7 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 		}
 		weeks = append(weeks, wp)
 	}
-	r, err := roadmap.NewRoadmap(roadmap.RoadmapInfo{
+	r, err := roadmap.NewRoadmap(&roadmap.RoadmapInfo{
 		RoadmapID: "rm-1",
 		UserID:    "user-1",
 		StartDate: base,

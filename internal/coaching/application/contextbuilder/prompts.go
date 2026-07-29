@@ -41,6 +41,7 @@ func (r *StaticPromptRegistry) Render(flow port.FlowType, cc port.CoachContext) 
 	}
 }
 
+//nolint:gocritic // hugeParam: CoachContext passed by value
 func initiatePrompt(cc port.CoachContext) string {
 	return fmt.Sprintf(`Task: Generate a 4-week training roadmap for user %s.
 Profile:
@@ -67,6 +68,7 @@ Output the roadmap as JSON conforming to the schema.`,
 	)
 }
 
+//nolint:gocritic // hugeParam: CoachContext passed by value
 func regeneratePrompt(cc port.CoachContext) string {
 	return fmt.Sprintf(`Task: Regenerate PENDING sessions for user %s in response to profile/injury changes.
 Only touch sessions listed in current_roadmap.pending_sessions. Preserve COMPLETED sessions untouched.
@@ -74,6 +76,7 @@ Respect the same guardrails as roadmap initiation.`,
 		cc.UserID)
 }
 
+//nolint:gocritic // hugeParam: CoachContext passed by value
 func adaptiveCyclePrompt(cc port.CoachContext) string {
 	return fmt.Sprintf(`Task: Apply an adaptive-cycle adjustment (BR-AC-04) for user %s based on last week's metrics.
 The orchestrator has already decided which rule applies. Your job is to translate that decision into
@@ -81,12 +84,14 @@ concrete SessionPlan prescriptions for the next week's PENDING sessions.`,
 		cc.UserID)
 }
 
+//nolint:gocritic // hugeParam: CoachContext passed by value
 func signalPrompt(cc port.CoachContext) string {
 	return fmt.Sprintf(`Task: Respond to a behavioral signal (B1-B4) for user %s.
 Adjust upcoming PENDING sessions per the signal reason. Explain reasoning in the reasoning field of each session.`,
 		cc.UserID)
 }
 
+//nolint:gocritic // hugeParam: CoachContext passed by value
 func postInjuryPrompt(cc port.CoachContext) string {
 	return fmt.Sprintf(`Task: Post-injury protective adjustment (BR-AC-09) for user %s.
 For the next 3 sessions targeting the recovered muscle group:
@@ -96,6 +101,7 @@ For the next 3 sessions targeting the recovered muscle group:
 		cc.UserID)
 }
 
+//nolint:gocritic // hugeParam: CoachContext passed by value
 func suggestAdHocPrompt(cc port.CoachContext) string {
 	return fmt.Sprintf(`Task: Suggest a single ad-hoc workout for user %s.
 This is a read-only suggestion — nothing will be persisted. Respect:

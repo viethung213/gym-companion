@@ -14,16 +14,16 @@ import (
 func seedRoadmap(t *testing.T, repo *memRepo) *roadmap.Roadmap {
 	t.Helper()
 	base := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC)
-	wp, _ := roadmap.NewWeekPlan(roadmap.WeekPlanInfo{
+	wp, _ := roadmap.NewWeekPlan(&roadmap.WeekPlanInfo{
 		WeekPlanID: "wp-1", RoadmapID: "rm-1", UserID: "user-1",
 		WeekNumber: 1, Phase: roadmap.PhaseAccumulation, TargetRPE: 7.0,
 		StartDate: base, EndDate: base.AddDate(0, 0, 6),
 	})
-	dp, _ := roadmap.NewDayPlan(roadmap.DayPlanInfo{
+	dp, _ := roadmap.NewDayPlan(&roadmap.DayPlanInfo{
 		DayPlanID: "dp-1", WeekPlanID: "wp-1", RoadmapID: "rm-1", UserID: "user-1",
 		ScheduledDate: base,
 	})
-	sp, _ := roadmap.NewSessionPlan(roadmap.SessionPlanInfo{
+	sp, _ := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
 		SessionPlanID: "sp-1", DayPlanID: "dp-1", WeekPlanID: "wp-1", RoadmapID: "rm-1",
 		UserID: "user-1", ScheduledDate: base,
 	}, time.Now())
@@ -33,7 +33,7 @@ func seedRoadmap(t *testing.T, repo *memRepo) *roadmap.Roadmap {
 	weeks := []*roadmap.WeekPlan{wp}
 	// Fill remaining weeks minimally to satisfy structural checks (optional here).
 	for i := 2; i <= 4; i++ {
-		w, _ := roadmap.NewWeekPlan(roadmap.WeekPlanInfo{
+		w, _ := roadmap.NewWeekPlan(&roadmap.WeekPlanInfo{
 			WeekPlanID: "wp-" + string(rune('0'+i)), RoadmapID: "rm-1", UserID: "user-1",
 			WeekNumber: int32(i),
 			Phase:      []roadmap.Phase{roadmap.PhaseOverload, roadmap.PhasePeak, roadmap.PhaseDeload}[i-2],
@@ -43,7 +43,7 @@ func seedRoadmap(t *testing.T, repo *memRepo) *roadmap.Roadmap {
 		})
 		weeks = append(weeks, w)
 	}
-	r, _ := roadmap.NewRoadmap(roadmap.RoadmapInfo{
+	r, _ := roadmap.NewRoadmap(&roadmap.RoadmapInfo{
 		RoadmapID: "rm-1", UserID: "user-1",
 		StartDate: base, EndDate: base.AddDate(0, 0, 28),
 	}, weeks, time.Now())

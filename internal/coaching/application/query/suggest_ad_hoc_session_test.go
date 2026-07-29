@@ -76,7 +76,7 @@ func buildSuggestHandler(t *testing.T) *SuggestAdHocSessionHandler {
 
 func TestSuggestAdHocSession_HappyPath_NoActiveRoadmap(t *testing.T) {
 	h := buildSuggestHandler(t)
-	got, err := h.Handle(context.Background(), SuggestAdHocSessionQuery{
+	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
 		Hint:   port.AdHocHint{FreeText: "quick back session"},
 	})
@@ -96,7 +96,7 @@ func TestSuggestAdHocSession_HappyPath_NoActiveRoadmap(t *testing.T) {
 
 func TestSuggestAdHocSession_HintOverridesMuscleGroups(t *testing.T) {
 	h := buildSuggestHandler(t)
-	got, err := h.Handle(context.Background(), SuggestAdHocSessionQuery{
+	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
 		Hint:   port.AdHocHint{MuscleGroups: []string{"legs"}},
 	})
@@ -111,7 +111,7 @@ func TestSuggestAdHocSession_HintOverridesMuscleGroups(t *testing.T) {
 func TestSuggestAdHocSession_DurationCap_ShrinksSets(t *testing.T) {
 	h := buildSuggestHandler(t)
 	// 15 minutes - 10' overhead = 5' → floor(5/3) = 1 set max
-	got, err := h.Handle(context.Background(), SuggestAdHocSessionQuery{
+	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
 		Hint:   port.AdHocHint{DurationMinutes: 15},
 	})
@@ -129,10 +129,10 @@ func TestSuggestAdHocSession_DurationCap_ShrinksSets(t *testing.T) {
 
 func TestSuggestAdHocSession_IntensityHintAffectsRPE(t *testing.T) {
 	h := buildSuggestHandler(t)
-	light, _ := h.Handle(context.Background(), SuggestAdHocSessionQuery{
+	light, _ := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1", Hint: port.AdHocHint{IntensityHint: "light"},
 	})
-	hard, _ := h.Handle(context.Background(), SuggestAdHocSessionQuery{
+	hard, _ := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1", Hint: port.AdHocHint{IntensityHint: "hard"},
 	})
 	if light.EstimatedRPE >= hard.EstimatedRPE {
@@ -142,7 +142,7 @@ func TestSuggestAdHocSession_IntensityHintAffectsRPE(t *testing.T) {
 
 func TestSuggestAdHocSession_MissingUserID(t *testing.T) {
 	h := buildSuggestHandler(t)
-	_, err := h.Handle(context.Background(), SuggestAdHocSessionQuery{})
+	_, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{})
 	if err == nil {
 		t.Errorf("expected error for missing user_id")
 	}

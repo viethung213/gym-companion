@@ -20,7 +20,8 @@ func newTestSessionInfo() SessionPlanInfo {
 
 func TestNewSessionPlan_DefaultsToPending(t *testing.T) {
 	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
-	sp, err := NewSessionPlan(newTestSessionInfo(), now)
+	info := newTestSessionInfo()
+	sp, err := NewSessionPlan(&info, now)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -32,6 +33,15 @@ func TestNewSessionPlan_DefaultsToPending(t *testing.T) {
 	}
 	if sp.Info().CompletedAt != nil {
 		t.Errorf("expected CompletedAt nil, got %v", sp.Info().CompletedAt)
+	}
+}
+
+func TestNewSessionPlan_NilChecks(t *testing.T) {
+	if _, err := NewSessionPlan(nil, time.Now()); err == nil {
+		t.Errorf("expected error for nil SessionPlanInfo")
+	}
+	if _, err := RehydrateSessionPlan(nil); err == nil {
+		t.Errorf("expected error for nil SessionPlanInfo")
 	}
 }
 
@@ -50,7 +60,8 @@ func TestNewSessionPlan_RequiresFields(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewSessionPlan(tt.give(), now)
+			info := tt.give()
+			_, err := NewSessionPlan(&info, now)
 			if !errors.Is(err, ErrInvalidRoadmap) {
 				t.Errorf("expected ErrInvalidRoadmap, got %v", err)
 			}
@@ -60,7 +71,8 @@ func TestNewSessionPlan_RequiresFields(t *testing.T) {
 
 func TestSessionPlan_MarkCompleted(t *testing.T) {
 	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
-	sp, _ := NewSessionPlan(newTestSessionInfo(), now)
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
 
 	completedAt := now.Add(24 * time.Hour)
 	if err := sp.MarkCompleted(85.0, 0.5, completedAt); err != nil {
@@ -69,21 +81,22 @@ func TestSessionPlan_MarkCompleted(t *testing.T) {
 	if sp.Status() != SessionPlanStatusCompleted {
 		t.Errorf("status = %s, want COMPLETED", sp.Status())
 	}
-	info := sp.Info()
-	if info.CompletedAt == nil || !info.CompletedAt.Equal(completedAt) {
+	gotInfo := sp.Info()
+	if gotInfo.CompletedAt == nil || !gotInfo.CompletedAt.Equal(completedAt) {
 		t.Errorf("CompletedAt not set correctly")
 	}
-	if info.SessionSCR == nil || *info.SessionSCR != 85.0 {
+	if gotInfo.SessionSCR == nil || *gotInfo.SessionSCR != 85.0 {
 		t.Errorf("SCR not stored")
 	}
-	if info.SessionDeltaRPE == nil || *info.SessionDeltaRPE != 0.5 {
+	if gotInfo.SessionDeltaRPE == nil || *gotInfo.SessionDeltaRPE != 0.5 {
 		t.Errorf("ΔRPE not stored")
 	}
 }
 
 func TestSessionPlan_MarkCompleted_IdempotentAndBlocksSkipped(t *testing.T) {
 	now := time.Now()
-	sp, _ := NewSessionPlan(newTestSessionInfo(), now)
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
 	_ = sp.MarkCompleted(80, 0, now)
 
 	// Idempotent second call is no-op
@@ -103,7 +116,8 @@ func TestSessionPlan_MarkCompleted_IdempotentAndBlocksSkipped(t *testing.T) {
 
 func TestSessionPlan_MarkSkipped_Idempotent(t *testing.T) {
 	now := time.Now()
-	sp, _ := NewSessionPlan(newTestSessionInfo(), now)
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
 	if err := sp.MarkSkipped(); err != nil {
 		t.Fatalf("MarkSkipped: %v", err)
 	}
@@ -119,7 +133,8 @@ func TestSessionPlan_MarkSkipped_Idempotent(t *testing.T) {
 
 func TestSessionPlan_RewritePrescription_OnlyPending(t *testing.T) {
 	now := time.Now()
-	sp, _ := NewSessionPlan(newTestSessionInfo(), now)
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
 
 	newPresc := WorkoutPrescription{
 		MainExercises: []PrescribedExercise{
@@ -151,7 +166,7 @@ func TestSessionPlan_Info_ReturnsDeepCopy(t *testing.T) {
 	info.Prescription = WorkoutPrescription{
 		MainExercises: []PrescribedExercise{{ExerciseID: "e1"}},
 	}
-	sp, _ := NewSessionPlan(info, now)
+	sp, _ := NewSessionPlan(&info, now)
 
 	got := sp.Info()
 	got.TargetMuscleGroups[0] = "MUTATED"

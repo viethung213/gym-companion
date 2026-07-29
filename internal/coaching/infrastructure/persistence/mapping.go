@@ -24,8 +24,11 @@ func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
 	}
 }
 
-func fromRoadmapRecord(rec roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.Roadmap, error) {
-	return roadmap.RehydrateRoadmap(roadmap.RoadmapInfo{
+func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.Roadmap, error) {
+	if rec == nil {
+		return nil, fmt.Errorf("nil roadmapRecord")
+	}
+	return roadmap.RehydrateRoadmap(&roadmap.RoadmapInfo{
 		RoadmapID: rec.RoadmapID,
 		UserID:    rec.UserID,
 		Status:    roadmap.RoadmapStatus(rec.Status),
@@ -53,8 +56,11 @@ func toWeekPlanRecord(w *roadmap.WeekPlan) weekPlanRecord {
 	}
 }
 
-func fromWeekPlanRecord(rec weekPlanRecord, days []*roadmap.DayPlan) (*roadmap.WeekPlan, error) {
-	return roadmap.RehydrateWeekPlan(roadmap.WeekPlanInfo{
+func fromWeekPlanRecord(rec *weekPlanRecord, days []*roadmap.DayPlan) (*roadmap.WeekPlan, error) {
+	if rec == nil {
+		return nil, fmt.Errorf("nil weekPlanRecord")
+	}
+	return roadmap.RehydrateWeekPlan(&roadmap.WeekPlanInfo{
 		WeekPlanID:      rec.WeekPlanID,
 		RoadmapID:       rec.RoadmapID,
 		UserID:          rec.UserID,
@@ -81,8 +87,11 @@ func toDayPlanRecord(d *roadmap.DayPlan) dayPlanRecord {
 	}
 }
 
-func fromDayPlanRecord(rec dayPlanRecord, sessions []*roadmap.SessionPlan) (*roadmap.DayPlan, error) {
-	return roadmap.RehydrateDayPlan(roadmap.DayPlanInfo{
+func fromDayPlanRecord(rec *dayPlanRecord, sessions []*roadmap.SessionPlan) (*roadmap.DayPlan, error) {
+	if rec == nil {
+		return nil, fmt.Errorf("nil dayPlanRecord")
+	}
+	return roadmap.RehydrateDayPlan(&roadmap.DayPlanInfo{
 		DayPlanID:     rec.DayPlanID,
 		WeekPlanID:    rec.WeekPlanID,
 		RoadmapID:     rec.RoadmapID,
@@ -130,7 +139,10 @@ func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
 	return rec, nil
 }
 
-func fromSessionPlanRecord(rec sessionPlanRecord) (*roadmap.SessionPlan, error) {
+func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error) {
+	if rec == nil {
+		return nil, fmt.Errorf("nil sessionPlanRecord")
+	}
 	var presc roadmap.WorkoutPrescription
 	if len(rec.Prescription) > 0 {
 		if err := json.Unmarshal(rec.Prescription, &presc); err != nil {
@@ -169,7 +181,7 @@ func fromSessionPlanRecord(rec sessionPlanRecord) (*roadmap.SessionPlan, error) 
 		v := float32(rec.SessionDeltaRPE.Float64)
 		info.SessionDeltaRPE = &v
 	}
-	return roadmap.RehydrateSessionPlan(info)
+	return roadmap.RehydrateSessionPlan(&info)
 }
 
 // Unused import guard.

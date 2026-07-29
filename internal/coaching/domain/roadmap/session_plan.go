@@ -52,16 +52,18 @@ type SessionPlan struct {
 }
 
 // NewSessionPlan constructs a SessionPlan in PENDING status.
-//nolint:gocritic // hugeParam: SessionPlanInfo snapshot passed by value
-func NewSessionPlan(info SessionPlanInfo, now time.Time) (*SessionPlan, error) {
-	info = normalizeSessionInfo(info)
-	info.Status = SessionPlanStatusPending
-	info.GeneratedAt = now
-	info.CompletedAt = nil
-	info.SessionSCR = nil
-	info.SessionDeltaRPE = nil
+func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil SessionPlanInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeSessionInfo(info)
+	normInfo.Status = SessionPlanStatusPending
+	normInfo.GeneratedAt = now
+	normInfo.CompletedAt = nil
+	normInfo.SessionSCR = nil
+	normInfo.SessionDeltaRPE = nil
 
-	sp := &SessionPlan{info: info}
+	sp := &SessionPlan{info: *normInfo}
 	if err := sp.validate(); err != nil {
 		return nil, err
 	}
@@ -70,14 +72,16 @@ func NewSessionPlan(info SessionPlanInfo, now time.Time) (*SessionPlan, error) {
 
 // RehydrateSessionPlan loads a SessionPlan from persistence without applying
 // lifecycle defaults.
-//nolint:gocritic // hugeParam: SessionPlanInfo snapshot passed by value
-func RehydrateSessionPlan(info SessionPlanInfo) (*SessionPlan, error) {
-	info = normalizeSessionInfo(info)
-	if !info.Status.Valid() {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidStatus, info.Status)
+func RehydrateSessionPlan(info *SessionPlanInfo) (*SessionPlan, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil SessionPlanInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeSessionInfo(info)
+	if !normInfo.Status.Valid() {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidStatus, normInfo.Status)
 	}
 
-	sp := &SessionPlan{info: info}
+	sp := &SessionPlan{info: *normInfo}
 	if err := sp.validate(); err != nil {
 		return nil, err
 	}
@@ -180,18 +184,21 @@ func (s *SessionPlan) validate() error {
 	return nil
 }
 
-//nolint:gocritic // hugeParam: SessionPlanInfo snapshot passed by value
-func normalizeSessionInfo(info SessionPlanInfo) SessionPlanInfo {
-	info.SessionPlanID = strings.TrimSpace(info.SessionPlanID)
-	info.DayPlanID = strings.TrimSpace(info.DayPlanID)
-	info.WeekPlanID = strings.TrimSpace(info.WeekPlanID)
-	info.RoadmapID = strings.TrimSpace(info.RoadmapID)
-	info.UserID = strings.TrimSpace(info.UserID)
-	info.SlotTime = strings.TrimSpace(info.SlotTime)
-	info.Reasoning = strings.TrimSpace(info.Reasoning)
-	info.TargetMuscleGroups = copyStringSlice(info.TargetMuscleGroups)
-	info.Prescription = copyPrescription(info.Prescription)
-	return info
+func normalizeSessionInfo(info *SessionPlanInfo) *SessionPlanInfo {
+	if info == nil {
+		return &SessionPlanInfo{}
+	}
+	cp := *info
+	cp.SessionPlanID = strings.TrimSpace(cp.SessionPlanID)
+	cp.DayPlanID = strings.TrimSpace(cp.DayPlanID)
+	cp.WeekPlanID = strings.TrimSpace(cp.WeekPlanID)
+	cp.RoadmapID = strings.TrimSpace(cp.RoadmapID)
+	cp.UserID = strings.TrimSpace(cp.UserID)
+	cp.SlotTime = strings.TrimSpace(cp.SlotTime)
+	cp.Reasoning = strings.TrimSpace(cp.Reasoning)
+	cp.TargetMuscleGroups = copyStringSlice(cp.TargetMuscleGroups)
+	cp.Prescription = copyPrescription(cp.Prescription)
+	return &cp
 }
 
 func copyPrescription(p WorkoutPrescription) WorkoutPrescription {

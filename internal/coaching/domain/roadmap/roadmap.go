@@ -25,14 +25,16 @@ type Roadmap struct {
 
 // NewRoadmap constructs a new ACTIVE roadmap with the given weeks attached.
 // weeks may be nil or partial; final validation happens on Save (Persist).
-//nolint:gocritic // hugeParam: RoadmapInfo snapshot passed by value
-func NewRoadmap(info RoadmapInfo, weeks []*WeekPlan, now time.Time) (*Roadmap, error) {
-	info = normalizeRoadmapInfo(info)
-	info.Status = RoadmapStatusActive
-	info.CreatedAt = now
-	info.UpdatedAt = now
+func NewRoadmap(info *RoadmapInfo, weeks []*WeekPlan, now time.Time) (*Roadmap, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil RoadmapInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeRoadmapInfo(info)
+	normInfo.Status = RoadmapStatusActive
+	normInfo.CreatedAt = now
+	normInfo.UpdatedAt = now
 
-	r := &Roadmap{info: info, weeks: weeks}
+	r := &Roadmap{info: *normInfo, weeks: weeks}
 	if err := r.validate(); err != nil {
 		return nil, err
 	}
@@ -40,13 +42,15 @@ func NewRoadmap(info RoadmapInfo, weeks []*WeekPlan, now time.Time) (*Roadmap, e
 }
 
 // RehydrateRoadmap loads a Roadmap from persistence with its children.
-//nolint:gocritic // hugeParam: RoadmapInfo snapshot passed by value
-func RehydrateRoadmap(info RoadmapInfo, weeks []*WeekPlan) (*Roadmap, error) {
-	info = normalizeRoadmapInfo(info)
-	if !info.Status.Valid() {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidStatus, info.Status)
+func RehydrateRoadmap(info *RoadmapInfo, weeks []*WeekPlan) (*Roadmap, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil RoadmapInfo", ErrInvalidRoadmap)
 	}
-	r := &Roadmap{info: info, weeks: weeks}
+	normInfo := normalizeRoadmapInfo(info)
+	if !normInfo.Status.Valid() {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidStatus, normInfo.Status)
+	}
+	r := &Roadmap{info: *normInfo, weeks: weeks}
 	if err := r.validate(); err != nil {
 		return nil, err
 	}
@@ -153,9 +157,12 @@ func (r *Roadmap) ValidateFullStructure() error {
 	return nil
 }
 
-//nolint:gocritic // hugeParam: RoadmapInfo snapshot passed by value
-func normalizeRoadmapInfo(info RoadmapInfo) RoadmapInfo {
-	info.RoadmapID = strings.TrimSpace(info.RoadmapID)
-	info.UserID = strings.TrimSpace(info.UserID)
-	return info
+func normalizeRoadmapInfo(info *RoadmapInfo) *RoadmapInfo {
+	if info == nil {
+		return &RoadmapInfo{}
+	}
+	cp := *info
+	cp.RoadmapID = strings.TrimSpace(cp.RoadmapID)
+	cp.UserID = strings.TrimSpace(cp.UserID)
+	return &cp
 }

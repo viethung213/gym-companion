@@ -23,9 +23,12 @@ type DayPlan struct {
 }
 
 // NewDayPlan constructs an empty DayPlan.
-func NewDayPlan(info DayPlanInfo) (*DayPlan, error) {
-	info = normalizeDayInfo(info)
-	dp := &DayPlan{info: info, sessions: nil}
+func NewDayPlan(info *DayPlanInfo) (*DayPlan, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil DayPlanInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeDayInfo(info)
+	dp := &DayPlan{info: *normInfo, sessions: nil}
 	if err := dp.validate(); err != nil {
 		return nil, err
 	}
@@ -33,9 +36,12 @@ func NewDayPlan(info DayPlanInfo) (*DayPlan, error) {
 }
 
 // RehydrateDayPlan reconstructs a DayPlan with its sessions.
-func RehydrateDayPlan(info DayPlanInfo, sessions []*SessionPlan) (*DayPlan, error) {
-	info = normalizeDayInfo(info)
-	dp := &DayPlan{info: info, sessions: sessions}
+func RehydrateDayPlan(info *DayPlanInfo, sessions []*SessionPlan) (*DayPlan, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil DayPlanInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeDayInfo(info)
+	dp := &DayPlan{info: *normInfo, sessions: sessions}
 	if err := dp.validate(); err != nil {
 		return nil, err
 	}
@@ -108,11 +114,14 @@ func (d *DayPlan) validate() error {
 	return nil
 }
 
-//nolint:gocritic // hugeParam: DayPlanInfo snapshot passed by value
-func normalizeDayInfo(info DayPlanInfo) DayPlanInfo {
-	info.DayPlanID = strings.TrimSpace(info.DayPlanID)
-	info.WeekPlanID = strings.TrimSpace(info.WeekPlanID)
-	info.RoadmapID = strings.TrimSpace(info.RoadmapID)
-	info.UserID = strings.TrimSpace(info.UserID)
-	return info
+func normalizeDayInfo(info *DayPlanInfo) *DayPlanInfo {
+	if info == nil {
+		return &DayPlanInfo{}
+	}
+	cp := *info
+	cp.DayPlanID = strings.TrimSpace(cp.DayPlanID)
+	cp.WeekPlanID = strings.TrimSpace(cp.WeekPlanID)
+	cp.RoadmapID = strings.TrimSpace(cp.RoadmapID)
+	cp.UserID = strings.TrimSpace(cp.UserID)
+	return &cp
 }

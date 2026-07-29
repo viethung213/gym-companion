@@ -16,7 +16,7 @@ func newTestRoadmapInfo() RoadmapInfo {
 }
 
 func newDay(id string, date time.Time, weekPlanID string, sessionCount int) *DayPlan {
-	dp, _ := NewDayPlan(DayPlanInfo{
+	dp, _ := NewDayPlan(&DayPlanInfo{
 		DayPlanID:     id,
 		WeekPlanID:    weekPlanID,
 		RoadmapID:     "rm-1",
@@ -26,7 +26,7 @@ func newDay(id string, date time.Time, weekPlanID string, sessionCount int) *Day
 	})
 	now := time.Now()
 	for i := 0; i < sessionCount; i++ {
-		sp, _ := NewSessionPlan(SessionPlanInfo{
+		sp, _ := NewSessionPlan(&SessionPlanInfo{
 			SessionPlanID: id + "-s" + string(rune('0'+i)),
 			DayPlanID:     id,
 			WeekPlanID:    weekPlanID,
@@ -40,7 +40,7 @@ func newDay(id string, date time.Time, weekPlanID string, sessionCount int) *Day
 }
 
 func newWeek(id string, num int32, phase Phase, weekStart time.Time, sessionsPerDay []int) *WeekPlan {
-	wp, _ := NewWeekPlan(WeekPlanInfo{
+	wp, _ := NewWeekPlan(&WeekPlanInfo{
 		WeekPlanID: id,
 		RoadmapID:  "rm-1",
 		UserID:     "user-1",
@@ -59,12 +59,22 @@ func newWeek(id string, num int32, phase Phase, weekStart time.Time, sessionsPer
 
 func TestNewRoadmap_DefaultsToActive(t *testing.T) {
 	now := time.Now()
-	r, err := NewRoadmap(newTestRoadmapInfo(), nil, now)
+	info := newTestRoadmapInfo()
+	r, err := NewRoadmap(&info, nil, now)
 	if err != nil {
 		t.Fatalf("NewRoadmap: %v", err)
 	}
 	if r.Status() != RoadmapStatusActive {
 		t.Errorf("status=%s, want ACTIVE", r.Status())
+	}
+}
+
+func TestNewRoadmap_NilChecks(t *testing.T) {
+	if _, err := NewRoadmap(nil, nil, time.Now()); err == nil {
+		t.Errorf("expected error for nil RoadmapInfo")
+	}
+	if _, err := RehydrateRoadmap(nil, nil); err == nil {
+		t.Errorf("expected error for nil RoadmapInfo")
 	}
 }
 
@@ -84,7 +94,7 @@ func TestNewRoadmap_ValidatesFields(t *testing.T) {
 			t.Parallel()
 			info := newTestRoadmapInfo()
 			tt.mut(&info)
-			_, err := NewRoadmap(info, nil, time.Now())
+			_, err := NewRoadmap(&info, nil, time.Now())
 			if !errors.Is(err, ErrInvalidRoadmap) {
 				t.Errorf("expected ErrInvalidRoadmap, got %v", err)
 			}
@@ -94,7 +104,7 @@ func TestNewRoadmap_ValidatesFields(t *testing.T) {
 
 func TestRoadmap_WeeklyCap_BR_AC_01(t *testing.T) {
 	// Try to add 7 sessions in one week (>6 = cap).
-	wp, err := NewWeekPlan(WeekPlanInfo{
+	wp, err := NewWeekPlan(&WeekPlanInfo{
 		WeekPlanID: "wp-1",
 		RoadmapID:  "rm-1",
 		UserID:     "user-1",
@@ -124,7 +134,8 @@ func TestRoadmap_WeeklyCap_BR_AC_01(t *testing.T) {
 }
 
 func TestRoadmap_MarkCompleted(t *testing.T) {
-	r, _ := NewRoadmap(newTestRoadmapInfo(), nil, time.Now())
+	info := newTestRoadmapInfo()
+	r, _ := NewRoadmap(&info, nil, time.Now())
 	now := time.Now().Add(28 * 24 * time.Hour)
 	if err := r.MarkCompleted(now); err != nil {
 		t.Fatalf("MarkCompleted: %v", err)
@@ -142,7 +153,7 @@ func TestRoadmap_PendingSessionsFrom(t *testing.T) {
 	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	wp1 := newWeek("wp-1", 1, PhaseAccumulation, base, []int{1, 0, 1, 0, 1, 0, 0})
 	info := newTestRoadmapInfo()
-	r, err := NewRoadmap(info, []*WeekPlan{wp1}, time.Now())
+	r, err := NewRoadmap(&info, []*WeekPlan{wp1}, time.Now())
 	if err != nil {
 		t.Fatalf("NewRoadmap: %v", err)
 	}
@@ -171,7 +182,8 @@ func TestRoadmap_PendingSessionsFrom(t *testing.T) {
 func TestRoadmap_FindSession(t *testing.T) {
 	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	wp1 := newWeek("wp-1", 1, PhaseAccumulation, base, []int{1, 0, 0, 0, 0, 0, 0})
-	r, _ := NewRoadmap(newTestRoadmapInfo(), []*WeekPlan{wp1}, time.Now())
+	info := newTestRoadmapInfo()
+	r, _ := NewRoadmap(&info, []*WeekPlan{wp1}, time.Now())
 
 	if _, ok := r.FindSession("wp-1-d0-s0"); !ok {
 		t.Errorf("expected to find session wp-1-d0-s0")
@@ -184,7 +196,8 @@ func TestRoadmap_FindSession(t *testing.T) {
 func TestRoadmap_ValidateFullStructure_Requires4Weeks(t *testing.T) {
 	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	wp1 := newWeek("wp-1", 1, PhaseAccumulation, base, []int{0, 0, 0, 0, 0, 0, 0})
-	r, _ := NewRoadmap(newTestRoadmapInfo(), []*WeekPlan{wp1}, time.Now())
+	info := newTestRoadmapInfo()
+	r, _ := NewRoadmap(&info, []*WeekPlan{wp1}, time.Now())
 	if err := r.ValidateFullStructure(); !errors.Is(err, ErrInvalidWeekCount) {
 		t.Errorf("expected ErrInvalidWeekCount for 1 week, got %v", err)
 	}
@@ -195,7 +208,8 @@ func TestRoadmap_ValidateFullStructure_Requires4Weeks(t *testing.T) {
 		newWeek("wp-3", 3, PhasePeak, base.AddDate(0, 0, 14), []int{0, 0, 0, 0, 0, 0, 0}),
 		newWeek("wp-4", 4, PhaseDeload, base.AddDate(0, 0, 21), []int{0, 0, 0, 0, 0, 0, 0}),
 	}
-	r2, _ := NewRoadmap(newTestRoadmapInfo(), weeks, time.Now())
+	info2 := newTestRoadmapInfo()
+	r2, _ := NewRoadmap(&info2, weeks, time.Now())
 	if err := r2.ValidateFullStructure(); err != nil {
 		t.Errorf("expected no error for 4 weeks, got %v", err)
 	}

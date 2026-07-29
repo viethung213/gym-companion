@@ -38,8 +38,8 @@ func NewSuggestAdHocSessionHandler(
 
 // Handle returns a SuggestedSession for the user. If the user has no active
 // roadmap, the suggestion still works — it just uses Accumulation defaults.
-func (h *SuggestAdHocSessionHandler) Handle(ctx context.Context, q SuggestAdHocSessionQuery) (port.SuggestedSession, error) {
-	if q.UserID == "" {
+func (h *SuggestAdHocSessionHandler) Handle(ctx context.Context, q *SuggestAdHocSessionQuery) (port.SuggestedSession, error) {
+	if q == nil || q.UserID == "" {
 		return port.SuggestedSession{}, errors.New("user_id required")
 	}
 	now := h.clock.Now()

@@ -26,9 +26,12 @@ type WeekPlan struct {
 }
 
 // NewWeekPlan constructs an empty WeekPlan.
-func NewWeekPlan(info WeekPlanInfo) (*WeekPlan, error) {
-	info = normalizeWeekInfo(info)
-	wp := &WeekPlan{info: info, days: nil}
+func NewWeekPlan(info *WeekPlanInfo) (*WeekPlan, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil WeekPlanInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeWeekInfo(info)
+	wp := &WeekPlan{info: *normInfo, days: nil}
 	if err := wp.validate(); err != nil {
 		return nil, err
 	}
@@ -36,9 +39,12 @@ func NewWeekPlan(info WeekPlanInfo) (*WeekPlan, error) {
 }
 
 // RehydrateWeekPlan reconstructs a WeekPlan with its days.
-func RehydrateWeekPlan(info WeekPlanInfo, days []*DayPlan) (*WeekPlan, error) {
-	info = normalizeWeekInfo(info)
-	wp := &WeekPlan{info: info, days: days}
+func RehydrateWeekPlan(info *WeekPlanInfo, days []*DayPlan) (*WeekPlan, error) {
+	if info == nil {
+		return nil, fmt.Errorf("%w: nil WeekPlanInfo", ErrInvalidRoadmap)
+	}
+	normInfo := normalizeWeekInfo(info)
+	wp := &WeekPlan{info: *normInfo, days: days}
 	if err := wp.validate(); err != nil {
 		return nil, err
 	}
@@ -133,10 +139,14 @@ func (w *WeekPlan) validate() error {
 	return nil
 }
 
-func normalizeWeekInfo(info WeekPlanInfo) WeekPlanInfo {
-	info.WeekPlanID = strings.TrimSpace(info.WeekPlanID)
-	info.RoadmapID = strings.TrimSpace(info.RoadmapID)
-	info.UserID = strings.TrimSpace(info.UserID)
-	info.MuscleSplitType = strings.TrimSpace(info.MuscleSplitType)
-	return info
+func normalizeWeekInfo(info *WeekPlanInfo) *WeekPlanInfo {
+	if info == nil {
+		return &WeekPlanInfo{}
+	}
+	cp := *info
+	cp.WeekPlanID = strings.TrimSpace(cp.WeekPlanID)
+	cp.RoadmapID = strings.TrimSpace(cp.RoadmapID)
+	cp.UserID = strings.TrimSpace(cp.UserID)
+	cp.MuscleSplitType = strings.TrimSpace(cp.MuscleSplitType)
+	return &cp
 }
