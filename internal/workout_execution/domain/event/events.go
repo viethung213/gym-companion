@@ -15,8 +15,8 @@ type WorkoutSessionStarted struct {
 }
 
 // EventName returns the CloudEvent type for WorkoutSessionStarted.
-func (e *WorkoutSessionStarted) EventName() string {
-	return "contracts.core.workout_execution.v1.event.WorkoutSessionStarted"
+func (e WorkoutSessionStarted) EventName() string {
+	return "contracts.core.workout_execution.v1.workoutSessionStarted"
 }
 
 // WorkoutSessionCompleted is published when a workout session finishes normally.
@@ -28,8 +28,8 @@ type WorkoutSessionCompleted struct {
 }
 
 // EventName returns the CloudEvent type for WorkoutSessionCompleted.
-func (e *WorkoutSessionCompleted) EventName() string {
-	return "contracts.core.workout_execution.v1.event.WorkoutSessionCompleted"
+func (e WorkoutSessionCompleted) EventName() string {
+	return "contracts.core.workout_execution.v1.workoutSessionCompleted"
 }
 
 // WorkoutSessionAborted is published when a workout session is aborted or marked anomalous.
@@ -42,8 +42,8 @@ type WorkoutSessionAborted struct {
 }
 
 // EventName returns the CloudEvent type for WorkoutSessionAborted.
-func (e *WorkoutSessionAborted) EventName() string {
-	return "contracts.core.workout_execution.v1.event.WorkoutSessionAborted"
+func (e WorkoutSessionAborted) EventName() string {
+	return "contracts.core.workout_execution.v1.workoutSessionAborted"
 }
 
 // NewPersonalRecordAchieved is published when a user beats their previous 1RM record.
@@ -58,8 +58,8 @@ type NewPersonalRecordAchieved struct {
 }
 
 // EventName returns the CloudEvent type for NewPersonalRecordAchieved.
-func (e *NewPersonalRecordAchieved) EventName() string {
-	return "contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved"
+func (e NewPersonalRecordAchieved) EventName() string {
+	return "contracts.core.workout_execution.v1.newPersonalRecordAchieved"
 }
 
 // BodyMetricUpdated is published if user updates weight at the end of a session.
@@ -70,6 +70,6 @@ type BodyMetricUpdated struct {
 }
 
 // EventName returns the CloudEvent type for BodyMetricUpdated.
-func (e *BodyMetricUpdated) EventName() string {
-	return "contracts.core.workout_execution.v1.event.BodyMetricUpdated"
+func (e BodyMetricUpdated) EventName() string {
+	return "contracts.core.workout_execution.v1.bodyMetricUpdated"
 }
