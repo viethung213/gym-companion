@@ -35,14 +35,13 @@ flowchart LR
 
 ---
 
-### ⚪ Core Flow 2.1 — Mở App ngoài giờ tập (`Dashboard / Non-Workout Hours Flow`)
-- **Kích hoạt khi**: Học viên mở App vào các thời điểm ngoài khung giờ tập (`slot_time`).
-- **Hành vi hệ thống**: **KHÔNG gọi AI Agent** để tiết kiệm tài nguyên.
-- **Màn hình Dashboard hiển thị (đọc trực tiếp từ DB)**:
-  1. **Lộ trình hiện tại**: Hiển thị Tiến độ Lộ trình 4 tuần (Ví dụ: `Tuần 2 / 4 - Pha Overload`).
-  2. **Buổi tập sắp tới**: Hiển thị tóm tắt `SessionPlan` tiếp theo (`status = PENDING`) kèm đồng hồ đếm ngược / nhắc nhở khung giờ tập (`slot_time`).
-  3. **Tiến độ Tuần**: Tỷ lệ hoàn thành buổi tập trong tuần (Ví dụ: `3/4 buổi completed`).
-  4. **Các nút thao tác chủ động**: *"Xem chi tiết Lịch 4 tuần"*, *"Yêu cầu đổi lịch tập"* (`RegenerateSchedule`), *"Khai báo chấn thương mới"*.
+### ⚪ Core Flow 2.1 — Mở App ngoài giờ tập
+1. Khi hết plan, ngày rest, hoặc ngoài roadmap.
+2. Chọn list bài tập: **tự chọn** (FE gọi Exercise catalog) hoặc **yêu cầu Coach AI gợi ý** (FE gọi Coaching `SuggestAdHocSession` — read-only, không lưu DB).
+3. User được chỉnh sửa list (swap/add/remove/đổi sets/weight) trước khi bắt đầu.
+4. Bấm "Bắt đầu tập" → FE gọi Workout Execution.
+5. Xong buổi → Workout Execution phát event **`AdHocWorkoutCompleted`** (event mới, tách với `WorkoutSessionCompleted`).
+6. Coaching lắng nghe, backfill `SessionPlan status=COMPLETED` vào Roadmap `ACTIVE` (nếu có), phát `RoadmapAdjusted{reason: "ad_hoc_workout_completed"}`. **Không apply BR-AC-01**.
 
 ---
 
