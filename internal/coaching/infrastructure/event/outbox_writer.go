@@ -1,5 +1,7 @@
 // Package event holds the outbox writer that wraps coaching domain events
+
 // in CloudEvents envelopes and persists them via the outbox repository.
+
 package event
 
 import (
