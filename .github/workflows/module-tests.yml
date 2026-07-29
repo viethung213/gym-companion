@@ -1,0 +1,128 @@
+name: Module Selective Tests CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  detect-changes:
+    name: Detect Changed Modules
+    runs-on: ubuntu-latest
+    outputs:
+      global: ${{ steps.filter.outputs.global }}
+      modules: ${{ steps.set-modules.outputs.modules }}
+      has_modules: ${{ steps.set-modules.outputs.has_modules }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            global:
+              - 'go.mod'
+              - 'go.sum'
+              - 'Dockerfile'
+              - 'Makefile'
+              - 'proto/buf.*'
+              - 'proto/buf.gen.yaml'
+              - 'internal/shared/**'
+              - 'internal/gen/**'
+              - '.github/workflows/**'
+            audio:
+              - 'internal/audio/**'
+              - 'proto/contracts/generic/audio/**'
+            auth:
+              - 'internal/auth/**'
+              - 'proto/contracts/generic/auth/**'
+            catalog:
+              - 'internal/catalog/**'
+              - 'proto/contracts/**/catalog/**'
+            coaching:
+              - 'internal/coaching/**'
+              - 'proto/contracts/core/coaching/**'
+            exercise:
+              - 'internal/exercise/**'
+              - 'proto/contracts/supporting/exercise/**'
+            notification:
+              - 'internal/notification/**'
+              - 'proto/contracts/generic/notification/**'
+            nutrition:
+              - 'internal/nutrition/**'
+              - 'proto/contracts/core/nutrition/**'
+            profile:
+              - 'internal/profile/**'
+              - 'proto/contracts/supporting/profile/**'
+            workout_execution:
+              - 'internal/workout_execution/**'
+              - 'proto/contracts/core/workout_execution/**'
+
+      - name: Compute Target Modules Matrix
+        id: set-modules
+        run: |
+          ALL_MODULES='["audio","auth","catalog","coaching","exercise","notification","nutrition","profile","workout_execution"]'
+          
+          if [ "${{ steps.filter.outputs.global }}" == "true" ]; then
+            echo "Global or core shared files changed. Running tests for ALL modules."
+            echo "modules=${ALL_MODULES}" >> $GITHUB_OUTPUT
+            echo "has_modules=true" >> $GITHUB_OUTPUT
+          else
+            SELECTED=()
+            [ "${{ steps.filter.outputs.audio }}" == "true" ] && SELECTED+=('"audio"')
+            [ "${{ steps.filter.outputs.auth }}" == "true" ] && SELECTED+=('"auth"')
+            [ "${{ steps.filter.outputs.catalog }}" == "true" ] && SELECTED+=('"catalog"')
+            [ "${{ steps.filter.outputs.coaching }}" == "true" ] && SELECTED+=('"coaching"')
+            [ "${{ steps.filter.outputs.exercise }}" == "true" ] && SELECTED+=('"exercise"')
+            [ "${{ steps.filter.outputs.notification }}" == "true" ] && SELECTED+=('"notification"')
+            [ "${{ steps.filter.outputs.nutrition }}" == "true" ] && SELECTED+=('"nutrition"')
+            [ "${{ steps.filter.outputs.profile }}" == "true" ] && SELECTED+=('"profile"')
+            [ "${{ steps.filter.outputs.workout_execution }}" == "true" ] && SELECTED+=('"workout_execution"')
+
+            if [ ${#SELECTED[@]} -eq 0 ]; then
+              echo "No module code changes detected. Skipping module tests."
+              echo "modules=[]" >> $GITHUB_OUTPUT
+              echo "has_modules=false" >> $GITHUB_OUTPUT
+            else
+              JSON_ARRAY=$(IFS=,; echo "[${SELECTED[*]}]")
+              echo "Selected modules to test: ${JSON_ARRAY}"
+              echo "modules=${JSON_ARRAY}" >> $GITHUB_OUTPUT
+              echo "has_modules=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  run-module-tests:
+    name: Test Module (${{ matrix.module }})
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.has_modules == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ json(needs.detect-changes.outputs.modules) }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Protobuf Stubs
+        run: make proto-gen
+
+      - name: Run Module Tests
+        run: make test-module MODULE=${{ matrix.module }}
