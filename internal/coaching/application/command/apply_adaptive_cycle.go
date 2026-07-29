@@ -9,9 +9,9 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
-	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 )
 
 // ApplyAdaptiveCycleCommand triggers UC-04.1 (BR-AC-04) evaluation.

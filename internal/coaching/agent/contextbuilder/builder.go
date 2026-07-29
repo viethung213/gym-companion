@@ -14,10 +14,10 @@ import (
 
 // Builder is a plain struct — inject its dependencies via NewBuilder.
 type Builder struct {
-	profile   port.UserProfileReader
-	workouts  port.WorkoutSessionReader
-	lookback  time.Duration
-	prompts   PromptRegistry
+	profile  port.UserProfileReader
+	workouts port.WorkoutSessionReader
+	lookback time.Duration
+	prompts  PromptRegistry
 }
 
 // NewBuilder wires a ContextBuilder.

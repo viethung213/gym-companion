@@ -9,8 +9,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
-	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
 // RegenerateScheduleCommand is the input to UC-02.3.

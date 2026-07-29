@@ -24,9 +24,9 @@ func (c *counterIDs) NewID() string {
 
 func strconvItoa(n int) string { return strconv.Itoa(n) }
 
-func TestMockCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
+func TestCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
 	clock := &fixedClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)} // Tuesday
-	m := NewMockCoachAgent(&counterIDs{}, clock)
+	m := NewCoachAgent(&counterIDs{}, clock)
 
 	cc := agent.CoachContext{
 		Flow:   agent.FlowInitiate4Week,
@@ -66,7 +66,7 @@ func TestMockCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
 	}
 }
 
-func TestMockCoachAgent_GenerateRoadmap_Deterministic(t *testing.T) {
+func TestCoachAgent_GenerateRoadmap_Deterministic(t *testing.T) {
 	clock := &fixedClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
 	cc := agent.CoachContext{
 		UserID: "user-beta",
@@ -76,12 +76,12 @@ func TestMockCoachAgent_GenerateRoadmap_Deterministic(t *testing.T) {
 		},
 	}
 
-	a1 := NewMockCoachAgent(&counterIDs{}, clock)
+	a1 := NewCoachAgent(&counterIDs{}, clock)
 	r1, err := a1.GenerateRoadmap(context.Background(), &cc, nil)
 	if err != nil {
 		t.Fatalf("gen1: %v", err)
 	}
-	a2 := NewMockCoachAgent(&counterIDs{}, clock)
+	a2 := NewCoachAgent(&counterIDs{}, clock)
 	r2, err := a2.GenerateRoadmap(context.Background(), &cc, nil)
 	if err != nil {
 		t.Fatalf("gen2: %v", err)

@@ -14,15 +14,15 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
-// MockCoachAgent implements agent.CoachAgent using deterministic templates.
-type MockCoachAgent struct {
+// CoachAgent implements agent.CoachAgent using deterministic templates.
+type CoachAgent struct {
 	ids   port.IDGenerator
 	clock port.Clock
 }
 
-// NewMockCoachAgent constructs the deterministic generator.
-func NewMockCoachAgent(ids port.IDGenerator, clock port.Clock) *MockCoachAgent {
-	return &MockCoachAgent{ids: ids, clock: clock}
+// NewCoachAgent constructs the deterministic generator.
+func NewCoachAgent(ids port.IDGenerator, clock port.Clock) *CoachAgent {
+	return &CoachAgent{ids: ids, clock: clock}
 }
 
 // phaseSpec defines RPE + relative volume/intensity per phase.
@@ -42,7 +42,7 @@ var defaultPhaseSpecs = []phaseSpec{
 
 // GenerateRoadmap creates a full 4-week roadmap. It is deterministic given
 // (userID, startDate, profile hash).
-func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *agent.CoachContext, _ *agent.Feedback) (*roadmap.Roadmap, error) {
+func (m *CoachAgent) GenerateRoadmap(ctx context.Context, cc *agent.CoachContext, _ *agent.Feedback) (*roadmap.Roadmap, error) {
 	if cc == nil {
 		return nil, fmt.Errorf("nil CoachContext")
 	}
@@ -119,7 +119,7 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *agent.CoachCon
 
 // RegeneratePending returns updated prescriptions for the given session IDs.
 // It uses the current roadmap snapshot to know phase & muscle groups.
-func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *agent.CoachContext, sessionIDs []string, _ *agent.Feedback) ([]*roadmap.SessionPlanInfo, error) {
+func (m *CoachAgent) RegeneratePending(ctx context.Context, cc *agent.CoachContext, sessionIDs []string, _ *agent.Feedback) ([]*roadmap.SessionPlanInfo, error) {
 	out := make([]*roadmap.SessionPlanInfo, 0, len(sessionIDs))
 	if cc == nil || cc.CurrentRoadmap == nil {
 		return out, nil
@@ -143,7 +143,7 @@ func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *agent.CoachC
 
 // Adapt is used by Trigger A / signal handlers. Phase-1 mock returns the same
 // mapping as RegeneratePending but tags reasoning with the decisionReason.
-func (m *MockCoachAgent) Adapt(ctx context.Context, cc *agent.CoachContext, decisionReason string, fb *Feedback) ([]*roadmap.SessionPlanInfo, error) {
+func (m *CoachAgent) Adapt(ctx context.Context, cc *agent.CoachContext, decisionReason string, fb *Feedback) ([]*roadmap.SessionPlanInfo, error) {
 	if cc == nil || cc.CurrentRoadmap == nil {
 		return nil, nil
 	}
@@ -166,7 +166,7 @@ type Feedback = agent.Feedback
 
 // SuggestAdHocSession returns a single-session suggestion. Read-only: no
 // persistence, no side effects. Deterministic given the hint + profile.
-func (m *MockCoachAgent) SuggestAdHocSession(ctx context.Context, cc *agent.CoachContext, hint agent.AdHocHint) (agent.SuggestedSession, error) {
+func (m *CoachAgent) SuggestAdHocSession(ctx context.Context, cc *agent.CoachContext, hint agent.AdHocHint) (agent.SuggestedSession, error) {
 	if cc == nil {
 		return agent.SuggestedSession{}, fmt.Errorf("nil CoachContext")
 	}
@@ -247,7 +247,7 @@ func shrinkToDuration(p roadmap.WorkoutPrescription, budgetMinutes int) roadmap.
 	return p
 }
 
-func (m *MockCoachAgent) buildSessionPlan(
+func (m *CoachAgent) buildSessionPlan(
 	roadmapID, weekPlanID, dayID, userID string,
 	date time.Time,
 	spec phaseSpec,

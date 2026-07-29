@@ -15,12 +15,12 @@ import (
 type FlowType string
 
 const (
-	FlowInitiate4Week      FlowType = "INITIATE_4_WEEK"
-	FlowRegenerate         FlowType = "REGENERATE_PENDING"
-	FlowAdaptiveCycle      FlowType = "ADAPTIVE_CYCLE"
-	FlowSignalHandler      FlowType = "SIGNAL_HANDLER"
-	FlowPostInjury         FlowType = "POST_INJURY_RECOVERY"
-	FlowDashboard          FlowType = "DASHBOARD_SUMMARY"
+	FlowInitiate4Week FlowType = "INITIATE_4_WEEK"
+	FlowRegenerate    FlowType = "REGENERATE_PENDING"
+	FlowAdaptiveCycle FlowType = "ADAPTIVE_CYCLE"
+	FlowSignalHandler FlowType = "SIGNAL_HANDLER"
+	FlowPostInjury    FlowType = "POST_INJURY_RECOVERY"
+	FlowDashboard     FlowType = "DASHBOARD_SUMMARY"
 	// FlowSuggestAdHocSession is a read-only flow: user asks the agent to
 	// suggest a single ad-hoc workout (outside the roadmap). Nothing is
 	// persisted; the frontend decides what to do with the suggestion.
@@ -51,10 +51,10 @@ type RoadmapSnapshot struct {
 
 // SessionSnapshot is a read-only view of one SessionPlan.
 type SessionSnapshot struct {
-	SessionPlanID  string
-	ScheduledDate  string // YYYY-MM-DD
-	Phase          roadmap.Phase
-	MuscleGroups   []string
+	SessionPlanID string
+	ScheduledDate string // YYYY-MM-DD
+	Phase         roadmap.Phase
+	MuscleGroups  []string
 }
 
 // Feedback carries reject reasons from Evaluator or Guard when a previous
@@ -75,11 +75,11 @@ type Issue struct {
 // AdHocHint is what the user (via chat or a simple form) tells the coach when
 // asking for a one-off session suggestion.
 type AdHocHint struct {
-	FreeText          string   // "help me pick chest exercises for 30 minutes"
-	MuscleGroups      []string // optional narrowing filter
+	FreeText           string   // "help me pick chest exercises for 30 minutes"
+	MuscleGroups       []string // optional narrowing filter
 	AvailableEquipment []string // may differ from profile (e.g. at hotel gym)
-	DurationMinutes   int      // 0 = no preference
-	IntensityHint     string   // "light" | "normal" | "hard" — optional
+	DurationMinutes    int      // 0 = no preference
+	IntensityHint      string   // "light" | "normal" | "hard" — optional
 }
 
 // SuggestedSession is the read-only output of FlowSuggestAdHocSession. It

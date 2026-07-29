@@ -10,8 +10,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
-	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
 // InitiateRoadmapCommand is the input to UC-02.1.
@@ -27,13 +27,13 @@ type InitiateRoadmapResult struct {
 // InitiateRoadmapHandler orchestrates: ContextBuilder → CoachAgent → Guard →
 // Save (Roadmap + Outbox event) in a single transaction.
 type InitiateRoadmapHandler struct {
-	tx        port.TransactionManager
-	repo      port.RoadmapRepository
-	agent     agent.CoachAgent
-	builder   *contextbuilder.Builder
-	guard     *guardrail.Engine
-	outbox    port.OutboxWriter
-	clock     port.Clock
+	tx      port.TransactionManager
+	repo    port.RoadmapRepository
+	agent   agent.CoachAgent
+	builder *contextbuilder.Builder
+	guard   *guardrail.Engine
+	outbox  port.OutboxWriter
+	clock   port.Clock
 }
 
 // NewInitiateRoadmapHandler wires the handler.

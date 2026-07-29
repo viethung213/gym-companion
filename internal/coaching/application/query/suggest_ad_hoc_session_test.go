@@ -61,7 +61,7 @@ func (stubWorkouts) GetSetLogs(context.Context, string, string, int) ([]port.Set
 func buildSuggestHandler(t *testing.T) *SuggestAdHocSessionHandler {
 	t.Helper()
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 8, 0, 0, 0, time.UTC)}
-	mockAgent := mock.NewMockCoachAgent(&incrIDs{}, clock)
+	mockAgent := mock.NewCoachAgent(&incrIDs{}, clock)
 	builder := contextbuilder.NewBuilder(
 		&stubProfile{p: port.Profile{
 			UserID:                "u-1",

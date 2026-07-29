@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/llm/mock"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
-	"github.com/viethung213/gym-companion/internal/coaching/agent/llm/mock"
-	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 )
 
 // ---- mocks ----
@@ -101,7 +101,7 @@ func buildHandler(t *testing.T) (*InitiateRoadmapHandler, *memRepo, *captureOutb
 	t.Helper()
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
 	ids := &incrIDs{}
-	mockAgent := mock.NewMockCoachAgent(ids, clock)
+	mockAgent := mock.NewCoachAgent(ids, clock)
 	builder := contextbuilder.NewBuilder(
 		&stubProfile{p: port.Profile{
 			UserID:                "user-1",
