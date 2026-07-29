@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/encoding/protojson"
-
 	profilev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event"
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	domainEvent "github.com/viethung213/gym-companion/internal/profile/domain/event"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type OutboxWriter struct {

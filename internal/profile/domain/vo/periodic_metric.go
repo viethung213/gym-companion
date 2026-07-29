@@ -43,26 +43,26 @@ func NewPeriodicMetric(id string, weightKg, bodyFatPercent float64, progressPhot
 	}, nil
 }
 
-func (p PeriodicMetric) ID() string {
+func (p *PeriodicMetric) ID() string {
 	return p.id
 }
 
-func (p PeriodicMetric) WeightKg() float64 {
+func (p *PeriodicMetric) WeightKg() float64 {
 	return p.weightKg
 }
 
-func (p PeriodicMetric) HeightCm() float64 {
+func (p *PeriodicMetric) HeightCm() float64 {
 	return p.heightCm
 }
 
-func (p PeriodicMetric) BodyFatPercent() float64 {
+func (p *PeriodicMetric) BodyFatPercent() float64 {
 	return p.bodyFatPercent
 }
 
-func (p PeriodicMetric) ProgressPhotoURL() string {
+func (p *PeriodicMetric) ProgressPhotoURL() string {
 	return p.progressPhotoURL
 }
 
-func (p PeriodicMetric) LoggedAt() time.Time {
+func (p *PeriodicMetric) LoggedAt() time.Time {
 	return p.loggedAt
 }

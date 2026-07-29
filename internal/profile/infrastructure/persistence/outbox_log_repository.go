@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-
-	"github.com/viethung213/gym-companion/internal/profile/application/port"
 )
 
 type GormOutboxLogRepository struct {

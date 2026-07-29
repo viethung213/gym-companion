@@ -304,6 +304,7 @@ func (p *UserProfile) UpdateProfile(
 	}
 }
 
+//nolint:gocritic // heavy value object passed by value
 func (p *UserProfile) AddPeriodicMetric(metric vo.PeriodicMetric) {
 	p.periodicMetrics = append(p.periodicMetrics, metric)
 	p.updatedAt = time.Now()

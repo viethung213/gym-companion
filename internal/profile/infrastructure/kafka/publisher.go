@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/segmentio/kafka-go"
-
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 )
 
