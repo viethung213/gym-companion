@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
 	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
 	"github.com/viethung213/gym-companion/internal/profile/domain/repository"
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PostgresUserProfileRepository struct {

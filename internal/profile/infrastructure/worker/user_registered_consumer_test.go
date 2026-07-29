@@ -8,7 +8,6 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"

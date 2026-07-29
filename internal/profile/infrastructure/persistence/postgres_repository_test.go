@@ -8,13 +8,12 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
 	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/persistence"
+	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {

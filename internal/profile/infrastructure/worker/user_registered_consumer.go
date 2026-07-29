@@ -9,14 +9,13 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"google.golang.org/protobuf/encoding/protojson"
-
 	authv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event"
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
 	"github.com/viethung213/gym-companion/internal/profile/domain/repository"
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type CloudEvent struct {
