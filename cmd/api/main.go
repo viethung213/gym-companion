@@ -74,6 +74,7 @@ func run() error {
 	}
 
 	lazyKP := &lazyKeyProvider{}
+
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			middleware.UnaryRecoveryInterceptor(),
@@ -82,7 +83,6 @@ func run() error {
 			middleware.UnaryRateLimitInterceptor(),
 		),
 	)
-
 	log.Printf("Starting gRPC server on port %s...\n", grpcPort)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -123,7 +123,6 @@ func run() error {
 	defer shutdownWorkout()
 
 	errChan := make(chan error, 2)
-
 	go func() {
 		if serveErr := grpcServer.Serve(lis); serveErr != nil {
 			errChan <- fmt.Errorf("grpc server serve: %w", serveErr)
@@ -132,7 +131,6 @@ func run() error {
 
 	// 2. Start HTTP Server (gRPC-Gateway)
 	log.Printf("Starting HTTP API gateway server on port %s...\n", httpPort)
-
 	mux := http.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
@@ -179,17 +177,14 @@ type lazyKeyProvider struct {
 func (l *lazyKeyProvider) GetPublicKeyPEM(ctx context.Context, kid string) (string, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-
 	if l.kp == nil {
 		return "", errors.New("key provider not initialized")
 	}
-
 	return l.kp.GetPublicKeyPEM(ctx, kid)
 }
 
 func (l *lazyKeyProvider) Set(kp middleware.KeyProvider) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
 	l.kp = kp
 }
