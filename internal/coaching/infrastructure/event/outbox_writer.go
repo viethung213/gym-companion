@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 )
