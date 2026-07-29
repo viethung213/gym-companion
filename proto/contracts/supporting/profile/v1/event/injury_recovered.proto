@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
+
+message InjuryRecoveredData {
+  string user_id = 1;
+  string injury_id = 2;
+  string muscle_group = 3;
+  string recovered_at = 4;
+}

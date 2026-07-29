@@ -37,7 +37,7 @@ service ProfileService {
   // Khai báo hồ sơ sức khỏe ban đầu (Onboarding)
   rpc SaveHealthProfile (contracts.supporting.profile.v1.message.SaveHealthProfileRequest) returns (contracts.supporting.profile.v1.message.SaveHealthProfileResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/profile"
+      post: "/api/v1/profile"
       body: "*"
     };
   }
@@ -45,14 +45,14 @@ service ProfileService {
   // Lấy thông tin hồ sơ chi tiết của người dùng
   rpc GetProfile (contracts.supporting.profile.v1.message.GetProfileRequest) returns (contracts.supporting.profile.v1.message.GetProfileResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/profile"
+      get: "/api/v1/profile"
     };
   }
 
   // Cập nhật thông tin hồ sơ
   rpc UpdateProfile (contracts.supporting.profile.v1.message.UpdateProfileRequest) returns (contracts.supporting.profile.v1.message.UpdateProfileResponse) {
     option (google.api.http) = {
-      put: "/api/v1/users/{user_id}/profile"
+      put: "/api/v1/profile"
       body: "*"
     };
   }
@@ -60,15 +60,22 @@ service ProfileService {
   // Cập nhật chỉ số cơ thể định kỳ (Cân nặng, Body Fat, ảnh tiến trình)
   rpc LogPeriodicMetrics (contracts.supporting.profile.v1.message.LogPeriodicMetricsRequest) returns (contracts.supporting.profile.v1.message.LogPeriodicMetricsResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/metrics"
+      post: "/api/v1/metrics"
       body: "*"
+    };
+  }
+
+  // Lấy toàn bộ lịch sử chỉ số cơ thể
+  rpc GetBodyMetricsHistory (contracts.supporting.profile.v1.message.GetBodyMetricsHistoryRequest) returns (contracts.supporting.profile.v1.message.GetBodyMetricsHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/metrics/history"
     };
   }
 
   // Báo cáo chấn thương mới gặp phải
   rpc ReportInjury (contracts.supporting.profile.v1.message.ReportInjuryRequest) returns (contracts.supporting.profile.v1.message.ReportInjuryResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/injuries"
+      post: "/api/v1/injuries"
       body: "*"
     };
   }
@@ -76,8 +83,15 @@ service ProfileService {
   // Khai báo đã phục hồi chấn thương
   rpc RecoverInjury (contracts.supporting.profile.v1.message.RecoverInjuryRequest) returns (contracts.supporting.profile.v1.message.RecoverInjuryResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/injuries/{injury_id}/recover"
+      post: "/api/v1/injuries/{injury_id}/recover"
       body: "*"
+    };
+  }
+
+  // Lấy toàn bộ lịch sử chấn thương
+  rpc GetInjuryHistory (contracts.supporting.profile.v1.message.GetInjuryHistoryRequest) returns (contracts.supporting.profile.v1.message.GetInjuryHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/injuries/history"
     };
   }
 }
