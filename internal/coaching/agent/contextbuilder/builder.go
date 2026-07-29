@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
@@ -31,7 +32,7 @@ func NewBuilder(profile port.UserProfileReader, workouts port.WorkoutSessionRead
 
 // Build produces a CoachContext for the given flow. currentRoadmap may be nil
 // (e.g. UC-02.1 InitiateRoadmap where no prior roadmap exists).
-func (b *Builder) Build(ctx context.Context, flow port.FlowType, userID string, currentRoadmap *roadmap.Roadmap, now time.Time) (*port.CoachContext, error) {
+func (b *Builder) Build(ctx context.Context, flow agent.FlowType, userID string, currentRoadmap *roadmap.Roadmap, now time.Time) (*agent.CoachContext, error) {
 	profile, err := b.profile.GetProfile(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -42,7 +43,7 @@ func (b *Builder) Build(ctx context.Context, flow port.FlowType, userID string, 
 		return nil, err
 	}
 
-	cc := &port.CoachContext{
+	cc := &agent.CoachContext{
 		Flow:           flow,
 		UserID:         userID,
 		Profile:        profile,
@@ -63,15 +64,15 @@ func (b *Builder) Build(ctx context.Context, flow port.FlowType, userID string, 
 	return cc, nil
 }
 
-func buildSnapshot(r *roadmap.Roadmap, now time.Time) *port.RoadmapSnapshot {
-	snap := &port.RoadmapSnapshot{
+func buildSnapshot(r *roadmap.Roadmap, now time.Time) *agent.RoadmapSnapshot {
+	snap := &agent.RoadmapSnapshot{
 		RoadmapID:      r.ID(),
 		Phase:          currentPhase(r, now),
 		CurrentWeekNum: currentWeekNum(r, now),
 	}
 	for _, s := range r.PendingSessionsFrom(now) {
 		info := s.Info()
-		snap.PendingSessions = append(snap.PendingSessions, port.SessionSnapshot{
+		snap.PendingSessions = append(snap.PendingSessions, agent.SessionSnapshot{
 			SessionPlanID: info.SessionPlanID,
 			ScheduledDate: info.ScheduledDate.Format("2006-01-02"),
 			MuscleGroups:  info.TargetMuscleGroups,

@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -27,7 +28,7 @@ type RegenerateScheduleResult struct {
 type RegenerateScheduleHandler struct {
 	tx      port.TransactionManager
 	repo    port.RoadmapRepository
-	agent   port.CoachAgent
+	agent   agent.CoachAgent
 	builder *contextbuilder.Builder
 	guard   *guardrail.Engine
 	outbox  port.OutboxWriter
@@ -38,7 +39,7 @@ type RegenerateScheduleHandler struct {
 func NewRegenerateScheduleHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
-	agent port.CoachAgent,
+	agent agent.CoachAgent,
 	builder *contextbuilder.Builder,
 	guard *guardrail.Engine,
 	outbox port.OutboxWriter,
@@ -67,7 +68,7 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 		return &RegenerateScheduleResult{Roadmap: rm}, nil
 	}
 
-	cc, err := h.builder.Build(ctx, port.FlowRegenerate, cmd.UserID, rm, now)
+	cc, err := h.builder.Build(ctx, agent.FlowRegenerate, cmd.UserID, rm, now)
 	if err != nil {
 		return nil, err
 	}

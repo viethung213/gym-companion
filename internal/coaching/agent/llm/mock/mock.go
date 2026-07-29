@@ -1,7 +1,7 @@
-// Package ai holds the CoachAgent adapters. MockCoachAgent is a deterministic
-// rules-based generator used in phase-1 (no LLM). It also serves as the
-// fallback when the real LLM adapter exceeds cost/time budget (D5).
-package ai
+// Package mock is the deterministic rules-based CoachAgent used in phase-1
+// (no LLM). It also serves as the fallback when the real LLM adapter exceeds
+// its cost/time budget (D5).
+package mock
 
 import (
 	"context"
@@ -9,11 +9,12 @@ import (
 	"hash/fnv"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
-// MockCoachAgent implements port.CoachAgent using deterministic templates.
+// MockCoachAgent implements agent.CoachAgent using deterministic templates.
 type MockCoachAgent struct {
 	ids   port.IDGenerator
 	clock port.Clock
@@ -41,7 +42,7 @@ var defaultPhaseSpecs = []phaseSpec{
 
 // GenerateRoadmap creates a full 4-week roadmap. It is deterministic given
 // (userID, startDate, profile hash).
-func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *port.CoachContext, _ *port.Feedback) (*roadmap.Roadmap, error) {
+func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *agent.CoachContext, _ *agent.Feedback) (*roadmap.Roadmap, error) {
 	if cc == nil {
 		return nil, fmt.Errorf("nil CoachContext")
 	}
@@ -118,7 +119,7 @@ func (m *MockCoachAgent) GenerateRoadmap(ctx context.Context, cc *port.CoachCont
 
 // RegeneratePending returns updated prescriptions for the given session IDs.
 // It uses the current roadmap snapshot to know phase & muscle groups.
-func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *port.CoachContext, sessionIDs []string, _ *port.Feedback) ([]*roadmap.SessionPlanInfo, error) {
+func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *agent.CoachContext, sessionIDs []string, _ *agent.Feedback) ([]*roadmap.SessionPlanInfo, error) {
 	out := make([]*roadmap.SessionPlanInfo, 0, len(sessionIDs))
 	if cc == nil || cc.CurrentRoadmap == nil {
 		return out, nil
@@ -142,7 +143,7 @@ func (m *MockCoachAgent) RegeneratePending(ctx context.Context, cc *port.CoachCo
 
 // Adapt is used by Trigger A / signal handlers. Phase-1 mock returns the same
 // mapping as RegeneratePending but tags reasoning with the decisionReason.
-func (m *MockCoachAgent) Adapt(ctx context.Context, cc *port.CoachContext, decisionReason string, fb *Feedback) ([]*roadmap.SessionPlanInfo, error) {
+func (m *MockCoachAgent) Adapt(ctx context.Context, cc *agent.CoachContext, decisionReason string, fb *Feedback) ([]*roadmap.SessionPlanInfo, error) {
 	if cc == nil || cc.CurrentRoadmap == nil {
 		return nil, nil
 	}
@@ -161,13 +162,13 @@ func (m *MockCoachAgent) Adapt(ctx context.Context, cc *port.CoachContext, decis
 }
 
 // Feedback is a type alias to shorten the signature above (avoid re-import).
-type Feedback = port.Feedback
+type Feedback = agent.Feedback
 
 // SuggestAdHocSession returns a single-session suggestion. Read-only: no
 // persistence, no side effects. Deterministic given the hint + profile.
-func (m *MockCoachAgent) SuggestAdHocSession(ctx context.Context, cc *port.CoachContext, hint port.AdHocHint) (port.SuggestedSession, error) {
+func (m *MockCoachAgent) SuggestAdHocSession(ctx context.Context, cc *agent.CoachContext, hint agent.AdHocHint) (agent.SuggestedSession, error) {
 	if cc == nil {
-		return port.SuggestedSession{}, fmt.Errorf("nil CoachContext")
+		return agent.SuggestedSession{}, fmt.Errorf("nil CoachContext")
 	}
 	// Pick the phase to size volume/intensity from — prefer current roadmap phase,
 	// otherwise default to Accumulation (moderate).
@@ -205,7 +206,7 @@ func (m *MockCoachAgent) SuggestAdHocSession(ctx context.Context, cc *port.Coach
 		presc = shrinkToDuration(presc, hint.DurationMinutes)
 	}
 
-	return port.SuggestedSession{
+	return agent.SuggestedSession{
 		MuscleGroups: muscles,
 		Prescription: presc,
 		Reasoning:    "ad-hoc suggestion (mock): phase=" + string(spec.phase) + " intensity=" + hint.IntensityHint,

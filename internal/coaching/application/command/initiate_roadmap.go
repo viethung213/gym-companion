@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -28,7 +29,7 @@ type InitiateRoadmapResult struct {
 type InitiateRoadmapHandler struct {
 	tx        port.TransactionManager
 	repo      port.RoadmapRepository
-	agent     port.CoachAgent
+	agent     agent.CoachAgent
 	builder   *contextbuilder.Builder
 	guard     *guardrail.Engine
 	outbox    port.OutboxWriter
@@ -39,7 +40,7 @@ type InitiateRoadmapHandler struct {
 func NewInitiateRoadmapHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
-	agent port.CoachAgent,
+	agent agent.CoachAgent,
 	builder *contextbuilder.Builder,
 	guard *guardrail.Engine,
 	outbox port.OutboxWriter,
@@ -68,7 +69,7 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmap
 	}
 
 	now := h.clock.Now()
-	cc, err := h.builder.Build(ctx, port.FlowInitiate4Week, cmd.UserID, nil, now)
+	cc, err := h.builder.Build(ctx, agent.FlowInitiate4Week, cmd.UserID, nil, now)
 	if err != nil {
 		return nil, fmt.Errorf("build context: %w", err)
 	}

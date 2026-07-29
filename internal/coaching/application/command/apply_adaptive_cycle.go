@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -29,7 +30,7 @@ type ApplyAdaptiveCycleResult struct {
 type ApplyAdaptiveCycleHandler struct {
 	tx      port.TransactionManager
 	repo    port.RoadmapRepository
-	agent   port.CoachAgent
+	agent   agent.CoachAgent
 	builder *contextbuilder.Builder
 	guard   *guardrail.Engine
 	outbox  port.OutboxWriter
@@ -41,7 +42,7 @@ type ApplyAdaptiveCycleHandler struct {
 func NewApplyAdaptiveCycleHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
-	agent port.CoachAgent,
+	agent agent.CoachAgent,
 	builder *contextbuilder.Builder,
 	guard *guardrail.Engine,
 	outbox port.OutboxWriter,
@@ -72,7 +73,7 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 		return nil, err
 	}
 	now := h.clock.Now()
-	cc, err := h.builder.Build(ctx, port.FlowAdaptiveCycle, cmd.UserID, rm, now)
+	cc, err := h.builder.Build(ctx, agent.FlowAdaptiveCycle, cmd.UserID, rm, now)
 	if err != nil {
 		return nil, err
 	}

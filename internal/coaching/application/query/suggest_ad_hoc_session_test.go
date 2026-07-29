@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/llm/mock"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai"
 )
 
 type fakeClock struct{ t time.Time }
@@ -60,7 +61,7 @@ func (stubWorkouts) GetSetLogs(context.Context, string, string, int) ([]port.Set
 func buildSuggestHandler(t *testing.T) *SuggestAdHocSessionHandler {
 	t.Helper()
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 8, 0, 0, 0, time.UTC)}
-	agent := ai.NewMockCoachAgent(&incrIDs{}, clock)
+	mockAgent := mock.NewMockCoachAgent(&incrIDs{}, clock)
 	builder := contextbuilder.NewBuilder(
 		&stubProfile{p: port.Profile{
 			UserID:                "u-1",
@@ -71,14 +72,14 @@ func buildSuggestHandler(t *testing.T) *SuggestAdHocSessionHandler {
 		stubWorkouts{},
 		contextbuilder.NewStaticPromptRegistry(),
 	)
-	return NewSuggestAdHocSessionHandler(&memRepo{}, agent, builder, clock)
+	return NewSuggestAdHocSessionHandler(&memRepo{}, mockAgent, builder, clock)
 }
 
 func TestSuggestAdHocSession_HappyPath_NoActiveRoadmap(t *testing.T) {
 	h := buildSuggestHandler(t)
 	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
-		Hint:   port.AdHocHint{FreeText: "quick back session"},
+		Hint:   agent.AdHocHint{FreeText: "quick back session"},
 	})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -98,7 +99,7 @@ func TestSuggestAdHocSession_HintOverridesMuscleGroups(t *testing.T) {
 	h := buildSuggestHandler(t)
 	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
-		Hint:   port.AdHocHint{MuscleGroups: []string{"legs"}},
+		Hint:   agent.AdHocHint{MuscleGroups: []string{"legs"}},
 	})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -113,7 +114,7 @@ func TestSuggestAdHocSession_DurationCap_ShrinksSets(t *testing.T) {
 	// 15 minutes - 10' overhead = 5' → floor(5/3) = 1 set max
 	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
-		Hint:   port.AdHocHint{DurationMinutes: 15},
+		Hint:   agent.AdHocHint{DurationMinutes: 15},
 	})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -130,10 +131,10 @@ func TestSuggestAdHocSession_DurationCap_ShrinksSets(t *testing.T) {
 func TestSuggestAdHocSession_IntensityHintAffectsRPE(t *testing.T) {
 	h := buildSuggestHandler(t)
 	light, _ := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
-		UserID: "u-1", Hint: port.AdHocHint{IntensityHint: "light"},
+		UserID: "u-1", Hint: agent.AdHocHint{IntensityHint: "light"},
 	})
 	hard, _ := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
-		UserID: "u-1", Hint: port.AdHocHint{IntensityHint: "hard"},
+		UserID: "u-1", Hint: agent.AdHocHint{IntensityHint: "hard"},
 	})
 	if light.EstimatedRPE >= hard.EstimatedRPE {
 		t.Errorf("light RPE (%v) should be < hard RPE (%v)", light.EstimatedRPE, hard.EstimatedRPE)

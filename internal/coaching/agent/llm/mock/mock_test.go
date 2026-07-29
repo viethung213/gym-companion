@@ -1,4 +1,4 @@
-package ai
+package mock
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/agent"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
@@ -25,10 +26,10 @@ func strconvItoa(n int) string { return strconv.Itoa(n) }
 
 func TestMockCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
 	clock := &fixedClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)} // Tuesday
-	agent := NewMockCoachAgent(&counterIDs{}, clock)
+	m := NewMockCoachAgent(&counterIDs{}, clock)
 
-	cc := port.CoachContext{
-		Flow:   port.FlowInitiate4Week,
+	cc := agent.CoachContext{
+		Flow:   agent.FlowInitiate4Week,
 		UserID: "user-alpha",
 		Profile: port.Profile{
 			UserID:                "user-alpha",
@@ -43,7 +44,7 @@ func TestMockCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
 		},
 	}
 
-	r, err := agent.GenerateRoadmap(context.Background(), &cc, nil)
+	r, err := m.GenerateRoadmap(context.Background(), &cc, nil)
 	if err != nil {
 		t.Fatalf("GenerateRoadmap: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestMockCoachAgent_GenerateRoadmap_4Weeks(t *testing.T) {
 
 func TestMockCoachAgent_GenerateRoadmap_Deterministic(t *testing.T) {
 	clock := &fixedClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
-	cc := port.CoachContext{
+	cc := agent.CoachContext{
 		UserID: "user-beta",
 		Profile: port.Profile{
 			UserID:                "user-beta",

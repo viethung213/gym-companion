@@ -1,8 +1,13 @@
-package port
+// Package agent groups the CoachAgent contract, its context payload, and
+// all agent-side implementation (prompt builder, LLM adapters, tools).
+// Coaching (application/command, application/query) depends only on the
+// exported facade types from this package — never on its sub-packages.
+package agent
 
 import (
 	"context"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
@@ -28,9 +33,9 @@ const (
 type CoachContext struct {
 	Flow             FlowType
 	UserID           string
-	Profile          Profile
-	RecentSessions   []WorkoutSession
-	InjuryStatus     []InjuryStatus
+	Profile          port.Profile
+	RecentSessions   []port.WorkoutSession
+	InjuryStatus     []port.InjuryStatus
 	CurrentRoadmap   *RoadmapSnapshot
 	Instructions     string // flow-specific instruction template rendered
 	OutputSchemaHint string // JSON schema hint (opaque to Go, used by the LLM adapter)

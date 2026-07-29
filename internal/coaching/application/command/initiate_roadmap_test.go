@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/contextbuilder"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai"
+	"github.com/viethung213/gym-companion/internal/coaching/agent/llm/mock"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 )
 
@@ -101,7 +101,7 @@ func buildHandler(t *testing.T) (*InitiateRoadmapHandler, *memRepo, *captureOutb
 	t.Helper()
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
 	ids := &incrIDs{}
-	agent := ai.NewMockCoachAgent(ids, clock)
+	mockAgent := mock.NewMockCoachAgent(ids, clock)
 	builder := contextbuilder.NewBuilder(
 		&stubProfile{p: port.Profile{
 			UserID:                "user-1",
@@ -114,7 +114,7 @@ func buildHandler(t *testing.T) (*InitiateRoadmapHandler, *memRepo, *captureOutb
 	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
 	repo := newMemRepo()
 	outbox := &captureOutbox{}
-	h := NewInitiateRoadmapHandler(fakeTx{}, repo, agent, builder, guard, outbox, clock)
+	h := NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, builder, guard, outbox, clock)
 	return h, repo, outbox
 }
 
