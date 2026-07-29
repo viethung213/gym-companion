@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -15,6 +16,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("Fatal: %v", err)
+	}
+}
+
+func run() error {
 	sqlFileFlag := flag.String("sql", "", "Path to 06-seed-exercises.sql file")
 	dbURLFlag := flag.String("db-url", "", "PostgreSQL database connection URL")
 	flag.Parse()
@@ -36,18 +43,17 @@ func main() {
 	}
 
 	if sqlPath == "" {
-		log.Fatalf("Error: 06-seed-exercises.sql file not found. Please ensure scripts/postgres-init/06-seed-exercises.sql exists.")
+		return errors.New("06-seed-exercises.sql file not found. Please ensure scripts/postgres-init/06-seed-exercises.sql exists")
 	}
 
-	absPath, err := filepath.Abs(sqlPath)
-	if err == nil {
+	if absPath, err := filepath.Abs(sqlPath); err == nil {
 		sqlPath = absPath
 	}
-	log.Printf("Using seed SQL file: %s", sqlPath)
 
+	log.Printf("Using seed SQL file: %s", sqlPath)
 	sqlBytes, err := os.ReadFile(sqlPath)
 	if err != nil {
-		log.Fatalf("Failed to read SQL seed file (%s): %v", sqlPath, err)
+		return fmt.Errorf("failed to read SQL seed file (%s): %w", sqlPath, err)
 	}
 
 	// 2. Resolve Database URL
@@ -74,7 +80,7 @@ func main() {
 	log.Printf("Connecting to PostgreSQL database...")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
-		log.Fatalf("Failed to open database connection: %v", err)
+		return fmt.Errorf("failed to open database connection: %w", err)
 	}
 	defer db.Close()
 
@@ -82,19 +88,19 @@ func main() {
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		log.Fatalf("Failed to ping database (%s): %v", dbURL, err)
+		return fmt.Errorf("failed to ping database (%s): %w", dbURL, err)
 	}
 
 	log.Printf("Executing 06-seed-exercises.sql into PostgreSQL (exercise schema)...")
-
 	execCtx, execCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer execCancel()
 
 	if _, err := db.ExecContext(execCtx, string(sqlBytes)); err != nil {
-		log.Fatalf("Failed to execute SQL seed script: %v", err)
+		return fmt.Errorf("failed to execute SQL seed script: %w", err)
 	}
 
 	fmt.Println("==================================================")
 	fmt.Println("🎉 Standalone Database Seeding for Exercise Completed!")
 	fmt.Println("==================================================")
+	return nil
 }

@@ -3,6 +3,7 @@ package persistence
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -11,185 +12,337 @@ import (
 // ---------- Roadmap ----------
 
 func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
+
 	if r == nil {
+
 		return roadmapRecord{}
+
 	}
+
 	info := r.Info()
+
 	return roadmapRecord{
+
 		RoadmapID: info.RoadmapID,
-		UserID:    info.UserID,
-		Status:    string(info.Status),
+
+		UserID: info.UserID,
+
+		Status: string(info.Status),
+
 		StartDate: info.StartDate,
-		EndDate:   info.EndDate,
+
+		EndDate: info.EndDate,
+
 		CreatedAt: info.CreatedAt,
+
 		UpdatedAt: info.UpdatedAt,
 	}
+
 }
 
 func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.Roadmap, error) {
+
 	if rec == nil {
-		return nil, fmt.Errorf("nil roadmapRecord")
+
+		return nil, errors.New("nil roadmapRecord")
+
 	}
-	return roadmap.RehydrateRoadmap(&roadmap.RoadmapInfo{
+
+	return roadmap.RehydrateRoadmap(&roadmap.Info{
+
 		RoadmapID: rec.RoadmapID,
-		UserID:    rec.UserID,
-		Status:    roadmap.RoadmapStatus(rec.Status),
+
+		UserID: rec.UserID,
+
+		Status: roadmap.Status(rec.Status),
+
 		StartDate: rec.StartDate,
-		EndDate:   rec.EndDate,
+
+		EndDate: rec.EndDate,
+
 		CreatedAt: rec.CreatedAt,
+
 		UpdatedAt: rec.UpdatedAt,
 	}, weeks)
+
 }
 
 // ---------- WeekPlan ----------
 
 func toWeekPlanRecord(w *roadmap.WeekPlan) weekPlanRecord {
+
 	if w == nil {
+
 		return weekPlanRecord{}
+
 	}
+
 	info := w.Info()
+
 	return weekPlanRecord{
-		WeekPlanID:      info.WeekPlanID,
-		RoadmapID:       info.RoadmapID,
-		UserID:          info.UserID,
-		WeekNumber:      int16(info.WeekNumber),
-		Phase:           string(info.Phase),
-		TargetRPE:       info.TargetRPE,
-		StartDate:       info.StartDate,
-		EndDate:         info.EndDate,
+
+		WeekPlanID: info.WeekPlanID,
+
+		RoadmapID: info.RoadmapID,
+
+		UserID: info.UserID,
+
+		WeekNumber: int16(info.WeekNumber),
+
+		Phase: string(info.Phase),
+
+		TargetRPE: info.TargetRPE,
+
+		StartDate: info.StartDate,
+
+		EndDate: info.EndDate,
+
 		MuscleSplitType: info.MuscleSplitType,
 	}
+
 }
 
 func fromWeekPlanRecord(rec *weekPlanRecord, days []*roadmap.DayPlan) (*roadmap.WeekPlan, error) {
+
 	if rec == nil {
-		return nil, fmt.Errorf("nil weekPlanRecord")
+
+		return nil, errors.New("nil weekPlanRecord")
+
 	}
+
 	return roadmap.RehydrateWeekPlan(&roadmap.WeekPlanInfo{
-		WeekPlanID:      rec.WeekPlanID,
-		RoadmapID:       rec.RoadmapID,
-		UserID:          rec.UserID,
-		WeekNumber:      int32(rec.WeekNumber),
-		Phase:           roadmap.Phase(rec.Phase),
-		TargetRPE:       rec.TargetRPE,
-		StartDate:       rec.StartDate,
-		EndDate:         rec.EndDate,
+
+		WeekPlanID: rec.WeekPlanID,
+
+		RoadmapID: rec.RoadmapID,
+
+		UserID: rec.UserID,
+
+		WeekNumber: int32(rec.WeekNumber),
+
+		Phase: roadmap.Phase(rec.Phase),
+
+		TargetRPE: rec.TargetRPE,
+
+		StartDate: rec.StartDate,
+
+		EndDate: rec.EndDate,
+
 		MuscleSplitType: rec.MuscleSplitType,
 	}, days)
+
 }
 
 // ---------- DayPlan ----------
 
 func toDayPlanRecord(d *roadmap.DayPlan) dayPlanRecord {
+
 	if d == nil {
+
 		return dayPlanRecord{}
+
 	}
+
 	info := d.Info()
+
 	return dayPlanRecord{
-		DayPlanID:     info.DayPlanID,
-		WeekPlanID:    info.WeekPlanID,
-		RoadmapID:     info.RoadmapID,
-		UserID:        info.UserID,
+
+		DayPlanID: info.DayPlanID,
+
+		WeekPlanID: info.WeekPlanID,
+
+		RoadmapID: info.RoadmapID,
+
+		UserID: info.UserID,
+
 		ScheduledDate: info.ScheduledDate,
 	}
+
 }
 
 func fromDayPlanRecord(rec *dayPlanRecord, sessions []*roadmap.SessionPlan) (*roadmap.DayPlan, error) {
+
 	if rec == nil {
-		return nil, fmt.Errorf("nil dayPlanRecord")
+
+		return nil, errors.New("nil dayPlanRecord")
+
 	}
+
 	return roadmap.RehydrateDayPlan(&roadmap.DayPlanInfo{
-		DayPlanID:     rec.DayPlanID,
-		WeekPlanID:    rec.WeekPlanID,
-		RoadmapID:     rec.RoadmapID,
-		UserID:        rec.UserID,
+
+		DayPlanID: rec.DayPlanID,
+
+		WeekPlanID: rec.WeekPlanID,
+
+		RoadmapID: rec.RoadmapID,
+
+		UserID: rec.UserID,
+
 		ScheduledDate: rec.ScheduledDate,
 	}, sessions)
+
 }
 
 // ---------- SessionPlan ----------
 
 func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
+
 	if s == nil {
-		return sessionPlanRecord{}, fmt.Errorf("nil SessionPlan")
+
+		return sessionPlanRecord{}, errors.New("nil SessionPlan")
+
 	}
+
 	info := s.Info()
+
 	prescBytes, err := json.Marshal(info.Prescription)
+
 	if err != nil {
+
 		return sessionPlanRecord{}, fmt.Errorf("marshal prescription: %w", err)
+
 	}
+
 	musclesBytes, err := json.Marshal(info.TargetMuscleGroups)
+
 	if err != nil {
+
 		return sessionPlanRecord{}, fmt.Errorf("marshal muscle groups: %w", err)
+
 	}
+
 	rec := sessionPlanRecord{
-		SessionPlanID:      info.SessionPlanID,
-		DayPlanID:          info.DayPlanID,
-		WeekPlanID:         info.WeekPlanID,
-		RoadmapID:          info.RoadmapID,
-		UserID:             info.UserID,
-		ScheduledDate:      info.ScheduledDate,
-		SlotTime:           info.SlotTime,
-		Status:             string(info.Status),
+
+		SessionPlanID: info.SessionPlanID,
+
+		DayPlanID: info.DayPlanID,
+
+		WeekPlanID: info.WeekPlanID,
+
+		RoadmapID: info.RoadmapID,
+
+		UserID: info.UserID,
+
+		ScheduledDate: info.ScheduledDate,
+
+		SlotTime: info.SlotTime,
+
+		Status: string(info.Status),
+
 		TargetMuscleGroups: musclesBytes,
-		Prescription:       prescBytes,
-		Reasoning:          info.Reasoning,
-		GeneratedAt:        info.GeneratedAt,
+
+		Prescription: prescBytes,
+
+		Reasoning: info.Reasoning,
+
+		GeneratedAt: info.GeneratedAt,
 	}
+
 	if info.CompletedAt != nil {
+
 		rec.CompletedAt = sql.NullTime{Time: *info.CompletedAt, Valid: true}
+
 	}
+
 	if info.SessionSCR != nil {
+
 		rec.SessionSCR = sql.NullFloat64{Float64: float64(*info.SessionSCR), Valid: true}
+
 	}
+
 	if info.SessionDeltaRPE != nil {
+
 		rec.SessionDeltaRPE = sql.NullFloat64{Float64: float64(*info.SessionDeltaRPE), Valid: true}
+
 	}
+
 	return rec, nil
+
 }
 
 func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error) {
-	if rec == nil {
-		return nil, fmt.Errorf("nil sessionPlanRecord")
-	}
-	var presc roadmap.WorkoutPrescription
-	if len(rec.Prescription) > 0 {
-		if err := json.Unmarshal(rec.Prescription, &presc); err != nil {
-			return nil, fmt.Errorf("unmarshal prescription: %w", err)
-		}
-	}
-	var muscles []string
-	if len(rec.TargetMuscleGroups) > 0 {
-		if err := json.Unmarshal(rec.TargetMuscleGroups, &muscles); err != nil {
-			return nil, fmt.Errorf("unmarshal muscle groups: %w", err)
-		}
-	}
-	info := roadmap.SessionPlanInfo{
-		SessionPlanID:      rec.SessionPlanID,
-		DayPlanID:          rec.DayPlanID,
-		WeekPlanID:         rec.WeekPlanID,
-		RoadmapID:          rec.RoadmapID,
-		UserID:             rec.UserID,
-		ScheduledDate:      rec.ScheduledDate,
-		SlotTime:           rec.SlotTime,
-		Status:             roadmap.SessionPlanStatus(rec.Status),
-		TargetMuscleGroups: muscles,
-		Prescription:       presc,
-		Reasoning:          rec.Reasoning,
-		GeneratedAt:        rec.GeneratedAt,
-	}
-	if rec.CompletedAt.Valid {
-		t := rec.CompletedAt.Time
-		info.CompletedAt = &t
-	}
-	if rec.SessionSCR.Valid {
-		v := float32(rec.SessionSCR.Float64)
-		info.SessionSCR = &v
-	}
-	if rec.SessionDeltaRPE.Valid {
-		v := float32(rec.SessionDeltaRPE.Float64)
-		info.SessionDeltaRPE = &v
-	}
-	return roadmap.RehydrateSessionPlan(&info)
-}
 
+	if rec == nil {
+
+		return nil, errors.New("nil sessionPlanRecord")
+
+	}
+
+	var presc roadmap.WorkoutPrescription
+
+	if len(rec.Prescription) > 0 {
+
+		if err := json.Unmarshal(rec.Prescription, &presc); err != nil {
+
+			return nil, fmt.Errorf("unmarshal prescription: %w", err)
+
+		}
+
+	}
+
+	var muscles []string
+
+	if len(rec.TargetMuscleGroups) > 0 {
+
+		if err := json.Unmarshal(rec.TargetMuscleGroups, &muscles); err != nil {
+
+			return nil, fmt.Errorf("unmarshal muscle groups: %w", err)
+
+		}
+
+	}
+
+	info := roadmap.SessionPlanInfo{
+
+		SessionPlanID: rec.SessionPlanID,
+
+		DayPlanID: rec.DayPlanID,
+
+		WeekPlanID: rec.WeekPlanID,
+
+		RoadmapID: rec.RoadmapID,
+
+		UserID: rec.UserID,
+
+		ScheduledDate: rec.ScheduledDate,
+
+		SlotTime: rec.SlotTime,
+
+		Status: roadmap.SessionPlanStatus(rec.Status),
+
+		TargetMuscleGroups: muscles,
+
+		Prescription: presc,
+
+		Reasoning: rec.Reasoning,
+
+		GeneratedAt: rec.GeneratedAt,
+	}
+
+	if rec.CompletedAt.Valid {
+
+		t := rec.CompletedAt.Time
+
+		info.CompletedAt = &t
+
+	}
+
+	if rec.SessionSCR.Valid {
+
+		v := float32(rec.SessionSCR.Float64)
+
+		info.SessionSCR = &v
+
+	}
+
+	if rec.SessionDeltaRPE.Valid {
+
+		v := float32(rec.SessionDeltaRPE.Float64)
+
+		info.SessionDeltaRPE = &v
+
+	}
+
+	return roadmap.RehydrateSessionPlan(&info)
+
+}

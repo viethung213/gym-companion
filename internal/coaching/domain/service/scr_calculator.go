@@ -35,7 +35,9 @@ func (c *SCRCalculator) DeltaRPE(actualAvgRPE, targetRPE float64) float64 {
 }
 
 // EpleyOneRepMax returns the estimated one-rep max via Epley formula:
-//   1RM = weight * (1 + reps/30)
+//
+//	1RM = weight * (1 + reps/30)
+//
 // reps <= 0 or weight <= 0 returns 0.
 func (c *SCRCalculator) EpleyOneRepMax(weight float64, reps int) float64 {
 	if weight <= 0 || reps <= 0 {

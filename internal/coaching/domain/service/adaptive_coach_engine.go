@@ -29,29 +29,29 @@ const (
 // AdaptationDecision is a value object describing the recommended action.
 // Callers translate this into concrete SessionPlan mutations.
 type AdaptationDecision struct {
-	Kind       AdaptationKind
-	Reason     string
-	Params     AdaptationParams
+	Kind   AdaptationKind
+	Reason string
+	Params AdaptationParams
 }
 
 // AdaptationParams carries per-kind numeric knobs. Only the fields relevant to
 // Kind are meaningful; the rest are zero.
 type AdaptationParams struct {
-	WeightPctChange float64  // e.g. +0.025 → +5%
-	VolumePctChange float64  // e.g. -0.30 for Deload
-	SessionsToDrop  int      // for Express/reduce recommendation
+	WeightPctChange float64      // e.g. +0.025 → +5%
+	VolumePctChange float64      // e.g. -0.30 for Deload
+	SessionsToDrop  int          // for Express/reduce recommendation
 	StaleWeekday    time.Weekday // for B2 mismatch
-	SessionIDs      []string // affected session IDs
-	MuscleGroup     string   // for post-injury
+	SessionIDs      []string     // affected session IDs
+	MuscleGroup     string       // for post-injury
 }
 
 // WeeklyMetrics is the per-week aggregate used by Trigger A (BR-AC-04).
 type WeeklyMetrics struct {
 	WeekNumber      int32
-	SCR             float64  // Session Completion Rate (0..100)
-	AvgDeltaRPE     float64  // ΔRPE averaged across sessions
-	MaxActualRPE    float64  // Highest RPE observed
-	HighRPESessions int      // sessions with RPE ≥ 9.0
+	SCR             float64 // Session Completion Rate (0..100)
+	AvgDeltaRPE     float64 // ΔRPE averaged across sessions
+	MaxActualRPE    float64 // Highest RPE observed
+	HighRPESessions int     // sessions with RPE ≥ 9.0
 	TotalSessions   int
 }
 

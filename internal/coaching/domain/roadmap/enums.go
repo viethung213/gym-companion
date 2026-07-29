@@ -2,18 +2,18 @@
 // (WeekPlan, DayPlan, SessionPlan) with 4-tier DDD structure.
 package roadmap
 
-// RoadmapStatus is the lifecycle status of a Roadmap aggregate.
-type RoadmapStatus string
+// Status is the lifecycle status of a Roadmap aggregate.
+type Status string
 
 const (
-	RoadmapStatusActive    RoadmapStatus = "ACTIVE"
-	RoadmapStatusCompleted RoadmapStatus = "COMPLETED"
+	StatusActive    Status = "ACTIVE"
+	StatusCompleted Status = "COMPLETED"
 )
 
-// Valid reports whether s is a known RoadmapStatus.
-func (s RoadmapStatus) Valid() bool {
+// Valid reports whether s is a known Status.
+func (s Status) Valid() bool {
 	switch s {
-	case RoadmapStatusActive, RoadmapStatusCompleted:
+	case StatusActive, StatusCompleted:
 		return true
 	default:
 		return false
