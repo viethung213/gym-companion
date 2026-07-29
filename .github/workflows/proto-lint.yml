@@ -1,0 +1,37 @@
+name: Protobuf Lint
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'proto/**'
+      - '.github/workflows/proto-lint.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'proto/**'
+      - '.github/workflows/proto-lint.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  proto-lint:
+    name: Lint Protobuf Schemas
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Buf CLI
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Update Buf Schema Dependencies
+        run: buf dep update proto
+
+      - name: Lint Protobuf Files
+        uses: bufbuild/buf-lint-action@v1
+        with:
+          input: 'proto'
