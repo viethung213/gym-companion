@@ -124,5 +124,10 @@ jobs:
       - name: Generate Protobuf Stubs
         run: make proto-gen
 
+      - name: Start Test Infrastructure (Postgres & Kafka)
+        run: |
+          make test-env-up
+          sleep 5
+
       - name: Run Module Tests
         run: make test-module MODULE=${{ matrix.module }}
