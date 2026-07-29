@@ -64,11 +64,11 @@ func (s *JWTSigner) GenerateAccessToken(ctx context.Context, user *aggregate.Use
 	now := time.Now()
 	expiresAt := now.Add(s.accessTTL)
 	claims := jwt.MapClaims{
-		"iss":   s.issuer,
-		"sub":   user.ID(),
-		"roles": []string{user.Role()},
-		"iat":   now.Unix(),
-		"exp":   expiresAt.Unix(),
+		"iss":  s.issuer,
+		"sub":  user.ID(),
+		"role": user.Role(),
+		"iat":  now.Unix(),
+		"exp":  expiresAt.Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

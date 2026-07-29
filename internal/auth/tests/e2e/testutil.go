@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/shared/database"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 // getTestDB creates a connection to the test database for E2E verification.
@@ -52,6 +54,9 @@ func truncateTables(db *gorm.DB) {
 // startE2ETestServer spins up the full gRPC and HTTP Gateway servers on random ports.
 // Returns HTTP base URL, GORM db instance, and a cleanup function.
 func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
+	if os.Getenv("OAUTH_STATE_SECRET") == "" {
+		os.Setenv("OAUTH_STATE_SECRET", "test-oauth-state-secret-key-32bytes!")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 1. Database Connection via Monolith Registry
@@ -91,8 +96,9 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 
 	// 4. Bootstrap Auth module via Initialize
 	deps := auth.ModuleDeps{
-		DB:         rawSQL,
-		GRPCServer: grpcServer,
+		DB:            rawSQL,
+		GRPCServer:    grpcServer,
+		KafkaRegistry: sharedKafka.GetRegistry(),
 	}
 	shutdown, err := auth.Initialize(ctx, deps)
 	if err != nil {
