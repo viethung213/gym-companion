@@ -8,23 +8,23 @@ import (
 
 // PrescribedExercise is a single exercise line item within a WorkoutPrescription.
 type PrescribedExercise struct {
-	ExerciseID      string
-	ExerciseName    string
-	TargetSets      int32
-	TargetReps      int32
-	TargetWeight    float32
-	DurationSeconds int32
-	Notes           string
-	RestSetSec      int32
-	RestExerciseSec int32
-	TargetRPE       float32
+	ExerciseID      string  `json:"exercise_id"`
+	ExerciseName    string  `json:"exercise_name"`
+	TargetSets      int32   `json:"target_sets"`
+	TargetReps      int32   `json:"target_reps"`
+	TargetWeight    float32 `json:"target_weight"`
+	DurationSeconds int32   `json:"duration_seconds"`
+	Notes           string  `json:"notes"`
+	RestSetSec      int32   `json:"rest_set_sec"`
+	RestExerciseSec int32   `json:"rest_exercise_sec"`
+	TargetRPE       float32 `json:"target_rpe"`
 }
 
 // WorkoutPrescription is the value object describing the workout script.
 type WorkoutPrescription struct {
-	WarmUps       []PrescribedExercise
-	MainExercises []PrescribedExercise
-	CoolDowns     []PrescribedExercise
+	WarmUps       []PrescribedExercise `json:"warm_ups"`
+	MainExercises []PrescribedExercise `json:"main_exercises"`
+	CoolDowns     []PrescribedExercise `json:"cool_downs"`
 }
 
 // SessionPlanInfo is the value-object snapshot of a SessionPlan entity.
@@ -52,6 +52,7 @@ type SessionPlan struct {
 }
 
 // NewSessionPlan constructs a SessionPlan in PENDING status.
+//nolint:gocritic // hugeParam: SessionPlanInfo snapshot passed by value
 func NewSessionPlan(info SessionPlanInfo, now time.Time) (*SessionPlan, error) {
 	info = normalizeSessionInfo(info)
 	info.Status = SessionPlanStatusPending
@@ -69,6 +70,7 @@ func NewSessionPlan(info SessionPlanInfo, now time.Time) (*SessionPlan, error) {
 
 // RehydrateSessionPlan loads a SessionPlan from persistence without applying
 // lifecycle defaults.
+//nolint:gocritic // hugeParam: SessionPlanInfo snapshot passed by value
 func RehydrateSessionPlan(info SessionPlanInfo) (*SessionPlan, error) {
 	info = normalizeSessionInfo(info)
 	if !info.Status.Valid() {
@@ -178,6 +180,7 @@ func (s *SessionPlan) validate() error {
 	return nil
 }
 
+//nolint:gocritic // hugeParam: SessionPlanInfo snapshot passed by value
 func normalizeSessionInfo(info SessionPlanInfo) SessionPlanInfo {
 	info.SessionPlanID = strings.TrimSpace(info.SessionPlanID)
 	info.DayPlanID = strings.TrimSpace(info.DayPlanID)

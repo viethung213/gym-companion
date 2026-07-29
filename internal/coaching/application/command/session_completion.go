@@ -39,7 +39,13 @@ type CompleteSessionHandler struct {
 }
 
 // NewCompleteSessionHandler wires the handler.
-func NewCompleteSessionHandler(tx port.TransactionManager, repo port.RoadmapRepository, scr *service.SCRCalculator, outbox port.OutboxWriter, clock port.Clock) *CompleteSessionHandler {
+func NewCompleteSessionHandler(
+	tx port.TransactionManager,
+	repo port.RoadmapRepository,
+	scr *service.SCRCalculator,
+	outbox port.OutboxWriter,
+	clock port.Clock,
+) *CompleteSessionHandler {
 	if scr == nil {
 		scr = service.NewSCRCalculator()
 	}

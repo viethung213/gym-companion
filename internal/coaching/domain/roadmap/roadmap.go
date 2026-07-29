@@ -25,6 +25,7 @@ type Roadmap struct {
 
 // NewRoadmap constructs a new ACTIVE roadmap with the given weeks attached.
 // weeks may be nil or partial; final validation happens on Save (Persist).
+//nolint:gocritic // hugeParam: RoadmapInfo snapshot passed by value
 func NewRoadmap(info RoadmapInfo, weeks []*WeekPlan, now time.Time) (*Roadmap, error) {
 	info = normalizeRoadmapInfo(info)
 	info.Status = RoadmapStatusActive
@@ -39,6 +40,7 @@ func NewRoadmap(info RoadmapInfo, weeks []*WeekPlan, now time.Time) (*Roadmap, e
 }
 
 // RehydrateRoadmap loads a Roadmap from persistence with its children.
+//nolint:gocritic // hugeParam: RoadmapInfo snapshot passed by value
 func RehydrateRoadmap(info RoadmapInfo, weeks []*WeekPlan) (*Roadmap, error) {
 	info = normalizeRoadmapInfo(info)
 	if !info.Status.Valid() {
@@ -151,6 +153,7 @@ func (r *Roadmap) ValidateFullStructure() error {
 	return nil
 }
 
+//nolint:gocritic // hugeParam: RoadmapInfo snapshot passed by value
 func normalizeRoadmapInfo(info RoadmapInfo) RoadmapInfo {
 	info.RoadmapID = strings.TrimSpace(info.RoadmapID)
 	info.UserID = strings.TrimSpace(info.UserID)

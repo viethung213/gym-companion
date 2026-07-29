@@ -91,8 +91,8 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 		if s.Status() != roadmap.SessionPlanStatusPending {
 			continue
 		}
-		if err := s.RewritePrescription(d.Prescription, d.TargetMuscleGroups, d.Reasoning, now); err != nil {
-			return nil, err
+		if rwErr := s.RewritePrescription(d.Prescription, d.TargetMuscleGroups, d.Reasoning, now); rwErr != nil {
+			return nil, rwErr
 		}
 	}
 
@@ -102,8 +102,8 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		rm.Touch(now)
-		if err := h.repo.Save(txCtx, rm); err != nil {
-			return err
+		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
+			return saveErr
 		}
 		evt := &domainevent.RoadmapAdjusted{
 			RoadmapID:  rm.ID(),

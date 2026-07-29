@@ -77,8 +77,8 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmap
 	if err != nil {
 		return nil, fmt.Errorf("agent generate: %w", err)
 	}
-	if err := draft.ValidateFullStructure(); err != nil {
-		return nil, fmt.Errorf("draft structure: %w", err)
+	if valErr := draft.ValidateFullStructure(); valErr != nil {
+		return nil, fmt.Errorf("draft structure: %w", valErr)
 	}
 
 	if result := h.guard.Check(draft); result.Status != guardrail.StatusApproved {
@@ -87,16 +87,16 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmap
 
 	var out *InitiateRoadmapResult
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err := h.repo.Save(txCtx, draft); err != nil {
-			return err
+		if saveErr := h.repo.Save(txCtx, draft); saveErr != nil {
+			return saveErr
 		}
 		evt := &domainevent.RoadmapInitiated{
 			RoadmapID:   draft.ID(),
 			UserID:      draft.UserID(),
 			InitiatedAt: now,
 		}
-		if err := h.outbox.Enqueue(txCtx, draft.UserID(), evt); err != nil {
-			return err
+		if enqErr := h.outbox.Enqueue(txCtx, draft.UserID(), evt); enqErr != nil {
+			return enqErr
 		}
 		out = &InitiateRoadmapResult{Roadmap: draft}
 		return nil

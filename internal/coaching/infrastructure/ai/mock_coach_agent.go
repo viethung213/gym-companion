@@ -241,7 +241,13 @@ func shrinkToDuration(p roadmap.WorkoutPrescription, budgetMinutes int) roadmap.
 	return p
 }
 
-func (m *MockCoachAgent) buildSessionPlan(roadmapID, weekPlanID, dayID, userID string, date time.Time, spec phaseSpec, injuries []port.InjuryStatus, now time.Time) (*roadmap.SessionPlan, error) {
+func (m *MockCoachAgent) buildSessionPlan(
+	roadmapID, weekPlanID, dayID, userID string,
+	date time.Time,
+	spec phaseSpec,
+	injuries []port.InjuryStatus,
+	now time.Time,
+) (*roadmap.SessionPlan, error) {
 	muscles := []string{"chest", "back"}
 	presc := buildPrescription(spec, injuries)
 	sp, err := roadmap.NewSessionPlan(roadmap.SessionPlanInfo{

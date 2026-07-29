@@ -108,6 +108,7 @@ func (d *DayPlan) validate() error {
 	return nil
 }
 
+//nolint:gocritic // hugeParam: DayPlanInfo snapshot passed by value
 func normalizeDayInfo(info DayPlanInfo) DayPlanInfo {
 	info.DayPlanID = strings.TrimSpace(info.DayPlanID)
 	info.WeekPlanID = strings.TrimSpace(info.WeekPlanID)

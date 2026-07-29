@@ -91,8 +91,8 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 		if s.Status() != roadmap.SessionPlanStatusPending {
 			continue // Someone else finalized it — respect D3.
 		}
-		if err := s.RewritePrescription(draft.Prescription, draft.TargetMuscleGroups, draft.Reasoning, now); err != nil {
-			return nil, fmt.Errorf("rewrite session %s: %w", draft.SessionPlanID, err)
+		if rwErr := s.RewritePrescription(draft.Prescription, draft.TargetMuscleGroups, draft.Reasoning, now); rwErr != nil {
+			return nil, fmt.Errorf("rewrite session %s: %w", draft.SessionPlanID, rwErr)
 		}
 	}
 
@@ -102,8 +102,8 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		rm.Touch(now)
-		if err := h.repo.Save(txCtx, rm); err != nil {
-			return err
+		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
+			return saveErr
 		}
 		evt := &domainevent.RoadmapAdjusted{
 			RoadmapID:  rm.ID(),
