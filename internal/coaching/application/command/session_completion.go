@@ -76,7 +76,18 @@ func NewCompleteSessionHandler(
 
 	}
 
-	return &CompleteSessionHandler{tx: tx, repo: repo, scr: scr, outbox: outbox, clock: clock}
+	return &CompleteSessionHandler{
+
+		tx: tx,
+
+		repo: repo,
+
+		scr: scr,
+
+		outbox: outbox,
+
+		clock: clock,
+	}
 
 }
 
@@ -202,7 +213,16 @@ type AbortSessionHandler struct {
 
 func NewAbortSessionHandler(tx port.TransactionManager, repo port.RoadmapRepository, outbox port.OutboxWriter, clock port.Clock) *AbortSessionHandler {
 
-	return &AbortSessionHandler{tx: tx, repo: repo, outbox: outbox, clock: clock}
+	return &AbortSessionHandler{
+
+		tx: tx,
+
+		repo: repo,
+
+		outbox: outbox,
+
+		clock: clock,
+	}
 
 }
 

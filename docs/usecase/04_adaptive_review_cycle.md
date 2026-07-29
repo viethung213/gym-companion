@@ -19,7 +19,8 @@
 2. System áp dụng quy tắc thích ứng định kỳ [BR-AC-04](../NGHIEP_VU_COT_LOI_BABOK.md#L135):
    - **Tăng tải lũy tiến** ($SCR \ge 80\%$ và $-1 \le \Delta RPE \le +1$): Tự động tăng mức tạ gợi ý $+2.5\% \rightarrow +5\%$ cho tuần kế tiếp.
    - **Quản lý mệt mỏi & Deload** ($RPE_{\text{Thực tế}} \ge 9.0$ liên tục 3 buổi hoặc $\Delta RPE \ge +2.0$): Tự động kích hoạt tuần Deload (giảm 30% volume & 10% tạ).
-   - **Thích �23. System cập nhật `prescription` bài tập của các `SessionPlan` tuần kế tiếp, phát `RoadmapAdjusted`.
+   - **Thích ứng linh hoạt** ($50\% \le SCR < 80\%$): Giữ nguyên mức tạ, điều chỉnh rep/set nếu cần, gợi ý tăng buổi tập/tuần nếu user đồng ý.
+3. System cập nhật `prescription` bài tập của các `SessionPlan` tuần kế tiếp, phát `RoadmapAdjusted`.
 
 **Alternative Flow**
 - A1: User từ chối giảm số buổi tập khi $SCR < 50\%$ ➔ System giữ nguyên cấu trúc số buổi cũ, nhưng tự động chuyển sang giáo án Express 30 phút để hỗ trợ hoàn thành.
@@ -144,18 +145,5 @@
 - E1: Sau 3 buổi mà $RPE > 7$ hoặc $Form\ Score < 80\%$ ➔ Kéo dài giai đoạn bảo vệ cho đến khi đạt đủ điều kiện an toàn.
 
 **Postcondition**: Người tập quay lại chu kỳ tăng tải bình thường sau khi phục hồi an toàn.
-
-**Domain Events**: `RoadmapAdjusted`�t hiện Signal B4 khi kết thúc buổi tập cuối Tuần 2.
-2. System gửi Push Notification / In-App Alert thông báo cho User.
-3. Khi User tương tác qua gRPC Stream, System đề xuất 3 phương án phá Plateau:
-   - (a) Đổi biến thể bài tập tương đương.
-   - (b) Điều chỉnh dải Rep/Set (VD: chuyển từ 8–10 reps sang 4–6 reps heavy).
-   - (c) Thay đổi thứ tự bài tập trong buổi tập.
-4. User chọn phương án và bấm Confirm ➔ System cập nhật `prescription` trong `ScheduleDay` của các tuần tới.
-
-**Error / Edge Cases**
-- E1: User không tương tác ➔ Tự động áp dụng đổi biến thể bài tập tương đương cho tuần tới.
-
-**Postcondition**: Bài tập tuần tới được làm mới để phá vỡ giai đoạn đình trệ.
 
 **Domain Events**: `RoadmapAdjusted`

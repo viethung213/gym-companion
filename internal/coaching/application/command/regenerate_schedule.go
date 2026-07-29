@@ -66,7 +66,22 @@ func NewRegenerateScheduleHandler(
 
 ) *RegenerateScheduleHandler {
 
-	return &RegenerateScheduleHandler{tx: tx, repo: repo, agent: agent, builder: builder, guard: guard, outbox: outbox, clock: clock}
+	return &RegenerateScheduleHandler{
+
+		tx: tx,
+
+		repo: repo,
+
+		agent: agent,
+
+		builder: builder,
+
+		guard: guard,
+
+		outbox: outbox,
+
+		clock: clock,
+	}
 
 }
 

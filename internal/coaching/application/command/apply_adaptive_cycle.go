@@ -80,9 +80,21 @@ func NewApplyAdaptiveCycleHandler(
 
 	return &ApplyAdaptiveCycleHandler{
 
-		tx: tx, repo: repo, agent: agent, builder: builder,
+		tx: tx,
 
-		guard: guard, outbox: outbox, clock: clock, engine: engine,
+		repo: repo,
+
+		agent: agent,
+
+		builder: builder,
+
+		guard: guard,
+
+		outbox: outbox,
+
+		clock: clock,
+
+		engine: engine,
 	}
 
 }

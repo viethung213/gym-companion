@@ -68,9 +68,19 @@ func NewInitiateRoadmapHandler(
 
 	return &InitiateRoadmapHandler{
 
-		tx: tx, repo: repo, agent: agent, builder: builder,
+		tx: tx,
 
-		guard: guard, outbox: outbox, clock: clock,
+		repo: repo,
+
+		agent: agent,
+
+		builder: builder,
+
+		guard: guard,
+
+		outbox: outbox,
+
+		clock: clock,
 	}
 
 }

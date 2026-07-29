@@ -83,63 +83,33 @@ func initiatePrompt(cc *agent.CoachContext) string {
 
 	return fmt.Sprintf(`Task: Generate a 4-week training roadmap for user %s.
 
-
-
 Profile:
-
-
 
   Primary goal: %s
 
-
-
   Available equipment: %v
-
-
 
   Preferred muscle groups: %v
 
-
-
   Available slots: %v
-
-
 
   Active injuries: %d
 
-
-
 Constraints:
-
-
 
   - Max 6 training sessions per week (BR-AC-01).
 
-
-
   - Week 1: ACCUMULATION (target RPE 6-7).
-
-
 
   - Week 2: OVERLOAD (target RPE 7-8).
 
-
-
   - Week 3: PEAK (target RPE 8-9).
-
-
 
   - Week 4: DELOAD (target RPE 5-6, volume -30%%, intensity -10%%).
 
-
-
   - Include warmup (5-10 min) and cooldown (5 min) per session.
 
-
-
   - Weight suggestions must be within ±30%% of history/PR.
-
-
 
 Output the roadmap as JSON conforming to the schema.`,
 
@@ -168,11 +138,7 @@ func regeneratePrompt(cc *agent.CoachContext) string {
 
 	return fmt.Sprintf(`Task: Regenerate PENDING sessions for user %s in response to profile/injury changes.
 
-
-
 Only touch sessions listed in current_roadmap.pending_sessions. Preserve COMPLETED sessions untouched.
-
-
 
 Respect the same guardrails as roadmap initiation.`,
 
@@ -190,11 +156,7 @@ func adaptiveCyclePrompt(cc *agent.CoachContext) string {
 
 	return fmt.Sprintf(`Task: Apply an adaptive-cycle adjustment (BR-AC-04) for user %s based on last week's metrics.
 
-
-
 The orchestrator has already decided which rule applies. Your job is to translate that decision into
-
-
 
 concrete SessionPlan prescriptions for the next week's PENDING sessions.`,
 
@@ -211,8 +173,6 @@ func signalPrompt(cc *agent.CoachContext) string {
 	}
 
 	return fmt.Sprintf(`Task: Respond to a behavioral signal (B1-B4) for user %s.
-
-
 
 Adjust upcoming PENDING sessions per the signal reason. Explain reasoning in the reasoning field of each session.`,
 
@@ -234,15 +194,9 @@ func postInjuryPrompt(cc *agent.CoachContext) string {
 
 For the next 3 sessions targeting the recovered muscle group:
 
-
-
   - Cap weight at 50%% of pre-injury PR.
 
-
-
   - Prefer machine/cable/bodyweight exercises over free weights.
-
-
 
   - Target RPE ≤ 7 for AI-verified form ≥ 80%%.`,
 
@@ -260,23 +214,13 @@ func suggestAdHocPrompt(cc *agent.CoachContext) string {
 
 	return fmt.Sprintf(`Task: Suggest a single ad-hoc workout for user %s.
 
-
-
 This is a read-only suggestion — nothing will be persisted. Respect:
-
-
 
   - Injuries: %d active
 
-
-
   - Available equipment: %v
 
-
-
   - User preferences: %v
-
-
 
 Output a WorkoutPrescription (warmups + main + cooldowns) and 1-line reasoning.`,
 

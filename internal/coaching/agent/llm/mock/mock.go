@@ -292,7 +292,11 @@ func (m *CoachAgent) Adapt(ctx context.Context, cc *agent.CoachContext, decision
 type Feedback = agent.Feedback
 
 // SuggestAdHocSession returns a single-session suggestion. Read-only: no
+
+// persistence.
+
 //
+
 //nolint:gocritic // hint is a value object copy to protect agent context immutability
 func (m *CoachAgent) SuggestAdHocSession(_ context.Context, cc *agent.CoachContext, hint agent.AdHocHint) (agent.SuggestedSession, error) {
 

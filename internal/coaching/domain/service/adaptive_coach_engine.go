@@ -69,7 +69,6 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 		return AdaptationDecision{Kind: AdaptationNoOp, Reason: "no data"}
 	}
 	last := weeks[len(weeks)-1]
-
 	// Case 3: SCR < 50% for 2 consecutive weeks → propose reduce/Express.
 	if len(weeks) >= 2 {
 		prev := weeks[len(weeks)-2]
@@ -81,7 +80,6 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 			}
 		}
 	}
-
 	// Case 2: Excessive fatigue → Deload.
 	// Trigger if 3+ sessions with RPE ≥ 9.0 OR avgΔRPE ≥ +2.0.
 	if last.HighRPESessions >= 3 || last.AvgDeltaRPE >= 2.0 {
@@ -94,7 +92,6 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 			},
 		}
 	}
-
 	// Case 1: Progressive overload.
 	// SCR ≥ 80% AND -1 ≤ ΔRPE ≤ +1.
 	if last.SCR >= 80.0 && last.AvgDeltaRPE >= -1.0 && last.AvgDeltaRPE <= 1.0 {
@@ -141,7 +138,6 @@ func (e *AdaptiveCoachEngine) DetectSignalB1(history []SessionOutcome, now time.
 			break
 		}
 	}
-
 	// 7 days without a completed session.
 	sevenDaysAgo := now.AddDate(0, 0, -7)
 	lastCompletedTooOld := true
