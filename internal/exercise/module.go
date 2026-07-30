@@ -60,6 +60,31 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	searchHandler := query.NewSearchExercisesHandler(repo)
 	metadataHandler := query.NewGetCatalogMetadataHandler(repo)
 
+	// Catalog CRUD handlers
+	createBodyPartHandler := command.NewCreateBodyPartHandler(repo, ids)
+	updateBodyPartHandler := command.NewUpdateBodyPartHandler(repo)
+	deleteBodyPartHandler := command.NewDeleteBodyPartHandler(repo)
+	getBodyPartHandler := query.NewGetBodyPartHandler(repo)
+	listBodyPartsHandler := query.NewListBodyPartsHandler(repo)
+
+	createEquipmentHandler := command.NewCreateEquipmentHandler(repo, ids)
+	updateEquipmentHandler := command.NewUpdateEquipmentHandler(repo)
+	deleteEquipmentHandler := command.NewDeleteEquipmentHandler(repo)
+	getEquipmentHandler := query.NewGetEquipmentHandler(repo)
+	listEquipmentsHandler := query.NewListEquipmentsHandler(repo)
+
+	createMuscleHandler := command.NewCreateMuscleHandler(repo, ids)
+	updateMuscleHandler := command.NewUpdateMuscleHandler(repo)
+	deleteMuscleHandler := command.NewDeleteMuscleHandler(repo)
+	getMuscleHandler := query.NewGetMuscleHandler(repo)
+	listMusclesHandler := query.NewListMusclesHandler(repo)
+
+	createTagHandler := command.NewCreateTagHandler(repo, ids)
+	updateTagHandler := command.NewUpdateTagHandler(repo)
+	deleteTagHandler := command.NewDeleteTagHandler(repo)
+	getTagHandler := query.NewGetTagHandler(repo)
+	listTagsHandler := query.NewListTagsHandler(repo)
+
 	// Initialize gRPC Handler and Register Service
 	grpcHandler := transport.NewExerciseServer(
 		createHandler,
@@ -70,6 +95,26 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getHandler,
 		searchHandler,
 		metadataHandler,
+		createBodyPartHandler,
+		updateBodyPartHandler,
+		deleteBodyPartHandler,
+		getBodyPartHandler,
+		listBodyPartsHandler,
+		createEquipmentHandler,
+		updateEquipmentHandler,
+		deleteEquipmentHandler,
+		getEquipmentHandler,
+		listEquipmentsHandler,
+		createMuscleHandler,
+		updateMuscleHandler,
+		deleteMuscleHandler,
+		getMuscleHandler,
+		listMusclesHandler,
+		createTagHandler,
+		updateTagHandler,
+		deleteTagHandler,
+		getTagHandler,
+		listTagsHandler,
 	)
 	exercisesvc.RegisterExerciseServiceServer(deps.GRPCServer, grpcHandler)
 

@@ -202,6 +202,31 @@ func (r *fakeRepository) GetMetadata(_ context.Context) (port.Metadata, error) {
 	return port.Metadata{}, nil
 }
 
+func (r *fakeRepository) CreateBodyPart(_ context.Context, _ *port.BodyPart) error { return nil }
+func (r *fakeRepository) GetBodyPart(_ context.Context, _ string) (*port.BodyPart, error) { return nil, nil }
+func (r *fakeRepository) ListBodyParts(_ context.Context, _, _ int) ([]port.BodyPart, int, error) { return nil, 0, nil }
+func (r *fakeRepository) UpdateBodyPart(_ context.Context, _ *port.BodyPart) error { return nil }
+func (r *fakeRepository) DeleteBodyPart(_ context.Context, _ string) error { return nil }
+
+func (r *fakeRepository) CreateEquipment(_ context.Context, _ *port.Equipment) error { return nil }
+func (r *fakeRepository) GetEquipment(_ context.Context, _ string) (*port.Equipment, error) { return nil, nil }
+func (r *fakeRepository) ListEquipments(_ context.Context, _, _ int) ([]port.Equipment, int, error) { return nil, 0, nil }
+func (r *fakeRepository) UpdateEquipment(_ context.Context, _ *port.Equipment) error { return nil }
+func (r *fakeRepository) DeleteEquipment(_ context.Context, _ string) error { return nil }
+
+func (r *fakeRepository) CreateMuscle(_ context.Context, _ *port.Muscle) error { return nil }
+func (r *fakeRepository) GetMuscle(_ context.Context, _ string) (*port.Muscle, error) { return nil, nil }
+func (r *fakeRepository) ListMuscles(_ context.Context, _ string, _, _ int) ([]port.Muscle, int, error) { return nil, 0, nil }
+func (r *fakeRepository) UpdateMuscle(_ context.Context, _ *port.Muscle) error { return nil }
+func (r *fakeRepository) DeleteMuscle(_ context.Context, _ string) error { return nil }
+
+func (r *fakeRepository) CreateTag(_ context.Context, _ *port.Tag) error { return nil }
+func (r *fakeRepository) GetTag(_ context.Context, _ string) (*port.Tag, error) { return nil, nil }
+func (r *fakeRepository) ListTags(_ context.Context, _, _ int) ([]port.Tag, int, error) { return nil, 0, nil }
+func (r *fakeRepository) UpdateTag(_ context.Context, _ *port.Tag) error { return nil }
+func (r *fakeRepository) DeleteTag(_ context.Context, _ string) error { return nil }
+
+
 type fakeClock struct {
 	now time.Time
 }
@@ -278,5 +303,162 @@ func validInfo() domain.Info {
 		BodyPartID:     "legs",
 		EquipmentID:    "barbell",
 		TargetMuscleID: "quads",
+	}
+}
+
+func TestGetCatalogMetadata(t *testing.T) {
+	t.Parallel()
+	suite := newTestSuite()
+
+	// 1. Success with authenticated user
+	_, err := suite.metadataHandler.Handle(userContext(), query.GetCatalogMetadataQuery{})
+	if err != nil {
+		t.Fatalf("get metadata: %v", err)
+	}
+
+	// 2. Failure with unauthenticated context
+	_, err = suite.metadataHandler.Handle(context.Background(), query.GetCatalogMetadataQuery{})
+	if !errors.Is(err, middleware.ErrUnauthorized) {
+		t.Fatalf("got error %v, want %v", err, middleware.ErrUnauthorized)
+	}
+}
+
+func TestGetExercise_DraftAccess(t *testing.T) {
+	t.Parallel()
+	suite := newTestSuite()
+	adminCtx := adminContext()
+	userCtx := userContext()
+
+	// 1. Create a draft exercise as admin
+	draft, err := suite.createHandler.Handle(
+		adminCtx,
+		&command.CreateExerciseCommand{Info: validInfo()},
+	)
+	if err != nil {
+		t.Fatalf("create draft exercise: %v", err)
+	}
+
+	// 2. Admin should be able to get it
+	exercise, err := suite.getHandler.Handle(adminCtx, query.GetExerciseQuery{ID: draft.Info().ID})
+	if err != nil {
+		t.Fatalf("admin get draft: %v", err)
+	}
+	if exercise == nil {
+		t.Fatal("got nil exercise, want non-nil")
+	}
+
+	// 3. User should not be able to get it
+	_, err = suite.getHandler.Handle(userCtx, query.GetExerciseQuery{ID: draft.Info().ID})
+	if !errors.Is(err, domain.ErrExerciseNotFound) {
+		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
+	}
+}
+
+func TestRequireAdmin_Authorization(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		run  func(ctx context.Context, s *testSuite) error
+	}{
+		{
+			name: "CreateExerciseHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.createHandler.Handle(ctx, &command.CreateExerciseCommand{Info: validInfo()})
+				return err
+			},
+		},
+		{
+			name: "UpdateExerciseHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.updateHandler.Handle(ctx, &command.UpdateExerciseCommand{ID: "id-1", Info: validInfo()})
+				return err
+			},
+		},
+		{
+			name: "SubmitExerciseForApprovalHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.submitForApprovalHandler.Handle(ctx, command.SubmitExerciseForApprovalCommand{ID: "id-1"})
+				return err
+			},
+		},
+		{
+			name: "ApproveExerciseHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.approveHandler.Handle(ctx, command.ApproveExerciseCommand{ID: "id-1"})
+				return err
+			},
+		},
+		{
+			name: "ArchiveExerciseHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				return s.archiveHandler.Handle(ctx, command.ArchiveExerciseCommand{ID: "id-1"})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			suite := newTestSuite()
+
+			// 1. Rejected when unauthenticated
+			err := tt.run(context.Background(), suite)
+			if !errors.Is(err, middleware.ErrUnauthorized) {
+				t.Fatalf("got error %v, want %v", err, middleware.ErrUnauthorized)
+			}
+
+			// 2. Rejected when authenticated as non-admin User
+			err = tt.run(userContext(), suite)
+			if !errors.Is(err, middleware.ErrForbidden) {
+				t.Fatalf("got error %v, want %v", err, middleware.ErrForbidden)
+			}
+		})
+	}
+}
+
+func TestRequireAuthenticated_Authorization(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		run  func(ctx context.Context, s *testSuite) error
+	}{
+		{
+			name: "GetExerciseHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.getHandler.Handle(ctx, query.GetExerciseQuery{ID: "id-1"})
+				return err
+			},
+		},
+		{
+			name: "SearchExercisesHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{Filters: &port.SearchFilters{}})
+				return err
+			},
+		},
+		{
+			name: "GetCatalogMetadataHandler",
+			run: func(ctx context.Context, s *testSuite) error {
+				_, err := s.metadataHandler.Handle(ctx, query.GetCatalogMetadataQuery{})
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			suite := newTestSuite()
+
+			// Rejected when unauthenticated
+			err := tt.run(context.Background(), suite)
+			if !errors.Is(err, middleware.ErrUnauthorized) {
+				t.Fatalf("got error %v, want %v", err, middleware.ErrUnauthorized)
+			}
+		})
 	}
 }

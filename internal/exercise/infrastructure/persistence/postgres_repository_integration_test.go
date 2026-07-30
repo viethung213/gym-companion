@@ -4,6 +4,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -204,4 +205,32 @@ func InitDB(databaseURL string) (*gorm.DB, error) {
 	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 
 	return db, nil
+}
+
+func TestPostgresRepository_FindByIDNotFound(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required")
+	}
+
+	db, err := InitDB(databaseURL)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get database handle: %v", err)
+	}
+	defer sqlDB.Close()
+
+	ctx := context.Background()
+	if err := prepareExerciseSchema(ctx, db); err != nil {
+		t.Fatalf("prepare schema: %v", err)
+	}
+
+	repo := NewPostgresRepository(db)
+	_, err = repo.FindByID(ctx, "non-existent-uuid")
+	if !errors.Is(err, domain.ErrExerciseNotFound) {
+		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
+	}
 }

@@ -89,4 +89,136 @@ service ExerciseService {
       delete: "/api/v1/admin/exercises/{id}"
     };
   }
+
+  // BodyPart CRUD operations
+  rpc CreateBodyPart (contracts.supporting.exercise.v1.message.CreateBodyPartRequest) returns (contracts.supporting.exercise.v1.message.CreateBodyPartResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/body-parts"
+      body: "*"
+    };
+  }
+
+  rpc GetBodyPart (contracts.supporting.exercise.v1.message.GetBodyPartRequest) returns (contracts.supporting.exercise.v1.message.GetBodyPartResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/body-parts/{id}"
+    };
+  }
+
+  rpc ListBodyParts (contracts.supporting.exercise.v1.message.ListBodyPartsRequest) returns (contracts.supporting.exercise.v1.message.ListBodyPartsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/body-parts"
+    };
+  }
+
+  rpc UpdateBodyPart (contracts.supporting.exercise.v1.message.UpdateBodyPartRequest) returns (contracts.supporting.exercise.v1.message.UpdateBodyPartResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/admin/body-parts/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteBodyPart (contracts.supporting.exercise.v1.message.DeleteBodyPartRequest) returns (contracts.supporting.exercise.v1.message.DeleteBodyPartResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/admin/body-parts/{id}"
+    };
+  }
+
+  // Equipment CRUD operations
+  rpc CreateEquipment (contracts.supporting.exercise.v1.message.CreateEquipmentRequest) returns (contracts.supporting.exercise.v1.message.CreateEquipmentResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/equipments"
+      body: "*"
+    };
+  }
+
+  rpc GetEquipment (contracts.supporting.exercise.v1.message.GetEquipmentRequest) returns (contracts.supporting.exercise.v1.message.GetEquipmentResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/equipments/{id}"
+    };
+  }
+
+  rpc ListEquipments (contracts.supporting.exercise.v1.message.ListEquipmentsRequest) returns (contracts.supporting.exercise.v1.message.ListEquipmentsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/equipments"
+    };
+  }
+
+  rpc UpdateEquipment (contracts.supporting.exercise.v1.message.UpdateEquipmentRequest) returns (contracts.supporting.exercise.v1.message.UpdateEquipmentResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/admin/equipments/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteEquipment (contracts.supporting.exercise.v1.message.DeleteEquipmentRequest) returns (contracts.supporting.exercise.v1.message.DeleteEquipmentResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/admin/equipments/{id}"
+    };
+  }
+
+  // Muscle CRUD operations
+  rpc CreateMuscle (contracts.supporting.exercise.v1.message.CreateMuscleRequest) returns (contracts.supporting.exercise.v1.message.CreateMuscleResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/muscles"
+      body: "*"
+    };
+  }
+
+  rpc GetMuscle (contracts.supporting.exercise.v1.message.GetMuscleRequest) returns (contracts.supporting.exercise.v1.message.GetMuscleResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/muscles/{id}"
+    };
+  }
+
+  rpc ListMuscles (contracts.supporting.exercise.v1.message.ListMusclesRequest) returns (contracts.supporting.exercise.v1.message.ListMusclesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/muscles"
+    };
+  }
+
+  rpc UpdateMuscle (contracts.supporting.exercise.v1.message.UpdateMuscleRequest) returns (contracts.supporting.exercise.v1.message.UpdateMuscleResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/admin/muscles/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteMuscle (contracts.supporting.exercise.v1.message.DeleteMuscleRequest) returns (contracts.supporting.exercise.v1.message.DeleteMuscleResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/admin/muscles/{id}"
+    };
+  }
+
+  // Tag CRUD operations
+  rpc CreateTag (contracts.supporting.exercise.v1.message.CreateTagRequest) returns (contracts.supporting.exercise.v1.message.CreateTagResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/tags"
+      body: "*"
+    };
+  }
+
+  rpc GetTag (contracts.supporting.exercise.v1.message.GetTagRequest) returns (contracts.supporting.exercise.v1.message.GetTagResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/tags/{id}"
+    };
+  }
+
+  rpc ListTags (contracts.supporting.exercise.v1.message.ListTagsRequest) returns (contracts.supporting.exercise.v1.message.ListTagsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/tags"
+    };
+  }
+
+  rpc UpdateTag (contracts.supporting.exercise.v1.message.UpdateTagRequest) returns (contracts.supporting.exercise.v1.message.UpdateTagResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/admin/tags/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteTag (contracts.supporting.exercise.v1.message.DeleteTagRequest) returns (contracts.supporting.exercise.v1.message.DeleteTagResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/admin/tags/{id}"
+    };
+  }
 }
