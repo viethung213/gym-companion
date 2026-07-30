@@ -9,10 +9,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/auth"
+	"github.com/viethung213/gym-companion/internal/coaching"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -29,9 +32,11 @@ func main() {
 }
 
 func run() error {
+	loadEnvFile()
+
 	httpPort := os.Getenv("APP_PORT")
 	if httpPort == "" {
-		httpPort = "8080"
+		httpPort = "1010"
 	}
 
 	grpcPort := os.Getenv("GRPC_PORT")
@@ -122,6 +127,19 @@ func run() error {
 	}
 	defer shutdownWorkout()
 
+	// Initialize Coaching Module
+	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, coaching.ModuleDeps{
+		GRPCServer:    grpcServer,
+		KafkaRegistry: kafkaRegistry,
+		ProfileReader: &adapters.MockUserProfileReader{},
+		SessionReader: &adapters.MockWorkoutSessionReader{},
+		CatalogReader: &adapters.MockExerciseCatalogReader{},
+	})
+	if err != nil {
+		return fmt.Errorf("initialize coaching module: %w", err)
+	}
+	defer shutdownCoaching()
+
 	errChan := make(chan error, 2)
 	go func() {
 		if serveErr := grpcServer.Serve(lis); serveErr != nil {
@@ -133,6 +151,10 @@ func run() error {
 	log.Printf("Starting HTTP API gateway server on port %s...\n", httpPort)
 	mux := http.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+	// Register Coaching HTTP Handler FIRST (before gwmux catch-all)
+	coachingHandler := coaching.NewCoachingHandler(coachAgent)
+	coaching.RegisterHandlers(mux, coachingHandler)
 
 	// Setup shared gRPC-Gateway multiplexer
 	gwmux := runtime.NewServeMux()
@@ -152,6 +174,7 @@ func run() error {
 		return fmt.Errorf("register workout execution gateway: %w", err)
 	}
 
+	// Register gwmux LAST (catch-all for remaining routes)
 	mux.Handle("/", gwmux)
 
 	// Health endpoint
@@ -187,4 +210,22 @@ func (l *lazyKeyProvider) Set(kp middleware.KeyProvider) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.kp = kp
+}
+
+func loadEnvFile() {
+	data, err := os.ReadFile(".env")
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && os.Getenv(parts[0]) == "" {
+			os.Setenv(parts[0], parts[1])
+		}
+	}
 }

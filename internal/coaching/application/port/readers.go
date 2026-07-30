@@ -68,13 +68,18 @@ type WorkoutSessionReader interface {
 	GetSetLogs(ctx context.Context, userID string, exerciseID string, limit int) ([]SetLog, error)
 }
 
-// ExerciseFilter is the search filter used by Agent Tools.
+// ExerciseFilter is the search filter mapped directly from Exercise gRPC contract SearchExercisesRequest.
 type ExerciseFilter struct {
-	MuscleGroup     string
-	Equipment       []string
-	DifficultyLevel string
-	ExcludeMuscle   string
-	Limit           int
+	BodyPartID         string
+	TargetMuscleID     string
+	SecondaryMuscleIDs []string
+	EquipmentIDs       []string
+	AvoidInjuryAreas   []string
+	TagIDs             []string
+	Keyword            string
+	Difficulty         string
+	Limit              int
+	Offset             int
 }
 
 // Exercise is the minimal exercise info Coaching consumes.

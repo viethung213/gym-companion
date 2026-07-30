@@ -41,6 +41,10 @@ WORKDIR /app
 # Copy binary từ prod-builder
 COPY --from=prod-builder /bin/fitai-api /app/fitai-api
 
+# Copy ADK prompts và skills (cần thiết cho coaching agent)
+COPY internal/coaching/infrastructure/ai/adk/prompts ./internal/coaching/infrastructure/ai/adk/prompts
+COPY internal/coaching/infrastructure/ai/adk/skills ./internal/coaching/infrastructure/ai/adk/skills
+
 EXPOSE 8080
 EXPOSE 9090
 

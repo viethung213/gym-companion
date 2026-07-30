@@ -1,0 +1,97 @@
+package coaching
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"net/http"
+
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+)
+
+// CoachingHandler provides HTTP handlers for coaching operations.
+type CoachingHandler struct {
+	coachAgent port.CoachAgent
+}
+
+// GenerateRoadmapRequest is the request body for roadmap generation.
+type GenerateRoadmapRequest struct {
+	UserID string `json:"user_id"`
+}
+
+// GenerateRoadmapResponse is the response body for roadmap generation.
+type GenerateRoadmapResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+// NewCoachingHandler creates a new coaching HTTP handler.
+func NewCoachingHandler(coachAgent port.CoachAgent) *CoachingHandler {
+	return &CoachingHandler{
+		coachAgent: coachAgent,
+	}
+}
+
+// HandleGenerateRoadmap handles POST /coaching/roadmap/generate
+func (h *CoachingHandler) HandleGenerateRoadmap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(GenerateRoadmapResponse{
+			Status:  "error",
+			Message: "Method not allowed",
+			Error:   "Use POST",
+		})
+		return
+	}
+
+	var req GenerateRoadmapRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(GenerateRoadmapResponse{
+			Status:  "error",
+			Message: "Invalid request body",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if req.UserID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(GenerateRoadmapResponse{
+			Status:  "error",
+			Message: "user_id is required",
+		})
+		return
+	}
+
+	log.Printf("Generating roadmap for user: %s\n", req.UserID)
+
+	ctx := context.Background()
+	roadmap, err := h.coachAgent.GenerateRoadmap(ctx, req.UserID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(GenerateRoadmapResponse{
+			Status:  "error",
+			Message: "Failed to generate roadmap",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(GenerateRoadmapResponse{
+		Status:  "success",
+		Message: "Roadmap generated successfully",
+		Data:    roadmap,
+	})
+}
+
+// RegisterHandlers registers coaching HTTP handlers.
+func RegisterHandlers(mux *http.ServeMux, handler *CoachingHandler) {
+	mux.HandleFunc("/coaching/roadmap/generate", handler.HandleGenerateRoadmap)
+	log.Println("Registered coaching HTTP handlers")
+}

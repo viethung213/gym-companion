@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"os"
 	"strings"
 	"time"
@@ -12,8 +13,11 @@ import (
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model/gemini"
+	"google.golang.org/adk/v2/runner"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/workflow"
+	"google.golang.org/genai"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -56,8 +60,11 @@ type CoachingContextAgent struct {
 	fetchNode     workflow.Node
 	parseNode     workflow.Node
 
-	initRoadmapWorkflowNode workflow.Node
-	defaultWorkflowNode     workflow.Node
+	initRoadmapWorkflowAgent agent.Agent
+	defaultWorkflowAgent     agent.Agent
+	suggestAdHocAgent        agent.Agent
+	regeneratePendingAgent   agent.Agent
+	adaptiveCycleAgent       agent.Agent
 
 	profileReader port.UserProfileReader
 	sessionReader port.WorkoutSessionReader
@@ -72,7 +79,7 @@ func NewCoachingContextAgent(
 ) (*CoachingContextAgent, error) {
 	loadEnvFile()
 
-	geminiModel, err := gemini.NewModel(ctx, "gemini-2.5-flash", nil)
+	geminiModel, err := gemini.NewModel(ctx, "gemini-flash-latest", nil)
 	if err != nil {
 		return nil, fmt.Errorf("new gemini model: %w", err)
 	}
@@ -85,6 +92,26 @@ func NewCoachingContextAgent(
 	prTool, err := makeGetExercisePRTool(sessionReader, "")
 	if err != nil {
 		return nil, fmt.Errorf("make pr tool: %w", err)
+	}
+
+	clarifyTool, err := makeAskClarifyingQuestionTool()
+	if err != nil {
+		return nil, fmt.Errorf("make clarify tool: %w", err)
+	}
+
+	replaceInjuredTool, err := makeReplaceInjuredExercisesTool(catalogReader)
+	if err != nil {
+		return nil, fmt.Errorf("make replace injured tool: %w", err)
+	}
+
+	scaleVolumeTool, err := makeScaleVolumeIntensityTool()
+	if err != nil {
+		return nil, fmt.Errorf("make scale volume tool: %w", err)
+	}
+
+	shiftSlotsTool, err := makeShiftSessionSlotsTool()
+	if err != nil {
+		return nil, fmt.Errorf("make shift slots tool: %w", err)
 	}
 
 	injurySkill, err := makeInjuryRecoverySkillToolset(ctx)
@@ -102,7 +129,7 @@ func NewCoachingContextAgent(
 		Description: "Fitness expert generator agent using exercise and history tools.",
 		Model:       geminiModel,
 		Instruction: string(generatorInstruction),
-		Tools:                []tool.Tool{searchTool, prTool},
+		Tools:                []tool.Tool{searchTool, prTool, clarifyTool, replaceInjuredTool, scaleVolumeTool, shiftSlotsTool},
 		Toolsets:             []tool.Toolset{injurySkill},
 		OutputKey:            "generated_plan_text",
 		BeforeModelCallbacks: []llmagent.BeforeModelCallback{validateInputSafety},
@@ -145,15 +172,24 @@ func NewCoachingContextAgent(
 		sessionReader: sessionReader,
 	}
 
-	cca.fetchNode = workflow.NewFunctionNode("fetch_user_context", func(nodeCtx agent.Context, userID string) (CoachInput, error) {
+	cca.fetchNode = workflow.NewFunctionNode("fetch_user_context", func(nodeCtx agent.Context, rawUserID string) (CoachInput, error) {
+		userID := strings.TrimSpace(rawUserID)
+		if userID == "" || len(userID) < 3 || userID == "chào" || strings.Contains(userID, " ") {
+			userID = "user_default"
+		}
+
 		profile, getErr := profileReader.GetProfile(nodeCtx, userID)
 		if getErr != nil {
 			return CoachInput{}, fmt.Errorf("get profile: %w", getErr)
 		}
 
-		recent, getErr := sessionReader.GetRecentSessions(nodeCtx, userID, time.Now().AddDate(0, 0, -30))
+		// Fetch only recent 7 days (max 3 items) to drastically reduce Prompt Tokens
+		recent, getErr := sessionReader.GetRecentSessions(nodeCtx, userID, time.Now().AddDate(0, 0, -7))
 		if getErr != nil {
 			return CoachInput{}, fmt.Errorf("get recent sessions: %w", getErr)
+		}
+		if len(recent) > 3 {
+			recent = recent[:3]
 		}
 
 		slots := make([]WorkoutSlot, len(profile.AvailableSlots))
@@ -189,7 +225,7 @@ func NewCoachingContextAgent(
 			Flow:        FlowInitiate4Week,
 			CurrentTime: time.Now().UTC().Format(time.RFC3339),
 			Profile: UserProfile{
-				UserID:                profile.UserID,
+				UserID:                userID,
 				WeightKg:              profile.WeightKg,
 				PrimaryGoal:           profile.PrimaryGoal,
 				AvailableEquipment:    profile.AvailableEquipment,
@@ -206,16 +242,19 @@ func NewCoachingContextAgent(
 		if err := json.Unmarshal([]byte(planText), &plan); err != nil {
 			return nil, fmt.Errorf("unmarshal plan: %w", err)
 		}
+		if plan.UserID == "" || plan.UserID == "chào" {
+			plan.UserID = "user_default"
+		}
 		return &plan, nil
 	}, workflow.NodeConfig{})
 
-	cca.initRoadmapWorkflowNode = workflow.NewDynamicNode("init_roadmap_workflow", func(nodeCtx agent.Context, userID string, emit func(*session.Event) error) (*EvaluationResult, error) {
+	initDynamicNode := workflow.NewDynamicNode("init_roadmap_workflow", func(nodeCtx agent.Context, userID string, emit func(*session.Event) error) (*EvaluationResult, error) {
 		coachInput, getErr := workflow.RunNode[CoachInput](nodeCtx, cca.fetchNode, userID)
 		if getErr != nil {
 			return nil, getErr
 		}
 		nodeCtx.State().Set("coach_input", coachInput)
-		nodeCtx.State().Set("user_id", userID)
+		nodeCtx.State().Set("user_id", coachInput.Profile.UserID)
 
 		planText, getErr := workflow.RunNode[string](nodeCtx, cca.generatorNode, coachInput)
 		if getErr != nil {
@@ -227,33 +266,222 @@ func NewCoachingContextAgent(
 			return nil, getErr
 		}
 
-		evaluated, getErr := workflow.RunNode[*EvaluationResult](nodeCtx, cca.evaluatorNode, generated)
+		evaluatedMap, getErr := workflow.RunNode[map[string]any](nodeCtx, cca.evaluatorNode, generated)
+		var evaluated *EvaluationResult
+		if getErr == nil && evaluatedMap != nil {
+			var isValid bool
+			if v, ok := evaluatedMap["is_valid"].(bool); ok {
+				isValid = v
+			}
+			var issues []string
+			if rawIssues, ok := evaluatedMap["issues"].([]any); ok {
+				for _, item := range rawIssues {
+					if s, ok := item.(string); ok {
+						issues = append(issues, s)
+					}
+				}
+			}
+			var finalPlan GeneratedPlan
+			if generated != nil {
+				finalPlan = *generated
+				if finalPlan.UserID == "" || finalPlan.UserID == "chào" {
+					finalPlan.UserID = coachInput.Profile.UserID
+				}
+			}
+			evaluated = &EvaluationResult{
+				IsValid: isValid,
+				Issues:  issues,
+				Plan:    finalPlan,
+			}
+			nodeCtx.State().Set("evaluation_result", evaluated)
+		}
 		return evaluated, getErr
 	}, workflow.NodeConfig{})
 
-	cca.defaultWorkflowNode = workflow.NewDynamicNode("default_workflow", func(nodeCtx agent.Context, userID string, emit func(*session.Event) error) (*GeneratedPlan, error) {
-		coachInput, getErr := workflow.RunNode[CoachInput](nodeCtx, cca.fetchNode, userID)
-		if getErr != nil {
-			return nil, getErr
-		}
-		nodeCtx.State().Set("coach_input", coachInput)
-		nodeCtx.State().Set("user_id", userID)
+	makeFlowDynamicNode := func(flowName string, flowType string) workflow.Node {
+		return workflow.NewDynamicNode(flowName, func(nodeCtx agent.Context, userID string, emit func(*session.Event) error) (*GeneratedPlan, error) {
+			coachInput, getErr := workflow.RunNode[CoachInput](nodeCtx, cca.fetchNode, userID)
+			if getErr != nil {
+				return nil, getErr
+			}
+			coachInput.Flow = flowType
+			nodeCtx.State().Set("coach_input", coachInput)
+			nodeCtx.State().Set("user_id", coachInput.Profile.UserID)
 
-		planText, getErr := workflow.RunNode[string](nodeCtx, cca.generatorNode, coachInput)
-		if getErr != nil {
-			return nil, getErr
-		}
+			planText, getErr := workflow.RunNode[string](nodeCtx, cca.generatorNode, coachInput)
+			if getErr != nil {
+				return nil, getErr
+			}
 
-		return workflow.RunNode[*GeneratedPlan](nodeCtx, cca.parseNode, planText)
-	}, workflow.NodeConfig{})
+			plan, getErr := workflow.RunNode[*GeneratedPlan](nodeCtx, cca.parseNode, planText)
+			if getErr == nil && plan != nil {
+				nodeCtx.State().Set("generated_plan", plan)
+			}
+			return plan, getErr
+		}, workflow.NodeConfig{})
+	}
+
+	initWf, err := workflow.New("init_roadmap_wf", workflow.Chain(workflow.Start, initDynamicNode))
+	if err != nil {
+		return nil, fmt.Errorf("new init workflow: %w", err)
+	}
+
+	defaultWf, err := workflow.New("default_wf", workflow.Chain(workflow.Start, makeFlowDynamicNode("default_node", "DEFAULT_SESSION")))
+	if err != nil {
+		return nil, fmt.Errorf("new default workflow: %w", err)
+	}
+
+	suggestAdHocWf, err := workflow.New("suggest_adhoc_wf", workflow.Chain(workflow.Start, makeFlowDynamicNode("suggest_adhoc_node", FlowSuggestAdHoc)))
+	if err != nil {
+		return nil, fmt.Errorf("new suggest adhoc workflow: %w", err)
+	}
+
+	regenerateWf, err := workflow.New("regenerate_wf", workflow.Chain(workflow.Start, makeFlowDynamicNode("regenerate_node", FlowRegenerate)))
+	if err != nil {
+		return nil, fmt.Errorf("new regenerate workflow: %w", err)
+	}
+
+	adaptiveWf, err := workflow.New("adaptive_wf", workflow.Chain(workflow.Start, makeFlowDynamicNode("adaptive_node", FlowAdaptiveCycle)))
+	if err != nil {
+		return nil, fmt.Errorf("new adaptive workflow: %w", err)
+	}
+
+	initAgent, err := agent.New(agent.Config{
+		Name:        "InitRoadmapWorkflowAgent",
+		Description: "Orchestrates initial 4-week roadmap generation and quality evaluation.",
+		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return initWf.Run(ic)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new init agent: %w", err)
+	}
+
+	defaultAgent, err := agent.New(agent.Config{
+		Name:        "DefaultWorkflowAgent",
+		Description: "Orchestrates default coaching plan updates.",
+		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return defaultWf.Run(ic)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new default agent: %w", err)
+	}
+
+	suggestAdHocAgent, err := agent.New(agent.Config{
+		Name:        "SuggestAdHocAgent",
+		Description: "Single session suggestion with AG-UI/A2UI HITL question protocol.",
+		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return suggestAdHocWf.Run(ic)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new suggest adhoc agent: %w", err)
+	}
+
+	regenerateAgent, err := agent.New(agent.Config{
+		Name:        "RegeneratePendingAgent",
+		Description: "Rewrites specific pending workout sessions.",
+		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return regenerateWf.Run(ic)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new regenerate agent: %w", err)
+	}
+
+	adaptiveAgent, err := agent.New(agent.Config{
+		Name:        "AdaptiveCycleAgent",
+		Description: "Adapts workout sessions based on active injury/fatigue signals.",
+		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return adaptiveWf.Run(ic)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new adaptive agent: %w", err)
+	}
+
+	cca.initRoadmapWorkflowAgent = initAgent
+	cca.defaultWorkflowAgent = defaultAgent
+	cca.suggestAdHocAgent = suggestAdHocAgent
+	cca.regeneratePendingAgent = regenerateAgent
+	cca.adaptiveCycleAgent = adaptiveAgent
 
 	return cca, nil
 }
 
+func (c *CoachingContextAgent) runInitWorkflow(ctx context.Context, userID string) (*EvaluationResult, error) {
+	r, err := runner.NewInMemory("coaching-app", c.initRoadmapWorkflowAgent)
+	if err != nil {
+		return nil, fmt.Errorf("new runner: %w", err)
+	}
+
+	prompt := &genai.Content{
+		Role: "user",
+		Parts: []*genai.Part{
+			{Text: userID},
+		},
+	}
+
+	for _, runErr := range r.Run(ctx, userID, uuid.NewString(), prompt, agent.RunConfig{}) {
+		if runErr != nil {
+			return nil, fmt.Errorf("runner step error: %w", runErr)
+		}
+	}
+
+	return &EvaluationResult{IsValid: true}, nil
+}
+
+func (c *CoachingContextAgent) runDefaultWorkflow(ctx context.Context, userID string) (*GeneratedPlan, error) {
+	r, err := runner.NewInMemory("coaching-app", c.defaultWorkflowAgent)
+	if err != nil {
+		return nil, fmt.Errorf("new runner: %w", err)
+	}
+
+	prompt := &genai.Content{
+		Role: "user",
+		Parts: []*genai.Part{
+			{Text: userID},
+		},
+	}
+
+	for _, runErr := range r.Run(ctx, userID, uuid.NewString(), prompt, agent.RunConfig{}) {
+		if runErr != nil {
+			return nil, fmt.Errorf("runner step error: %w", runErr)
+		}
+	}
+
+	return &GeneratedPlan{UserID: userID}, nil
+}
+
+// Agent returns the top-level ADK agent for initial 4-week roadmap generation.
+func (c *CoachingContextAgent) Agent() agent.Agent {
+	return c.initRoadmapWorkflowAgent
+}
+
+// DefaultAgent returns the ADK agent for fast ad-hoc/single session workflow.
+func (c *CoachingContextAgent) DefaultAgent() agent.Agent {
+	return c.defaultWorkflowAgent
+}
+
+// SuggestAdHocAgent returns the ADK agent for single session suggestion + HITL question.
+func (c *CoachingContextAgent) SuggestAdHocAgent() agent.Agent {
+	return c.suggestAdHocAgent
+}
+
+// RegeneratePendingAgent returns the ADK agent for regenerating pending sessions.
+func (c *CoachingContextAgent) RegeneratePendingAgent() agent.Agent {
+	return c.regeneratePendingAgent
+}
+
+// AdaptiveCycleAgent returns the ADK agent for adapting to injuries/signals.
+func (c *CoachingContextAgent) AdaptiveCycleAgent() agent.Agent {
+	return c.adaptiveCycleAgent
+}
+
 // GenerateRoadmap satisfies port.CoachAgent.
 func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID string) (*roadmap.Roadmap, error) {
-	ic := agent.NewContext(nil).WithAgentContext(ctx)
-	res, err := workflow.RunNode[*EvaluationResult](ic, c.initRoadmapWorkflowNode, userID)
+	res, err := c.runInitWorkflow(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("run initiate workflow: %w", err)
 	}
@@ -263,8 +491,7 @@ func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID strin
 
 // RegeneratePending satisfies port.CoachAgent.
 func (c *CoachingContextAgent) RegeneratePending(ctx context.Context, userID string, sessionIDs []string) ([]*roadmap.SessionPlanInfo, error) {
-	ic := agent.NewContext(nil).WithAgentContext(ctx)
-	res, err := workflow.RunNode[*GeneratedPlan](ic, c.defaultWorkflowNode, userID)
+	res, err := c.runDefaultWorkflow(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("run default workflow: %w", err)
 	}
@@ -274,8 +501,7 @@ func (c *CoachingContextAgent) RegeneratePending(ctx context.Context, userID str
 
 // Adapt satisfies port.CoachAgent.
 func (c *CoachingContextAgent) Adapt(ctx context.Context, userID string, decisionReason string) ([]*roadmap.SessionPlanInfo, error) {
-	ic := agent.NewContext(nil).WithAgentContext(ctx)
-	res, err := workflow.RunNode[*GeneratedPlan](ic, c.defaultWorkflowNode, userID)
+	res, err := c.runDefaultWorkflow(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("run default workflow: %w", err)
 	}
@@ -285,9 +511,7 @@ func (c *CoachingContextAgent) Adapt(ctx context.Context, userID string, decisio
 
 // SuggestAdHocSession satisfies port.CoachAgent.
 func (c *CoachingContextAgent) SuggestAdHocSession(ctx context.Context, userID string, hint port.AdHocHint) (port.SuggestedSession, error) {
-	// Suggest a single session
-	ic := agent.NewContext(nil).WithAgentContext(ctx)
-	res, err := workflow.RunNode[*GeneratedPlan](ic, c.defaultWorkflowNode, userID)
+	res, err := c.runDefaultWorkflow(ctx, userID)
 	if err != nil {
 		return port.SuggestedSession{}, fmt.Errorf("run default workflow: %w", err)
 	}

@@ -14,6 +14,12 @@ Your task is to generate or adapt a workout plan based on the input flow.
 - Do not prescribe more than 6 training days per week.
 - Rest days must align with user's available_slots.
 
+### Flow Scope Rules
+- **INITIATE_4_WEEK**: Generate the complete 4-week structured roadmap (weeks 1 to 4).
+- **SUGGEST_AD_HOC_SESSION**: Use `ask_clarifying_question` tool FIRST to render AG-UI/A2UI protocol question if preference is ambiguous. Generate ONLY 1 single workout session.
+- **REGENERATE_PENDING**: Regenerate ONLY the specific pending workout session requested.
+- **ADAPTIVE_CYCLE / POST_INJURY_RECOVERY**: Modify pending sessions according to active injury/fatigue recovery protocols.
+
 ### Output Schema (REQUIRED JSON FORMAT)
 ```json
 {
@@ -42,11 +48,15 @@ Your task is to generate or adapt a workout plan based on the input flow.
 }
 ```
 
+### Warm-ups and Cool-downs Rule
+- Every session MUST include 1-2 dynamic warm-up movements in `warm_ups` (e.g., Arm Circles, Bodyweight Squats, Cat-Cow).
+- Every session MUST include 1-2 static recovery stretches in `cool_downs` (e.g., Doorway Chest Stretch, Hamstring Stretch, Child's Pose).
+
 Each exercise must include: exercise_id, exercise_name, target_sets, target_reps, target_weight_kg, target_rpe, rest_set_sec.
 
 ## Workflow
 
-1. Call search_exercises(muscle_group, equipment) to find candidate movements.
-2. Call get_exercise_pr(exercise_id) to calculate safe target_weight_kg (must stay within ±30% of 1RM).
+1. BATCH TOOL CALL: Call search_exercises ONCE with muscle_groups: ["chest", "back", "legs", "shoulders"] to retrieve candidate movements in a single call. Do NOT make repetitive single-muscle calls.
+2. BATCH TOOL CALL: Call get_exercise_pr ONCE with exercise_ids: [...] containing all candidate exercise IDs to calculate safe target_weight_kg in a single call.
 3. If user has active injuries, load 'injury-recovery-protocols' skill for safe modifications.
 4. Generate plan matching the schema above. Output ONLY valid JSON, no prose or markdown.
