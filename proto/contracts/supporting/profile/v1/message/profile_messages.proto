@@ -20,16 +20,30 @@ message Injury {
   string recovered_at = 7;
 }
 
-message SaveHealthProfileRequest {
-  string user_id = 1;
+message PeriodicMetric {
+  string id = 1;
   float weight_kg = 2;
-  float height_cm = 3;
-  int32 age = 4;
-  string gender = 5;
-  repeated string goals = 6;
-  repeated InjuryInput injuries = 7;
-  string experience_level = 8; // "BEGINNER", "INTERMEDIATE", "ADVANCED"
-  repeated string preferred_workout_times = 9;
+  float body_fat_percent = 3;
+  string progress_photo_url = 4;
+  string logged_at = 5;
+  float height_cm = 6;
+}
+
+message SaveHealthProfileRequest {
+  float weight_kg = 1;
+  float height_cm = 2;
+  string date_of_birth = 3; // "YYYY-MM-DD" e.g. "1998-05-15"
+  string gender = 4;
+  repeated string goals = 5;
+  repeated InjuryInput injuries = 6;
+  string experience_level = 7; // "BEGINNER", "INTERMEDIATE", "ADVANCED"
+  repeated string preferred_workout_times = 8;
+  repeated string available_equipment = 9;
+  repeated string preferred_muscle_groups = 10;
+  string coach_style = 11;
+  float target_weight_kg = 12;
+  float target_body_fat_percent = 13;
+  float body_fat_percent = 14;
 }
 
 message SaveHealthProfileResponse {
@@ -40,32 +54,45 @@ message SaveHealthProfileResponse {
 }
 
 message GetProfileRequest {
-  string user_id = 1;
+  string user_id = 1; // Option for Admin/others to query user profile; if empty, uses context user_id
 }
 
 message GetProfileResponse {
   string user_id = 1;
   float weight_kg = 2;
   float height_cm = 3;
-  int32 age = 4;
-  string gender = 5;
-  repeated string goals = 6;
-  string experience_level = 7;
-  repeated string preferred_workout_times = 8;
-  repeated Injury injuries = 9;
-  string created_at = 10;
-  string updated_at = 11;
+  string date_of_birth = 4;
+  int32 age = 5;
+  string gender = 6;
+  repeated string goals = 7;
+  string experience_level = 8;
+  repeated string preferred_workout_times = 9;
+  repeated Injury injuries = 10;
+  string created_at = 11;
+  string updated_at = 12;
+  repeated string available_equipment = 13;
+  repeated string preferred_muscle_groups = 14;
+  string coach_style = 15;
+  float target_weight_kg = 16;
+  float target_body_fat_percent = 17;
+  float completion_rate = 18;
+  float body_fat_percent = 19;
 }
 
 message UpdateProfileRequest {
-  string user_id = 1;
-  float weight_kg = 2;
-  float height_cm = 3;
-  int32 age = 4;
-  string gender = 5;
-  repeated string goals = 6;
-  string experience_level = 7;
-  repeated string preferred_workout_times = 8;
+  float weight_kg = 1;
+  float height_cm = 2;
+  string date_of_birth = 3; // "YYYY-MM-DD" e.g. "1998-05-15"
+  string gender = 4;
+  repeated string goals = 5;
+  string experience_level = 6;
+  repeated string preferred_workout_times = 7;
+  repeated string available_equipment = 8;
+  repeated string preferred_muscle_groups = 9;
+  string coach_style = 10;
+  float target_weight_kg = 11;
+  float target_body_fat_percent = 12;
+  float body_fat_percent = 13;
 }
 
 message UpdateProfileResponse {
@@ -74,10 +101,10 @@ message UpdateProfileResponse {
 }
 
 message LogPeriodicMetricsRequest {
-  string user_id = 1;
-  float weight_kg = 2;
-  float body_fat_percent = 3;
-  string progress_photo_url = 4;
+  float weight_kg = 1;
+  float body_fat_percent = 2;
+  string progress_photo_url = 3;
+  float height_cm = 4;
 }
 
 message LogPeriodicMetricsResponse {
@@ -87,13 +114,22 @@ message LogPeriodicMetricsResponse {
   float body_fat_percent = 4;
   string sync_status = 5;
   string message = 6;
+  float height_cm = 7;
+}
+
+message GetBodyMetricsHistoryRequest {
+  string user_id = 1; // Option for Admin/others to query history; if empty, uses context user_id
+}
+
+message GetBodyMetricsHistoryResponse {
+  string user_id = 1;
+  repeated PeriodicMetric metrics = 2;
 }
 
 message ReportInjuryRequest {
-  string user_id = 1;
-  string muscle_group = 2;
-  string severity = 3;
-  string notes = 4;
+  string muscle_group = 1;
+  string severity = 2;
+  string notes = 3;
 }
 
 message ReportInjuryResponse {
@@ -103,11 +139,19 @@ message ReportInjuryResponse {
 }
 
 message RecoverInjuryRequest {
-  string user_id = 1;
-  string injury_id = 2;
+  string injury_id = 1;
 }
 
 message RecoverInjuryResponse {
   bool success = 1;
   string message = 2;
+}
+
+message GetInjuryHistoryRequest {
+  string user_id = 1; // Option for Admin/others to query history; if empty, uses context user_id
+}
+
+message GetInjuryHistoryResponse {
+  string user_id = 1;
+  repeated Injury injuries = 2;
 }

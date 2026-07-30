@@ -7,10 +7,11 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// Registry manages and isolates database connection pools for all modules.
+// Registry manages and isolates database connection pools and kafka readers/writers for all modules.
 type Registry struct {
 	mu      sync.RWMutex
 	writers map[string]*kafka.Writer
+	readers map[string]*kafka.Reader
 }
 
 var (
@@ -20,11 +21,12 @@ var (
 	once sync.Once
 )
 
-// GetRegistry returns the singleton instance of the database connection Registry.
+// GetRegistry returns the singleton instance of the connection Registry.
 func GetRegistry() *Registry {
 	once.Do(func() {
 		instance = &Registry{
 			writers: make(map[string]*kafka.Writer),
+			readers: make(map[string]*kafka.Reader),
 		}
 	})
 	return instance
@@ -36,7 +38,6 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 		return nil, fmt.Errorf("no brokers provided for module %s", module)
 	}
 
-	// Thread-safe read lock check
 	r.mu.RLock()
 	w, exists := r.writers[module]
 	r.mu.RUnlock()
@@ -45,7 +46,6 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 		return w, nil
 	}
 
-	// Lock for writing and double-check
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -54,19 +54,54 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 		return w, nil
 	}
 
-	// Instantiate writer for this module
 	w = &kafka.Writer{
 		Addr:                   kafka.TCP(brokers...),
 		Balancer:               &kafka.Hash{},
 		AllowAutoTopicCreation: true,
-		RequiredAcks:           kafka.RequireAll, // Ensures robust delivery (ACID-like safety)
+		RequiredAcks:           kafka.RequireAll,
 	}
 
 	r.writers[module] = w
 	return w, nil
 }
 
-// CloseAll closes all open Kafka writers in the registry.
+// GetReader retrieves or instantiates a kafka.Reader dedicated to a consumer group and topic.
+func (r *Registry) GetReader(consumerGroup, topic string, brokers []string) (*kafka.Reader, error) {
+	if len(brokers) == 0 {
+		return nil, fmt.Errorf("no brokers provided for topic %s", topic)
+	}
+
+	key := fmt.Sprintf("%s:%s", consumerGroup, topic)
+	r.mu.RLock()
+	reader, exists := r.readers[key]
+	r.mu.RUnlock()
+
+	if exists {
+		return reader, nil
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	reader, exists = r.readers[key]
+	if exists {
+		return reader, nil
+	}
+
+	reader = kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     brokers,
+		GroupID:     consumerGroup,
+		Topic:       topic,
+		MinBytes:    10,
+		MaxBytes:    10 * 1024 * 1024,
+		StartOffset: kafka.FirstOffset,
+	})
+
+	r.readers[key] = reader
+	return reader, nil
+}
+
+// CloseAll closes all open Kafka writers and readers in the registry.
 func (r *Registry) CloseAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -76,5 +111,12 @@ func (r *Registry) CloseAll() {
 			_ = w.Close()
 		}
 		delete(r.writers, module)
+	}
+
+	for key, reader := range r.readers {
+		if reader != nil {
+			_ = reader.Close()
+		}
+		delete(r.readers, key)
 	}
 }
