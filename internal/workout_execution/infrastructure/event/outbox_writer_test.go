@@ -2,6 +2,7 @@ package event_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,10 +13,12 @@ import (
 )
 
 type mockOutboxRepo struct {
-	saveErr error
+	saveErr     error
+	savedRecord *port.OutboxRecord
 }
 
 func (m *mockOutboxRepo) Save(ctx context.Context, record *port.OutboxRecord) error {
+	m.savedRecord = record
 	return m.saveErr
 }
 
@@ -46,6 +49,31 @@ func TestOutboxWriter(t *testing.T) {
 		err := writer.WriteEvents(context.Background(), "WorkoutSession", "sess-1", []interface{}{ev})
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)
+		}
+
+		if repo.savedRecord == nil {
+			t.Fatal("savedRecord is nil")
+		}
+		if got, want := repo.savedRecord.EventType, "contracts.core.workout_execution.v1.workoutSessionStarted"; got != want {
+			t.Errorf("got EventType = %v, want %v", got, want)
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
+			t.Fatalf("failed to unmarshal payload: %v", err)
+		}
+		if got, want := envelope["type"], "contracts.core.workout_execution.v1.workoutSessionStarted"; got != want {
+			t.Errorf("got envelope type = %v, want %v", got, want)
+		}
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data to be map[string]interface{}, got %T", envelope["data"])
+		}
+		if got, want := dataMap["sessionId"], "sess-1"; got != want {
+			t.Errorf("got data.sessionId = %v, want %v", got, want)
+		}
+		if got, want := dataMap["userId"], "user-1"; got != want {
+			t.Errorf("got data.userId = %v, want %v", got, want)
 		}
 	})
 

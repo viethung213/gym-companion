@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/viethung213/gym-companion/internal/auth/application"
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
@@ -28,7 +27,7 @@ type OAuthLoginHandler struct {
 	tokenServ port.TokenService
 	oauthServ port.OAuthService
 	publisher port.OutboxWriter
-	txManager application.TransactionManager
+	txManager port.TransactionManager
 }
 
 // NewOAuthLoginHandler creates a new OAuthLoginHandler instance.
@@ -39,7 +38,7 @@ func NewOAuthLoginHandler(
 	tokenServ port.TokenService,
 	oauthServ port.OAuthService,
 	publisher port.OutboxWriter,
-	txManager application.TransactionManager,
+	txManager port.TransactionManager,
 ) *OAuthLoginHandler {
 	return &OAuthLoginHandler{
 		userRepo:  userRepo,

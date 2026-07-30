@@ -180,7 +180,7 @@ func SeedMockData(t *testing.T, db *gorm.DB) string {
 		EventID:       uuid.NewString(),
 		AggregateType: "WorkoutSession",
 		AggregateID:   "sess-seed-1",
-		EventType:     "contracts.core.workout_execution.v1.event.WorkoutSessionStarted",
+		EventType:     "contracts.core.workout_execution.v1.workoutSessionStarted",
 		Payload:       []byte(`{"sessionId":"sess-seed-1"}`),
 		PartitionKey:  "sess-seed-1",
 		Published:     false,
