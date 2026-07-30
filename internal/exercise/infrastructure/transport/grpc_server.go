@@ -27,6 +27,30 @@ type ExerciseServer struct {
 	getHandler               *query.GetExerciseHandler
 	searchHandler            *query.SearchExercisesHandler
 	metadataHandler          *query.GetCatalogMetadataHandler
+
+	createBodyPartHandler   *command.CreateBodyPartHandler
+	updateBodyPartHandler   *command.UpdateBodyPartHandler
+	deleteBodyPartHandler   *command.DeleteBodyPartHandler
+	getBodyPartHandler      *query.GetBodyPartHandler
+	listBodyPartsHandler    *query.ListBodyPartsHandler
+
+	createEquipmentHandler  *command.CreateEquipmentHandler
+	updateEquipmentHandler  *command.UpdateEquipmentHandler
+	deleteEquipmentHandler  *command.DeleteEquipmentHandler
+	getEquipmentHandler     *query.GetEquipmentHandler
+	listEquipmentsHandler   *query.ListEquipmentsHandler
+
+	createMuscleHandler     *command.CreateMuscleHandler
+	updateMuscleHandler     *command.UpdateMuscleHandler
+	deleteMuscleHandler     *command.DeleteMuscleHandler
+	getMuscleHandler        *query.GetMuscleHandler
+	listMusclesHandler      *query.ListMusclesHandler
+
+	createTagHandler        *command.CreateTagHandler
+	updateTagHandler        *command.UpdateTagHandler
+	deleteTagHandler        *command.DeleteTagHandler
+	getTagHandler           *query.GetTagHandler
+	listTagsHandler         *query.ListTagsHandler
 }
 
 var _ exercisesvc.ExerciseServiceServer = (*ExerciseServer)(nil)
@@ -40,6 +64,26 @@ func NewExerciseServer(
 	getHandler *query.GetExerciseHandler,
 	searchHandler *query.SearchExercisesHandler,
 	metadataHandler *query.GetCatalogMetadataHandler,
+	createBodyPartHandler *command.CreateBodyPartHandler,
+	updateBodyPartHandler *command.UpdateBodyPartHandler,
+	deleteBodyPartHandler *command.DeleteBodyPartHandler,
+	getBodyPartHandler *query.GetBodyPartHandler,
+	listBodyPartsHandler *query.ListBodyPartsHandler,
+	createEquipmentHandler *command.CreateEquipmentHandler,
+	updateEquipmentHandler *command.UpdateEquipmentHandler,
+	deleteEquipmentHandler *command.DeleteEquipmentHandler,
+	getEquipmentHandler *query.GetEquipmentHandler,
+	listEquipmentsHandler *query.ListEquipmentsHandler,
+	createMuscleHandler *command.CreateMuscleHandler,
+	updateMuscleHandler *command.UpdateMuscleHandler,
+	deleteMuscleHandler *command.DeleteMuscleHandler,
+	getMuscleHandler *query.GetMuscleHandler,
+	listMusclesHandler *query.ListMusclesHandler,
+	createTagHandler *command.CreateTagHandler,
+	updateTagHandler *command.UpdateTagHandler,
+	deleteTagHandler *command.DeleteTagHandler,
+	getTagHandler *query.GetTagHandler,
+	listTagsHandler *query.ListTagsHandler,
 ) *ExerciseServer {
 	return &ExerciseServer{
 		createHandler:            createHandler,
@@ -50,6 +94,26 @@ func NewExerciseServer(
 		getHandler:               getHandler,
 		searchHandler:            searchHandler,
 		metadataHandler:          metadataHandler,
+		createBodyPartHandler:    createBodyPartHandler,
+		updateBodyPartHandler:    updateBodyPartHandler,
+		deleteBodyPartHandler:    deleteBodyPartHandler,
+		getBodyPartHandler:       getBodyPartHandler,
+		listBodyPartsHandler:     listBodyPartsHandler,
+		createEquipmentHandler:   createEquipmentHandler,
+		updateEquipmentHandler:   updateEquipmentHandler,
+		deleteEquipmentHandler:   deleteEquipmentHandler,
+		getEquipmentHandler:      getEquipmentHandler,
+		listEquipmentsHandler:    listEquipmentsHandler,
+		createMuscleHandler:      createMuscleHandler,
+		updateMuscleHandler:      updateMuscleHandler,
+		deleteMuscleHandler:      deleteMuscleHandler,
+		getMuscleHandler:         getMuscleHandler,
+		listMusclesHandler:       listMusclesHandler,
+		createTagHandler:         createTagHandler,
+		updateTagHandler:         updateTagHandler,
+		deleteTagHandler:         deleteTagHandler,
+		getTagHandler:            getTagHandler,
+		listTagsHandler:          listTagsHandler,
 	}
 }
 
@@ -312,15 +376,279 @@ func toProtoStatus(status domain.Status) exercisemsg.ExerciseStatus {
 	}
 }
 
+// Body Part RPCs
+func (s *ExerciseServer) CreateBodyPart(ctx context.Context, req *exercisemsg.CreateBodyPartRequest) (*exercisemsg.CreateBodyPartResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	bp, err := s.createBodyPartHandler.Handle(ctx, &command.CreateBodyPartCommand{Name: req.GetName()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.CreateBodyPartResponse{BodyPart: toProtoBodyPart(bp)}, nil
+}
+
+func (s *ExerciseServer) GetBodyPart(ctx context.Context, req *exercisemsg.GetBodyPartRequest) (*exercisemsg.GetBodyPartResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	bp, err := s.getBodyPartHandler.Handle(ctx, query.GetBodyPartQuery{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.GetBodyPartResponse{BodyPart: toProtoBodyPart(bp)}, nil
+}
+
+func (s *ExerciseServer) ListBodyParts(ctx context.Context, req *exercisemsg.ListBodyPartsRequest) (*exercisemsg.ListBodyPartsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	bps, total, err := s.listBodyPartsHandler.Handle(ctx, query.ListBodyPartsQuery{Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	pbBps := make([]*exercisemsg.BodyPart, len(bps))
+	for i := range bps {
+		pbBps[i] = toProtoBodyPart(&bps[i])
+	}
+	return &exercisemsg.ListBodyPartsResponse{BodyParts: pbBps, Total: int32(total)}, nil
+}
+
+func (s *ExerciseServer) UpdateBodyPart(ctx context.Context, req *exercisemsg.UpdateBodyPartRequest) (*exercisemsg.UpdateBodyPartResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	bp, err := s.updateBodyPartHandler.Handle(ctx, &command.UpdateBodyPartCommand{ID: req.GetId(), Name: req.GetName()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.UpdateBodyPartResponse{BodyPart: toProtoBodyPart(bp)}, nil
+}
+
+func (s *ExerciseServer) DeleteBodyPart(ctx context.Context, req *exercisemsg.DeleteBodyPartRequest) (*exercisemsg.DeleteBodyPartResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	err := s.deleteBodyPartHandler.Handle(ctx, &command.DeleteBodyPartCommand{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.DeleteBodyPartResponse{Success: true}, nil
+}
+
+// Equipment RPCs
+func (s *ExerciseServer) CreateEquipment(ctx context.Context, req *exercisemsg.CreateEquipmentRequest) (*exercisemsg.CreateEquipmentResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	eq, err := s.createEquipmentHandler.Handle(ctx, &command.CreateEquipmentCommand{Name: req.GetName()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.CreateEquipmentResponse{Equipment: toProtoEquipment(eq)}, nil
+}
+
+func (s *ExerciseServer) GetEquipment(ctx context.Context, req *exercisemsg.GetEquipmentRequest) (*exercisemsg.GetEquipmentResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	eq, err := s.getEquipmentHandler.Handle(ctx, query.GetEquipmentQuery{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.GetEquipmentResponse{Equipment: toProtoEquipment(eq)}, nil
+}
+
+func (s *ExerciseServer) ListEquipments(ctx context.Context, req *exercisemsg.ListEquipmentsRequest) (*exercisemsg.ListEquipmentsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	eqs, total, err := s.listEquipmentsHandler.Handle(ctx, query.ListEquipmentsQuery{Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	pbEqs := make([]*exercisemsg.Equipment, len(eqs))
+	for i := range eqs {
+		pbEqs[i] = toProtoEquipment(&eqs[i])
+	}
+	return &exercisemsg.ListEquipmentsResponse{Equipments: pbEqs, Total: int32(total)}, nil
+}
+
+func (s *ExerciseServer) UpdateEquipment(ctx context.Context, req *exercisemsg.UpdateEquipmentRequest) (*exercisemsg.UpdateEquipmentResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	eq, err := s.updateEquipmentHandler.Handle(ctx, &command.UpdateEquipmentCommand{ID: req.GetId(), Name: req.GetName()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.UpdateEquipmentResponse{Equipment: toProtoEquipment(eq)}, nil
+}
+
+func (s *ExerciseServer) DeleteEquipment(ctx context.Context, req *exercisemsg.DeleteEquipmentRequest) (*exercisemsg.DeleteEquipmentResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	err := s.deleteEquipmentHandler.Handle(ctx, &command.DeleteEquipmentCommand{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.DeleteEquipmentResponse{Success: true}, nil
+}
+
+// Muscle RPCs
+func (s *ExerciseServer) CreateMuscle(ctx context.Context, req *exercisemsg.CreateMuscleRequest) (*exercisemsg.CreateMuscleResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	m, err := s.createMuscleHandler.Handle(ctx, &command.CreateMuscleCommand{Name: req.GetName(), BodyPartID: req.GetBodyPartId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.CreateMuscleResponse{Muscle: toProtoMuscle(m)}, nil
+}
+
+func (s *ExerciseServer) GetMuscle(ctx context.Context, req *exercisemsg.GetMuscleRequest) (*exercisemsg.GetMuscleResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	m, err := s.getMuscleHandler.Handle(ctx, query.GetMuscleQuery{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.GetMuscleResponse{Muscle: toProtoMuscle(m)}, nil
+}
+
+func (s *ExerciseServer) ListMuscles(ctx context.Context, req *exercisemsg.ListMusclesRequest) (*exercisemsg.ListMusclesResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ms, total, err := s.listMusclesHandler.Handle(ctx, query.ListMusclesQuery{BodyPartID: req.GetBodyPartId(), Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	pbMs := make([]*exercisemsg.Muscle, len(ms))
+	for i := range ms {
+		pbMs[i] = toProtoMuscle(&ms[i])
+	}
+	return &exercisemsg.ListMusclesResponse{Muscles: pbMs, Total: int32(total)}, nil
+}
+
+func (s *ExerciseServer) UpdateMuscle(ctx context.Context, req *exercisemsg.UpdateMuscleRequest) (*exercisemsg.UpdateMuscleResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	m, err := s.updateMuscleHandler.Handle(ctx, &command.UpdateMuscleCommand{ID: req.GetId(), Name: req.GetName(), BodyPartID: req.GetBodyPartId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.UpdateMuscleResponse{Muscle: toProtoMuscle(m)}, nil
+}
+
+func (s *ExerciseServer) DeleteMuscle(ctx context.Context, req *exercisemsg.DeleteMuscleRequest) (*exercisemsg.DeleteMuscleResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	err := s.deleteMuscleHandler.Handle(ctx, &command.DeleteMuscleCommand{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.DeleteMuscleResponse{Success: true}, nil
+}
+
+// Tag RPCs
+func (s *ExerciseServer) CreateTag(ctx context.Context, req *exercisemsg.CreateTagRequest) (*exercisemsg.CreateTagResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	t, err := s.createTagHandler.Handle(ctx, &command.CreateTagCommand{Name: req.GetName()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.CreateTagResponse{Tag: toProtoTag(t)}, nil
+}
+
+func (s *ExerciseServer) GetTag(ctx context.Context, req *exercisemsg.GetTagRequest) (*exercisemsg.GetTagResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	t, err := s.getTagHandler.Handle(ctx, query.GetTagQuery{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.GetTagResponse{Tag: toProtoTag(t)}, nil
+}
+
+func (s *ExerciseServer) ListTags(ctx context.Context, req *exercisemsg.ListTagsRequest) (*exercisemsg.ListTagsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ts, total, err := s.listTagsHandler.Handle(ctx, query.ListTagsQuery{Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	pbTs := make([]*exercisemsg.Tag, len(ts))
+	for i := range ts {
+		pbTs[i] = toProtoTag(&ts[i])
+	}
+	return &exercisemsg.ListTagsResponse{Tags: pbTs, Total: int32(total)}, nil
+}
+
+func (s *ExerciseServer) UpdateTag(ctx context.Context, req *exercisemsg.UpdateTagRequest) (*exercisemsg.UpdateTagResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	t, err := s.updateTagHandler.Handle(ctx, &command.UpdateTagCommand{ID: req.GetId(), Name: req.GetName()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.UpdateTagResponse{Tag: toProtoTag(t)}, nil
+}
+
+func (s *ExerciseServer) DeleteTag(ctx context.Context, req *exercisemsg.DeleteTagRequest) (*exercisemsg.DeleteTagResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	err := s.deleteTagHandler.Handle(ctx, &command.DeleteTagCommand{ID: req.GetId()})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &exercisemsg.DeleteTagResponse{Success: true}, nil
+}
+
+func toProtoBodyPart(bp *port.BodyPart) *exercisemsg.BodyPart {
+	return &exercisemsg.BodyPart{Id: bp.ID, Name: bp.Name}
+}
+
+func toProtoEquipment(eq *port.Equipment) *exercisemsg.Equipment {
+	return &exercisemsg.Equipment{Id: eq.ID, Name: eq.Name}
+}
+
+func toProtoMuscle(m *port.Muscle) *exercisemsg.Muscle {
+	return &exercisemsg.Muscle{Id: m.ID, Name: m.Name, BodyPartId: m.BodyPartID}
+}
+
+func toProtoTag(t *port.Tag) *exercisemsg.Tag {
+	return &exercisemsg.Tag{Id: t.ID, Name: t.Name}
+}
+
 func rpcError(err error) error {
 	switch {
 	case errors.Is(err, middleware.ErrUnauthorized):
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, middleware.ErrForbidden):
 		return status.Error(codes.PermissionDenied, err.Error())
-	case errors.Is(err, domain.ErrExerciseNotFound):
+	case errors.Is(err, domain.ErrExerciseNotFound),
+		errors.Is(err, domain.ErrBodyPartNotFound),
+		errors.Is(err, domain.ErrEquipmentNotFound),
+		errors.Is(err, domain.ErrMuscleNotFound),
+		errors.Is(err, domain.ErrTagNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domain.ErrInvalidExercise),
+		errors.Is(err, domain.ErrInvalidBodyPart),
+		errors.Is(err, domain.ErrInvalidEquipment),
+		errors.Is(err, domain.ErrInvalidMuscle),
+		errors.Is(err, domain.ErrInvalidTag),
 		errors.Is(err, domain.ErrInvalidStatus),
 		errors.Is(err, domain.ErrInvalidTransition),
 		errors.Is(err, domain.ErrArchivedExercise):
