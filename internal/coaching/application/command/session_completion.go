@@ -80,9 +80,15 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 			return roadmap.ErrSessionNotFound
 		}
 
+		// Auto-count prescribed sets if not provided.
+		totalPrescribedSets := cmd.TotalPrescribedSets
+		if totalPrescribedSets <= 0 {
+			totalPrescribedSets = countTargetSets(session)
+		}
+
 		// Compute SCR / ΔRPE.
 
-		scrPct := float32(h.scr.SCR(cmd.TotalActualSets, cmd.TotalPrescribedSets))
+		scrPct := float32(h.scr.SCR(cmd.TotalActualSets, totalPrescribedSets))
 
 		// Target RPE lives in the WeekPlan; find it.
 
@@ -91,6 +97,11 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 		delta := float32(h.scr.DeltaRPE(cmd.AverageActualRPE, float64(targetRPE)))
 
 		now := h.clock.Now()
+
+		sessionInfo := session.Info()
+		if sessionInfo.Source == roadmap.SessionPlanSourceAdHoc {
+			// Signal B3: ad-hoc session completion detected. Log for downstream processing.
+		}
 
 		if err := session.MarkCompleted(scrPct, delta, now); err != nil {
 			return fmt.Errorf("mark completed: %w", err)
@@ -207,4 +218,20 @@ func findTargetRPEForSession(rm *roadmap.Roadmap, sessionPlanID string) float32 
 	}
 
 	return 0
+}
+
+// countTargetSets sums target sets from all exercises in the session prescription.
+func countTargetSets(session *roadmap.SessionPlan) int {
+	info := session.Info()
+	total := 0
+	for _, ex := range info.Prescription.WarmUps {
+		total += int(ex.TargetSets)
+	}
+	for _, ex := range info.Prescription.MainExercises {
+		total += int(ex.TargetSets)
+	}
+	for _, ex := range info.Prescription.CoolDowns {
+		total += int(ex.TargetSets)
+	}
+	return total
 }

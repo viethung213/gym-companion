@@ -169,6 +169,8 @@ func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
 
 		Status: string(info.Status),
 
+		Source: string(info.Source),
+
 		TargetMuscleGroups: musclesBytes,
 
 		Prescription: prescBytes,
@@ -230,6 +232,8 @@ func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error)
 		SlotTime: rec.SlotTime,
 
 		Status: roadmap.SessionPlanStatus(rec.Status),
+
+		Source: roadmap.SessionPlanSource(rec.Source),
 
 		TargetMuscleGroups: muscles,
 

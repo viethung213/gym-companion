@@ -19,18 +19,20 @@ import (
 // Server implements pbsvc.CoachingServiceServer.
 type Server struct {
 	pbsvc.UnimplementedCoachingServiceServer
-	initiate   *command.InitiateRoadmapHandler
-	regenerate *command.RegenerateScheduleHandler
-	queries    *query.Handlers
+	initiate      *command.InitiateRoadmapHandler
+	regenerate    *command.RegenerateScheduleHandler
+	createAdhoc   *command.CreateAdhocSessionHandler
+	queries       *query.Handlers
 }
 
 // NewServer wires the gRPC handler.
 func NewServer(
 	initiate *command.InitiateRoadmapHandler,
 	regenerate *command.RegenerateScheduleHandler,
+	createAdhoc *command.CreateAdhocSessionHandler,
 	queries *query.Handlers,
 ) *Server {
-	return &Server{initiate: initiate, regenerate: regenerate, queries: queries}
+	return &Server{initiate: initiate, regenerate: regenerate, createAdhoc: createAdhoc, queries: queries}
 }
 
 // InitiateRoadmap implements UC-02.1.
@@ -141,6 +143,24 @@ func (s *Server) RegenerateSchedule(ctx context.Context, req *pbmsg.RegenerateSc
 	}
 
 	return &pbmsg.RegenerateScheduleResponse{Roadmap: toPBRoadmap(res.Roadmap)}, nil
+}
+
+// CreateAdhocSessionPlan creates an ad-hoc session plan (Flow 2.1).
+func (s *Server) CreateAdhocSessionPlan(ctx context.Context, req *pbmsg.CreateAdhocSessionPlanRequest) (*pbmsg.CreateAdhocSessionPlanResponse, error) {
+	if req.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	res, err := s.createAdhoc.Handle(ctx, command.CreateAdhocSessionCommand{
+		UserID:      req.GetUserId(),
+		ExerciseIDs: req.GetExerciseIds(),
+	})
+
+	if err != nil {
+		return nil, mapDomainErr(err)
+	}
+
+	return &pbmsg.CreateAdhocSessionPlanResponse{SessionPlan: toPBSession(res.SessionPlan)}, nil
 }
 
 // -------- error mapping --------
@@ -275,6 +295,7 @@ func toPBSession(s *roadmap.SessionPlan) *pbmsg.SessionPlan {
 		ScheduledDate:      dateToPB(info.ScheduledDate.Year(), int(info.ScheduledDate.Month()), info.ScheduledDate.Day()),
 		SlotTime:           info.SlotTime,
 		Status:             domainSessionStatusToPB(info.Status),
+		Source:             domainSourceToPB(info.Source),
 		TargetMuscleGroups: append([]string(nil), info.TargetMuscleGroups...),
 		Prescription:       toPBPrescription(info.Prescription),
 		Reasoning:          info.Reasoning,
@@ -387,5 +408,31 @@ func pbStatusToDomain(s pbmsg.RoadmapStatus) roadmap.Status {
 
 	default:
 		return "" // no filter
+	}
+}
+
+func domainSourceToPB(src roadmap.SessionPlanSource) pbmsg.SessionPlanSource {
+	switch src {
+	case roadmap.SessionPlanSourceScheduled:
+		return pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_COACH_SCHEDULED
+
+	case roadmap.SessionPlanSourceAdHoc:
+		return pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_USER_ADHOC
+
+	default:
+		return pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_UNSPECIFIED
+	}
+}
+
+func pbSourceToDomain(src pbmsg.SessionPlanSource) roadmap.SessionPlanSource {
+	switch src {
+	case pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_COACH_SCHEDULED:
+		return roadmap.SessionPlanSourceScheduled
+
+	case pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_USER_ADHOC:
+		return roadmap.SessionPlanSourceAdHoc
+
+	default:
+		return ""
 	}
 }

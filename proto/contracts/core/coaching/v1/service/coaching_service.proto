@@ -76,4 +76,12 @@ service CoachingService {
       body: "*"
     };
   }
+
+  // Create an ad-hoc session plan (Flow 2.1).
+  rpc CreateAdhocSessionPlan (contracts.core.coaching.v1.message.CreateAdhocSessionPlanRequest) returns (contracts.core.coaching.v1.message.CreateAdhocSessionPlanResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/session-plans/adhoc"
+      body: "*"
+    };
+  }
 }

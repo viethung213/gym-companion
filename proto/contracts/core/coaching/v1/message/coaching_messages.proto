@@ -20,6 +20,12 @@ enum SessionPlanStatus {
   SESSION_PLAN_STATUS_SKIPPED = 3;   // Đã bỏ qua / không tập
 }
 
+enum SessionPlanSource {
+  SESSION_PLAN_SOURCE_UNSPECIFIED = 0;
+  SESSION_PLAN_SOURCE_COACH_SCHEDULED = 1;
+  SESSION_PLAN_SOURCE_USER_ADHOC = 2;
+}
+
 enum RoadmapPhase {
   ROADMAP_PHASE_UNSPECIFIED = 0;
   ROADMAP_PHASE_ACCUMULATION = 1; // Tích lũy khối lượng
@@ -128,6 +134,7 @@ message SessionPlan {
   WorkoutPrescription prescription = 10;
   string reasoning = 11;
   google.protobuf.Timestamp generated_at = 12;
+  SessionPlanSource source = 13;
 }
 
 message WorkoutPrescription {
@@ -147,4 +154,13 @@ message PrescribedExercise {
   int32 rest_set_sec = 8;
   int32 rest_exercise_sec = 9;
   float target_rpe = 10;
+}
+
+message CreateAdhocSessionPlanRequest {
+  string user_id = 1;
+  repeated string exercise_ids = 2;
+}
+
+message CreateAdhocSessionPlanResponse {
+  SessionPlan session_plan = 1;
 }
