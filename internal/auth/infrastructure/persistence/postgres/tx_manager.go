@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/auth/application"
+	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"gorm.io/gorm"
 )
 
-// SQLTransactionManager implements application.TransactionManager port using GORM transaction.
+// SQLTransactionManager implements port.TransactionManager port using GORM transaction.
 type SQLTransactionManager struct {
 	db *gorm.DB
 }
 
 // Compile-time interface verification
-var _ application.TransactionManager = (*SQLTransactionManager)(nil)
+var _ port.TransactionManager = (*SQLTransactionManager)(nil)
 
 // NewSQLTransactionManager creates a new instance of SQLTransactionManager.
 func NewSQLTransactionManager(db *gorm.DB) *SQLTransactionManager {
