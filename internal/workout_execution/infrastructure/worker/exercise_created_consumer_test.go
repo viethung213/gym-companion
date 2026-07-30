@@ -109,7 +109,7 @@ func TestExerciseCreatedConsumer_HandleMessage(t *testing.T) {
 
 	t.Run("idempotency - consuming duplicate event does not error or overwrite", func(t *testing.T) {
 		now := time.Now().UTC()
-		existing := aggregate.RestoreMotionSpecification("ex-dup-1", "http://onnx", "http://rules", "http://dialogue", "front", true, now, now)
+		existing := aggregate.RestoreMotionSpecification("ex-dup-1", "http://detector.onnx", "http://skeleton.onnx", "http://rules", "http://dialogue", "front", true, now, now)
 		_ = repo.Save(context.Background(), existing)
 
 		payload := []byte(`{

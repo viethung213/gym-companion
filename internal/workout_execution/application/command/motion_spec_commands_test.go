@@ -60,8 +60,8 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 
 	t.Run("Update non-existing spec returns error", func(t *testing.T) {
 		cmd := command.UpdateMotionSpecificationCommand{
-			ExerciseID:   "non-existent-ex",
-			OnnxModelURL: "http://cdn/lunge.onnx",
+			ExerciseID:      "non-existent-ex",
+			OnnxDetectorURL: "http://cdn/detector.onnx",
 		}
 
 		_, err := handler.Handle(context.Background(), cmd)
@@ -71,12 +71,13 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 	})
 
 	t.Run("Update existing spec updates fields", func(t *testing.T) {
-		draft := aggregate.NewDraftMotionSpecification("ex-lunge")
+		draft := aggregate.NewDraftMotionSpecification("ex-lunge", "", "")
 		_ = repo.Save(context.Background(), draft)
 
 		cmd := command.UpdateMotionSpecificationCommand{
 			ExerciseID:             "ex-lunge",
-			OnnxModelURL:           "http://cdn/lunge.onnx",
+			OnnxDetectorURL:        "http://cdn/detector.onnx",
+			OnnxSkeletonURL:        "http://cdn/skeleton.onnx",
 			LocalRulesURL:          "http://cdn/lunge.json",
 			DialogueEngineURL:      "http://cdn/lunge_dialogue.json",
 			RecommendedCameraAngle: "front",
@@ -86,8 +87,8 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if spec.OnnxModelURL() != "http://cdn/lunge.onnx" {
-			t.Errorf("got ONNX URL = %s, want http://cdn/lunge.onnx", spec.OnnxModelURL())
+		if spec.OnnxDetectorURL() != "http://cdn/detector.onnx" {
+			t.Errorf("got Detector URL = %s, want http://cdn/detector.onnx", spec.OnnxDetectorURL())
 		}
 		if !spec.IsReady() {
 			t.Error("want spec.IsReady = true after all URLs are set")
@@ -97,14 +98,15 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 	t.Run("Update existing spec preserves is_ready when both URLs present", func(t *testing.T) {
 		// Seed a pre-existing draft via RestoreMotionSpecification
 		existing := aggregate.RestoreMotionSpecification(
-			"ex-squat", "http://cdn/squat.onnx", "http://cdn/squat.json",
+			"ex-squat", "http://cdn/detector.onnx", "http://cdn/skeleton.onnx", "http://cdn/squat.json",
 			"http://cdn/squat_dialogue.json", "side", false, now, now,
 		)
 		_ = repo.Save(context.Background(), existing)
 
 		cmd := command.UpdateMotionSpecificationCommand{
 			ExerciseID:             "ex-squat",
-			OnnxModelURL:           "http://cdn/squat-v2.onnx",
+			OnnxDetectorURL:        "http://cdn/detector-v2.onnx",
+			OnnxSkeletonURL:        "http://cdn/skeleton-v2.onnx",
 			LocalRulesURL:          "http://cdn/squat-v2.json",
 			DialogueEngineURL:      "http://cdn/squat_dialogue-v2.json",
 			RecommendedCameraAngle: "side",
@@ -122,7 +124,7 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 func TestDeleteMotionSpecificationHandler(t *testing.T) {
 	now := time.Now().UTC()
 	repo := newMockMotionSpecRepo()
-	draft := aggregate.RestoreMotionSpecification("ex-to-del", "a", "b", "c", "side", true, now, now)
+	draft := aggregate.RestoreMotionSpecification("ex-to-del", "a", "b", "c", "d", "side", true, now, now)
 
 	_ = repo.Save(context.Background(), draft)
 	handler := command.NewDeleteMotionSpecificationHandler(repo)

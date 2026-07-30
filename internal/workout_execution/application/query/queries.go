@@ -14,7 +14,9 @@ import (
 type MotionSpecificationDTO struct {
 	ExerciseID string
 
-	OnnxModelURL string
+	OnnxDetectorURL string
+
+	OnnxSkeletonURL string
 
 	LocalRulesURL string
 

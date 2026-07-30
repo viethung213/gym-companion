@@ -254,7 +254,8 @@ func (r *PostgresMotionSpecificationRepository) Save(ctx context.Context, spec *
 
 	model := &MotionSpecificationModel{
 		ExerciseID:             spec.ExerciseID(),
-		OnnxModelURL:           spec.OnnxModelURL(),
+		OnnxDetectorURL:        spec.OnnxDetectorURL(),
+		OnnxSkeletonURL:        spec.OnnxSkeletonURL(),
 		LocalRulesURL:          spec.LocalRulesURL(),
 		DialogueEngineURL:      spec.DialogueEngineURL(),
 		RecommendedCameraAngle: spec.RecommendedCameraAngle(),
@@ -282,8 +283,8 @@ func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Con
 	}
 
 	return aggregate.RestoreMotionSpecification(
-		model.ExerciseID, model.OnnxModelURL, model.LocalRulesURL,
-		model.DialogueEngineURL, model.RecommendedCameraAngle, model.IsReady,
+		model.ExerciseID, model.OnnxDetectorURL, model.OnnxSkeletonURL,
+		model.LocalRulesURL, model.DialogueEngineURL, model.RecommendedCameraAngle, model.IsReady,
 		model.CreatedAt, model.UpdatedAt,
 	), nil
 }
@@ -317,8 +318,8 @@ func (r *PostgresMotionSpecificationRepository) List(ctx context.Context, limit,
 	specs := make([]*aggregate.MotionSpecification, len(models))
 	for i, m := range models {
 		specs[i] = aggregate.RestoreMotionSpecification(
-			m.ExerciseID, m.OnnxModelURL, m.LocalRulesURL,
-			m.DialogueEngineURL, m.RecommendedCameraAngle, m.IsReady,
+			m.ExerciseID, m.OnnxDetectorURL, m.OnnxSkeletonURL,
+			m.LocalRulesURL, m.DialogueEngineURL, m.RecommendedCameraAngle, m.IsReady,
 			m.CreatedAt, m.UpdatedAt,
 		)
 	}

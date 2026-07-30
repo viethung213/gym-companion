@@ -257,7 +257,8 @@ func (h *GRPCHandler) GetMotionSpecification(ctx context.Context, req *workoutex
 
 	return &workoutexecutionv1message.GetMotionSpecificationResponse{
 		ExerciseId:             spec.ExerciseID(),
-		OnnxModelUrl:           spec.OnnxModelURL(),
+		OnnxDetectorUrl:        spec.OnnxDetectorURL(),
+		OnnxSkeletonUrl:        spec.OnnxSkeletonURL(),
 		LocalRulesUrl:          spec.LocalRulesURL(),
 		DialogueEngineUrl:      spec.DialogueEngineURL(),
 		RecommendedCameraAngle: spec.RecommendedCameraAngle(),
@@ -449,7 +450,8 @@ func (h *GRPCHandler) UpdateMotionSpecification(ctx context.Context, req *workou
 
 	spec, err := h.updateMotionSpecHandler.Handle(ctx, command.UpdateMotionSpecificationCommand{
 		ExerciseID:             req.GetExerciseId(),
-		OnnxModelURL:           req.GetOnnxModelUrl(),
+		OnnxDetectorURL:        req.GetOnnxDetectorUrl(),
+		OnnxSkeletonURL:        req.GetOnnxSkeletonUrl(),
 		LocalRulesURL:          req.GetLocalRulesUrl(),
 		DialogueEngineURL:      req.GetDialogueEngineUrl(),
 		RecommendedCameraAngle: req.GetRecommendedCameraAngle(),
@@ -530,7 +532,8 @@ func (h *GRPCHandler) ListMotionSpecifications(ctx context.Context, req *workout
 	for i, s := range res.Items {
 		pbList[i] = &workoutexecutionv1message.GetMotionSpecificationResponse{
 			ExerciseId:             s.ExerciseID(),
-			OnnxModelUrl:           s.OnnxModelURL(),
+			OnnxDetectorUrl:        s.OnnxDetectorURL(),
+			OnnxSkeletonUrl:        s.OnnxSkeletonURL(),
 			LocalRulesUrl:          s.LocalRulesURL(),
 			DialogueEngineUrl:      s.DialogueEngineURL(),
 			RecommendedCameraAngle: s.RecommendedCameraAngle(),

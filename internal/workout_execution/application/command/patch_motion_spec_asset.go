@@ -157,7 +157,6 @@ func (h *PatchMotionSpecificationAssetHandler) Handle(
 		publicFileURL = fmt.Sprintf("https://cdn.fitai.com/%s", objectKey)
 	}
 
-	onnxURL := spec.OnnxModelURL()
 	rulesURL := spec.LocalRulesURL()
 	dialogueURL := spec.DialogueEngineURL()
 
@@ -167,7 +166,7 @@ func (h *PatchMotionSpecificationAssetHandler) Handle(
 		dialogueURL = publicFileURL
 	}
 
-	spec.UpdateSpec(onnxURL, rulesURL, dialogueURL, spec.RecommendedCameraAngle())
+	spec.UpdateSpec(spec.OnnxDetectorURL(), spec.OnnxSkeletonURL(), rulesURL, dialogueURL, spec.RecommendedCameraAngle())
 
 	// 8. Persist spec & domain events
 	var saveErr error
