@@ -296,7 +296,7 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	exID := "ex-deadlift"
-	spec := aggregate.NewMotionSpecification(exID, "http://model.onnx", "http://rules.json", vo.DialogueEngineConfig{PersonalityID: "c1"}, "side")
+	spec := aggregate.RestoreMotionSpecification(exID, "http://model.onnx", "http://rules.json", "http://dialogue.json", "side", true, time.Now(), time.Now())
 
 	if err := repo.Save(ctx, spec); err != nil {
 		t.Fatalf("Failed to save MotionSpec: %v", err)
@@ -452,7 +452,7 @@ func TestPostgresRepository_CanceledContextAndLockConflict(t *testing.T) {
 		t.Error("expected error on canceled context FindByUserIDAndExerciseIDs")
 	}
 
-	motionSpec := aggregate.NewMotionSpecification("ex1", "http://onnx", "http://rules", vo.DialogueEngineConfig{}, "front")
+	motionSpec := aggregate.RestoreMotionSpecification("ex1", "http://onnx", "http://rules", "http://dialogue", "front", true, time.Now(), time.Now())
 	if err := motionRepo.Save(ctxCancel, motionSpec); err == nil {
 		t.Error("expected error on canceled context Save MotionSpec")
 	}

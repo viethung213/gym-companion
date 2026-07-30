@@ -33,7 +33,7 @@ func TestWorkoutExecution_FullLifecycle_E2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMotionSpecification for seeded mock data failed: %v", err)
 	}
-	if motionResp.GetOnnxModelUrl() == "" || motionResp.GetDialogueEngine().GetPersonalityId() != "coach-pro" {
+	if motionResp.GetOnnxModelUrl() == "" || motionResp.GetDialogueEngineUrl() == "" {
 		t.Errorf("Unexpected GetMotionSpecification response: %+v", motionResp)
 	}
 
