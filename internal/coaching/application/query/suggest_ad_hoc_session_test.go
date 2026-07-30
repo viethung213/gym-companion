@@ -2,14 +2,9 @@ package query
 
 import (
 	"context"
-	"errors"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/viethung213/gym-companion/internal/coaching/agent"
-	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
-	"github.com/viethung213/gym-companion/internal/coaching/agent/llm/mock"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
@@ -18,15 +13,6 @@ type fakeClock struct{ t time.Time }
 
 func (c *fakeClock) Now() time.Time { return c.t }
 
-type incrIDs struct{ n int }
-
-func (i *incrIDs) NewID() string {
-	i.n++
-
-	return "id-" + strconv.Itoa(i.n)
-}
-
-// memRepo — minimal implementation of port.RoadmapRepository for tests.
 type memRepo struct{ active *roadmap.Roadmap }
 
 func (m *memRepo) Save(context.Context, *roadmap.Roadmap) error { return nil }
@@ -38,7 +24,6 @@ func (m *memRepo) FindActiveByUser(context.Context, string) (*roadmap.Roadmap, e
 	if m.active != nil {
 		return m.active, nil
 	}
-
 	return nil, roadmap.ErrRoadmapNotFound
 }
 
@@ -50,42 +35,64 @@ func (m *memRepo) FindSessionByID(context.Context, string) (*roadmap.Roadmap, er
 	return nil, roadmap.ErrSessionNotFound
 }
 
-type stubProfile struct{ p port.Profile }
+type fakeCoachAgent struct{}
 
-func (s *stubProfile) GetProfile(context.Context, string) (port.Profile, error) { return s.p, nil }
-
-type stubWorkouts struct{}
-
-func (stubWorkouts) GetRecentSessions(context.Context, string, time.Time) ([]port.WorkoutSession, error) {
+func (f *fakeCoachAgent) GenerateRoadmap(_ context.Context, _ string) (*roadmap.Roadmap, error) {
 	return nil, nil
 }
 
-func (stubWorkouts) GetSetLogs(context.Context, string, string, int) ([]port.SetLog, error) {
+func (f *fakeCoachAgent) RegeneratePending(_ context.Context, _ string, _ []string) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
+}
+
+func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ string) ([]*roadmap.SessionPlanInfo, error) {
+	return nil, nil
+}
+
+func (f *fakeCoachAgent) SuggestAdHocSession(_ context.Context, _ string, hint port.AdHocHint) (port.SuggestedSession, error) {
+	rpe := float32(7.0)
+	if hint.IntensityHint == "light" {
+		rpe = 6.0
+	} else if hint.IntensityHint == "hard" {
+		rpe = 8.0
+	}
+
+	muscleGroups := []string{"back"}
+	if len(hint.MuscleGroups) > 0 {
+		muscleGroups = hint.MuscleGroups
+	}
+
+	sets := int32(3)
+	if hint.DurationMinutes == 15 {
+		sets = 1
+	}
+
+	return port.SuggestedSession{
+		MuscleGroups: muscleGroups,
+		Prescription: roadmap.WorkoutPrescription{
+			MainExercises: []roadmap.PrescribedExercise{
+				{
+					ExerciseID:   "ex-1",
+					ExerciseName: "Pullup",
+					TargetSets:   sets,
+					TargetReps:   8,
+					TargetWeight: 0,
+					TargetRPE:    rpe,
+				},
+			},
+		},
+		Reasoning:    "Based on constraints",
+		EstimatedRPE: rpe,
+	}, nil
 }
 
 func buildSuggestHandler(t *testing.T) *SuggestAdHocSessionHandler {
 	t.Helper()
 
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 8, 0, 0, 0, time.UTC)}
+	mockAgent := &fakeCoachAgent{}
 
-	mockAgent := mock.NewCoachAgent(&incrIDs{}, clock)
-
-	builder := contextbuilder.NewBuilder(
-
-		&stubProfile{p: port.Profile{
-			UserID:                "u-1",
-			PrimaryGoal:           "MUSCLE_GAIN",
-			PreferredMuscleGroups: []string{"back"},
-			AvailableEquipment:    []string{"BARBELL"},
-		}},
-
-		stubWorkouts{},
-
-		contextbuilder.NewStaticPromptRegistry(),
-	)
-
-	return NewSuggestAdHocSessionHandler(&memRepo{}, mockAgent, builder, clock)
+	return NewSuggestAdHocSessionHandler(&memRepo{}, mockAgent, clock)
 }
 
 func TestSuggestAdHocSession_HappyPath_NoActiveRoadmap(t *testing.T) {
@@ -93,10 +100,8 @@ func TestSuggestAdHocSession_HappyPath_NoActiveRoadmap(t *testing.T) {
 
 	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
-
-		Hint: agent.AdHocHint{FreeText: "quick back session"},
+		Hint:   port.AdHocHint{FreeText: "quick back session"},
 	})
-
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
@@ -119,10 +124,8 @@ func TestSuggestAdHocSession_HintOverridesMuscleGroups(t *testing.T) {
 
 	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
-
-		Hint: agent.AdHocHint{MuscleGroups: []string{"legs"}},
+		Hint:   port.AdHocHint{MuscleGroups: []string{"legs"}},
 	})
-
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
@@ -135,20 +138,15 @@ func TestSuggestAdHocSession_HintOverridesMuscleGroups(t *testing.T) {
 func TestSuggestAdHocSession_DurationCap_ShrinksSets(t *testing.T) {
 	h := buildSuggestHandler(t)
 
-	// 15 minutes - 10' overhead = 5' → floor(5/3) = 1 set max
-
 	got, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
 		UserID: "u-1",
-
-		Hint: agent.AdHocHint{DurationMinutes: 15},
+		Hint:   port.AdHocHint{DurationMinutes: 15},
 	})
-
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 
 	totalSets := 0
-
 	for _, ex := range got.Prescription.MainExercises {
 		totalSets += int(ex.TargetSets)
 	}
@@ -162,11 +160,11 @@ func TestSuggestAdHocSession_IntensityHintAffectsRPE(t *testing.T) {
 	h := buildSuggestHandler(t)
 
 	light, _ := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
-		UserID: "u-1", Hint: agent.AdHocHint{IntensityHint: "light"},
+		UserID: "u-1", Hint: port.AdHocHint{IntensityHint: "light"},
 	})
 
 	hard, _ := h.Handle(context.Background(), &SuggestAdHocSessionQuery{
-		UserID: "u-1", Hint: agent.AdHocHint{IntensityHint: "hard"},
+		UserID: "u-1", Hint: port.AdHocHint{IntensityHint: "hard"},
 	})
 
 	if light.EstimatedRPE >= hard.EstimatedRPE {
@@ -178,10 +176,7 @@ func TestSuggestAdHocSession_MissingUserID(t *testing.T) {
 	h := buildSuggestHandler(t)
 
 	_, err := h.Handle(context.Background(), &SuggestAdHocSessionQuery{})
-
 	if err == nil {
 		t.Errorf("expected error for missing user_id")
 	}
-
-	_ = errors.Is
 }

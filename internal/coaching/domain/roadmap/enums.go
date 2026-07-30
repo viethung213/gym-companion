@@ -44,6 +44,24 @@ func (s SessionPlanStatus) IsFinal() bool {
 	return s == SessionPlanStatusCompleted || s == SessionPlanStatusSkipped
 }
 
+// SessionPlanSource defines the origin of a SessionPlan.
+type SessionPlanSource string
+
+const (
+	SessionPlanSourceScheduled SessionPlanSource = "COACH_SCHEDULED"
+	SessionPlanSourceAdHoc     SessionPlanSource = "USER_ADHOC"
+)
+
+// Valid reports whether s is a known SessionPlanSource.
+func (s SessionPlanSource) Valid() bool {
+	switch s {
+	case SessionPlanSourceScheduled, SessionPlanSourceAdHoc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Phase is a training phase within the 4-week periodization model.
 type Phase string
 

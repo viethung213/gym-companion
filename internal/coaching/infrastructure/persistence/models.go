@@ -57,6 +57,7 @@ type sessionPlanRecord struct {
 	ScheduledDate      time.Time       `gorm:"column:scheduled_date;not null;type:date"`
 	SlotTime           string          `gorm:"column:slot_time"`
 	Status             string          `gorm:"column:status;not null"`
+	Source             string          `gorm:"column:source;not null"`
 	TargetMuscleGroups []byte          `gorm:"column:target_muscle_groups;type:jsonb"`
 	Prescription       []byte          `gorm:"column:prescription;type:jsonb"`
 	Reasoning          string          `gorm:"column:reasoning"`

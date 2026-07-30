@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
     scheduled_date        DATE         NOT NULL,
     slot_time             VARCHAR(50)  NOT NULL DEFAULT '',
     status                VARCHAR(50)  NOT NULL DEFAULT 'PENDING',
+    source                VARCHAR(50)  NOT NULL DEFAULT 'COACH_SCHEDULED',
     target_muscle_groups  JSONB        NOT NULL DEFAULT '[]',
     prescription          JSONB        NOT NULL DEFAULT '{}',
     reasoning             TEXT         NOT NULL DEFAULT '',
@@ -73,7 +74,8 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
     completed_at          TIMESTAMP WITH TIME ZONE,
     session_scr           NUMERIC(5,2),
     session_delta_rpe     NUMERIC(4,2),
-    CONSTRAINT chk_session_status CHECK (status IN ('PENDING', 'COMPLETED', 'SKIPPED'))
+    CONSTRAINT chk_session_status CHECK (status IN ('PENDING', 'COMPLETED', 'SKIPPED')),
+    CONSTRAINT chk_session_source CHECK (source IN ('COACH_SCHEDULED', 'USER_ADHOC'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_plans_day_plan_id  ON coaching.session_plans(day_plan_id);

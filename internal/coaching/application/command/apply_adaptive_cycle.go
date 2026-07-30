@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/agent"
-	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
@@ -28,22 +26,20 @@ type ApplyAdaptiveCycleResult struct {
 
 // ApplyAdaptiveCycleHandler orchestrates BR-AC-04 Trigger A.
 type ApplyAdaptiveCycleHandler struct {
-	tx      port.TransactionManager
-	repo    port.RoadmapRepository
-	agent   agent.CoachAgent
-	builder *contextbuilder.Builder
-	guard   *guardrail.Engine
-	outbox  port.OutboxWriter
-	clock   port.Clock
-	engine  *service.AdaptiveCoachEngine
+	tx     port.TransactionManager
+	repo   port.RoadmapRepository
+	agent  port.CoachAgent
+	guard  *guardrail.Engine
+	outbox port.OutboxWriter
+	clock  port.Clock
+	engine *service.AdaptiveCoachEngine
 }
 
 // NewApplyAdaptiveCycleHandler wires the handler.
 func NewApplyAdaptiveCycleHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
-	agent agent.CoachAgent,
-	builder *contextbuilder.Builder,
+	agent port.CoachAgent,
 	guard *guardrail.Engine,
 	outbox port.OutboxWriter,
 	clock port.Clock,
@@ -54,14 +50,13 @@ func NewApplyAdaptiveCycleHandler(
 	}
 
 	return &ApplyAdaptiveCycleHandler{
-		tx:      tx,
-		repo:    repo,
-		agent:   agent,
-		builder: builder,
-		guard:   guard,
-		outbox:  outbox,
-		clock:   clock,
-		engine:  engine,
+		tx:     tx,
+		repo:   repo,
+		agent:  agent,
+		guard:  guard,
+		outbox: outbox,
+		clock:  clock,
+		engine: engine,
 	}
 }
 
@@ -85,13 +80,7 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 
 	now := h.clock.Now()
 
-	cc, err := h.builder.Build(ctx, agent.FlowAdaptiveCycle, cmd.UserID, rm, now)
-
-	if err != nil {
-		return nil, err
-	}
-
-	drafts, err := h.agent.Adapt(ctx, cc, decision.Reason, nil)
+	drafts, err := h.agent.Adapt(ctx, cmd.UserID, decision.Reason)
 
 	if err != nil {
 		return nil, fmt.Errorf("agent adapt: %w", err)

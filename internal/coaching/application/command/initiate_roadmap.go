@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/agent"
-	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
@@ -27,33 +25,30 @@ type InitiateRoadmapResult struct {
 // InitiateRoadmapHandler orchestrates: ContextBuilder → CoachAgent → Guard →
 // Save (Roadmap + Outbox event) in a single transaction.
 type InitiateRoadmapHandler struct {
-	tx      port.TransactionManager
-	repo    port.RoadmapRepository
-	agent   agent.CoachAgent
-	builder *contextbuilder.Builder
-	guard   *guardrail.Engine
-	outbox  port.OutboxWriter
-	clock   port.Clock
+	tx     port.TransactionManager
+	repo   port.RoadmapRepository
+	agent  port.CoachAgent
+	guard  *guardrail.Engine
+	outbox port.OutboxWriter
+	clock  port.Clock
 }
 
 // NewInitiateRoadmapHandler wires the handler.
 func NewInitiateRoadmapHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
-	agent agent.CoachAgent,
-	builder *contextbuilder.Builder,
+	agent port.CoachAgent,
 	guard *guardrail.Engine,
 	outbox port.OutboxWriter,
 	clock port.Clock,
 ) *InitiateRoadmapHandler {
 	return &InitiateRoadmapHandler{
-		tx:      tx,
-		repo:    repo,
-		agent:   agent,
-		builder: builder,
-		guard:   guard,
-		outbox:  outbox,
-		clock:   clock,
+		tx:     tx,
+		repo:   repo,
+		agent:  agent,
+		guard:  guard,
+		outbox: outbox,
+		clock:  clock,
 	}
 }
 
@@ -78,13 +73,7 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmap
 
 	now := h.clock.Now()
 
-	cc, err := h.builder.Build(ctx, agent.FlowInitiate4Week, cmd.UserID, nil, now)
-
-	if err != nil {
-		return nil, fmt.Errorf("build context: %w", err)
-	}
-
-	draft, err := h.agent.GenerateRoadmap(ctx, cc, nil)
+	draft, err := h.agent.GenerateRoadmap(ctx, cmd.UserID)
 
 	if err != nil {
 		return nil, fmt.Errorf("agent generate: %w", err)

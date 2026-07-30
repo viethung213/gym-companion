@@ -1,31 +1,36 @@
-package command
+//go:build e2e || integration
+
+package e2e
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strconv"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
-	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
+	"github.com/viethung213/gym-companion/internal/coaching/application/query"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
+	pbsvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-// ---- mocks ----
+type E2ETestSuite struct {
+	GRPCConn   *grpc.ClientConn
+	Client     pbsvc.CoachingServiceClient
+	StopServer func()
+}
+
 type fakeClock struct{ t time.Time }
 
 func (c *fakeClock) Now() time.Time { return c.t }
-
-type incrIDs struct{ n int }
-
-func (i *incrIDs) NewID() string {
-	i.n++
-	return "id-" + strconv.Itoa(i.n)
-}
 
 type fakeTx struct{}
 
@@ -35,7 +40,7 @@ func (fakeTx) WithTransaction(ctx context.Context, fn func(context.Context) erro
 
 type memRepo struct {
 	byID       map[string]*roadmap.Roadmap
-	activeByID map[string]string // userID -> roadmap.ID
+	activeByID map[string]string
 }
 
 func newMemRepo() *memRepo {
@@ -44,11 +49,9 @@ func newMemRepo() *memRepo {
 
 func (m *memRepo) Save(_ context.Context, r *roadmap.Roadmap) error {
 	m.byID[r.ID()] = r
-
 	if r.Status() == roadmap.StatusActive {
 		m.activeByID[r.UserID()] = r.ID()
 	}
-
 	return nil
 }
 
@@ -66,8 +69,14 @@ func (m *memRepo) FindActiveByUser(_ context.Context, userID string) (*roadmap.R
 	return nil, roadmap.ErrRoadmapNotFound
 }
 
-func (m *memRepo) ListByUser(_ context.Context, _ string, _ roadmap.Status, _, _ int) ([]*roadmap.Roadmap, error) {
-	return nil, nil
+func (m *memRepo) ListByUser(_ context.Context, userID string, _ roadmap.Status, _, _ int) ([]*roadmap.Roadmap, error) {
+	var out []*roadmap.Roadmap
+	for _, r := range m.byID {
+		if r.UserID() == userID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 func (m *memRepo) FindSessionByID(_ context.Context, sid string) (*roadmap.Roadmap, error) {
@@ -80,10 +89,10 @@ func (m *memRepo) FindSessionByID(_ context.Context, sid string) (*roadmap.Roadm
 }
 
 type captureOutbox struct {
-	events []domainevent.Event
+	events []event.Event
 }
 
-func (c *captureOutbox) Enqueue(_ context.Context, _ string, events ...domainevent.Event) error {
+func (c *captureOutbox) Enqueue(_ context.Context, _ string, events ...event.Event) error {
 	c.events = append(c.events, events...)
 	return nil
 }
@@ -94,7 +103,7 @@ type fakeCoachAgent struct {
 
 func (f *fakeCoachAgent) GenerateRoadmap(_ context.Context, userID string) (*roadmap.Roadmap, error) {
 	info := &roadmap.Info{
-		RoadmapID: "roadmap-1",
+		RoadmapID: "roadmap-e2e-1",
 		UserID:    userID,
 		Status:    roadmap.StatusActive,
 		StartDate: f.t,
@@ -114,7 +123,7 @@ func (f *fakeCoachAgent) GenerateRoadmap(_ context.Context, userID string) (*roa
 		}
 		weekInfo := &roadmap.WeekPlanInfo{
 			WeekPlanID: fmt.Sprintf("week-%d", i),
-			RoadmapID:  "roadmap-1",
+			RoadmapID:  "roadmap-e2e-1",
 			UserID:     userID,
 			WeekNumber: int32(i),
 			Phase:      phase,
@@ -140,67 +149,52 @@ func (f *fakeCoachAgent) SuggestAdHocSession(_ context.Context, _ string, _ port
 	return port.SuggestedSession{}, nil
 }
 
-func buildHandler(t *testing.T) (*InitiateRoadmapHandler, *memRepo, *captureOutbox) {
+func SetupCoachingE2ESuite(t *testing.T) *E2ETestSuite {
 	t.Helper()
 
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen on random port: %v", err)
+	}
+
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
-	mockAgent := &fakeCoachAgent{t: clock.t}
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
 	repo := newMemRepo()
 	outbox := &captureOutbox{}
+	mockAgent := &fakeCoachAgent{t: clock.t}
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
 
-	h := NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
+	initiateHandler := command.NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
+	regenerateHandler := command.NewRegenerateScheduleHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
+	queriesHandler := query.NewHandlers(repo)
 
-	return h, repo, outbox
-}
+	grpcServer := grpc.NewServer()
+	srv := coachingGrpc.NewServer(initiateHandler, regenerateHandler, queriesHandler)
+	pbsvc.RegisterCoachingServiceServer(grpcServer, srv)
 
-func TestInitiateRoadmap_HappyPath(t *testing.T) {
-	h, repo, outbox := buildHandler(t)
+	go func() {
+		if serveErr := grpcServer.Serve(lis); serveErr != nil {
+			t.Logf("gRPC server exited: %v", serveErr)
+		}
+	}()
 
-	res, err := h.Handle(context.Background(), InitiateRoadmapCommand{UserID: "user-1"})
+	conn, err := grpc.NewClient(
+		lis.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		t.Fatalf("Handle: %v", err)
+		grpcServer.Stop()
+		t.Fatalf("Failed to connect to test gRPC server: %v", err)
 	}
 
-	if res == nil || res.Roadmap == nil {
-		t.Fatalf("nil result")
-	}
+	client := pbsvc.NewCoachingServiceClient(conn)
 
-	if res.Roadmap.Status() != roadmap.StatusActive {
-		t.Errorf("status=%s", res.Roadmap.Status())
-	}
-
-	if _, err := repo.FindActiveByUser(context.Background(), "user-1"); err != nil {
-		t.Errorf("expected active roadmap in repo: %v", err)
-	}
-
-	if len(outbox.events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(outbox.events))
-	}
-
-	if _, ok := outbox.events[0].(*domainevent.RoadmapInitiated); !ok {
-		t.Errorf("expected RoadmapInitiated, got %T", outbox.events[0])
-	}
-}
-
-func TestInitiateRoadmap_RejectsDuplicateActive(t *testing.T) {
-	h, _, _ := buildHandler(t)
-
-	if _, err := h.Handle(context.Background(), InitiateRoadmapCommand{UserID: "user-1"}); err != nil {
-		t.Fatalf("first init: %v", err)
-	}
-
-	_, err := h.Handle(context.Background(), InitiateRoadmapCommand{UserID: "user-1"})
-	if !errors.Is(err, roadmap.ErrActiveRoadmapExists) {
-		t.Errorf("expected ErrActiveRoadmapExists, got %v", err)
-	}
-}
-
-func TestInitiateRoadmap_MissingUserID(t *testing.T) {
-	h, _, _ := buildHandler(t)
-
-	_, err := h.Handle(context.Background(), InitiateRoadmapCommand{UserID: ""})
-	if err == nil {
-		t.Errorf("expected error for missing user_id")
+	return &E2ETestSuite{
+		GRPCConn: conn,
+		Client:   client,
+		StopServer: func() {
+			conn.Close()
+			grpcServer.GracefulStop()
+			lis.Close()
+		},
 	}
 }

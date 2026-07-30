@@ -37,6 +37,7 @@ type SessionPlanInfo struct {
 	ScheduledDate      time.Time
 	SlotTime           string
 	Status             SessionPlanStatus
+	Source             SessionPlanSource
 	TargetMuscleGroups []string
 	Prescription       WorkoutPrescription
 	Reasoning          string
@@ -60,6 +61,10 @@ func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) 
 	normInfo := normalizeSessionInfo(info)
 
 	normInfo.Status = SessionPlanStatusPending
+
+	if normInfo.Source == "" {
+		normInfo.Source = SessionPlanSourceScheduled
+	}
 
 	normInfo.GeneratedAt = now
 
@@ -223,6 +228,10 @@ func (s *SessionPlan) validate() error {
 
 	if !i.Status.Valid() {
 		return fmt.Errorf("%w: %s", ErrInvalidStatus, i.Status)
+	}
+
+	if i.Source != "" && !i.Source.Valid() {
+		return fmt.Errorf("%w: invalid source %s", ErrInvalidRoadmap, i.Source)
 	}
 
 	return nil

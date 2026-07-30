@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/coaching/agent"
-	"github.com/viethung213/gym-companion/internal/coaching/agent/contextbuilder"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
@@ -26,33 +24,30 @@ type RegenerateScheduleResult struct {
 
 // RegenerateScheduleHandler orchestrates UC-02.3 (FR-AC-06).
 type RegenerateScheduleHandler struct {
-	tx      port.TransactionManager
-	repo    port.RoadmapRepository
-	agent   agent.CoachAgent
-	builder *contextbuilder.Builder
-	guard   *guardrail.Engine
-	outbox  port.OutboxWriter
-	clock   port.Clock
+	tx     port.TransactionManager
+	repo   port.RoadmapRepository
+	agent  port.CoachAgent
+	guard  *guardrail.Engine
+	outbox port.OutboxWriter
+	clock  port.Clock
 }
 
 // NewRegenerateScheduleHandler wires the handler.
 func NewRegenerateScheduleHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
-	agent agent.CoachAgent,
-	builder *contextbuilder.Builder,
+	agent port.CoachAgent,
 	guard *guardrail.Engine,
 	outbox port.OutboxWriter,
 	clock port.Clock,
 ) *RegenerateScheduleHandler {
 	return &RegenerateScheduleHandler{
-		tx:      tx,
-		repo:    repo,
-		agent:   agent,
-		builder: builder,
-		guard:   guard,
-		outbox:  outbox,
-		clock:   clock,
+		tx:     tx,
+		repo:   repo,
+		agent:  agent,
+		guard:  guard,
+		outbox: outbox,
+		clock:  clock,
 	}
 }
 
@@ -80,19 +75,13 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 		return &RegenerateScheduleResult{Roadmap: rm}, nil
 	}
 
-	cc, err := h.builder.Build(ctx, agent.FlowRegenerate, cmd.UserID, rm, now)
-
-	if err != nil {
-		return nil, err
-	}
-
 	ids := make([]string, 0, len(pending))
 
 	for _, s := range pending {
 		ids = append(ids, s.ID())
 	}
 
-	drafts, err := h.agent.RegeneratePending(ctx, cc, ids, nil)
+	drafts, err := h.agent.RegeneratePending(ctx, cmd.UserID, ids)
 
 	if err != nil {
 		return nil, fmt.Errorf("agent regenerate: %w", err)
