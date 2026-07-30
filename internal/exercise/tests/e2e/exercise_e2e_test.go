@@ -6,8 +6,9 @@ import (
 	"context"
 	"testing"
 
-	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	"google.golang.org/grpc/metadata"
+
+	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 )
 
 func TestExercise_Lifecycle_E2E(t *testing.T) {

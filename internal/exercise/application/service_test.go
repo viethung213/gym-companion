@@ -203,29 +203,42 @@ func (r *fakeRepository) GetMetadata(_ context.Context) (port.Metadata, error) {
 }
 
 func (r *fakeRepository) CreateBodyPart(_ context.Context, _ *port.BodyPart) error { return nil }
-func (r *fakeRepository) GetBodyPart(_ context.Context, _ string) (*port.BodyPart, error) { return nil, nil }
-func (r *fakeRepository) ListBodyParts(_ context.Context, _, _ int) ([]port.BodyPart, int, error) { return nil, 0, nil }
+func (r *fakeRepository) GetBodyPart(_ context.Context, _ string) (*port.BodyPart, error) {
+	return nil, nil
+}
+func (r *fakeRepository) ListBodyParts(_ context.Context, _, _ int) ([]port.BodyPart, int, error) {
+	return nil, 0, nil
+}
 func (r *fakeRepository) UpdateBodyPart(_ context.Context, _ *port.BodyPart) error { return nil }
-func (r *fakeRepository) DeleteBodyPart(_ context.Context, _ string) error { return nil }
+func (r *fakeRepository) DeleteBodyPart(_ context.Context, _ string) error         { return nil }
 
 func (r *fakeRepository) CreateEquipment(_ context.Context, _ *port.Equipment) error { return nil }
-func (r *fakeRepository) GetEquipment(_ context.Context, _ string) (*port.Equipment, error) { return nil, nil }
-func (r *fakeRepository) ListEquipments(_ context.Context, _, _ int) ([]port.Equipment, int, error) { return nil, 0, nil }
+func (r *fakeRepository) GetEquipment(_ context.Context, _ string) (*port.Equipment, error) {
+	return nil, nil
+}
+func (r *fakeRepository) ListEquipments(_ context.Context, _, _ int) ([]port.Equipment, int, error) {
+	return nil, 0, nil
+}
 func (r *fakeRepository) UpdateEquipment(_ context.Context, _ *port.Equipment) error { return nil }
-func (r *fakeRepository) DeleteEquipment(_ context.Context, _ string) error { return nil }
+func (r *fakeRepository) DeleteEquipment(_ context.Context, _ string) error          { return nil }
 
 func (r *fakeRepository) CreateMuscle(_ context.Context, _ *port.Muscle) error { return nil }
-func (r *fakeRepository) GetMuscle(_ context.Context, _ string) (*port.Muscle, error) { return nil, nil }
-func (r *fakeRepository) ListMuscles(_ context.Context, _ string, _, _ int) ([]port.Muscle, int, error) { return nil, 0, nil }
+func (r *fakeRepository) GetMuscle(_ context.Context, _ string) (*port.Muscle, error) {
+	return nil, nil
+}
+func (r *fakeRepository) ListMuscles(_ context.Context, _ string, _, _ int) ([]port.Muscle, int, error) {
+	return nil, 0, nil
+}
 func (r *fakeRepository) UpdateMuscle(_ context.Context, _ *port.Muscle) error { return nil }
-func (r *fakeRepository) DeleteMuscle(_ context.Context, _ string) error { return nil }
+func (r *fakeRepository) DeleteMuscle(_ context.Context, _ string) error       { return nil }
 
-func (r *fakeRepository) CreateTag(_ context.Context, _ *port.Tag) error { return nil }
+func (r *fakeRepository) CreateTag(_ context.Context, _ *port.Tag) error        { return nil }
 func (r *fakeRepository) GetTag(_ context.Context, _ string) (*port.Tag, error) { return nil, nil }
-func (r *fakeRepository) ListTags(_ context.Context, _, _ int) ([]port.Tag, int, error) { return nil, 0, nil }
+func (r *fakeRepository) ListTags(_ context.Context, _, _ int) ([]port.Tag, int, error) {
+	return nil, 0, nil
+}
 func (r *fakeRepository) UpdateTag(_ context.Context, _ *port.Tag) error { return nil }
-func (r *fakeRepository) DeleteTag(_ context.Context, _ string) error { return nil }
-
+func (r *fakeRepository) DeleteTag(_ context.Context, _ string) error    { return nil }
 
 type fakeClock struct {
 	now time.Time

@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viethung213/gym-companion/internal/exercise/application/port"
-	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
+	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
 
 func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {

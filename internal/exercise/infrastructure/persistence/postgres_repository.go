@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/exercise/application/port"
-	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
+	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
 
 type PostgresRepository struct {

@@ -3,8 +3,9 @@ package persistence
 import (
 	"fmt"
 
-	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"gorm.io/gorm"
+
+	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
 
 func insertOutbox(tx *gorm.DB, event *domain.Event) error {

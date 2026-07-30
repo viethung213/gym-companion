@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"gorm.io/gorm"
+
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
-	"gorm.io/gorm"
 )
 
 func replaceSecondaryMuscles(tx *gorm.DB, info *domain.Info) error {

@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
@@ -12,8 +15,6 @@ import (
 	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type ExerciseServer struct {
@@ -28,29 +29,29 @@ type ExerciseServer struct {
 	searchHandler            *query.SearchExercisesHandler
 	metadataHandler          *query.GetCatalogMetadataHandler
 
-	createBodyPartHandler   *command.CreateBodyPartHandler
-	updateBodyPartHandler   *command.UpdateBodyPartHandler
-	deleteBodyPartHandler   *command.DeleteBodyPartHandler
-	getBodyPartHandler      *query.GetBodyPartHandler
-	listBodyPartsHandler    *query.ListBodyPartsHandler
+	createBodyPartHandler *command.CreateBodyPartHandler
+	updateBodyPartHandler *command.UpdateBodyPartHandler
+	deleteBodyPartHandler *command.DeleteBodyPartHandler
+	getBodyPartHandler    *query.GetBodyPartHandler
+	listBodyPartsHandler  *query.ListBodyPartsHandler
 
-	createEquipmentHandler  *command.CreateEquipmentHandler
-	updateEquipmentHandler  *command.UpdateEquipmentHandler
-	deleteEquipmentHandler  *command.DeleteEquipmentHandler
-	getEquipmentHandler     *query.GetEquipmentHandler
-	listEquipmentsHandler   *query.ListEquipmentsHandler
+	createEquipmentHandler *command.CreateEquipmentHandler
+	updateEquipmentHandler *command.UpdateEquipmentHandler
+	deleteEquipmentHandler *command.DeleteEquipmentHandler
+	getEquipmentHandler    *query.GetEquipmentHandler
+	listEquipmentsHandler  *query.ListEquipmentsHandler
 
-	createMuscleHandler     *command.CreateMuscleHandler
-	updateMuscleHandler     *command.UpdateMuscleHandler
-	deleteMuscleHandler     *command.DeleteMuscleHandler
-	getMuscleHandler        *query.GetMuscleHandler
-	listMusclesHandler      *query.ListMusclesHandler
+	createMuscleHandler *command.CreateMuscleHandler
+	updateMuscleHandler *command.UpdateMuscleHandler
+	deleteMuscleHandler *command.DeleteMuscleHandler
+	getMuscleHandler    *query.GetMuscleHandler
+	listMusclesHandler  *query.ListMusclesHandler
 
-	createTagHandler        *command.CreateTagHandler
-	updateTagHandler        *command.UpdateTagHandler
-	deleteTagHandler        *command.DeleteTagHandler
-	getTagHandler           *query.GetTagHandler
-	listTagsHandler         *query.ListTagsHandler
+	createTagHandler *command.CreateTagHandler
+	updateTagHandler *command.UpdateTagHandler
+	deleteTagHandler *command.DeleteTagHandler
+	getTagHandler    *query.GetTagHandler
+	listTagsHandler  *query.ListTagsHandler
 }
 
 var _ exercisesvc.ExerciseServiceServer = (*ExerciseServer)(nil)
@@ -403,7 +404,10 @@ func (s *ExerciseServer) ListBodyParts(ctx context.Context, req *exercisemsg.Lis
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	bps, total, err := s.listBodyPartsHandler.Handle(ctx, query.ListBodyPartsQuery{Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	bps, total, err := s.listBodyPartsHandler.Handle(ctx, query.ListBodyPartsQuery{
+		Limit:  int(req.GetLimit()),
+		Offset: int(req.GetOffset()),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -418,7 +422,10 @@ func (s *ExerciseServer) UpdateBodyPart(ctx context.Context, req *exercisemsg.Up
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	bp, err := s.updateBodyPartHandler.Handle(ctx, &command.UpdateBodyPartCommand{ID: req.GetId(), Name: req.GetName()})
+	bp, err := s.updateBodyPartHandler.Handle(ctx, &command.UpdateBodyPartCommand{
+		ID:   req.GetId(),
+		Name: req.GetName(),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -463,7 +470,10 @@ func (s *ExerciseServer) ListEquipments(ctx context.Context, req *exercisemsg.Li
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	eqs, total, err := s.listEquipmentsHandler.Handle(ctx, query.ListEquipmentsQuery{Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	eqs, total, err := s.listEquipmentsHandler.Handle(ctx, query.ListEquipmentsQuery{
+		Limit:  int(req.GetLimit()),
+		Offset: int(req.GetOffset()),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -478,7 +488,10 @@ func (s *ExerciseServer) UpdateEquipment(ctx context.Context, req *exercisemsg.U
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	eq, err := s.updateEquipmentHandler.Handle(ctx, &command.UpdateEquipmentCommand{ID: req.GetId(), Name: req.GetName()})
+	eq, err := s.updateEquipmentHandler.Handle(ctx, &command.UpdateEquipmentCommand{
+		ID:   req.GetId(),
+		Name: req.GetName(),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -501,7 +514,10 @@ func (s *ExerciseServer) CreateMuscle(ctx context.Context, req *exercisemsg.Crea
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	m, err := s.createMuscleHandler.Handle(ctx, &command.CreateMuscleCommand{Name: req.GetName(), BodyPartID: req.GetBodyPartId()})
+	m, err := s.createMuscleHandler.Handle(ctx, &command.CreateMuscleCommand{
+		Name:       req.GetName(),
+		BodyPartID: req.GetBodyPartId(),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -523,7 +539,11 @@ func (s *ExerciseServer) ListMuscles(ctx context.Context, req *exercisemsg.ListM
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	ms, total, err := s.listMusclesHandler.Handle(ctx, query.ListMusclesQuery{BodyPartID: req.GetBodyPartId(), Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	ms, total, err := s.listMusclesHandler.Handle(ctx, query.ListMusclesQuery{
+		BodyPartID: req.GetBodyPartId(),
+		Limit:      int(req.GetLimit()),
+		Offset:     int(req.GetOffset()),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -538,7 +558,11 @@ func (s *ExerciseServer) UpdateMuscle(ctx context.Context, req *exercisemsg.Upda
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	m, err := s.updateMuscleHandler.Handle(ctx, &command.UpdateMuscleCommand{ID: req.GetId(), Name: req.GetName(), BodyPartID: req.GetBodyPartId()})
+	m, err := s.updateMuscleHandler.Handle(ctx, &command.UpdateMuscleCommand{
+		ID:         req.GetId(),
+		Name:       req.GetName(),
+		BodyPartID: req.GetBodyPartId(),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -583,7 +607,10 @@ func (s *ExerciseServer) ListTags(ctx context.Context, req *exercisemsg.ListTags
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	ts, total, err := s.listTagsHandler.Handle(ctx, query.ListTagsQuery{Limit: int(req.GetLimit()), Offset: int(req.GetOffset())})
+	ts, total, err := s.listTagsHandler.Handle(ctx, query.ListTagsQuery{
+		Limit:  int(req.GetLimit()),
+		Offset: int(req.GetOffset()),
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
