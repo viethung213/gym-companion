@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
-
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	exercisev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/event"
 	exercisev1msg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func newEvent(

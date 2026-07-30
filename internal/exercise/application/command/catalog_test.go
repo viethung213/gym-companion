@@ -7,11 +7,10 @@ import (
 	"errors"
 	"testing"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"google.golang.org/grpc/metadata"
 )
 
 type mockIDGenerator struct {

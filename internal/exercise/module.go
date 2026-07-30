@@ -11,10 +11,6 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"google.golang.org/grpc"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
@@ -23,6 +19,9 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
 	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	"google.golang.org/grpc"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
