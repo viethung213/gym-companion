@@ -116,9 +116,10 @@ message GetMotionSpecificationResponse {
   string exercise_id = 1;
   string onnx_model_url = 2;
   string local_rules_url = 3;
-  DialogueEngineConfig dialogue_engine = 4;
+  string dialogue_engine_url = 4;
   string recommended_camera_angle = 5;
 }
+
 
 message PersonalRecord {
   string exercise_id = 1;
@@ -180,3 +181,71 @@ message GetWorkoutHistoryResponse {
 message AdminGetWorkoutHistoryResponse {
   repeated WorkoutSessionSummary sessions = 1;
 }
+
+message UpdateMotionSpecificationRequest {
+  string exercise_id = 1;
+  string onnx_model_url = 2;
+  string local_rules_url = 3;
+  string dialogue_engine_url = 4;
+  string recommended_camera_angle = 5;
+}
+
+
+message UpdateMotionSpecificationResponse {
+  string exercise_id = 1;
+  google.protobuf.Timestamp updated_at = 2;
+  bool is_ready = 3;
+}
+
+message DeleteMotionSpecificationRequest {
+  string exercise_id = 1;
+}
+
+message DeleteMotionSpecificationResponse {
+  string exercise_id = 1;
+  bool success = 2;
+}
+
+message ListMotionSpecificationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMotionSpecificationsResponse {
+  repeated GetMotionSpecificationResponse motion_specifications = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message GetPresignedUploadURLRequest {
+  string file_name = 1;
+  string content_type = 2;
+}
+
+message GetPresignedUploadURLResponse {
+  string upload_url = 1;
+  string file_url = 2;
+  string file_name = 3;
+}
+
+enum MotionAssetType {
+  MOTION_ASSET_TYPE_UNSPECIFIED = 0;
+  MOTION_ASSET_TYPE_POSE_RULES = 1;
+  MOTION_ASSET_TYPE_DIALOGUE_CONFIG = 2;
+}
+
+message PatchMotionSpecificationAssetRequest {
+  string exercise_id = 1;
+  MotionAssetType asset_type = 2;
+  string patch_json = 3;
+  repeated string delete_keys = 4;
+}
+
+message PatchMotionSpecificationAssetResponse {
+  string exercise_id = 1;
+  MotionAssetType asset_type = 2;
+  string file_url = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+

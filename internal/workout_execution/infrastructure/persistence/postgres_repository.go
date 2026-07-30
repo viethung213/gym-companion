@@ -3,15 +3,15 @@ package persistence
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
-	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -251,16 +251,16 @@ func NewPostgresMotionSpecificationRepository(db *gorm.DB) *PostgresMotionSpecif
 
 func (r *PostgresMotionSpecificationRepository) Save(ctx context.Context, spec *aggregate.MotionSpecification) error {
 	db := getDB(ctx, r.db)
-	dialogueBytes, _ := json.Marshal(spec.DialogueEngine())
 
 	model := &MotionSpecificationModel{
 		ExerciseID:             spec.ExerciseID(),
 		OnnxModelURL:           spec.OnnxModelURL(),
 		LocalRulesURL:          spec.LocalRulesURL(),
-		DialogueEngineJSON:     dialogueBytes,
+		DialogueEngineURL:      spec.DialogueEngineURL(),
 		RecommendedCameraAngle: spec.RecommendedCameraAngle(),
-		CreatedAt:              time.Now().UTC(),
-		UpdatedAt:              time.Now().UTC(),
+		IsReady:                spec.IsReady(),
+		CreatedAt:              spec.CreatedAt(),
+		UpdatedAt:              spec.UpdatedAt(),
 	}
 
 	err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(model).Error
@@ -276,20 +276,54 @@ func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Con
 	err := db.First(&model, "exercise_id = ?", exerciseID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, derror.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find motion specification: %w", err)
 	}
 
-	var dialogue vo.DialogueEngineConfig
-	if len(model.DialogueEngineJSON) > 0 {
-		_ = json.Unmarshal(model.DialogueEngineJSON, &dialogue)
+	return aggregate.RestoreMotionSpecification(
+		model.ExerciseID, model.OnnxModelURL, model.LocalRulesURL,
+		model.DialogueEngineURL, model.RecommendedCameraAngle, model.IsReady,
+		model.CreatedAt, model.UpdatedAt,
+	), nil
+}
+
+func (r *PostgresMotionSpecificationRepository) Delete(ctx context.Context, exerciseID string) error {
+	db := getDB(ctx, r.db)
+	res := db.Delete(&MotionSpecificationModel{}, "exercise_id = ?", exerciseID)
+	if res.Error != nil {
+		return fmt.Errorf("failed to delete motion specification: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return derror.ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresMotionSpecificationRepository) List(ctx context.Context, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	db := getDB(ctx, r.db)
+
+	var total int64
+	if err := db.Model(&MotionSpecificationModel{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count motion specifications: %w", err)
 	}
 
-	return aggregate.NewMotionSpecification(
-		model.ExerciseID, model.OnnxModelURL, model.LocalRulesURL,
-		dialogue, model.RecommendedCameraAngle,
-	), nil
+	var models []MotionSpecificationModel
+	err := db.Limit(limit).Offset(offset).Order("exercise_id ASC").Find(&models).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list motion specifications: %w", err)
+	}
+
+	specs := make([]*aggregate.MotionSpecification, len(models))
+	for i, m := range models {
+		specs[i] = aggregate.RestoreMotionSpecification(
+			m.ExerciseID, m.OnnxModelURL, m.LocalRulesURL,
+			m.DialogueEngineURL, m.RecommendedCameraAngle, m.IsReady,
+			m.CreatedAt, m.UpdatedAt,
+		)
+	}
+
+	return specs, int(total), nil
 }
 
 // PostgresOutboxRepository implements port.OutboxRepository.
@@ -372,4 +406,62 @@ func (r *PostgresOutboxRepository) ExecuteInLock(ctx context.Context, lockID int
 		txCtx := WithTx(ctx, tx)
 		return fn(txCtx)
 	})
+}
+
+// PostgresOutboxLogRepository implements port.OutboxLogRepository for consumer idempotency tracking.
+type PostgresOutboxLogRepository struct {
+	db *gorm.DB
+}
+
+var _ port.OutboxLogRepository = (*PostgresOutboxLogRepository)(nil)
+
+// NewPostgresOutboxLogRepository constructs repository.
+func NewPostgresOutboxLogRepository(db *gorm.DB) *PostgresOutboxLogRepository {
+	return &PostgresOutboxLogRepository{db: db}
+}
+
+func (r *PostgresOutboxLogRepository) IsProcessed(ctx context.Context, eventID string) (bool, error) {
+	if eventID == "" {
+		return false, nil
+	}
+	db := getDB(ctx, r.db)
+	var count int64
+	err := db.Model(&OutboxLogModel{}).
+		Where("event_id = ? AND status = ?", eventID, "PROCESSED").
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("failed to check outbox_log idempotency: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *PostgresOutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {
+	if record == nil {
+		return nil
+	}
+	db := getDB(ctx, r.db)
+
+	id := record.ID
+	if id == "" {
+		id = record.EventID
+	}
+	if id == "" {
+		id = uuid.New().String()
+	}
+
+	model := &OutboxLogModel{
+		ID:           id,
+		EventID:      record.EventID,
+		EventType:    record.EventType,
+		Payload:      record.Payload,
+		PartitionKey: record.PartitionKey,
+		ProcessedAt:  time.Now().UTC(),
+		Status:       record.Status,
+		ErrorMessage: record.ErrorMessage,
+	}
+
+	if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(model).Error; err != nil {
+		return fmt.Errorf("failed to save outbox_log record: %w", err)
+	}
+	return nil
 }

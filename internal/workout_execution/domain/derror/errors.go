@@ -16,4 +16,5 @@ var (
 	ErrPersonalRecordNotFound       = errors.New("personal record not found")
 	ErrInvalidSetNumber             = errors.New("invalid set number")
 	ErrInvalidRepsOrWeight          = errors.New("invalid reps or weight value")
+	ErrNotFound                     = ErrMotionSpecNotFound
 )

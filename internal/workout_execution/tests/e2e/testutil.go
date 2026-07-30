@@ -15,7 +15,6 @@ import (
 	infraPostgres "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

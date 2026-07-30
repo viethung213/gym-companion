@@ -3,6 +3,7 @@ package workoutexecution
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
 	workoutEvent "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/event"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
+	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
 	"google.golang.org/grpc"
@@ -43,15 +45,24 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
-	// Initialize Repositories & Transaction Manager
+	// AutoMigrate models to sync schema changes (e.g. dialogue_engine_url, outbox_log)
+	_ = gormDB.AutoMigrate(
+		&persistence.MotionSpecificationModel{},
+		&persistence.OutboxLogModel{},
+	)
+
+	// Initialize Repositories & Storage & Transaction Manager
 	txManager := persistence.NewSQLTransactionManager(gormDB)
 	sessionRepo := persistence.NewPostgresWorkoutSessionRepository(gormDB)
 	prRepo := persistence.NewPostgresPersonalRecordRepository(gormDB)
 	motionRepo := persistence.NewPostgresMotionSpecificationRepository(gormDB)
 	outboxRepo := persistence.NewPostgresOutboxRepository(gormDB)
+	outboxLogRepo := persistence.NewPostgresOutboxLogRepository(gormDB)
 
 	outboxWriter := workoutEvent.NewOutboxWriter(outboxRepo)
+
 	loadGuard := service.NewTrainingLoadGuard(sessionRepo)
+	storageProvider := storage.NewS3StorageProviderFromEnv()
 
 	// Initialize Command Handlers
 	startSessionHandler := command.NewStartWorkoutSessionHandler(sessionRepo, nil, outboxWriter, txManager)
@@ -61,12 +72,17 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	abortSessionHandler := command.NewAbortWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
 	syncLogsHandler := command.NewSyncWorkoutLogsHandler(sessionRepo, outboxWriter, txManager)
 	prProcessHandler := command.NewProcessCompletedSessionForPRHandler(sessionRepo, prRepo, outboxWriter, txManager)
+	updateMotionSpecHandler := command.NewUpdateMotionSpecificationHandler(motionRepo, outboxWriter, txManager)
+	patchMotionSpecAssetHandler := command.NewPatchMotionSpecificationAssetHandler(motionRepo, storageProvider, outboxWriter, txManager)
+	deleteMotionSpecHandler := command.NewDeleteMotionSpecificationHandler(motionRepo)
 
 	// Initialize Query Handlers
 	getMotionSpecQuery := query.NewGetMotionSpecificationQueryHandler(motionRepo)
 	getPRsQuery := query.NewGetPersonalRecordsQueryHandler(prRepo)
 	getErrorsQuery := query.NewGetWorkoutSessionErrorsQueryHandler(sessionRepo)
 	getHistoryQuery := query.NewGetWorkoutHistoryQueryHandler(sessionRepo)
+	listMotionSpecsQuery := query.NewListMotionSpecificationsQueryHandler(motionRepo)
+	getPresignedUploadURLQuery := query.NewGetPresignedUploadURLQueryHandler(storageProvider)
 
 	// Initialize gRPC Transport
 	grpcHandler := transport.NewGRPCHandler(
@@ -80,7 +96,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getPRsQuery,
 		getErrorsQuery,
 		getHistoryQuery,
+		updateMotionSpecHandler,
+		deleteMotionSpecHandler,
+		listMotionSpecsQuery,
+		getPresignedUploadURLQuery,
+		patchMotionSpecAssetHandler,
 	)
+
 	workoutexecutionv1service.RegisterWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
 	workoutexecutionv1service.RegisterAdminWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
 
@@ -100,6 +122,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, nil, 2*time.Second)
 	timeoutWorker := worker.NewSessionTimeoutWorker(sessionRepo, outboxWriter, txManager, 5*time.Minute)
 	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, outboxWriter, txManager, 1*time.Minute, 5*time.Minute)
+	exerciseCreatedConsumer := worker.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)
+
 	_ = worker.NewPREventConsumer(prProcessHandler)
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
@@ -135,6 +159,44 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		}()
 		criticalWorker.Start(workerCtx)
 	}()
+
+	// Start ExerciseCreated event consumer worker (listening to topic 'exercise.events')
+	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
+		exerciseReader, err := deps.KafkaRegistry.GetReader("workout_execution_exercise_consumer", "exercise.events", kafkaBrokers)
+		if err == nil && exerciseReader != nil {
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("PANIC RECOVERED in WorkoutExecution ExerciseCreated consumer worker: %v", r)
+					}
+					_ = exerciseReader.Close()
+				}()
+
+				for {
+					select {
+					case <-workerCtx.Done():
+						return
+					default:
+						msg, err := exerciseReader.ReadMessage(workerCtx)
+						if err != nil {
+							if errors.Is(err, context.Canceled) {
+								return
+							}
+							time.Sleep(1 * time.Second)
+							continue
+						}
+
+						if err := exerciseCreatedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
+							log.Printf("WorkoutExecution failed to process ExerciseCreated event: %v", err)
+						}
+					}
+				}
+			}()
+		}
+	}
 
 	shutdown := func() {
 		log.Println("Shutting down Workout Execution Bounded Context background workers...")

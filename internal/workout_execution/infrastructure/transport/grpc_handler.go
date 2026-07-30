@@ -34,6 +34,11 @@ type GRPCHandler struct {
 	getPRsQuery                  *query.GetPersonalRecordsQueryHandler
 	getErrorsQuery               *query.GetWorkoutSessionErrorsQueryHandler
 	getHistoryQuery              *query.GetWorkoutHistoryQueryHandler
+	updateMotionSpecHandler      *command.UpdateMotionSpecificationHandler
+	deleteMotionSpecHandler      *command.DeleteMotionSpecificationHandler
+	listMotionSpecsQuery         *query.ListMotionSpecificationsQueryHandler
+	getPresignedUploadURLQuery   *query.GetPresignedUploadURLQueryHandler
+	patchMotionSpecAssetHandler  *command.PatchMotionSpecificationAssetHandler
 }
 
 var _ workoutexecutionv1service.WorkoutExecutionServiceServer = (*GRPCHandler)(nil)
@@ -51,6 +56,11 @@ func NewGRPCHandler(
 	getPRsQuery *query.GetPersonalRecordsQueryHandler,
 	getErrorsQuery *query.GetWorkoutSessionErrorsQueryHandler,
 	getHistoryQuery *query.GetWorkoutHistoryQueryHandler,
+	updateMotionSpecHandler *command.UpdateMotionSpecificationHandler,
+	deleteMotionSpecHandler *command.DeleteMotionSpecificationHandler,
+	listMotionSpecsQuery *query.ListMotionSpecificationsQueryHandler,
+	getPresignedUploadURLQuery *query.GetPresignedUploadURLQueryHandler,
+	patchMotionSpecAssetHandler *command.PatchMotionSpecificationAssetHandler,
 ) *GRPCHandler {
 	return &GRPCHandler{
 		startSessionHandler:          startSessionHandler,
@@ -63,6 +73,11 @@ func NewGRPCHandler(
 		getPRsQuery:                  getPRsQuery,
 		getErrorsQuery:               getErrorsQuery,
 		getHistoryQuery:              getHistoryQuery,
+		updateMotionSpecHandler:      updateMotionSpecHandler,
+		deleteMotionSpecHandler:      deleteMotionSpecHandler,
+		listMotionSpecsQuery:         listMotionSpecsQuery,
+		getPresignedUploadURLQuery:   getPresignedUploadURLQuery,
+		patchMotionSpecAssetHandler:  patchMotionSpecAssetHandler,
 	}
 }
 
@@ -240,15 +255,12 @@ func (h *GRPCHandler) GetMotionSpecification(ctx context.Context, req *workoutex
 		return nil, status.Errorf(codes.NotFound, "motion spec not found: %v", err)
 	}
 
-	dEngine := spec.DialogueEngine()
 	return &workoutexecutionv1message.GetMotionSpecificationResponse{
 		ExerciseId:             spec.ExerciseID(),
 		OnnxModelUrl:           spec.OnnxModelURL(),
 		LocalRulesUrl:          spec.LocalRulesURL(),
+		DialogueEngineUrl:      spec.DialogueEngineURL(),
 		RecommendedCameraAngle: spec.RecommendedCameraAngle(),
-		DialogueEngine: &workoutexecutionv1message.DialogueEngineConfig{
-			PersonalityId: dEngine.PersonalityID,
-		},
 	}, nil
 }
 
@@ -408,6 +420,153 @@ func (h *GRPCHandler) AdminGetWorkoutHistory(ctx context.Context, req *workoutex
 	}, nil
 }
 
+// GetPresignedUploadURL generates a presigned URL allowing the Client to upload files directly to Cloud Storage.
+func (h *GRPCHandler) GetPresignedUploadURL(ctx context.Context, req *workoutexecutionv1message.GetPresignedUploadURLRequest) (*workoutexecutionv1message.GetPresignedUploadURLResponse, error) {
+	if req == nil || req.GetFileName() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "file_name is required")
+	}
+
+	res, err := h.getPresignedUploadURLQuery.Handle(ctx, query.GetPresignedUploadURLQuery{
+		FileName:    req.GetFileName(),
+		ContentType: req.GetContentType(),
+	})
+	if err != nil {
+		return nil, toGRPCError("GetPresignedUploadURL failed", err)
+	}
+
+	return &workoutexecutionv1message.GetPresignedUploadURLResponse{
+		UploadUrl: res.UploadURL,
+		FileUrl:   res.FileURL,
+		FileName:  res.FileName,
+	}, nil
+}
+
+// UpdateMotionSpecification updates motion specification files/rules for an exercise.
+func (h *GRPCHandler) UpdateMotionSpecification(ctx context.Context, req *workoutexecutionv1message.UpdateMotionSpecificationRequest) (*workoutexecutionv1message.UpdateMotionSpecificationResponse, error) {
+	if req == nil || req.GetExerciseId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "exercise_id is required")
+	}
+
+	spec, err := h.updateMotionSpecHandler.Handle(ctx, command.UpdateMotionSpecificationCommand{
+		ExerciseID:             req.GetExerciseId(),
+		OnnxModelURL:           req.GetOnnxModelUrl(),
+		LocalRulesURL:          req.GetLocalRulesUrl(),
+		DialogueEngineURL:      req.GetDialogueEngineUrl(),
+		RecommendedCameraAngle: req.GetRecommendedCameraAngle(),
+	})
+	if err != nil {
+		return nil, toGRPCError("UpdateMotionSpecification failed", err)
+	}
+
+	return &workoutexecutionv1message.UpdateMotionSpecificationResponse{
+		ExerciseId: spec.ExerciseID(),
+		UpdatedAt:  timestamppb.New(spec.UpdatedAt()),
+		IsReady:    spec.IsComplete(),
+	}, nil
+}
+
+// PatchMotionSpecificationAsset updates partial JSON contents of pose rules or dialogue config on S3.
+func (h *GRPCHandler) PatchMotionSpecificationAsset(ctx context.Context, req *workoutexecutionv1message.PatchMotionSpecificationAssetRequest) (*workoutexecutionv1message.PatchMotionSpecificationAssetResponse, error) {
+	if req == nil || req.GetExerciseId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "exercise_id is required")
+	}
+
+	assetTypeStr := req.GetAssetType().String()
+
+	res, err := h.patchMotionSpecAssetHandler.Handle(ctx, command.PatchMotionSpecificationAssetCommand{
+		ExerciseID: req.GetExerciseId(),
+		AssetType:  assetTypeStr,
+		PatchJSON:  req.GetPatchJson(),
+		DeleteKeys: req.GetDeleteKeys(),
+	})
+	if err != nil {
+		return nil, toGRPCError("PatchMotionSpecificationAsset failed", err)
+	}
+
+	return &workoutexecutionv1message.PatchMotionSpecificationAssetResponse{
+		ExerciseId: res.ExerciseID,
+		AssetType:  req.GetAssetType(),
+		FileUrl:    res.FileURL,
+		UpdatedAt:  timestamppb.New(res.Spec.UpdatedAt()),
+	}, nil
+}
+
+// DeleteMotionSpecification deletes a MotionSpecification.
+
+func (h *GRPCHandler) DeleteMotionSpecification(ctx context.Context, req *workoutexecutionv1message.DeleteMotionSpecificationRequest) (*workoutexecutionv1message.DeleteMotionSpecificationResponse, error) {
+	if req == nil || req.GetExerciseId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "exercise_id is required")
+	}
+
+	err := h.deleteMotionSpecHandler.Handle(ctx, command.DeleteMotionSpecificationCommand{
+		ExerciseID: req.GetExerciseId(),
+	})
+	if err != nil {
+		return nil, toGRPCError("DeleteMotionSpecification failed", err)
+	}
+
+	return &workoutexecutionv1message.DeleteMotionSpecificationResponse{
+		ExerciseId: req.GetExerciseId(),
+		Success:    true,
+	}, nil
+}
+
+// ListMotionSpecifications lists MotionSpecifications with pagination.
+func (h *GRPCHandler) ListMotionSpecifications(ctx context.Context, req *workoutexecutionv1message.ListMotionSpecificationsRequest) (*workoutexecutionv1message.ListMotionSpecificationsResponse, error) {
+	pageSize := req.GetPageSize()
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+
+	res, err := h.listMotionSpecsQuery.Handle(ctx, query.ListMotionSpecificationsQuery{
+		Limit:  int(pageSize),
+		Offset: 0,
+	})
+	if err != nil {
+		return nil, toGRPCError("ListMotionSpecifications failed", err)
+	}
+
+	pbList := make([]*workoutexecutionv1message.GetMotionSpecificationResponse, len(res.Items))
+	for i, s := range res.Items {
+		pbList[i] = &workoutexecutionv1message.GetMotionSpecificationResponse{
+			ExerciseId:             s.ExerciseID(),
+			OnnxModelUrl:           s.OnnxModelURL(),
+			LocalRulesUrl:          s.LocalRulesURL(),
+			DialogueEngineUrl:      s.DialogueEngineURL(),
+			RecommendedCameraAngle: s.RecommendedCameraAngle(),
+		}
+	}
+
+	return &workoutexecutionv1message.ListMotionSpecificationsResponse{
+		MotionSpecifications: pbList,
+		TotalCount:           int32(res.TotalCount),
+	}, nil
+}
+
+func mapProtoToDialogueEngine(cfg *workoutexecutionv1message.DialogueEngineConfig) vo.DialogueEngineConfig {
+	if cfg == nil {
+		return vo.DialogueEngineConfig{}
+	}
+	dMap := make(map[string]vo.DialogueSeverities)
+	for errKey, sevs := range cfg.GetDialogueMap() {
+		var s1, s2 []vo.DialogueOption
+		if sevs != nil {
+			for _, opt := range sevs.GetSeverity_1() {
+				s1 = append(s1, vo.DialogueOption{Text: opt.GetText(), AudioURL: opt.GetAudioUrl()})
+			}
+			for _, opt := range sevs.GetSeverity_2() {
+				s2 = append(s2, vo.DialogueOption{Text: opt.GetText(), AudioURL: opt.GetAudioUrl()})
+			}
+		}
+		dMap[errKey] = vo.DialogueSeverities{Severity1: s1, Severity2: s2}
+	}
+	return vo.DialogueEngineConfig{
+		PersonalityID: cfg.GetPersonalityId(),
+		Cooldowns:     cfg.GetCooldowns(),
+		DialogueMap:   dMap,
+	}
+}
+
 // parseTimestampOrNow parses an RFC3339 string into a Protobuf Timestamp, defaulting to Now() if empty or invalid.
 func parseTimestampOrNow(timeStr string) *timestamppb.Timestamp {
 	if timeStr != "" {
@@ -425,7 +584,8 @@ func toGRPCError(msg string, err error) error {
 	// 404 Not Found
 	case errors.Is(err, derror.ErrWorkoutSessionNotFound),
 		errors.Is(err, derror.ErrMotionSpecNotFound),
-		errors.Is(err, derror.ErrPersonalRecordNotFound):
+		errors.Is(err, derror.ErrPersonalRecordNotFound),
+		errors.Is(err, derror.ErrNotFound):
 		return status.Errorf(codes.NotFound, "%s: %v", msg, err)
 
 	// 400 Bad Request / Invalid Argument

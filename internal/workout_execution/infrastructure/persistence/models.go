@@ -112,8 +112,9 @@ type MotionSpecificationModel struct {
 	ExerciseID             string    `gorm:"primaryKey;column:exercise_id"`
 	OnnxModelURL           string    `gorm:"column:onnx_model_url"`
 	LocalRulesURL          string    `gorm:"column:local_rules_url"`
-	DialogueEngineJSON     []byte    `gorm:"column:dialogue_engine_json;type:jsonb"`
+	DialogueEngineURL      string    `gorm:"column:dialogue_engine_url"`
 	RecommendedCameraAngle string    `gorm:"column:recommended_camera_angle"`
+	IsReady                bool      `gorm:"column:is_ready;default:false"`
 	CreatedAt              time.Time `gorm:"column:created_at"`
 	UpdatedAt              time.Time `gorm:"column:updated_at"`
 }
@@ -121,6 +122,23 @@ type MotionSpecificationModel struct {
 // TableName returns table name for GORM.
 func (MotionSpecificationModel) TableName() string {
 	return "workout_execution.motion_specifications"
+}
+
+// OutboxLogModel maps to workout_execution.outbox_log table.
+type OutboxLogModel struct {
+	ID           string    `gorm:"primaryKey;type:uuid"`
+	EventID      string    `gorm:"column:event_id;type:uuid;not null"`
+	EventType    string    `gorm:"column:event_type;not null"`
+	Payload      []byte    `gorm:"column:payload;type:jsonb;not null"`
+	PartitionKey string    `gorm:"column:partition_key;not null"`
+	ProcessedAt  time.Time `gorm:"column:processed_at;autoCreateTime"`
+	Status       string    `gorm:"column:status;not null"`
+	ErrorMessage string    `gorm:"column:error_message"`
+}
+
+// TableName returns table name for GORM.
+func (OutboxLogModel) TableName() string {
+	return "workout_execution.outbox_log"
 }
 
 // OutboxModel maps to workout_execution.outbox table.

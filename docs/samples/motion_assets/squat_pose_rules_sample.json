@@ -1,0 +1,26 @@
+{
+  "camera_angle": "side",
+  "version": "1.0.0",
+  "thresholds": {
+    "knee_angle_min": 75.0,
+    "knee_angle_max": 180.0,
+    "hip_angle_min": 60.0,
+    "back_angle_max": 45.0
+  },
+  "rules": {
+    "ERR_SHALLOW_DEPTH": {
+      "metric": "knee_angle_min",
+      "operator": ">",
+      "threshold": 95.0,
+      "severity": 1,
+      "message": "Squat chưa đủ sâu"
+    },
+    "ERR_BACK_ARCH": {
+      "metric": "back_angle_max",
+      "operator": ">",
+      "threshold": 50.0,
+      "severity": 2,
+      "message": "Lưng bị gập forward quá nhiều"
+    }
+  }
+}
