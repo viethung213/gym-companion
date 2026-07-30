@@ -17,7 +17,7 @@ func TestDomainEventNames(t *testing.T) {
 	}
 
 	ev2 := event.WorkoutSessionCompleted{SessionID: "s1", UserID: "u1", PlanID: "p1", CompletedAt: now, Summary: vo.SessionSummary{}}
-	if got, want := ev2.EventName(), "contracts.core.workout_execution.v1.event.WorkoutSessionCompleted"; got != want {
+	if got, want := ev2.EventName(), "contracts.core.workout_execution.v1.workoutSessionCompleted"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := ev2.PlanID, "p1"; got != want {
@@ -25,7 +25,7 @@ func TestDomainEventNames(t *testing.T) {
 	}
 
 	ev3 := event.WorkoutSessionAborted{SessionID: "s1", UserID: "u1", PlanID: "p1", Reason: "stop", IsAnomalous: false, AbortedAt: now}
-	if got, want := ev3.EventName(), "contracts.core.workout_execution.v1.event.WorkoutSessionAborted"; got != want {
+	if got, want := ev3.EventName(), "contracts.core.workout_execution.v1.workoutSessionAborted"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := ev3.PlanID, "p1"; got != want {
