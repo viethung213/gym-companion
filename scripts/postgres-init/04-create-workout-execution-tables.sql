@@ -96,8 +96,14 @@ CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
     exercise_id VARCHAR(255) PRIMARY KEY,
     onnx_model_url VARCHAR(1024),
     local_rules_url VARCHAR(1024),
-    dialogue_engine_json JSONB,
+    dialogue_engine_url VARCHAR(1024),
     recommended_camera_angle VARCHAR(50),
+
+    is_ready BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE workout_execution.motion_specifications ADD COLUMN IF NOT EXISTS dialogue_engine_url VARCHAR(1024);
+ALTER TABLE workout_execution.motion_specifications DROP COLUMN IF EXISTS dialogue_engine_json;
+

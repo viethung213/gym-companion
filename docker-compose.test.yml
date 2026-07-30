@@ -12,6 +12,13 @@ services:
       - "${GRPC_PORT:-9090}:9090"
     env_file:
       - .env
+    environment:
+      # Cloud Storage / Supabase S3 — override with real values via .env or CI secrets
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-gym-companion-assets}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     networks:
       - fitai-network
 

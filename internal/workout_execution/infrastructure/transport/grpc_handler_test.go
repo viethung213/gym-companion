@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
-	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -111,6 +111,20 @@ func (m *mockMotionRepo) FindByExerciseID(ctx context.Context, exerciseID string
 	return m.spec, nil
 }
 
+func (m *mockMotionRepo) Delete(ctx context.Context, exerciseID string) error {
+	return m.err
+}
+
+func (m *mockMotionRepo) List(ctx context.Context, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	if m.err != nil {
+		return nil, 0, m.err
+	}
+	if m.spec != nil {
+		return []*aggregate.MotionSpecification{m.spec}, 1, nil
+	}
+	return nil, 0, nil
+}
+
 type mockTxManager struct {
 	err error
 }
@@ -144,6 +158,11 @@ func TestGRPCHandler(t *testing.T) {
 	grpcHandler := transport.NewGRPCHandler(
 		startH, startScheduledH, logSetH, completeH, abortH, syncH,
 		motionQ, prQ, errsQ, historyQ,
+		command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
+		command.NewDeleteMotionSpecificationHandler(motionRepo),
+		query.NewListMotionSpecificationsQueryHandler(motionRepo),
+		query.NewGetPresignedUploadURLQueryHandler(&mockStorageProvider{}),
+		command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
 	)
 
 	t.Run("StartWorkoutSession error and success", func(t *testing.T) {
@@ -287,8 +306,9 @@ func TestGRPCHandler(t *testing.T) {
 			t.Fatal("got nil, want error")
 		}
 
-		motionRepo.spec = aggregate.NewMotionSpecification("ex1", "http://onnx", "http://rules", vo.DialogueEngineConfig{PersonalityID: "coach1"}, "front")
+		motionRepo.spec = aggregate.RestoreMotionSpecification("ex1", "http://onnx", "http://rules", "http://dialogue", "front", true, time.Now().UTC(), time.Now().UTC())
 		res, err := grpcHandler.GetMotionSpecification(context.Background(), &workoutexecutionv1message.GetMotionSpecificationRequest{ExerciseId: "ex1"})
+
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)
 		}
@@ -466,6 +486,11 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 			h := transport.NewGRPCHandler(
 				startH, startScheduledH, logSetH, completeH, abortH, syncH,
 				motionQ, prQ, errsQ, historyQ,
+				command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
+				command.NewDeleteMotionSpecificationHandler(motionRepo),
+				query.NewListMotionSpecificationsQueryHandler(motionRepo),
+				query.NewGetPresignedUploadURLQueryHandler(&mockStorageProvider{}),
+				command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
 			)
 
 			_, err := h.LogWorkoutSet(context.Background(), &workoutexecutionv1message.LogWorkoutSetRequest{
@@ -478,11 +503,29 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 			}
 			st, ok := status.FromError(err)
 			if !ok {
-				t.Fatalf("error is not a gRPC status: %v", err)
+				t.Fatalf("want status error, got %v", err)
 			}
-			if got, want := st.Code(), tt.wantCode; got != want {
-				t.Errorf("got gRPC code = %v, want %v (err: %v)", got, want, err)
+			if st.Code() != tt.wantCode {
+				t.Errorf("got code %v, want %v", st.Code(), tt.wantCode)
 			}
 		})
 	}
+}
+
+type mockStorageProvider struct{}
+
+func (m *mockStorageProvider) UploadFile(ctx context.Context, fileName, contentType string, content io.Reader) (string, error) {
+	return "https://cdn.fitai.com/models/" + fileName, nil
+}
+
+func (m *mockStorageProvider) GeneratePresignedUploadURL(ctx context.Context, fileName, contentType string) (string, string, error) {
+	return "https://cdn.fitai.com/upload/" + fileName, "https://cdn.fitai.com/models/" + fileName, nil
+}
+
+func (m *mockStorageProvider) GetObject(ctx context.Context, objectKey string) ([]byte, error) {
+	return []byte("{}"), nil
+}
+
+func (m *mockStorageProvider) PutObject(ctx context.Context, objectKey string, data []byte, contentType string) (string, error) {
+	return "https://cdn.fitai.com/" + objectKey, nil
 }

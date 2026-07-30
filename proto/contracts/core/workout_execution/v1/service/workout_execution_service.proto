@@ -123,4 +123,47 @@ service AdminWorkoutExecutionService {
       get: "/api/v1/admin/execution/users/{user_id}/history"
     };
   }
+
+  // Admin xin Presigned Upload URL để Client đẩy trực tiếp file ONNX hoặc rules JSON lên Cloud Storage / Supabase Storage
+  rpc GetPresignedUploadURL (contracts.core.workout_execution.v1.message.GetPresignedUploadURLRequest) returns (contracts.core.workout_execution.v1.message.GetPresignedUploadURLResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/execution/motion-specs/presigned-upload-url"
+      body: "*"
+    };
+  }
+
+
+
+
+  // Admin cập nhật cấu hình MotionSpecification (URL file ONNX, file rule, dialogue engine)
+  rpc UpdateMotionSpecification (contracts.core.workout_execution.v1.message.UpdateMotionSpecificationRequest) returns (contracts.core.workout_execution.v1.message.UpdateMotionSpecificationResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/admin/execution/motion-specs/{exercise_id}"
+      body: "*"
+    };
+  }
+
+  // Admin chỉnh sửa từng phần (Partial Patching) các file luật tư thế hoặc kịch bản giọng nói lưu trên S3
+  rpc PatchMotionSpecificationAsset (contracts.core.workout_execution.v1.message.PatchMotionSpecificationAssetRequest) returns (contracts.core.workout_execution.v1.message.PatchMotionSpecificationAssetResponse) {
+    option (google.api.http) = {
+      patch: "/api/v1/admin/execution/motion-specs/{exercise_id}/assets"
+      body: "*"
+    };
+  }
+
+
+  // Admin xóa cấu hình MotionSpecification của một bài tập
+  rpc DeleteMotionSpecification (contracts.core.workout_execution.v1.message.DeleteMotionSpecificationRequest) returns (contracts.core.workout_execution.v1.message.DeleteMotionSpecificationResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/admin/execution/motion-specs/{exercise_id}"
+    };
+  }
+
+  // Admin lấy danh sách phân trang các MotionSpecification
+  rpc ListMotionSpecifications (contracts.core.workout_execution.v1.message.ListMotionSpecificationsRequest) returns (contracts.core.workout_execution.v1.message.ListMotionSpecificationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/admin/execution/motion-specs"
+    };
+  }
 }
+

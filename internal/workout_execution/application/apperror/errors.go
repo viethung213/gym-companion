@@ -10,4 +10,6 @@ var (
 	ErrUserProfileUnavailable     = errors.New("user profile service unavailable")
 	ErrEventPublishFailed         = errors.New("failed to publish outbox event")
 	ErrTransactionFailed          = errors.New("database transaction failed")
+	ErrConflict                   = errors.New("resource conflict")
+	ErrInternal                   = errors.New("internal server error")
 )
