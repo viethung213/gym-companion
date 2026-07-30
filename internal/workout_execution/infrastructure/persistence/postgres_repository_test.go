@@ -12,6 +12,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	infraPostgres "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"gorm.io/driver/postgres"
@@ -311,8 +312,8 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	}
 
 	missingSpec, err := repo.FindByExerciseID(ctx, "non-existent-ex")
-	if err != nil || missingSpec != nil {
-		t.Errorf("expected nil, nil for missing MotionSpec, got %v, %v", missingSpec, err)
+	if !errors.Is(err, derror.ErrNotFound) || missingSpec != nil {
+		t.Errorf("expected derror.ErrNotFound for missing MotionSpec, got %v, %v", missingSpec, err)
 	}
 }
 
