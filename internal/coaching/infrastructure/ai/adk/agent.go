@@ -12,10 +12,8 @@ import (
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model/gemini"
-	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/workflow"
-	"google.golang.org/genai"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -89,25 +87,23 @@ func NewCoachingContextAgent(
 		return nil, fmt.Errorf("make pr tool: %w", err)
 	}
 
-	skillToolset, err := makeCoachingSkillToolset(ctx)
+	injurySkill, err := makeInjuryRecoverySkillToolset(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("make skill toolset: %w", err)
+		return nil, fmt.Errorf("make injury skill: %w", err)
+	}
+
+	generatorInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/generator.txt")
+	if err != nil {
+		return nil, fmt.Errorf("read generator prompt: %w", err)
 	}
 
 	generatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "CoachGeneratorAgent",
 		Description: "Fitness expert generator agent using exercise and history tools.",
 		Model:       geminiModel,
-		Instruction: `You are CoachGeneratorAgent — expert AI fitness coach.
-Your task is to generate or adapt a workout plan based on the input flow.
-You must always load the 'coaching-roadmap-rules' skill to read the exact phase rules and schema structure before writing your output.
-Steps:
-1. Call search_exercises to find movements.
-2. Call get_exercise_pr to fetch user PRs and set target weights safely.
-3. Load the coaching-roadmap-rules skill to verify phase target RPE and output schema.
-4. Write the final response in clean JSON matching the schema from the skill. No prose.`,
+		Instruction: string(generatorInstruction),
 		Tools:                []tool.Tool{searchTool, prTool},
-		Toolsets:             []tool.Toolset{skillToolset},
+		Toolsets:             []tool.Toolset{injurySkill},
 		OutputKey:            "generated_plan_text",
 		BeforeModelCallbacks: []llmagent.BeforeModelCallback{validateInputSafety},
 		BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
@@ -121,17 +117,16 @@ Steps:
 		return nil, fmt.Errorf("new generator node: %w", err)
 	}
 
+	evaluatorInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/evaluator.txt")
+	if err != nil {
+		return nil, fmt.Errorf("read evaluator prompt: %w", err)
+	}
+
 	evaluatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "CoachEvaluatorAgent",
 		Description: "Final quality reviewer ensuring plan complies with phase limits.",
 		Model:       geminiModel,
-		Instruction: `You are CoachEvaluatorAgent — final quality reviewer.
-Compare the GeneratedPlan input against the business rules:
-1. Exact phase sequence: ACCUMULATION -> OVERLOAD -> PEAK -> DELOAD.
-2. RPE ranges match phase targets.
-3. Deload week volume is <= 70% of Peak week.
-4. No sessions target active injuries.
-Output only JSON matching the EvaluationResult schema.`,
+		Instruction: string(evaluatorInstruction),
 		OutputSchema: evaluationResultSchema,
 	})
 	if err != nil {

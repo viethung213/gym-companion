@@ -3,7 +3,7 @@ package adk
 import (
 	"context"
 	"fmt"
-	"testing/fstest"
+	"os"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
@@ -209,41 +209,11 @@ func validateToolExecution(ctx agent.Context, t tool.Tool, args map[string]any) 
 	return nil, nil
 }
 
-// makeCoachingSkillToolset sets up the business rules as an in-memory ADK Skill.
-func makeCoachingSkillToolset(ctx context.Context) (tool.Toolset, error) {
-	mapFS := fstest.MapFS{
-		"coaching-roadmap-rules/SKILL.md": &fstest.MapFile{
-			Data: []byte(`---
-name: coaching-roadmap-rules
-description: Detailed business rules for 4-week workout roadmap design.
----
-When designing a workout plan, follow these business rules strictly:
-1. Target RPE ranges per phase:
-   - Week 1: ACCUMULATION (Target RPE: 6.0 - 7.0)
-   - Week 2: OVERLOAD     (Target RPE: 7.0 - 8.0)
-   - Week 3: PEAK         (Target RPE: 8.0 - 9.0)
-   - Week 4: DELOAD       (Target RPE: 5.0 - 6.0)
-2. Do not prescribe more than 6 training days per week.
-3. Read references/schema-example.json for the correct JSON format.`),
-		},
-		"coaching-roadmap-rules/references/schema-example.json": &fstest.MapFile{
-			Data: []byte(`{
-  "user_id": "user-123",
-  "weeks": [
-    {
-      "week_number": 1,
-      "phase": "ACCUMULATION",
-      "target_rpe_min": 6.0,
-      "target_rpe_max": 7.0,
-      "sessions": []
-    }
-  ]
-}`),
-		},
-	}
-
-	source := skill.NewFileSystemSource(mapFS)
+// makeInjuryRecoverySkillToolset loads optional injury recovery protocols as an ADK Skill.
+func makeInjuryRecoverySkillToolset(ctx context.Context) (tool.Toolset, error) {
+	source := skill.NewFileSystemSource(os.DirFS("internal/coaching/infrastructure/ai/adk/skills"))
 	return skilltoolset.New(ctx, skilltoolset.Config{
 		Source: source,
 	})
 }
+
