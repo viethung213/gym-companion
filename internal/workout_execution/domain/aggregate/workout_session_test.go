@@ -6,6 +6,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/event"
 )
 
 func TestWorkoutSession_Lifecycle(t *testing.T) {
@@ -56,6 +57,7 @@ func TestWorkoutSession_Lifecycle(t *testing.T) {
 
 	t.Run("Complete session without overload confirmation required", func(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
+		session.PopEvents() // clear start event
 
 		err := session.Complete(false, false)
 		if err != nil {
@@ -64,6 +66,18 @@ func TestWorkoutSession_Lifecycle(t *testing.T) {
 
 		if got, want := session.Status(), aggregate.StatusCompleted; got != want {
 			t.Errorf("got Status = %v, want %v", got, want)
+		}
+
+		events := session.PopEvents()
+		if got, want := len(events), 1; got != want {
+			t.Fatalf("got event count = %v, want %v", got, want)
+		}
+		if ev, ok := events[0].(*event.WorkoutSessionCompleted); ok {
+			if got, want := ev.PlanID, "plan-1"; got != want {
+				t.Errorf("got PlanID = %v, want %v", got, want)
+			}
+		} else {
+			t.Fatalf("expected *event.WorkoutSessionCompleted, got %T", events[0])
 		}
 	})
 
