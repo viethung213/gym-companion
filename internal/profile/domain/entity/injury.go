@@ -57,7 +57,33 @@ func (i *Injury) Severity() string        { return i.severity }
 func (i *Injury) Notes() string           { return i.notes }
 func (i *Injury) ReportedAt() time.Time   { return i.reportedAt }
 func (i *Injury) IsRecovered() bool       { return i.isRecovered }
-func (i *Injury) RecoveredAt() *time.Time { return i.recoveredAt }
+func (i *Injury) RecoveredAt() *time.Time {
+	if i.recoveredAt == nil {
+		return nil
+	}
+	t := *i.recoveredAt
+	return &t
+}
+
+func (i *Injury) Clone() *Injury {
+	if i == nil {
+		return nil
+	}
+	var recAt *time.Time
+	if i.recoveredAt != nil {
+		t := *i.recoveredAt
+		recAt = &t
+	}
+	return &Injury{
+		id:          i.id,
+		muscleGroup: i.muscleGroup,
+		severity:    i.severity,
+		notes:       i.notes,
+		reportedAt:  i.reportedAt,
+		isRecovered: i.isRecovered,
+		recoveredAt: recAt,
+	}
+}
 
 func (i *Injury) Recover(recoveredAt time.Time) error {
 	if i.isRecovered {

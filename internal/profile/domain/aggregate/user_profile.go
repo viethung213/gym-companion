@@ -76,18 +76,24 @@ func NewUserProfile(
 		}
 	}
 
+	copiedGoals := copyStringSlice(goals)
+	copiedTimes := copyStringSlice(preferredWorkoutTimes)
+	copiedEquip := copyStringSlice(availableEquipment)
+	copiedMuscles := copyStringSlice(preferredMuscleGroups)
+	copiedInjuries := copyInjurySlice(injuries)
+
 	p := &UserProfile{
 		userID:                userID,
 		biologicalMetrics:     bio,
 		experienceLevel:       experienceLevel,
-		goals:                 goals,
-		preferredWorkoutTimes: preferredWorkoutTimes,
-		availableEquipment:    availableEquipment,
-		preferredMuscleGroups: preferredMuscleGroups,
+		goals:                 copiedGoals,
+		preferredWorkoutTimes: copiedTimes,
+		availableEquipment:    copiedEquip,
+		preferredMuscleGroups: copiedMuscles,
 		coachStyle:            coachStyle,
 		targetWeightKg:        targetWeightKg,
 		targetBodyFatPercent:  targetBodyFatPercent,
-		injuries:              injuries,
+		injuries:              copiedInjuries,
 		periodicMetrics:       periodicMetrics,
 		completionRate:        result.CompletionRate,
 		aiCoachActivated:      result.AICoachActivated,
@@ -97,12 +103,12 @@ func NewUserProfile(
 	}
 
 	// Always record ProfileUpdatedEvent
-	p.RecordEvent(event.NewProfileUpdatedEvent(userID, bio, goals, result.CompletionRate, now))
+	p.RecordEvent(event.NewProfileUpdatedEvent(userID, bio, p.goals, result.CompletionRate, now))
 
 	// Record ProfileCompletedEvent only if completionRate >= 80% or AI coach activated
 	if result.AICoachActivated || result.CompletionRate >= 80.0 {
 		p.RecordEvent(event.NewProfileCompletedEvent(
-			userID, bio, goals, injuries, preferredWorkoutTimes, now,
+			userID, bio, p.goals, p.injuries, p.preferredWorkoutTimes, now,
 		))
 	}
 
@@ -131,15 +137,15 @@ func ReconstituteUserProfile(
 		userID:                userID,
 		biologicalMetrics:     bio,
 		experienceLevel:       experienceLevel,
-		goals:                 goals,
-		preferredWorkoutTimes: preferredWorkoutTimes,
-		availableEquipment:    availableEquipment,
-		preferredMuscleGroups: preferredMuscleGroups,
+		goals:                 copyStringSlice(goals),
+		preferredWorkoutTimes: copyStringSlice(preferredWorkoutTimes),
+		availableEquipment:    copyStringSlice(availableEquipment),
+		preferredMuscleGroups: copyStringSlice(preferredMuscleGroups),
 		coachStyle:            coachStyle,
 		targetWeightKg:        targetWeightKg,
 		targetBodyFatPercent:  targetBodyFatPercent,
-		injuries:              injuries,
-		periodicMetrics:       periodicMetrics,
+		injuries:              copyInjurySlice(injuries),
+		periodicMetrics:       copyPeriodicMetricSlice(periodicMetrics),
 		completionRate:        completionRate,
 		aiCoachActivated:      aiCoachActivated,
 		createdAt:             createdAt,
@@ -151,19 +157,50 @@ func ReconstituteUserProfile(
 func (p *UserProfile) UserID() string                          { return p.userID }
 func (p *UserProfile) BiologicalMetrics() vo.BiologicalMetrics { return p.biologicalMetrics }
 func (p *UserProfile) ExperienceLevel() string                 { return p.experienceLevel }
-func (p *UserProfile) Goals() []string                         { return p.goals }
-func (p *UserProfile) PreferredWorkoutTimes() []string         { return p.preferredWorkoutTimes }
-func (p *UserProfile) AvailableEquipment() []string            { return p.availableEquipment }
-func (p *UserProfile) PreferredMuscleGroups() []string         { return p.preferredMuscleGroups }
+func (p *UserProfile) Goals() []string                         { return copyStringSlice(p.goals) }
+func (p *UserProfile) PreferredWorkoutTimes() []string         { return copyStringSlice(p.preferredWorkoutTimes) }
+func (p *UserProfile) AvailableEquipment() []string            { return copyStringSlice(p.availableEquipment) }
+func (p *UserProfile) PreferredMuscleGroups() []string         { return copyStringSlice(p.preferredMuscleGroups) }
 func (p *UserProfile) CoachStyle() string                      { return p.coachStyle }
 func (p *UserProfile) TargetWeightKg() float64                 { return p.targetWeightKg }
 func (p *UserProfile) TargetBodyFatPercent() float64           { return p.targetBodyFatPercent }
-func (p *UserProfile) Injuries() []*entity.Injury              { return p.injuries }
-func (p *UserProfile) PeriodicMetrics() []vo.PeriodicMetric    { return p.periodicMetrics }
+func (p *UserProfile) Injuries() []*entity.Injury              { return copyInjurySlice(p.injuries) }
+func (p *UserProfile) PeriodicMetrics() []vo.PeriodicMetric    { return copyPeriodicMetricSlice(p.periodicMetrics) }
 func (p *UserProfile) CompletionRate() float64                 { return p.completionRate }
 func (p *UserProfile) AICoachActivated() bool                  { return p.aiCoachActivated }
 func (p *UserProfile) CreatedAt() time.Time                    { return p.createdAt }
 func (p *UserProfile) UpdatedAt() time.Time                    { return p.updatedAt }
+
+func copyStringSlice(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	res := make([]string, len(s))
+	copy(res, s)
+	return res
+}
+
+func copyInjurySlice(injuries []*entity.Injury) []*entity.Injury {
+	if len(injuries) == 0 {
+		return nil
+	}
+	res := make([]*entity.Injury, len(injuries))
+	for i, inj := range injuries {
+		if inj != nil {
+			res[i] = inj.Clone()
+		}
+	}
+	return res
+}
+
+func copyPeriodicMetricSlice(metrics []vo.PeriodicMetric) []vo.PeriodicMetric {
+	if len(metrics) == 0 {
+		return nil
+	}
+	res := make([]vo.PeriodicMetric, len(metrics))
+	copy(res, metrics)
+	return res
+}
 
 func (p *UserProfile) PopEvents() []any {
 	events := p.domainEvents
@@ -258,16 +295,16 @@ func (p *UserProfile) UpdateProfile(
 		p.experienceLevel = experienceLevel
 	}
 	if len(goals) > 0 {
-		p.goals = goals
+		p.goals = copyStringSlice(goals)
 	}
 	if len(preferredWorkoutTimes) > 0 {
-		p.preferredWorkoutTimes = preferredWorkoutTimes
+		p.preferredWorkoutTimes = copyStringSlice(preferredWorkoutTimes)
 	}
 	if len(availableEquipment) > 0 {
-		p.availableEquipment = availableEquipment
+		p.availableEquipment = copyStringSlice(availableEquipment)
 	}
 	if len(preferredMuscleGroups) > 0 {
-		p.preferredMuscleGroups = preferredMuscleGroups
+		p.preferredMuscleGroups = copyStringSlice(preferredMuscleGroups)
 	}
 	if coachStyle != "" {
 		p.coachStyle = coachStyle
@@ -316,9 +353,10 @@ func (p *UserProfile) AddInjury(injury *entity.Injury) error {
 			return derror.ErrInjuryAlreadyActive
 		}
 	}
-	p.injuries = append(p.injuries, injury)
+	injCopy := injury.Clone()
+	p.injuries = append(p.injuries, injCopy)
 	p.updatedAt = time.Now()
-	p.RecordEvent(event.NewInjuryReportedEvent(p.userID, injury))
+	p.RecordEvent(event.NewInjuryReportedEvent(p.userID, injCopy))
 	return nil
 }
 

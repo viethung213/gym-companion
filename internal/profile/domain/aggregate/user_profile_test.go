@@ -187,3 +187,44 @@ func TestUserProfile_InjuryLifecycle(t *testing.T) {
 	err = p.RecoverInjury("inj-1", time.Now())
 	assert.ErrorIs(t, err, derror.ErrInjuryAlreadyClosed)
 }
+
+func TestUserProfile_DefensiveCopy(t *testing.T) {
+	bio, err := vo.NewBiologicalMetrics(70.0, 175.0, 25, "MALE")
+	require.NoError(t, err)
+
+	goals := []string{"STRENGTH"}
+	inj, err := entity.NewInjury("inj-1", "Knee", "MILD", "Test strain", time.Now())
+	require.NoError(t, err)
+
+	p, err := aggregate.NewUserProfile(
+		"user-def-1",
+		bio,
+		"INTERMEDIATE",
+		goals,
+		[]string{"MORNING"},
+		[]string{"BARBELL"},
+		[]string{"CHEST"},
+		"STRICT",
+		70.0,
+		15.0,
+		[]*entity.Injury{inj},
+	)
+	require.NoError(t, err)
+
+	// 1. Mutate input slice after creation
+	goals[0] = "MUTATED_INPUT"
+	assert.Equal(t, []string{"STRENGTH"}, p.Goals())
+
+	// 2. Mutate output slice returned by getter
+	retGoals := p.Goals()
+	retGoals[0] = "MUTATED_OUTPUT"
+	assert.Equal(t, []string{"STRENGTH"}, p.Goals())
+
+	// 3. Mutate returned injury object pointer
+	retInjuries := p.Injuries()
+	require.Len(t, retInjuries, 1)
+	err = retInjuries[0].Recover(time.Now())
+	require.NoError(t, err)
+	// Internal injury in aggregate must remain NOT recovered until RecoverInjury method is called on aggregate
+	assert.False(t, p.Injuries()[0].IsRecovered())
+}

@@ -71,6 +71,24 @@ type WorkoutSetLog struct {
 	CreatedAt   time.Time   `json:"createdAt"`
 }
 
+// DeepCopy returns a deep copy of WorkoutSetLog, cloning pointer and slice fields.
+func (l WorkoutSetLog) DeepCopy() WorkoutSetLog {
+	cp := l
+	if l.FormScore != nil {
+		fs := *l.FormScore
+		cp.FormScore = &fs
+	}
+	if len(l.Reps) > 0 {
+		cp.Reps = make([]vo.RepLog, len(l.Reps))
+		for i, r := range l.Reps {
+			cp.Reps[i] = vo.NewRepLog(r.RepNumber, r.ROMPercentage, r.GetErrorCodes(), r.GetJointAngles())
+		}
+	} else if l.Reps != nil {
+		cp.Reps = make([]vo.RepLog, 0)
+	}
+	return cp
+}
+
 // SessionError represents posture errors logged during an AI set.
 type SessionError struct {
 	ID         string    `json:"id"`
@@ -187,11 +205,23 @@ func (s *WorkoutSession) PlanID() string { return s.planID }
 // Status returns current status.
 func (s *WorkoutSession) Status() SessionStatus { return s.status }
 
-// ScheduledAt returns planned time.
-func (s *WorkoutSession) ScheduledAt() *time.Time { return s.scheduledAt }
+// ScheduledAt returns defensive copy of planned time.
+func (s *WorkoutSession) ScheduledAt() *time.Time {
+	if s.scheduledAt == nil {
+		return nil
+	}
+	t := *s.scheduledAt
+	return &t
+}
 
-// StartedAt returns start time pointer.
-func (s *WorkoutSession) StartedAt() *time.Time { return s.startedAt }
+// StartedAt returns defensive copy of start time.
+func (s *WorkoutSession) StartedAt() *time.Time {
+	if s.startedAt == nil {
+		return nil
+	}
+	t := *s.startedAt
+	return &t
+}
 
 // Start transitions session from SCHEDULED to IN_PROGRESS.
 func (s *WorkoutSession) Start() error {
@@ -215,8 +245,14 @@ func (s *WorkoutSession) Start() error {
 	return nil
 }
 
-// EndedAt returns end time.
-func (s *WorkoutSession) EndedAt() *time.Time { return s.endedAt }
+// EndedAt returns defensive copy of end time.
+func (s *WorkoutSession) EndedAt() *time.Time {
+	if s.endedAt == nil {
+		return nil
+	}
+	t := *s.endedAt
+	return &t
+}
 
 // CreatedAt returns creation time.
 func (s *WorkoutSession) CreatedAt() time.Time { return s.createdAt }
@@ -230,7 +266,9 @@ func (s *WorkoutSession) Sets() []WorkoutSetLog {
 		return nil
 	}
 	res := make([]WorkoutSetLog, len(s.sets))
-	copy(res, s.sets)
+	for i, set := range s.sets {
+		res[i] = set.DeepCopy()
+	}
 	return res
 }
 
@@ -298,7 +336,7 @@ func (s *WorkoutSession) LogSet(setLog WorkoutSetLog) error {
 		setLog.CreatedAt = time.Now().UTC()
 	}
 
-	s.sets = append(s.sets, setLog)
+	s.sets = append(s.sets, setLog.DeepCopy())
 	s.updatedAt = time.Now().UTC()
 	return nil
 }
