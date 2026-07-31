@@ -1,3 +1,5 @@
+//go:build unit
+
 package command
 
 import (
@@ -9,12 +11,12 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
 
-type mockIDGenerator struct {
+type mockEventIDGenerator struct {
 	id  string
 	err error
 }
 
-func (m mockIDGenerator) NewID() (string, error) {
+func (m mockEventIDGenerator) NewID() (string, error) {
 	return m.id, m.err
 }
 
@@ -46,14 +48,14 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		generator  mockIDGenerator
+		generator  mockEventIDGenerator
 		eventType  string
 		wantErrIs  error
 		expectType string
 	}{
 		{
 			name: "success created event",
-			generator: mockIDGenerator{
+			generator: mockEventIDGenerator{
 				id: "event-uuid-789",
 			},
 			eventType:  domain.EventTypeExerciseCreated,
@@ -61,7 +63,7 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 		},
 		{
 			name: "success approved event",
-			generator: mockIDGenerator{
+			generator: mockEventIDGenerator{
 				id: "event-uuid-abc",
 			},
 			eventType:  domain.EventTypeExerciseApproved,
@@ -69,7 +71,7 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 		},
 		{
 			name: "generator error",
-			generator: mockIDGenerator{
+			generator: mockEventIDGenerator{
 				err: errors.New("id generator error"),
 			},
 			eventType: domain.EventTypeExerciseCreated,
