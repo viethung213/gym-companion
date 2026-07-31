@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
@@ -299,9 +302,29 @@ func TestGRPCHandler_Endpoints(t *testing.T) {
 		assert.NotEmpty(t, hRes.GetInjuries()[1].GetRecoveredAt())
 	})
 
-	// 7. Unauthenticated resolution
-	t.Run("Unauthenticated error case", func(t *testing.T) {
-		_, err := handler.GetProfile(context.Background(), &profilev1message.GetProfileRequest{})
-		assert.Error(t, err)
+	// 7. Security verification (Auth Bypass & BOLA protection)
+	t.Run("Security Checks", func(t *testing.T) {
+		// Case A: Unauthenticated request with target user_id in payload must return Unauthenticated
+		_, err := handler.GetProfile(context.Background(), &profilev1message.GetProfileRequest{UserId: "victim-user-123"})
+		require.Error(t, err)
+		st, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Unauthenticated, st.Code())
+
+		// Case B: Normal User attempting to access another user's profile must return PermissionDenied (BOLA protection)
+		normalUserCtx := context.WithValue(context.Background(), middleware.UserIDKey, "normal-user-1")
+		normalUserCtx = context.WithValue(normalUserCtx, middleware.UserRoleKey, "User")
+		_, err = handler.GetProfile(normalUserCtx, &profilev1message.GetProfileRequest{UserId: "other-user-999"})
+		require.Error(t, err)
+		st, ok = status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.PermissionDenied, st.Code())
+
+		// Case C: Admin User accessing another user's profile must succeed
+		adminUserCtx := context.WithValue(context.Background(), middleware.UserIDKey, "admin-1")
+		adminUserCtx = context.WithValue(adminUserCtx, middleware.UserRoleKey, "Admin")
+		res, err := handler.GetProfile(adminUserCtx, &profilev1message.GetProfileRequest{UserId: "grpc-user-1"})
+		require.NoError(t, err)
+		assert.Equal(t, "grpc-user-1", res.GetUserId())
 	})
 }

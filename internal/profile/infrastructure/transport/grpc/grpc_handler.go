@@ -54,19 +54,16 @@ func NewGRPCHandler(
 func resolveUserID(ctx context.Context, reqUserID string) (string, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		// Fallback for unauthenticated testing mode if reqUserID is present
-		if reqUserID != "" {
-			return reqUserID, nil
-		}
 		return "", status.Error(codes.Unauthenticated, "authentication required")
 	}
 
-	// Admin user can specify target user_id in request payload/url
-	if actor.IsAdmin() && reqUserID != "" {
+	if reqUserID != "" && reqUserID != actor.UserID {
+		if !actor.IsAdmin() {
+			return "", status.Error(codes.PermissionDenied, "access denied: only admins can view or modify another user's profile")
+		}
 		return reqUserID, nil
 	}
 
-	// Normal user: UserID is extracted strictly from gRPC context metadata (JWT token claim)
 	return actor.UserID, nil
 }
 
