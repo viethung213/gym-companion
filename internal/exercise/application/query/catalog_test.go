@@ -133,7 +133,7 @@ func TestGetBodyPart_Success(t *testing.T) {
 	}
 	handler := NewGetBodyPartHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
 
 	bp, err := handler.Handle(userCtx, GetBodyPartQuery{ID: "bp-123"})
 	if err != nil {
@@ -150,7 +150,7 @@ func TestGetBodyPart_NotFound(t *testing.T) {
 	repo := &mockQueryRepository{bp: nil}
 	handler := NewGetBodyPartHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
 
 	_, err := handler.Handle(userCtx, GetBodyPartQuery{ID: "nonexistent"})
 	if !errors.Is(err, domain.ErrBodyPartNotFound) {
@@ -184,7 +184,7 @@ func TestListBodyParts_Success(t *testing.T) {
 	}
 	handler := NewListBodyPartsHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
 
 	bps, total, err := handler.Handle(userCtx, ListBodyPartsQuery{Limit: 10, Offset: 0})
 	if err != nil {
@@ -204,7 +204,7 @@ func TestListBodyParts_Empty(t *testing.T) {
 	repo := &mockQueryRepository{bps: []port.BodyPart{}}
 	handler := NewListBodyPartsHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
 
 	bps, total, err := handler.Handle(userCtx, ListBodyPartsQuery{Limit: 10, Offset: 0})
 	if err != nil {
@@ -221,7 +221,7 @@ func TestListBodyParts_DefaultLimit(t *testing.T) {
 	repo := &mockQueryRepository{bps: []port.BodyPart{}}
 	handler := NewListBodyPartsHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
 
 	_, _, err := handler.Handle(userCtx, ListBodyPartsQuery{Limit: 0, Offset: 0})
 	if err != nil {
