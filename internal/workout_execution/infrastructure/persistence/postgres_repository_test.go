@@ -454,7 +454,7 @@ func TestPostgresRepository_CanceledContextAndLockConflict(t *testing.T) {
 		t.Error("expected error on canceled context FindByUserIDAndExerciseIDs")
 	}
 
-	motionSpec := aggregate.NewMotionSpecification("ex1", "http://onnx", "http://rules", vo.DialogueEngineConfig{}, "front")
+	motionSpec := aggregate.RestoreMotionSpecification("ex1", "http://onnx_detector", "http://onnx_skeleton", "http://rules", "http://dialogue", "front", true, time.Now().UTC(), time.Now().UTC())
 	if err := motionRepo.Save(ctxCancel, motionSpec); err == nil {
 		t.Error("expected error on canceled context Save MotionSpec")
 	}

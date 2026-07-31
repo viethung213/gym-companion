@@ -150,7 +150,7 @@ func SeedMockData(t *testing.T, db *gorm.DB) string {
 		OnnxDetectorURL:        "http://storage.fitai.com/models/detector.onnx",
 		OnnxSkeletonURL:        "http://storage.fitai.com/models/skeleton.onnx",
 		LocalRulesURL:          "http://storage.fitai.com/rules/bench_press.json",
-		DialogueEngineJSON:     []byte(`{"personalityId":"coach-pro"}`),
+		DialogueEngineURL:      "http://storage.fitai.com/dialogue/bench_press.json",
 		RecommendedCameraAngle: "front",
 		CreatedAt:              now,
 		UpdatedAt:              now,
