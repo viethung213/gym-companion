@@ -148,3 +148,182 @@ message GetCatalogMetadataResponse {
   repeated Muscle muscles = 3;
   repeated Tag tags = 4;
 }
+
+// BodyPart CRUD
+message CreateBodyPartRequest {
+  string name = 1;
+}
+
+message CreateBodyPartResponse {
+  BodyPart body_part = 1;
+}
+
+message GetBodyPartRequest {
+  string id = 1;
+}
+
+message GetBodyPartResponse {
+  BodyPart body_part = 1;
+}
+
+message ListBodyPartsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListBodyPartsResponse {
+  repeated BodyPart body_parts = 1;
+  int32 total = 2;
+}
+
+message UpdateBodyPartRequest {
+  string id = 1;
+  string name = 2;
+}
+
+message UpdateBodyPartResponse {
+  BodyPart body_part = 1;
+}
+
+message DeleteBodyPartRequest {
+  string id = 1;
+}
+
+message DeleteBodyPartResponse {
+  bool success = 1;
+}
+
+// Equipment CRUD
+message CreateEquipmentRequest {
+  string name = 1;
+}
+
+message CreateEquipmentResponse {
+  Equipment equipment = 1;
+}
+
+message GetEquipmentRequest {
+  string id = 1;
+}
+
+message GetEquipmentResponse {
+  Equipment equipment = 1;
+}
+
+message ListEquipmentsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListEquipmentsResponse {
+  repeated Equipment equipments = 1;
+  int32 total = 2;
+}
+
+message UpdateEquipmentRequest {
+  string id = 1;
+  string name = 2;
+}
+
+message UpdateEquipmentResponse {
+  Equipment equipment = 1;
+}
+
+message DeleteEquipmentRequest {
+  string id = 1;
+}
+
+message DeleteEquipmentResponse {
+  bool success = 1;
+}
+
+// Muscle CRUD
+message CreateMuscleRequest {
+  string name = 1;
+  string body_part_id = 2;
+}
+
+message CreateMuscleResponse {
+  Muscle muscle = 1;
+}
+
+message GetMuscleRequest {
+  string id = 1;
+}
+
+message GetMuscleResponse {
+  Muscle muscle = 1;
+}
+
+message ListMusclesRequest {
+  string body_part_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListMusclesResponse {
+  repeated Muscle muscles = 1;
+  int32 total = 2;
+}
+
+message UpdateMuscleRequest {
+  string id = 1;
+  string name = 2;
+  string body_part_id = 3;
+}
+
+message UpdateMuscleResponse {
+  Muscle muscle = 1;
+}
+
+message DeleteMuscleRequest {
+  string id = 1;
+}
+
+message DeleteMuscleResponse {
+  bool success = 1;
+}
+
+// Tag CRUD
+message CreateTagRequest {
+  string name = 1;
+}
+
+message CreateTagResponse {
+  Tag tag = 1;
+}
+
+message GetTagRequest {
+  string id = 1;
+}
+
+message GetTagResponse {
+  Tag tag = 1;
+}
+
+message ListTagsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListTagsResponse {
+  repeated Tag tags = 1;
+  int32 total = 2;
+}
+
+message UpdateTagRequest {
+  string id = 1;
+  string name = 2;
+}
+
+message UpdateTagResponse {
+  Tag tag = 1;
+}
+
+message DeleteTagRequest {
+  string id = 1;
+}
+
+message DeleteTagResponse {
+  bool success = 1;
+}
