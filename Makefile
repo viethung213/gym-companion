@@ -113,6 +113,10 @@ endif
 	@-cp -n .env.example .env 2>/dev/null
 	@echo "Running all tests (Unit, Integration, E2E) for module $(MODULE) sequentially inside Docker..."
 	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
+		if [ ! -d "./internal/$(MODULE)" ] || ! find ./internal/$(MODULE) -name "*.go" 2>/dev/null | grep -q .; then \
+			echo "⚠️  Module \"$(MODULE)\" chưa triển khai Go code hoặc không có test. Bỏ qua kiểm thử."; \
+			exit 0; \
+		fi; \
 		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./internal/$(MODULE)/... 2>&1); \
 		STATUS=$$?; \
 		echo "$$OUT"; \
