@@ -45,7 +45,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
-
 	// Initialize Repositories & Storage & Transaction Manager
 	txManager := persistence.NewSQLTransactionManager(gormDB)
 	sessionRepo := persistence.NewPostgresWorkoutSessionRepository(gormDB)
