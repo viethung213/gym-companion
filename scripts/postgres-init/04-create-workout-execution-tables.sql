@@ -94,7 +94,8 @@ CREATE INDEX IF NOT EXISTS idx_personal_records_user_exercise ON workout_executi
 -- 6. Table: motion_specifications
 CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
     exercise_id VARCHAR(255) PRIMARY KEY,
-    onnx_model_url VARCHAR(1024),
+    onnx_detector_url VARCHAR(1024),
+    onnx_skeleton_url VARCHAR(1024),
     local_rules_url VARCHAR(1024),
     dialogue_engine_url VARCHAR(1024),
     recommended_camera_angle VARCHAR(50),
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE workout_execution.motion_specifications ADD COLUMN IF NOT EXISTS dialogue_engine_url VARCHAR(1024);
-ALTER TABLE workout_execution.motion_specifications DROP COLUMN IF EXISTS dialogue_engine_json;
+
+
+
 

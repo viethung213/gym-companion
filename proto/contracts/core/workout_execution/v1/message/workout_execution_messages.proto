@@ -114,10 +114,11 @@ message GetMotionSpecificationRequest {
 
 message GetMotionSpecificationResponse {
   string exercise_id = 1;
-  string onnx_model_url = 2;
-  string local_rules_url = 3;
-  string dialogue_engine_url = 4;
-  string recommended_camera_angle = 5;
+  string onnx_detector_url = 2;
+  string onnx_skeleton_url = 3;
+  string local_rules_url = 4;
+  string dialogue_engine_url = 5;
+  string recommended_camera_angle = 6;
 }
 
 
@@ -184,10 +185,11 @@ message AdminGetWorkoutHistoryResponse {
 
 message UpdateMotionSpecificationRequest {
   string exercise_id = 1;
-  string onnx_model_url = 2;
-  string local_rules_url = 3;
-  string dialogue_engine_url = 4;
-  string recommended_camera_angle = 5;
+  string onnx_detector_url = 2;
+  string onnx_skeleton_url = 3;
+  string local_rules_url = 4;
+  string dialogue_engine_url = 5;
+  string recommended_camera_angle = 6;
 }
 
 

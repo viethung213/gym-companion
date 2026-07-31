@@ -15,7 +15,8 @@ import (
 // UpdateMotionSpecificationCommand contains parameters to update an existing MotionSpecification.
 type UpdateMotionSpecificationCommand struct {
 	ExerciseID             string
-	OnnxModelURL           string
+	OnnxDetectorURL        string
+	OnnxSkeletonURL        string
 	LocalRulesURL          string
 	DialogueEngineURL      string
 	RecommendedCameraAngle string
@@ -59,7 +60,8 @@ func (h *UpdateMotionSpecificationHandler) Handle(
 	}
 
 	spec.UpdateSpec(
-		cmd.OnnxModelURL,
+		cmd.OnnxDetectorURL,
+		cmd.OnnxSkeletonURL,
 		cmd.LocalRulesURL,
 		cmd.DialogueEngineURL,
 		cmd.RecommendedCameraAngle,

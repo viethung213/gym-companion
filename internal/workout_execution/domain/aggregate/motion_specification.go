@@ -9,7 +9,8 @@ import (
 // MotionSpecification is the aggregate root holding AI model URLs, pose rules, and audio scripts for an exercise.
 type MotionSpecification struct {
 	exerciseID             string
-	onnxModelURL           string
+	onnxDetectorURL        string
+	onnxSkeletonURL        string
 	localRulesURL          string
 	dialogueEngineURL      string
 	recommendedCameraAngle string
@@ -19,27 +20,30 @@ type MotionSpecification struct {
 	events                 []interface{}
 }
 
-// NewDraftMotionSpecification creates an initial draft (is_ready = false) when an ExerciseCreated event is consumed.
-func NewDraftMotionSpecification(exerciseID string) *MotionSpecification {
+// NewDraftMotionSpecification creates an initial draft (is_ready = false) with provided ONNX model URLs.
+func NewDraftMotionSpecification(exerciseID string, detectorURL, skeletonURL string) *MotionSpecification {
 	now := time.Now().UTC()
 	return &MotionSpecification{
-		exerciseID: exerciseID,
-		isReady:    false,
-		createdAt:  now,
-		updatedAt:  now,
+		exerciseID:      exerciseID,
+		onnxDetectorURL: detectorURL,
+		onnxSkeletonURL: skeletonURL,
+		isReady:         false,
+		createdAt:       now,
+		updatedAt:       now,
 	}
 }
 
 // RestoreMotionSpecification restores a persisted MotionSpecification from its stored fields (used by repository).
 func RestoreMotionSpecification(
-	exerciseID, onnxModelURL, localRulesURL, dialogueEngineURL string,
+	exerciseID, onnxDetectorURL, onnxSkeletonURL, localRulesURL, dialogueEngineURL string,
 	recommendedCameraAngle string,
 	isReady bool,
 	createdAt, updatedAt time.Time,
 ) *MotionSpecification {
 	return &MotionSpecification{
 		exerciseID:             exerciseID,
-		onnxModelURL:           onnxModelURL,
+		onnxDetectorURL:        onnxDetectorURL,
+		onnxSkeletonURL:        onnxSkeletonURL,
 		localRulesURL:          localRulesURL,
 		dialogueEngineURL:      dialogueEngineURL,
 		recommendedCameraAngle: recommendedCameraAngle,
@@ -51,11 +55,14 @@ func RestoreMotionSpecification(
 
 // UpdateSpec updates the motion specification details, recomputes is_ready, and records a MotionSpecificationUpdated domain event.
 func (m *MotionSpecification) UpdateSpec(
-	onnxModelURL, localRulesURL, dialogueEngineURL string,
+	onnxDetectorURL, onnxSkeletonURL, localRulesURL, dialogueEngineURL string,
 	recommendedCameraAngle string,
 ) {
-	if onnxModelURL != "" {
-		m.onnxModelURL = onnxModelURL
+	if onnxDetectorURL != "" {
+		m.onnxDetectorURL = onnxDetectorURL
+	}
+	if onnxSkeletonURL != "" {
+		m.onnxSkeletonURL = onnxSkeletonURL
 	}
 	if localRulesURL != "" {
 		m.localRulesURL = localRulesURL
@@ -71,7 +78,8 @@ func (m *MotionSpecification) UpdateSpec(
 
 	m.events = append(m.events, event.MotionSpecificationUpdated{
 		ExerciseID:             m.exerciseID,
-		OnnxModelURL:           m.onnxModelURL,
+		OnnxDetectorURL:        m.onnxDetectorURL,
+		OnnxSkeletonURL:        m.onnxSkeletonURL,
 		LocalRulesURL:          m.localRulesURL,
 		DialogueEngineURL:      m.dialogueEngineURL,
 		RecommendedCameraAngle: m.recommendedCameraAngle,
@@ -80,9 +88,9 @@ func (m *MotionSpecification) UpdateSpec(
 	})
 }
 
-// IsComplete returns true when ONNX model URL, local rules URL, and dialogue engine URL are all present.
+// IsComplete returns true when detector & skeleton ONNX URLs, local rules URL, and dialogue engine URL are present.
 func (m *MotionSpecification) IsComplete() bool {
-	return m.onnxModelURL != "" && m.localRulesURL != "" && m.dialogueEngineURL != ""
+	return m.onnxDetectorURL != "" && m.onnxSkeletonURL != "" && m.localRulesURL != "" && m.dialogueEngineURL != ""
 }
 
 // PopEvents returns and clears recorded domain events.
@@ -95,8 +103,11 @@ func (m *MotionSpecification) PopEvents() []interface{} {
 // ExerciseID returns the exercise ID.
 func (m *MotionSpecification) ExerciseID() string { return m.exerciseID }
 
-// OnnxModelURL returns the ONNX model URL.
-func (m *MotionSpecification) OnnxModelURL() string { return m.onnxModelURL }
+// OnnxDetectorURL returns the ONNX detector model URL.
+func (m *MotionSpecification) OnnxDetectorURL() string { return m.onnxDetectorURL }
+
+// OnnxSkeletonURL returns the ONNX skeleton model URL.
+func (m *MotionSpecification) OnnxSkeletonURL() string { return m.onnxSkeletonURL }
 
 // LocalRulesURL returns the local rules URL.
 func (m *MotionSpecification) LocalRulesURL() string { return m.localRulesURL }

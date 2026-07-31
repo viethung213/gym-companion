@@ -306,7 +306,7 @@ func TestGRPCHandler(t *testing.T) {
 			t.Fatal("got nil, want error")
 		}
 
-		motionRepo.spec = aggregate.RestoreMotionSpecification("ex1", "http://onnx", "http://rules", "http://dialogue", "front", true, time.Now().UTC(), time.Now().UTC())
+		motionRepo.spec = aggregate.RestoreMotionSpecification("ex1", "http://detector.onnx", "http://skeleton.onnx", "http://rules", "http://dialogue", "front", true, time.Now().UTC(), time.Now().UTC())
 		res, err := grpcHandler.GetMotionSpecification(context.Background(), &workoutexecutionv1message.GetMotionSpecificationRequest{ExerciseId: "ex1"})
 
 		if err != nil {

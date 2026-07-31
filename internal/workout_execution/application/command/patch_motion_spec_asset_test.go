@@ -43,7 +43,7 @@ func TestPatchMotionSpecificationAssetHandler(t *testing.T) {
 	handler := command.NewPatchMotionSpecificationAssetHandler(repo, storage, nil, nil)
 
 	t.Run("Patch dialogue config creates file on S3 and updates spec", func(t *testing.T) {
-		draft := aggregate.NewDraftMotionSpecification("ex-squat")
+		draft := aggregate.NewDraftMotionSpecification("ex-squat", "", "")
 		_ = repo.Save(context.Background(), draft)
 
 		patchJSON := `{
@@ -98,7 +98,7 @@ func TestPatchMotionSpecificationAssetHandler(t *testing.T) {
 				"deprecated_rule": true
 			}
 		}`)
-		existingSpec := aggregate.RestoreMotionSpecification("ex-squat", "http://cdn/squat.onnx", "http://cdn/rules/ex-squat_rule.json", "http://cdn/dialogue/ex-squat_dialogue.json", "side", true, time.Now().UTC(), time.Now().UTC())
+		existingSpec := aggregate.RestoreMotionSpecification("ex-squat", "http://cdn/detector.onnx", "http://cdn/skeleton.onnx", "http://cdn/rules/ex-squat_rule.json", "http://cdn/dialogue/ex-squat_dialogue.json", "side", true, time.Now().UTC(), time.Now().UTC())
 		_ = repo.Save(context.Background(), existingSpec)
 
 		patchJSON := `{
