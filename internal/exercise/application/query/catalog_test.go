@@ -10,7 +10,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
-	"google.golang.org/grpc/metadata"
 )
 
 type mockQueryRepository struct {
@@ -93,15 +92,15 @@ func (m *mockQueryRepository) DeleteEquipment(ctx context.Context, id string) er
 	return nil
 }
 
-func (m *mockQueryRepository) CreateMuscle(ctx context.Context, m *port.Muscle) error {
+func (r *mockQueryRepository) CreateMuscle(ctx context.Context, m *port.Muscle) error {
 	return nil
 }
 
-func (m *mockQueryRepository) GetMuscle(ctx context.Context, id string) (*port.Muscle, error) {
+func (r *mockQueryRepository) GetMuscle(ctx context.Context, id string) (*port.Muscle, error) {
 	return nil, nil
 }
 
-func (m *mockQueryRepository) UpdateMuscle(ctx context.Context, m *port.Muscle) error {
+func (r *mockQueryRepository) UpdateMuscle(ctx context.Context, m *port.Muscle) error {
 	return nil
 }
 
@@ -133,7 +132,7 @@ func TestGetBodyPart_Success(t *testing.T) {
 	}
 	handler := NewGetBodyPartHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "user-1"), middleware.UserRoleKey, "User")
 
 	bp, err := handler.Handle(userCtx, GetBodyPartQuery{ID: "bp-123"})
 	if err != nil {
@@ -150,7 +149,7 @@ func TestGetBodyPart_NotFound(t *testing.T) {
 	repo := &mockQueryRepository{bp: nil}
 	handler := NewGetBodyPartHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "user-1"), middleware.UserRoleKey, "User")
 
 	_, err := handler.Handle(userCtx, GetBodyPartQuery{ID: "nonexistent"})
 	if !errors.Is(err, domain.ErrBodyPartNotFound) {
@@ -184,7 +183,7 @@ func TestListBodyParts_Success(t *testing.T) {
 	}
 	handler := NewListBodyPartsHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "user-1"), middleware.UserRoleKey, "User")
 
 	bps, total, err := handler.Handle(userCtx, ListBodyPartsQuery{Limit: 10, Offset: 0})
 	if err != nil {
@@ -204,7 +203,7 @@ func TestListBodyParts_Empty(t *testing.T) {
 	repo := &mockQueryRepository{bps: []port.BodyPart{}}
 	handler := NewListBodyPartsHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "user-1"), middleware.UserRoleKey, "User")
 
 	bps, total, err := handler.Handle(userCtx, ListBodyPartsQuery{Limit: 10, Offset: 0})
 	if err != nil {
@@ -221,7 +220,7 @@ func TestListBodyParts_DefaultLimit(t *testing.T) {
 	repo := &mockQueryRepository{bps: []port.BodyPart{}}
 	handler := NewListBodyPartsHandler(repo)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "user-1"), middleware.UserRoleKey, "User")
 
 	_, _, err := handler.Handle(userCtx, ListBodyPartsQuery{Limit: 0, Offset: 0})
 	if err != nil {
