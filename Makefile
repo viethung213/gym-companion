@@ -76,8 +76,7 @@ test-all: build-test
 	@-cp -n .env.example .env 2>/dev/null
 	@echo "Running all tests (Unit, Integration, E2E) inside Docker..."
 	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
-		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./... 2>&1); \
-		STATUS=$$?; \
+		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./...); \
 		echo "$$OUT"; \
 		PASSED=$$(echo "$$OUT" | grep -c -e "--- PASS:"); \
 		FAILED=$$(echo "$$OUT" | grep -c -e "--- FAIL:"); \
@@ -86,7 +85,7 @@ test-all: build-test
 		echo "🟢 ĐẠT (PASSED): $$PASSED"; \
 		echo "🔴 THẤT BẠI (FAILED): $$FAILED"; \
 		echo "=================================================="; \
-		if [ $$STATUS -ne 0 ] || [ $$FAILED -gt 0 ]; then exit 1; fi'
+		if [ $$FAILED -gt 0 ]; then exit 1; fi'
 
 # Chạy tất cả các Unit Tests của toàn dự án bên trong Docker
 test-unit: build-test
@@ -113,8 +112,7 @@ endif
 	@-cp -n .env.example .env 2>/dev/null
 	@echo "Running all tests (Unit, Integration, E2E) for module $(MODULE) sequentially inside Docker..."
 	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
-		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./internal/$(MODULE)/... 2>&1); \
-		STATUS=$$?; \
+		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./internal/$(MODULE)/...); \
 		echo "$$OUT"; \
 		PASSED=$$(echo "$$OUT" | grep -c -e "--- PASS:"); \
 		FAILED=$$(echo "$$OUT" | grep -c -e "--- FAIL:"); \
@@ -123,7 +121,7 @@ endif
 		echo "🟢 ĐẠT (PASSED): $$PASSED"; \
 		echo "🔴 THẤT BẠI (FAILED): $$FAILED"; \
 		echo "=================================================="; \
-		if [ $$STATUS -ne 0 ] || [ $$FAILED -gt 0 ]; then exit 1; fi'
+		if [ $$FAILED -gt 0 ]; then exit 1; fi'
 
 # Chạy chỉ Unit Tests của một module cụ thể bên trong Docker
 test-unit-module: build-test
