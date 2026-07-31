@@ -158,18 +158,24 @@ func (p *UserProfile) UserID() string                          { return p.userID
 func (p *UserProfile) BiologicalMetrics() vo.BiologicalMetrics { return p.biologicalMetrics }
 func (p *UserProfile) ExperienceLevel() string                 { return p.experienceLevel }
 func (p *UserProfile) Goals() []string                         { return copyStringSlice(p.goals) }
-func (p *UserProfile) PreferredWorkoutTimes() []string         { return copyStringSlice(p.preferredWorkoutTimes) }
-func (p *UserProfile) AvailableEquipment() []string            { return copyStringSlice(p.availableEquipment) }
-func (p *UserProfile) PreferredMuscleGroups() []string         { return copyStringSlice(p.preferredMuscleGroups) }
-func (p *UserProfile) CoachStyle() string                      { return p.coachStyle }
-func (p *UserProfile) TargetWeightKg() float64                 { return p.targetWeightKg }
-func (p *UserProfile) TargetBodyFatPercent() float64           { return p.targetBodyFatPercent }
-func (p *UserProfile) Injuries() []*entity.Injury              { return copyInjurySlice(p.injuries) }
-func (p *UserProfile) PeriodicMetrics() []vo.PeriodicMetric    { return copyPeriodicMetricSlice(p.periodicMetrics) }
-func (p *UserProfile) CompletionRate() float64                 { return p.completionRate }
-func (p *UserProfile) AICoachActivated() bool                  { return p.aiCoachActivated }
-func (p *UserProfile) CreatedAt() time.Time                    { return p.createdAt }
-func (p *UserProfile) UpdatedAt() time.Time                    { return p.updatedAt }
+func (p *UserProfile) PreferredWorkoutTimes() []string {
+	return copyStringSlice(p.preferredWorkoutTimes)
+}
+func (p *UserProfile) AvailableEquipment() []string { return copyStringSlice(p.availableEquipment) }
+func (p *UserProfile) PreferredMuscleGroups() []string {
+	return copyStringSlice(p.preferredMuscleGroups)
+}
+func (p *UserProfile) CoachStyle() string            { return p.coachStyle }
+func (p *UserProfile) TargetWeightKg() float64       { return p.targetWeightKg }
+func (p *UserProfile) TargetBodyFatPercent() float64 { return p.targetBodyFatPercent }
+func (p *UserProfile) Injuries() []*entity.Injury    { return copyInjurySlice(p.injuries) }
+func (p *UserProfile) PeriodicMetrics() []vo.PeriodicMetric {
+	return copyPeriodicMetricSlice(p.periodicMetrics)
+}
+func (p *UserProfile) CompletionRate() float64 { return p.completionRate }
+func (p *UserProfile) AICoachActivated() bool  { return p.aiCoachActivated }
+func (p *UserProfile) CreatedAt() time.Time    { return p.createdAt }
+func (p *UserProfile) UpdatedAt() time.Time    { return p.updatedAt }
 
 func copyStringSlice(s []string) []string {
 	if len(s) == 0 {
