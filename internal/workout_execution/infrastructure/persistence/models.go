@@ -3,6 +3,7 @@ package persistence
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -203,7 +204,7 @@ func SessionToPersistence(session *aggregate.WorkoutSession) *WorkoutSessionMode
 			errBytes, _ := json.Marshal(r.GetErrorCodes())
 			anglesBytes, _ := json.Marshal(r.GetJointAngles())
 			setModel.Reps = append(setModel.Reps, RepLogModel{
-				ID:            session.ID() + "-" + set.ID,
+				ID:            fmt.Sprintf("%s-%s-%d", session.ID(), set.ID, r.RepNumber),
 				SetLogID:      set.ID,
 				RepNumber:     r.RepNumber,
 				ROMPercentage: r.ROMPercentage,
