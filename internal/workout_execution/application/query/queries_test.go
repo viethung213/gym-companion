@@ -206,7 +206,7 @@ func TestGetMotionSpecificationQueryHandler(t *testing.T) {
 
 		now := time.Now().UTC()
 
-		spec := aggregate.RestoreMotionSpecification("ex-1", "http://model.onnx", "http://rules.json", "http://dialogue.json", "front", true, now, now)
+		spec := aggregate.RestoreMotionSpecification("ex-1", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "front", true, now, now)
 
 		h := query.NewGetMotionSpecificationQueryHandler(&mockMotionRepo{spec: spec})
 

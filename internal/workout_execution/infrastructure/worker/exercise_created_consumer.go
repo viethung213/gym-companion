@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -120,7 +121,9 @@ func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exercis
 		return fmt.Errorf("exercise created consumer check existing: %w", err)
 	}
 
-	draft := aggregate.NewDraftMotionSpecification(exerciseID)
+	defaultDetectorURL := os.Getenv("DEFAULT_ONNX_DETECTOR_URL")
+	defaultSkeletonURL := os.Getenv("DEFAULT_ONNX_SKELETON_URL")
+	draft := aggregate.NewDraftMotionSpecification(exerciseID, defaultDetectorURL, defaultSkeletonURL)
 	if err := c.motionRepo.Save(ctx, draft); err != nil {
 		return fmt.Errorf("exercise created consumer save draft: %w", err)
 	}

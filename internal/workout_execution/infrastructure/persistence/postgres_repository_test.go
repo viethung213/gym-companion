@@ -89,6 +89,8 @@ func ensureTablesExist(db *gorm.DB) {
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 		exercise_id VARCHAR(255) PRIMARY KEY,
 		onnx_model_url VARCHAR(1024),
+		onnx_detector_url VARCHAR(1024),
+		onnx_skeleton_url VARCHAR(1024),
 		local_rules_url VARCHAR(1024),
 		dialogue_engine_json JSONB,
 		recommended_camera_angle VARCHAR(50),
@@ -296,7 +298,7 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	exID := "ex-deadlift"
-	spec := aggregate.NewMotionSpecification(exID, "http://model.onnx", "http://rules.json", vo.DialogueEngineConfig{PersonalityID: "c1"}, "side")
+	spec := aggregate.RestoreMotionSpecification(exID, "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "side", true, time.Now().UTC(), time.Now().UTC())
 
 	if err := repo.Save(ctx, spec); err != nil {
 		t.Fatalf("Failed to save MotionSpec: %v", err)
@@ -306,8 +308,8 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	if err != nil || found == nil {
 		t.Fatalf("FindByExerciseID failed: err=%v, found=%v", err, found)
 	}
-	if found.OnnxModelURL() != "http://model.onnx" {
-		t.Errorf("got model URL = %v, want http://model.onnx", found.OnnxModelURL())
+	if found.OnnxDetectorURL() != "http://detector.onnx" {
+		t.Errorf("got detector URL = %v, want http://detector.onnx", found.OnnxDetectorURL())
 	}
 
 	missingSpec, err := repo.FindByExerciseID(ctx, "non-existent-ex")

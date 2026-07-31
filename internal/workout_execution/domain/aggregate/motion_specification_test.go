@@ -11,7 +11,7 @@ func TestMotionSpecification(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	spec := aggregate.RestoreMotionSpecification("ex-1", "http://onnx.model", "http://rules.json", "http://dialogue.json", "side", true, now, now)
+	spec := aggregate.RestoreMotionSpecification("ex-1", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "side", true, now, now)
 
 	if got, want := spec.ExerciseID(), "ex-1"; got != want {
 
@@ -19,9 +19,15 @@ func TestMotionSpecification(t *testing.T) {
 
 	}
 
-	if got, want := spec.OnnxModelURL(), "http://onnx.model"; got != want {
+	if got, want := spec.OnnxDetectorURL(), "http://detector.onnx"; got != want {
 
-		t.Errorf("got OnnxModelURL = %v, want %v", got, want)
+		t.Errorf("got OnnxDetectorURL = %v, want %v", got, want)
+
+	}
+
+	if got, want := spec.OnnxSkeletonURL(), "http://skeleton.onnx"; got != want {
+
+		t.Errorf("got OnnxSkeletonURL = %v, want %v", got, want)
 
 	}
 
@@ -53,7 +59,7 @@ func TestMotionSpecification(t *testing.T) {
 
 func TestNewDraftMotionSpecification(t *testing.T) {
 
-	spec := aggregate.NewDraftMotionSpecification("ex-2")
+	spec := aggregate.NewDraftMotionSpecification("ex-2", "", "")
 
 	if spec.ExerciseID() != "ex-2" {
 

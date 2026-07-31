@@ -121,7 +121,9 @@ func (e BodyMetricUpdated) EventName() string {
 type MotionSpecificationUpdated struct {
 	ExerciseID string `json:"exerciseId"`
 
-	OnnxModelURL string `json:"onnxModelUrl"`
+	OnnxDetectorURL string `json:"onnxDetectorUrl"`
+
+	OnnxSkeletonURL string `json:"onnxSkeletonUrl"`
 
 	LocalRulesURL string `json:"localRulesUrl"`
 

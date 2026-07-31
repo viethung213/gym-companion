@@ -97,6 +97,8 @@ func ensureTablesExist(db *gorm.DB) {
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 		exercise_id VARCHAR(255) PRIMARY KEY,
 		onnx_model_url VARCHAR(1024),
+		onnx_detector_url VARCHAR(1024),
+		onnx_skeleton_url VARCHAR(1024),
 		local_rules_url VARCHAR(1024),
 		dialogue_engine_json JSONB,
 		recommended_camera_angle VARCHAR(50),
@@ -145,7 +147,8 @@ func SeedMockData(t *testing.T, db *gorm.DB) string {
 	// 1. Seed Motion Specification
 	motionModel := infraPostgres.MotionSpecificationModel{
 		ExerciseID:             exerciseID,
-		OnnxModelURL:           "http://storage.fitai.com/models/bench_press.onnx",
+		OnnxDetectorURL:        "http://storage.fitai.com/models/detector.onnx",
+		OnnxSkeletonURL:        "http://storage.fitai.com/models/skeleton.onnx",
 		LocalRulesURL:          "http://storage.fitai.com/rules/bench_press.json",
 		DialogueEngineJSON:     []byte(`{"personalityId":"coach-pro"}`),
 		RecommendedCameraAngle: "front",
