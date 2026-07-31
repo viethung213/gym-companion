@@ -7,6 +7,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/event"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 )
 
 func TestWorkoutSession_Lifecycle(t *testing.T) {
@@ -190,4 +191,53 @@ func TestWorkoutSession_MarkCriticalInactivity(t *testing.T) {
 			t.Fatal("got nil, want error for already-anomalous session")
 		}
 	})
+}
+
+func TestWorkoutSession_DefensiveCopy(t *testing.T) {
+	session, err := aggregate.NewWorkoutSession("sess-def-1", "user-1", "plan-1")
+	if err != nil {
+		t.Fatalf("got err = %v, want nil", err)
+	}
+
+	formScore := float32(90.0)
+	rep := vo.NewRepLog(1, 100.0, []string{"ERR_BAD_FORM"}, map[string]float32{"knee": 45.0})
+
+	set := aggregate.WorkoutSetLog{
+		SetNumber:  1,
+		ExerciseID: "ex-1",
+		TargetReps: 10,
+		ActualReps: 10,
+		Weight:     60.0,
+		FormScore:  &formScore,
+		RPE:        8.0,
+		Reps:       []vo.RepLog{rep},
+	}
+
+	err = session.LogSet(set)
+	if err != nil {
+		t.Fatalf("LogSet err = %v, want nil", err)
+	}
+
+	// 1. Mutate input set after LogSet
+	formScore = 10.0
+	set.Reps[0].GetErrorCodes()[0] = "MUTATED"
+	sessionSets := session.Sets()
+	if got := *sessionSets[0].FormScore; got != float32(90.0) {
+		t.Errorf("FormScore in aggregate modified via input pointer! got %v, want 90.0", got)
+	}
+
+	// 2. Mutate output set returned by Sets()
+	*sessionSets[0].FormScore = 50.0
+	if got := *session.Sets()[0].FormScore; got != float32(90.0) {
+		t.Errorf("FormScore in aggregate modified via Sets() getter! got %v, want 90.0", got)
+	}
+
+	// 3. Mutate StartedAt pointer returned by getter
+	st := session.StartedAt()
+	if st != nil {
+		*st = time.Time{}
+		if session.StartedAt().IsZero() {
+			t.Errorf("StartedAt in aggregate modified via StartedAt() getter!")
+		}
+	}
 }
