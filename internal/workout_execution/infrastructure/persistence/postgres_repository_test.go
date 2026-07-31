@@ -12,6 +12,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	infraPostgres "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"gorm.io/driver/postgres"
@@ -89,12 +90,12 @@ func ensureTablesExist(db *gorm.DB) {
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 		exercise_id VARCHAR(255) PRIMARY KEY,
-		onnx_model_url VARCHAR(1024),
 		onnx_detector_url VARCHAR(1024),
 		onnx_skeleton_url VARCHAR(1024),
 		local_rules_url VARCHAR(1024),
-		dialogue_engine_json JSONB,
+		dialogue_engine_url VARCHAR(1024),
 		recommended_camera_angle VARCHAR(50),
+		is_ready BOOLEAN NOT NULL DEFAULT FALSE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
@@ -111,12 +112,18 @@ func ensureTablesExist(db *gorm.DB) {
 		published_at TIMESTAMP WITH TIME ZONE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS event_id VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_type VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS partition_key VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_pub_created ON workout_execution.outbox (published, created_at);`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
+		id UUID PRIMARY KEY,
+		event_id UUID NOT NULL,
+		event_type VARCHAR(255) NOT NULL,
+		payload JSONB NOT NULL,
+		partition_key VARCHAR(255) NOT NULL,
+		processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		status VARCHAR(50) NOT NULL,
+		error_message TEXT
+	);`)
 }
 
 func getTestDB(t *testing.T) *gorm.DB {
@@ -314,8 +321,8 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	}
 
 	missingSpec, err := repo.FindByExerciseID(ctx, "non-existent-ex")
-	if err != nil || missingSpec != nil {
-		t.Errorf("expected nil, nil for missing MotionSpec, got %v, %v", missingSpec, err)
+	if !errors.Is(err, derror.ErrNotFound) || missingSpec != nil {
+		t.Errorf("expected derror.ErrNotFound for missing MotionSpec, got %v, %v", missingSpec, err)
 	}
 }
 
@@ -455,7 +462,7 @@ func TestPostgresRepository_CanceledContextAndLockConflict(t *testing.T) {
 		t.Error("expected error on canceled context FindByUserIDAndExerciseIDs")
 	}
 
-	motionSpec := aggregate.NewMotionSpecification("ex1", "http://onnx", "http://rules", vo.DialogueEngineConfig{}, "front")
+	motionSpec := aggregate.NewDraftMotionSpecification("ex1", "http://detector.onnx", "http://skeleton.onnx")
 	if err := motionRepo.Save(ctxCancel, motionSpec); err == nil {
 		t.Error("expected error on canceled context Save MotionSpec")
 	}

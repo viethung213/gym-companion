@@ -96,12 +96,12 @@ func ensureTablesExist(db *gorm.DB) {
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 		exercise_id VARCHAR(255) PRIMARY KEY,
-		onnx_model_url VARCHAR(1024),
 		onnx_detector_url VARCHAR(1024),
 		onnx_skeleton_url VARCHAR(1024),
 		local_rules_url VARCHAR(1024),
-		dialogue_engine_json JSONB,
+		dialogue_engine_url VARCHAR(1024),
 		recommended_camera_angle VARCHAR(50),
+		is_ready BOOLEAN NOT NULL DEFAULT FALSE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
@@ -118,12 +118,18 @@ func ensureTablesExist(db *gorm.DB) {
 		published_at TIMESTAMP WITH TIME ZONE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS event_id VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_type VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS partition_key VARCHAR(255);`)
-	db.Exec(`ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_pub_created ON workout_execution.outbox (published, created_at);`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
+		id UUID PRIMARY KEY,
+		event_id UUID NOT NULL,
+		event_type VARCHAR(255) NOT NULL,
+		payload JSONB NOT NULL,
+		partition_key VARCHAR(255) NOT NULL,
+		processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		status VARCHAR(50) NOT NULL,
+		error_message TEXT
+	);`)
 }
 
 // CleanMockData truncates all tables in workout_execution schema to clean up state.
@@ -135,6 +141,7 @@ func CleanMockData(db *gorm.DB) {
 	db.Exec("TRUNCATE TABLE workout_execution.personal_records CASCADE")
 	db.Exec("TRUNCATE TABLE workout_execution.motion_specifications CASCADE")
 	db.Exec("TRUNCATE TABLE workout_execution.outbox CASCADE")
+	db.Exec("TRUNCATE TABLE workout_execution.outbox_log CASCADE")
 }
 
 // SeedMockData seeds initial mock data into database for testing.
@@ -150,7 +157,7 @@ func SeedMockData(t *testing.T, db *gorm.DB) string {
 		OnnxDetectorURL:        "http://storage.fitai.com/models/detector.onnx",
 		OnnxSkeletonURL:        "http://storage.fitai.com/models/skeleton.onnx",
 		LocalRulesURL:          "http://storage.fitai.com/rules/bench_press.json",
-		DialogueEngineJSON:     []byte(`{"personalityId":"coach-pro"}`),
+		DialogueEngineURL:      "http://storage.fitai.com/dialogue/coach-pro.json",
 		RecommendedCameraAngle: "front",
 		CreatedAt:              now,
 		UpdatedAt:              now,

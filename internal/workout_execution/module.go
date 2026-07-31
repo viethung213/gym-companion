@@ -45,12 +45,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
-	// AutoMigrate models to sync schema changes (e.g. dialogue_engine_url, outbox_log)
-	_ = gormDB.AutoMigrate(
-		&persistence.MotionSpecificationModel{},
-		&persistence.OutboxLogModel{},
-	)
-
 	// Initialize Repositories & Storage & Transaction Manager
 	txManager := persistence.NewSQLTransactionManager(gormDB)
 	sessionRepo := persistence.NewPostgresWorkoutSessionRepository(gormDB)
