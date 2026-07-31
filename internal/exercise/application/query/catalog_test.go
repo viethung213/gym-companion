@@ -93,7 +93,7 @@ func (m *mockQueryRepository) DeleteEquipment(ctx context.Context, id string) er
 	return nil
 }
 
-func (m *mockQueryRepository) CreateMuscle(ctx context.Context, m *port.Muscle) error {
+func (m *mockQueryRepository) CreateMuscle(ctx context.Context, muscle *port.Muscle) error {
 	return nil
 }
 
@@ -101,7 +101,7 @@ func (m *mockQueryRepository) GetMuscle(ctx context.Context, id string) (*port.M
 	return nil, nil
 }
 
-func (m *mockQueryRepository) UpdateMuscle(ctx context.Context, m *port.Muscle) error {
+func (m *mockQueryRepository) UpdateMuscle(ctx context.Context, muscle *port.Muscle) error {
 	return nil
 }
 

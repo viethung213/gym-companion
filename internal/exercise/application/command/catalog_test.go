@@ -255,7 +255,7 @@ func TestCreateBodyPart_Success(t *testing.T) {
 	ids := &mockIDGenerator{nextID: "bp-123"}
 	handler := NewCreateBodyPartHandler(repo, ids)
 
-	adminCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
+	adminCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
 
 	bp, err := handler.Handle(adminCtx, &CreateBodyPartCommand{Name: "Chest"})
 	if err != nil {
@@ -273,7 +273,7 @@ func TestCreateBodyPart_NoAuthz(t *testing.T) {
 	ids := &mockIDGenerator{nextID: "bp-123"}
 	handler := NewCreateBodyPartHandler(repo, ids)
 
-	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
+	userCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "user-1", "x-user-role", "User"))
 
 	_, err := handler.Handle(userCtx, &CreateBodyPartCommand{Name: "Chest"})
 	if err == nil {
@@ -290,7 +290,7 @@ func TestCreateBodyPart_EmptyName(t *testing.T) {
 	ids := &mockIDGenerator{nextID: "bp-123"}
 	handler := NewCreateBodyPartHandler(repo, ids)
 
-	adminCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
+	adminCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
 
 	_, err := handler.Handle(adminCtx, &CreateBodyPartCommand{Name: "  "})
 	if !errors.Is(err, domain.ErrInvalidBodyPart) {
@@ -304,7 +304,7 @@ func TestUpdateBodyPart_Success(t *testing.T) {
 	repo.bp = &port.BodyPart{ID: "bp-123", Name: "Old"}
 	handler := NewUpdateBodyPartHandler(repo)
 
-	adminCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
+	adminCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
 
 	bp, err := handler.Handle(adminCtx, &UpdateBodyPartCommand{ID: "bp-123", Name: "Updated"})
 	if err != nil {
@@ -322,7 +322,7 @@ func TestDeleteBodyPart_Success(t *testing.T) {
 	repo.bp = &port.BodyPart{ID: "bp-123", Name: "Chest"}
 	handler := NewDeleteBodyPartHandler(repo)
 
-	adminCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
+	adminCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "admin-1", "x-user-role", "Admin"))
 
 	err := handler.Handle(adminCtx, &DeleteBodyPartCommand{ID: "bp-123"})
 	if err != nil {
