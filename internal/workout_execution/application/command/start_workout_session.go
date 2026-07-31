@@ -56,14 +56,6 @@ func (h *StartWorkoutSessionHandler) Handle(
 		return nil, apperror.ErrInvalidInput
 	}
 
-	activeSession, err := h.sessionRepo.FindActiveSessionByUserID(ctx, cmd.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query active sessions: %w", err)
-	}
-	if activeSession != nil {
-		return nil, derror.ErrActiveSessionAlreadyExists
-	}
-
 	if h.planClient != nil {
 		exists, planErr := h.planClient.ValidatePlanExists(ctx, cmd.UserID, cmd.PlanID)
 		if planErr != nil {
@@ -81,6 +73,14 @@ func (h *StartWorkoutSessionHandler) Handle(
 	}
 
 	if err := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		activeSession, err := h.sessionRepo.FindActiveSessionByUserID(txCtx, cmd.UserID)
+		if err != nil {
+			return fmt.Errorf("failed to query active sessions: %w", err)
+		}
+		if activeSession != nil {
+			return derror.ErrActiveSessionAlreadyExists
+		}
+
 		if err := h.sessionRepo.Save(txCtx, session); err != nil {
 			return err
 		}
