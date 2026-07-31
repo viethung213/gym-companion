@@ -36,6 +36,7 @@ func ensureTablesExist(db *gorm.DB) {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_workout_sessions_active_user ON workout_execution.workout_sessions(user_id) WHERE status = 'IN_PROGRESS';`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.workout_set_logs (
 		id VARCHAR(255) PRIMARY KEY,

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +42,9 @@ func (r *PostgresWorkoutSessionRepository) Save(ctx context.Context, session *ag
 	}).Create(model).Error
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "uq_workout_sessions_active_user") {
+			return derror.ErrActiveSessionAlreadyExists
+		}
 		return fmt.Errorf("failed to save workout session: %w", err)
 	}
 
