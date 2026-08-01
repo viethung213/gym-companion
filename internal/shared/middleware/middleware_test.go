@@ -53,11 +53,16 @@ func getTestKeys(t *testing.T) (privKey *rsa.PrivateKey, pubKeyPEM string) {
 }
 
 type mockKeyProvider struct {
+	mu     sync.Mutex
+	calls  int
 	keyPEM string
 	err    error
 }
 
 func (m *mockKeyProvider) GetPublicKeyPEM(_ context.Context, kid string) (string, error) {
+	m.mu.Lock()
+	m.calls++
+	m.mu.Unlock()
 	if m.err != nil {
 		return "", m.err
 	}
@@ -65,6 +70,12 @@ func (m *mockKeyProvider) GetPublicKeyPEM(_ context.Context, kid string) (string
 		return m.keyPEM, nil
 	}
 	return "", errors.New("key not found")
+}
+
+func (m *mockKeyProvider) GetCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
 }
 
 func generateTestToken(t *testing.T, userID, role, kid string) string {
@@ -224,6 +235,76 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 	}
 }
 
+func TestUnaryAuthInterceptor_PublicRoute_InvalidToken_Fails(t *testing.T) {
+	t.Parallel()
+	_, pubKeyPEM := getTestKeys(t)
+	mockKP := &mockKeyProvider{
+		keyPEM: pubKeyPEM,
+	}
+	interceptor := UnaryAuthInterceptor(mockKP)
+	infoPublic := &grpc.UnaryServerInfo{
+		FullMethod: "/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL",
+	}
+	dummyHandler := func(_ context.Context, _ any) (any, error) {
+		return "public-ok", nil
+	}
+
+	// Invalid token on public route MUST be rejected with Unauthenticated
+	ctxWithBadToken := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs("authorization", "Bearer invalid-token-string"),
+	)
+	_, err := interceptor(ctxWithBadToken, nil, infoPublic, dummyHandler)
+	if err == nil || status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated error when invalid token is sent to public route, got %v", err)
+	}
+
+	// Malformed auth header (e.g. Basic auth) on public route MUST be rejected
+	ctxWithMalformedHeader := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs("authorization", "Basic dXNlcjpwYXNz"),
+	)
+	_, err = interceptor(ctxWithMalformedHeader, nil, infoPublic, dummyHandler)
+	if err == nil || status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated error when malformed header is sent to public route, got %v", err)
+	}
+}
+
+func TestRSAPublicKeyCache(t *testing.T) {
+	t.Parallel()
+	_, pubKeyPEM := getTestKeys(t)
+	mockKP := &mockKeyProvider{
+		keyPEM: pubKeyPEM,
+	}
+	interceptor := UnaryAuthInterceptor(mockKP)
+
+	infoSecured := &grpc.UnaryServerInfo{
+		FullMethod: "/contracts.generic.auth.v1.service.AuthService/Logout",
+	}
+	goodToken := generateTestToken(t, "user-456", "user", "test-kid")
+	ctxWithGoodToken := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs("authorization", "Bearer "+goodToken),
+	)
+
+	dummyHandler := func(_ context.Context, _ any) (any, error) {
+		return "ok", nil
+	}
+
+	// Make 10 requests with the same token/kid
+	for i := 0; i < 10; i++ {
+		resp, err := interceptor(ctxWithGoodToken, nil, infoSecured, dummyHandler)
+		if err != nil || resp != "ok" {
+			t.Fatalf("expected request %d to succeed, got err=%v", i, err)
+		}
+	}
+
+	// Public key provider should only have been called ONCE due to caching
+	if calls := mockKP.GetCalls(); calls != 1 {
+		t.Errorf("expected KeyProvider to be called exactly 1 time, got %d calls", calls)
+	}
+}
+
 func TestUnaryRateLimitInterceptor(t *testing.T) {
 	t.Parallel()
 	interceptor := UnaryRateLimitInterceptor()
@@ -284,3 +365,65 @@ func TestUnaryRateLimitInterceptor_CompleteWorkoutSession(t *testing.T) {
 		t.Fatalf("expected ResourceExhausted, got %v", err2)
 	}
 }
+
+func TestExtractClientIP(t *testing.T) {
+	t.Parallel()
+	// Test A: Strip port from peer address
+	addr, _ := net.ResolveTCPAddr("tcp", "192.168.1.100:54321")
+	ctxPeer := peer.NewContext(context.Background(), &peer.Peer{Addr: addr})
+	ip := extractClientIP(ctxPeer)
+	if ip != "192.168.1.100" {
+		t.Errorf("expected IP 192.168.1.100 without port, got %s", ip)
+	}
+
+	// Test B: X-Forwarded-For header priority
+	ctxXFF := metadata.NewIncomingContext(
+		ctxPeer,
+		metadata.Pairs("x-forwarded-for", "203.0.113.195, 70.41.3.18, 150.172.238.178"),
+	)
+	ipXFF := extractClientIP(ctxXFF)
+	if ipXFF != "203.0.113.195" {
+		t.Errorf("expected client IP from X-Forwarded-For 203.0.113.195, got %s", ipXFF)
+	}
+
+	// Test C: X-Real-IP header priority
+	ctxXRI := metadata.NewIncomingContext(
+		ctxPeer,
+		metadata.Pairs("x-real-ip", "198.51.100.1"),
+	)
+	ipXRI := extractClientIP(ctxXRI)
+	if ipXRI != "198.51.100.1" {
+		t.Errorf("expected client IP from X-Real-IP 198.51.100.1, got %s", ipXRI)
+	}
+}
+
+func TestRateLimiterRegistry_SweepCleanup(t *testing.T) {
+	t.Parallel()
+	reg := &rateLimiterRegistry{
+		limiters:  make(map[string]*limiterEntry),
+		ttl:       50 * time.Millisecond,
+		lastSweep: time.Now().Add(-2 * time.Minute), // Force sweep trigger on next GetLimiter call
+	}
+
+	// Insert an old entry
+	reg.limiters["old-key"] = &limiterEntry{
+		limiter:  nil,
+		lastSeen: time.Now().Add(-100 * time.Millisecond),
+	}
+
+	// Call GetLimiter for a new key, triggering sweep
+	_ = reg.GetLimiter("new-key", 100)
+
+	reg.mu.Lock()
+	_, oldExists := reg.limiters["old-key"]
+	_, newExists := reg.limiters["new-key"]
+	reg.mu.Unlock()
+
+	if oldExists {
+		t.Errorf("expected old-key to be evicted during sweep, but it still exists")
+	}
+	if !newExists {
+		t.Errorf("expected new-key to exist in registry")
+	}
+}
+

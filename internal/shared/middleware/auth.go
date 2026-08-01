@@ -2,9 +2,11 @@ package middleware
 
 import (
 	"context"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
@@ -33,9 +35,58 @@ const (
 )
 
 var (
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrForbidden    = errors.New("forbidden")
+	ErrUnauthorized      = errors.New("unauthorized")
+	ErrForbidden         = errors.New("forbidden")
+	errMissingMetadata   = errors.New("missing metadata")
+	errMissingAuthHeader = errors.New("missing authorization header")
+	errInvalidAuthFormat = errors.New("invalid authorization format (expected Bearer <token>)")
 )
+
+type rsaKeyCache struct {
+	mu   sync.RWMutex
+	keys map[string]*rsa.PublicKey
+	kp   KeyProvider
+}
+
+func newRSAKeyCache(kp KeyProvider) *rsaKeyCache {
+	return &rsaKeyCache{
+		keys: make(map[string]*rsa.PublicKey),
+		kp:   kp,
+	}
+}
+
+func (c *rsaKeyCache) GetPublicKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+	if c.kp == nil {
+		return nil, errors.New("key provider not initialized")
+	}
+
+	c.mu.RLock()
+	pubKey, exists := c.keys[kid]
+	c.mu.RUnlock()
+	if exists {
+		return pubKey, nil
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if pubKey, exists = c.keys[kid]; exists {
+		return pubKey, nil
+	}
+
+	pubKeyPEM, err := c.kp.GetPublicKeyPEM(ctx, kid)
+	if err != nil {
+		return nil, fmt.Errorf("get public key: %w", err)
+	}
+
+	pubKey, err = jwt.ParseRSAPublicKeyFromPEM([]byte(pubKeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("parse rsa public key: %w", err)
+	}
+
+	c.keys[kid] = pubKey
+	return pubKey, nil
+}
 
 type Actor struct {
 	UserID string
@@ -71,6 +122,8 @@ func RequireAdmin(ctx context.Context) (Actor, error) {
 
 // UnaryAuthInterceptor intercepts unary gRPC requests to validate JWT tokens.
 func UnaryAuthInterceptor(kp KeyProvider) grpc.UnaryServerInterceptor {
+	keyCache := newRSAKeyCache(kp)
+
 	return func(
 		ctx context.Context,
 		req any,
@@ -83,21 +136,21 @@ func UnaryAuthInterceptor(kp KeyProvider) grpc.UnaryServerInterceptor {
 		// 2. Extract token from metadata
 		tokenStr, err := extractToken(ctx)
 		if err != nil {
-			if required {
-				return nil, status.Errorf(codes.Unauthenticated, "authentication required: %v", err)
+			// If auth header is completely missing on a public/optional route, proceed as anonymous
+			if errors.Is(err, errMissingMetadata) || errors.Is(err, errMissingAuthHeader) {
+				if required {
+					return nil, status.Errorf(codes.Unauthenticated, "authentication required: %v", err)
+				}
+				return handler(ctx, req)
 			}
-			// Bypass if not required
-			return handler(ctx, req)
+			// Malformed authorization header (e.g. invalid format) -> always reject
+			return nil, status.Errorf(codes.Unauthenticated, "invalid authorization header format: %v", err)
 		}
 
-		// 3. Validate token
-		userID, role, err := parseAndValidateToken(ctx, tokenStr, kp)
+		// 3. Validate token: If token was provided, it MUST be valid regardless of route auth requirement
+		userID, role, err := parseAndValidateToken(ctx, tokenStr, keyCache)
 		if err != nil {
-			if required {
-				return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
-			}
-			// Bypass if not required
-			return handler(ctx, req)
+			return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
 		}
 
 		// 4. Inject identity into context
@@ -111,35 +164,23 @@ func UnaryAuthInterceptor(kp KeyProvider) grpc.UnaryServerInterceptor {
 func parseAndValidateToken(
 	ctx context.Context,
 	tokenStr string,
-	kp KeyProvider,
+	cache *rsaKeyCache,
 ) (userID, role string, err error) {
-	if kp == nil {
-		return "", "", errors.New("key provider not initialized")
+	if cache == nil {
+		return "", "", errors.New("key cache not initialized")
 	}
 
-	var kid string
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
-		var ok bool
-		kid, ok = token.Header["kid"].(string)
+		kid, ok := token.Header["kid"].(string)
 		if !ok || kid == "" {
 			return nil, errors.New("missing kid in token header")
 		}
 
-		pubKeyPEM, getErr := kp.GetPublicKeyPEM(ctx, kid)
-		if getErr != nil {
-			return nil, fmt.Errorf("get public key: %w", getErr)
-		}
-
-		pubKey, parseErr := jwt.ParseRSAPublicKeyFromPEM([]byte(pubKeyPEM))
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse rsa public key: %w", parseErr)
-		}
-
-		return pubKey, nil
+		return cache.GetPublicKey(ctx, kid)
 	})
 
 	if err != nil {
@@ -233,18 +274,19 @@ func isAuthRequired(fullMethod string) bool {
 func extractToken(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return "", errors.New("missing metadata")
+		return "", errMissingMetadata
 	}
 
 	authHeaders := md.Get("authorization")
 	if len(authHeaders) == 0 || authHeaders[0] == "" {
-		return "", errors.New("missing authorization header")
+		return "", errMissingAuthHeader
 	}
 
 	parts := strings.SplitN(authHeaders[0], " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return "", errors.New("invalid authorization format (expected Bearer <token>)")
+		return "", errInvalidAuthFormat
 	}
 
 	return parts[1], nil
 }
+
