@@ -200,6 +200,8 @@ type lazyKeyProvider struct {
 	kp middleware.KeyProvider
 }
 
+var _ middleware.KeyProvider = (*lazyKeyProvider)(nil)
+
 func (l *lazyKeyProvider) GetPublicKeyPEM(ctx context.Context, kid string) (string, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
