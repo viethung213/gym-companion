@@ -149,7 +149,8 @@ func (r *OutboxRepository) ProcessBatch(
 
 		records := make([]*port.OutboxRecord, len(dbOutboxes))
 		ids := make([]string, len(dbOutboxes))
-		for i, rec := range dbOutboxes {
+		for i := range dbOutboxes {
+			rec := &dbOutboxes[i]
 			var pubAt *time.Time
 			if rec.PublishedAt.Valid {
 				pubAt = &rec.PublishedAt.Time
@@ -168,8 +169,8 @@ func (r *OutboxRepository) ProcessBatch(
 		}
 
 		txCtx := WithTx(ctx, tx)
-		if err := publishFn(txCtx, records); err != nil {
-			return fmt.Errorf("publish outbox batch: %w", err)
+		if pubErr := publishFn(txCtx, records); pubErr != nil {
+			return fmt.Errorf("publish outbox batch: %w", pubErr)
 		}
 
 		now := time.Now()

@@ -130,8 +130,8 @@ func (r *OutboxRepository) ProcessBatch(
 		}
 
 		txCtx := WithTx(ctx, tx)
-		if err := publishFn(txCtx, records); err != nil {
-			return fmt.Errorf("publish outbox batch: %w", err)
+		if pubErr := publishFn(txCtx, records); pubErr != nil {
+			return fmt.Errorf("publish outbox batch: %w", pubErr)
 		}
 
 		now := time.Now()

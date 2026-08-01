@@ -437,8 +437,8 @@ func (r *PostgresOutboxRepository) ProcessBatch(
 		}
 
 		txCtx := WithTx(ctx, tx)
-		if err := publishFn(txCtx, res); err != nil {
-			return fmt.Errorf("publish outbox batch: %w", err)
+		if pubErr := publishFn(txCtx, res); pubErr != nil {
+			return fmt.Errorf("publish outbox batch: %w", pubErr)
 		}
 
 		now := time.Now().UTC()
