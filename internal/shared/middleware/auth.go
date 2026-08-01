@@ -289,4 +289,3 @@ func extractToken(ctx context.Context) (string, error) {
 
 	return parts[1], nil
 }
-

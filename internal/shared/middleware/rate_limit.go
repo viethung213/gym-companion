@@ -160,4 +160,3 @@ func extractClientIP(ctx context.Context) string {
 
 	return "unknown"
 }
-
