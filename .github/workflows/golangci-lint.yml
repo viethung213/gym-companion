@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: false
 
       - name: Generate Protobuf Stubs
@@ -50,3 +50,4 @@ jobs:
         with:
           version: v1.64.5
           install-mode: goinstall
+          args: --timeout=5m --build-tags=unit,integration,e2e ./...

@@ -1,3 +1,2 @@
-# Ensure shell scripts and Go files have LF line endings when checked out/committed
+# Ensure shell scripts have LF line endings when checked out/committed
 *.sh text eol=lf
-*.go text eol=lf
