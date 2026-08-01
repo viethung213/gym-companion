@@ -50,45 +50,12 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processOutbox(ctx context.Context) error {
-	var events []*port.OutboxRecord
-
-	// 1. Fetch unpublished events (max 500) inside a transaction with an Advisory Lock
-	err := w.outboxRepo.ExecuteInLock(ctx, 11223344, func(txCtx context.Context) error {
-		var err error
-		events, err = w.outboxRepo.FetchUnpublished(txCtx, 500)
-		if err != nil {
-			return err
+	return w.outboxRepo.ProcessBatch(ctx, 500, func(publishCtx context.Context, events []*port.OutboxRecord) error {
+		log.Printf("Outbox worker: found %d unpublished events to process.", len(events))
+		if err := w.publisher.PublishBatch(publishCtx, events); err != nil {
+			return fmt.Errorf("publish batch failed: %w", err)
 		}
+		log.Printf("Outbox worker: successfully published batch of %d events.", len(events))
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	if len(events) == 0 {
-		return nil
-	}
-
-	log.Printf("Outbox worker: found %d unpublished events to process.", len(events))
-
-	// 2. Batch publish to Kafka (OUTSIDE DB transaction, using parent context)
-	err = w.publisher.PublishBatch(ctx, events)
-	if err != nil {
-		return fmt.Errorf("publish batch failed: %w", err)
-	}
-
-	// 3. Batch mark as published in the database inside another transaction
-	ids := make([]string, len(events))
-	for i, ev := range events {
-		ids[i] = ev.ID
-	}
-	err = w.outboxRepo.ExecuteInLock(ctx, 11223344, func(txCtx context.Context) error {
-		return w.outboxRepo.MarkPublished(txCtx, ids)
-	})
-	if err != nil {
-		return fmt.Errorf("mark batch published failed: %w", err)
-	}
-
-	log.Printf("Outbox worker: successfully published batch of %d events.", len(events))
-	return nil
 }

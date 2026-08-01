@@ -100,6 +100,9 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 				return fmt.Errorf("find user by email: %w", findErr)
 			}
 			if findErr == nil && existingUser != nil {
+				if !profile.EmailVerified {
+					return fmt.Errorf("cannot link social account: email %s is not verified by provider %s", profile.Email, cmd.Provider)
+				}
 				user = existingUser
 				if cmd.Provider == "google" {
 					user.LinkGoogle(profile.ID)

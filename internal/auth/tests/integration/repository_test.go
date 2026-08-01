@@ -4,6 +4,8 @@ package integration
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -277,21 +279,94 @@ func TestOutboxRepository_Integration(t *testing.T) {
 	}
 }
 
-func TestOutboxRepository_ExecuteInLock_Integration(t *testing.T) {
+func TestOutboxRepository_ProcessBatch_Integration(t *testing.T) {
 	db := getTestDB(t)
 	repo := infraPostgres.NewOutboxRepository(db)
 	ctx := context.Background()
 
-	var count int
-	err := repo.ExecuteInLock(ctx, 99887766, func(txCtx context.Context) error {
-		count++
+	eventID := uuid.New().String()
+	_ = repo.SaveEvent(ctx, eventID, "test.batch", []byte(`{}`), "key")
+
+	var processedCount int
+	err := repo.ProcessBatch(ctx, 10, func(txCtx context.Context, records []*port.OutboxRecord) error {
+		processedCount = len(records)
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("Failed to execute in lock: %v", err)
+		t.Fatalf("Failed to process batch: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("Expected count to be 1, got %d", count)
+	if processedCount != 1 {
+		t.Errorf("Expected processedCount to be 1, got %d", processedCount)
+	}
+}
+
+func TestOutboxRepository_ConcurrentWorkers_Integration(t *testing.T) {
+	db := getTestDB(t)
+	truncateTables(db)
+	defer truncateTables(db)
+
+	repo := infraPostgres.NewOutboxRepository(db)
+	ctx := context.Background()
+
+	const totalRecords = 20
+	const batchLimit = 10
+
+	for i := 0; i < totalRecords; i++ {
+		eventID := uuid.New().String()
+		if err := repo.SaveEvent(ctx, eventID, "test.concurrent", []byte(`{}`), fmt.Sprintf("key-%d", i)); err != nil {
+			t.Fatalf("Failed to seed outbox record %d: %v", i, err)
+		}
+	}
+
+	var mu sync.Mutex
+	processedIDs := make(map[string]int)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Worker 1: fetches batch of 10, holds transaction lock for 100ms before committing
+	go func() {
+		defer wg.Done()
+		_ = repo.ProcessBatch(ctx, batchLimit, func(txCtx context.Context, records []*port.OutboxRecord) error {
+			mu.Lock()
+			for _, r := range records {
+				processedIDs[r.ID]++
+			}
+			mu.Unlock()
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		})
+	}()
+
+	// Small sleep so Worker 1 enters ProcessBatch first and locks rows 1..10
+	time.Sleep(20 * time.Millisecond)
+
+	// Worker 2: calls ProcessBatch while Worker 1 is holding locks on rows 1..10
+	go func() {
+		defer wg.Done()
+		_ = repo.ProcessBatch(ctx, batchLimit, func(txCtx context.Context, records []*port.OutboxRecord) error {
+			mu.Lock()
+			for _, r := range records {
+				processedIDs[r.ID]++
+			}
+			mu.Unlock()
+			return nil
+		})
+	}()
+
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(processedIDs) != totalRecords {
+		t.Errorf("Expected %d total unique records processed concurrently, got %d", totalRecords, len(processedIDs))
+	}
+
+	for id, count := range processedIDs {
+		if count > 1 {
+			t.Errorf("Record %s was processed %d times (expected exactly 1)", id, count)
+		}
 	}
 }
 

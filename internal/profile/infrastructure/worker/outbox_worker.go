@@ -47,28 +47,11 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processOutbox(ctx context.Context) error {
-	events, err := w.outboxRepo.FetchUnpublished(ctx, 100)
-	if err != nil {
-		return fmt.Errorf("fetch unpublished events: %w", err)
-	}
-
-	if len(events) == 0 {
+	return w.outboxRepo.ProcessBatch(ctx, 100, func(publishCtx context.Context, events []*port.OutboxRecord) error {
+		if err := w.publisher.PublishBatch(publishCtx, events); err != nil {
+			return fmt.Errorf("publish outbox batch to kafka: %w", err)
+		}
+		log.Printf("Profile Outbox worker: successfully published batch of %d events.", len(events))
 		return nil
-	}
-
-	if err := w.publisher.PublishBatch(ctx, events); err != nil {
-		return fmt.Errorf("publish outbox batch to kafka: %w", err)
-	}
-
-	ids := make([]string, len(events))
-	for i, ev := range events {
-		ids[i] = ev.ID
-	}
-
-	if err := w.outboxRepo.MarkAsPublished(ctx, ids); err != nil {
-		return fmt.Errorf("mark outbox events as published: %w", err)
-	}
-
-	log.Printf("Profile Outbox worker: successfully published batch of %d events.", len(events))
-	return nil
+	})
 }

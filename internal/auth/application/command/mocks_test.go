@@ -184,9 +184,10 @@ func (mockOAuthService) GetOAuthLoginURL(ctx context.Context, provider string, s
 
 func (mockOAuthService) ExchangeCodeForProfile(ctx context.Context, provider string, code string, redirectURI string) (*port.OAuthUserProfile, error) {
 	return &port.OAuthUserProfile{
-		ID:       "9e0dc099-0df4-436f-b258-004ea10a6234",
-		Email:    "oauth_user@example.com",
-		FullName: "OAuth User",
+		ID:            "9e0dc099-0df4-436f-b258-004ea10a6234",
+		Email:         "oauth_user@example.com",
+		FullName:      "OAuth User",
+		EmailVerified: true,
 	}, nil
 }
 

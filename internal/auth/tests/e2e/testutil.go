@@ -18,8 +18,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -84,7 +86,24 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 		t.Fatalf("Failed to listen on free port for gRPC: %v", err)
 	}
 	grpcAddr := grpcListener.Addr().String()
-	grpcServer := grpc.NewServer()
+
+	testAuthInterceptor := func(
+		ctx context.Context,
+		req any,
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get("x-user-id"); len(vals) > 0 && vals[0] != "" {
+				ctx = context.WithValue(ctx, middleware.UserIDKey, vals[0])
+			}
+			if vals := md.Get("x-user-role"); len(vals) > 0 && vals[0] != "" {
+				ctx = context.WithValue(ctx, middleware.UserRoleKey, vals[0])
+			}
+		}
+		return handler(ctx, req)
+	}
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 
 	// 3. Start HTTP Gateway on free port
 	httpListener, err := net.Listen("tcp", "127.0.0.1:0")

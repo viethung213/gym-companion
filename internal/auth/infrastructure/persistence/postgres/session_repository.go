@@ -29,7 +29,7 @@ func NewSessionRepository(db *gorm.DB) *SessionRepository {
 
 func (r *SessionRepository) getDB(ctx context.Context) *gorm.DB {
 	if tx := GetTx(ctx); tx != nil {
-		return tx
+		return tx.WithContext(ctx)
 	}
 	return r.db.WithContext(ctx)
 }

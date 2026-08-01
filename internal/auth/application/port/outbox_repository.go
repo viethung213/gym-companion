@@ -16,5 +16,5 @@ type OutboxRepository interface {
 	SaveEvent(ctx context.Context, eventID string, eventType string, payload []byte, partitionKey string) error
 	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
 	MarkPublished(ctx context.Context, ids []string) error
-	ExecuteInLock(ctx context.Context, lockID int64, fn func(ctx context.Context) error) error
+	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 }

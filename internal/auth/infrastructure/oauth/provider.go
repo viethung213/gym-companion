@@ -165,18 +165,23 @@ func (p *OAuthProvider) exchangeGoogle(ctx context.Context, code string, redirec
 	}
 
 	var profileResp struct {
-		ID    string `json:"id"`
-		Email string `json:"email"`
-		Name  string `json:"name"`
+		ID            string `json:"id"`
+		Email         string `json:"email"`
+		VerifiedEmail bool   `json:"verified_email"`
+		EmailVerified bool   `json:"email_verified"`
+		Name          string `json:"name"`
 	}
 	if err := json.NewDecoder(respProf.Body).Decode(&profileResp); err != nil {
 		return nil, fmt.Errorf("decode profile response: %w", err)
 	}
 
+	isVerified := profileResp.VerifiedEmail || profileResp.EmailVerified
+
 	return &port.OAuthUserProfile{
-		ID:       profileResp.ID,
-		Email:    profileResp.Email,
-		FullName: profileResp.Name,
+		ID:            profileResp.ID,
+		Email:         profileResp.Email,
+		FullName:      profileResp.Name,
+		EmailVerified: isVerified,
 	}, nil
 }
 
@@ -261,9 +266,13 @@ func (p *OAuthProvider) exchangeFacebook(ctx context.Context, code string, redir
 		return nil, fmt.Errorf("decode facebook profile response: %w", err)
 	}
 
+	// Facebook Graph API only exposes non-empty `email` when confirmed/verified by user
+	isVerified := profileResp.Email != ""
+
 	return &port.OAuthUserProfile{
-		ID:       profileResp.ID,
-		Email:    profileResp.Email,
-		FullName: profileResp.Name,
+		ID:            profileResp.ID,
+		Email:         profileResp.Email,
+		FullName:      profileResp.Name,
+		EmailVerified: isVerified,
 	}, nil
 }

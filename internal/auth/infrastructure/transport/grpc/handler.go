@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
@@ -13,7 +12,6 @@ import (
 	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -76,7 +74,8 @@ type contextKey string
 const userIDContextKey contextKey = "userId"
 
 func extractUserID(ctx context.Context) (string, error) {
-	// 1. Try standard context key (camelCase) set by middleware later
+	// Only extract UserID from verified context keys populated by Authentication Interceptor/Middleware.
+	// Metadata headers (e.g. x-user-id) from unverified incoming requests are strictly ignored to prevent impersonation attacks.
 	if val, ok := ctx.Value(middleware.UserIDKey).(string); ok && val != "" {
 		return val, nil
 	}
@@ -87,20 +86,7 @@ func extractUserID(ctx context.Context) (string, error) {
 		return val, nil
 	}
 
-	// 2. Fallback to gRPC metadata
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", errors.New("missing request metadata")
-	}
-
-	metadataKeys := []string{"x-user-id", "user-id", "grpcgateway-x-user-id", "grpcgateway-user-id"}
-	for _, key := range metadataKeys {
-		if val := md.Get(key); len(val) > 0 && val[0] != "" {
-			return val[0], nil
-		}
-	}
-
-	return "", errors.New("missing user identity in context or metadata")
+	return "", errors.New("missing verified user identity in context")
 }
 
 // Logout revokes a user's session token.
@@ -110,10 +96,7 @@ func (h *GRPCHandler) Logout(
 ) (*authv1message.LogoutResponse, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
-		return &authv1message.LogoutResponse{
-			Success: false,
-			Message: fmt.Sprintf("failed to logout: %v", err),
-		}, nil
+		return nil, status.Errorf(codes.Unauthenticated, "unauthorized: %v", err)
 	}
 
 	err = h.logoutHandler.Handle(ctx, command.LogoutCommand{
@@ -121,10 +104,13 @@ func (h *GRPCHandler) Logout(
 		UserID:       userID,
 	})
 	if err != nil {
-		return &authv1message.LogoutResponse{
-			Success: false,
-			Message: fmt.Sprintf("failed to logout: %v", err),
-		}, nil
+		if errors.Is(err, apperror.ErrUnauthorized) {
+			return &authv1message.LogoutResponse{
+				Success: false,
+				Message: "unauthorized: session does not belong to user",
+			}, nil
+		}
+		return nil, status.Errorf(codes.Internal, "failed to logout: %v", err)
 	}
 
 	return &authv1message.LogoutResponse{

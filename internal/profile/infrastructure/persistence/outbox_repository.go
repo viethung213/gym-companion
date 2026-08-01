@@ -8,6 +8,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type GormOutboxRepository struct {
@@ -81,4 +82,69 @@ func (r *GormOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 		return fmt.Errorf("mark outbox records as published: %w", err)
 	}
 	return nil
+}
+
+func (r *GormOutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var models []*OutboxModel
+		err := tx.
+			Clauses(clause.Locking{
+				Strength: "UPDATE",
+				Options:  "SKIP LOCKED",
+			}).
+			Where("published = ?", false).
+			Order("created_at ASC").
+			Limit(limit).
+			Find(&models).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("fetch unpublished outbox events for update: %w", err)
+		}
+
+		if len(models) == 0 {
+			return nil
+		}
+
+		records := make([]*port.OutboxRecord, 0, len(models))
+		ids := make([]string, 0, len(models))
+		for _, m := range models {
+			records = append(records, &port.OutboxRecord{
+				ID:           m.ID,
+				EventID:      m.EventID,
+				EventType:    m.EventType,
+				Payload:      m.Payload,
+				PartitionKey: m.PartitionKey,
+			})
+			ids = append(ids, m.ID)
+		}
+
+		txCtx := context.WithValue(ctx, txKey{}, tx)
+		if pubErr := publishFn(txCtx, records); pubErr != nil {
+			return fmt.Errorf("publish outbox batch: %w", pubErr)
+		}
+
+		now := time.Now()
+		err = tx.Model(&OutboxModel{}).
+			Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"published":    true,
+				"published_at": sql.NullTime{Time: now, Valid: true},
+			}).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("mark outbox records as published: %w", err)
+		}
+
+		return nil
+	})
 }
