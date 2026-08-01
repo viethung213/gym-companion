@@ -2,12 +2,14 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
 )
 
@@ -82,15 +84,21 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 	} else if cmd.Provider == "facebook" {
 		user, err = h.userRepo.FindByFacebookID(ctx, profile.ID)
 	}
+	if err != nil && !errors.Is(err, derror.ErrUserNotFound) {
+		return "", "", "", fmt.Errorf("find user by social id: %w", err)
+	}
 
 	var accessToken, refreshTokenStr string
 	var expiresAt time.Time
 
 	// 5. Execute User registration/linking, Token generation, and Session saving in a SINGLE Atomic Transaction
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err != nil || user == nil {
+		if user == nil {
 			// Try to find user by email to link social provider
 			existingUser, findErr := h.userRepo.FindByEmail(txCtx, profile.Email)
+			if findErr != nil && !errors.Is(findErr, derror.ErrUserNotFound) {
+				return fmt.Errorf("find user by email: %w", findErr)
+			}
 			if findErr == nil && existingUser != nil {
 				user = existingUser
 				if cmd.Provider == "google" {

@@ -19,7 +19,9 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockUserRepo struct {
-	users map[string]*aggregate.User
+	users             map[string]*aggregate.User
+	findByEmailErr    error
+	findByGoogleIDErr error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, u *aggregate.User) error {
@@ -44,6 +46,9 @@ func (m *mockUserRepo) FindByID(ctx context.Context, id string) (*aggregate.User
 }
 
 func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*aggregate.User, error) {
+	if m.findByEmailErr != nil {
+		return nil, m.findByEmailErr
+	}
 	for _, u := range m.users {
 		if u.Email() == email {
 			return u, nil
@@ -53,6 +58,9 @@ func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*aggregat
 }
 
 func (m *mockUserRepo) FindByGoogleID(ctx context.Context, googleID string) (*aggregate.User, error) {
+	if m.findByGoogleIDErr != nil {
+		return nil, m.findByGoogleIDErr
+	}
 	for _, u := range m.users {
 		if u.GoogleID() == googleID {
 			return u, nil

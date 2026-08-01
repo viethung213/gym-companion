@@ -183,3 +183,87 @@ func TestOAuthLoginHandler_StateValidationFailure(t *testing.T) {
 		t.Errorf("got error %v, expected it to contain 'oauth state validation failed'", err)
 	}
 }
+
+func TestOAuthLoginHandler_FindByEmail_DBError(t *testing.T) {
+	ctx := context.Background()
+	dbErr := errors.New("connection timeout")
+
+	userRepo := &mockUserRepo{
+		users:          make(map[string]*aggregate.User),
+		findByEmailErr: dbErr,
+	}
+	key := &port.JWKRecord{
+		ID:        "active-kid",
+		Status:    port.KeyStatusActive,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
+	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
+	publisher := &mockEventPublisher{}
+
+	handler := NewOAuthLoginHandler(
+		userRepo,
+		keyRepo,
+		sessRepo,
+		mockTokenService{},
+		mockOAuthService{},
+		publisher,
+		&mockTxManager{},
+	)
+
+	_, _, _, err := handler.Handle(ctx, OAuthLoginCommand{
+		Provider: "google",
+		Code:     "valid_code",
+	})
+	if err == nil {
+		t.Fatal("expected error when FindByEmail returns DB error, got nil")
+	}
+	if !strings.Contains(err.Error(), "find user by email") {
+		t.Errorf("got error %v, want error containing 'find user by email'", err)
+	}
+	if len(userRepo.users) != 0 {
+		t.Errorf("expected 0 users created when FindByEmail fails with DB error, got %d", len(userRepo.users))
+	}
+}
+
+func TestOAuthLoginHandler_FindBySocialID_DBError(t *testing.T) {
+	ctx := context.Background()
+	dbErr := errors.New("database locked")
+
+	userRepo := &mockUserRepo{
+		users:             make(map[string]*aggregate.User),
+		findByGoogleIDErr: dbErr,
+	}
+	key := &port.JWKRecord{
+		ID:        "active-kid",
+		Status:    port.KeyStatusActive,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
+	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
+	publisher := &mockEventPublisher{}
+
+	handler := NewOAuthLoginHandler(
+		userRepo,
+		keyRepo,
+		sessRepo,
+		mockTokenService{},
+		mockOAuthService{},
+		publisher,
+		&mockTxManager{},
+	)
+
+	_, _, _, err := handler.Handle(ctx, OAuthLoginCommand{
+		Provider: "google",
+		Code:     "valid_code",
+	})
+	if err == nil {
+		t.Fatal("expected error when FindByGoogleID returns DB error, got nil")
+	}
+	if !strings.Contains(err.Error(), "find user by social id") {
+		t.Errorf("got error %v, want error containing 'find user by social id'", err)
+	}
+}
+
