@@ -1,3 +1,5 @@
+//go:build unit
+
 package persistence_test
 
 import (
