@@ -57,18 +57,18 @@ func ParseSessionStatus(str string) SessionStatus {
 
 // WorkoutSetLog represents a set performed in a session.
 type WorkoutSetLog struct {
-	ID          string      `json:"id"`
-	SessionID   string      `json:"sessionId"`
-	SetNumber   int         `json:"setNumber"`
-	ExerciseID  string      `json:"exerciseId"`
-	TargetReps  int         `json:"targetReps"`
-	ActualReps  int         `json:"actualReps"`
-	Weight      float32     `json:"weight"`
-	FormScore   *float32    `json:"formScore,omitempty"` // nil if non-AI
-	RPE         float32     `json:"rpe"`
-	CameraAngle string      `json:"cameraAngle"`
-	Reps        []vo.RepLog `json:"reps,omitempty"`
-	CreatedAt   time.Time   `json:"createdAt"`
+	ID          string
+	SessionID   string
+	SetNumber   int
+	ExerciseID  string
+	TargetReps  int
+	ActualReps  int
+	Weight      float32
+	FormScore   *float32 // nil if non-AI
+	RPE         float32
+	CameraAngle string
+	Reps        []vo.RepLog
+	CreatedAt   time.Time
 }
 
 // DeepCopy returns a deep copy of WorkoutSetLog, cloning pointer and slice fields.
@@ -91,14 +91,14 @@ func (l WorkoutSetLog) DeepCopy() WorkoutSetLog {
 
 // SessionError represents posture errors logged during an AI set.
 type SessionError struct {
-	ID         string    `json:"id"`
-	SessionID  string    `json:"sessionId"`
-	SetNumber  int       `json:"setNumber"`
-	RepNumber  int       `json:"repNumber"`
-	ExerciseID string    `json:"exerciseId"`
-	ErrorCode  string    `json:"errorCode"`
-	Severity   string    `json:"severity"`
-	Timestamp  time.Time `json:"timestamp"`
+	ID         string
+	SessionID  string
+	SetNumber  int
+	RepNumber  int
+	ExerciseID string
+	ErrorCode  string
+	Severity   string
+	Timestamp  time.Time
 }
 
 // WorkoutSession is the aggregate root controlling a workout execution lifecycle.

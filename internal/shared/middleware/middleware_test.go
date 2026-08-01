@@ -255,3 +255,32 @@ func TestUnaryRateLimitInterceptor(t *testing.T) {
 	// environments if burst is large, but with a 10% burst of 100 (which
 	// is 10), calling 11 times in microsecond loop guarantees exhaustion.
 }
+
+func TestUnaryRateLimitInterceptor_CompleteWorkoutSession(t *testing.T) {
+	t.Parallel()
+	interceptor := UnaryRateLimitInterceptor()
+
+	dummyHandler := func(_ context.Context, _ any) (any, error) {
+		return "ok", nil
+	}
+
+	addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:54321")
+	ctx := peer.NewContext(context.Background(), &peer.Peer{Addr: addr})
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/contracts.core.workout_execution.v1.service.WorkoutExecutionService/CompleteWorkoutSession"}
+
+	// For 10 req/min, burst is 10/10 = 1.
+	// First request succeeds, 2nd request should be rate limited immediately.
+	_, err1 := interceptor(ctx, nil, info, dummyHandler)
+	if err1 != nil {
+		t.Fatalf("expected first call to succeed, got %v", err1)
+	}
+
+	_, err2 := interceptor(ctx, nil, info, dummyHandler)
+	if err2 == nil {
+		t.Fatalf("expected rate limit error on second call for CompleteWorkoutSession")
+	}
+	if status.Code(err2) != codes.ResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err2)
+	}
+}
