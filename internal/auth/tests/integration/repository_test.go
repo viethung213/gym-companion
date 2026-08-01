@@ -8,15 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 	infraPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
 	"github.com/viethung213/gym-companion/internal/shared/database"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func getTestDB(t *testing.T) *gorm.DB {

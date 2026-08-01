@@ -65,8 +65,8 @@ test-env-down:
 
 # Chạy golangci-lint tĩnh cục bộ để kiểm tra chất lượng mã nguồn (sử dụng go run để biên dịch tự động bằng phiên bản Go của máy host, hỗ trợ Go 1.25+ và đồng bộ với CI)
 lint:
-	@echo "Linting Go source files..."
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5 run -v
+	@echo "Linting Go source files (including unit, integration, and e2e tagged files)..."
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5 run --build-tags "unit,integration,e2e" -v
 
 # --- Lệnh Chạy Toàn Bộ Dự Án ---
 

@@ -28,7 +28,6 @@ type TestSuite struct {
 	StopServer func()
 }
 
-
 type fakeClock struct{ t time.Time }
 
 func (c *fakeClock) Now() time.Time { return c.t }

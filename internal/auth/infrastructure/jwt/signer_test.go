@@ -1,3 +1,4 @@
+
 //go:build unit
 
 package jwt
@@ -107,7 +108,10 @@ func validateTokenHelper(t *testing.T, tokenStr string, key *port.JWKRecord) (st
 		return "", "", fmt.Errorf("invalid claims")
 	}
 
-	userID := claims["sub"].(string)
+	userID, ok := claims["sub"].(string)
+	if !ok {
+		return "", "", fmt.Errorf("invalid sub claim")
+	}
 	role, _ := claims["role"].(string)
 	return userID, role, nil
 }

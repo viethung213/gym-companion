@@ -266,4 +266,3 @@ func TestOAuthLoginHandler_FindBySocialID_DBError(t *testing.T) {
 		t.Errorf("got error %v, want error containing 'find user by social id'", err)
 	}
 }
-

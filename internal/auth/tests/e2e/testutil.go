@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -14,14 +15,13 @@ import (
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/viethung213/gym-companion/internal/auth"
+	"github.com/viethung213/gym-companion/internal/shared/database"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-
-	"github.com/viethung213/gym-companion/internal/auth"
-	"github.com/viethung213/gym-companion/internal/shared/database"
-	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 // getTestDB creates a connection to the test database for E2E verification.
@@ -108,7 +108,7 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 
 	// Run gRPC server in background
 	go func() {
-		if err := grpcServer.Serve(grpcListener); err != nil && err != grpc.ErrServerStopped {
+		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			log.Printf("gRPC server run error: %v", err)
 		}
 	}()
