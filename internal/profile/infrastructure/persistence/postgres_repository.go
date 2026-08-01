@@ -73,10 +73,9 @@ func (r *PostgresUserProfileRepository) FindByUserID(ctx context.Context, userID
 		return nil, fmt.Errorf("query body metrics: %w", err)
 	}
 
-	// Only query active injuries (is_recovered = false) for active profile state
 	var injuryModels []*InjuryModel
-	if err := db.Find(&injuryModels, "user_id = ? AND is_recovered = ?", userID, false).Error; err != nil {
-		return nil, fmt.Errorf("query active injuries: %w", err)
+	if err := db.Find(&injuryModels, "user_id = ?", userID).Error; err != nil {
+		return nil, fmt.Errorf("query injuries: %w", err)
 	}
 
 	domain, err := ToDomainAggregate(&userModel, metricModels, injuryModels)
