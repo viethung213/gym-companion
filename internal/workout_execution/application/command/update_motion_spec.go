@@ -67,22 +67,24 @@ func (h *UpdateMotionSpecificationHandler) Handle(
 		cmd.RecommendedCameraAngle,
 	)
 
-	var saveErr error
-	if h.txManager != nil {
-		saveErr = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-			if err := h.motionRepo.Save(txCtx, spec); err != nil {
+	saveAndPublish := func(execCtx context.Context) error {
+		if err := h.motionRepo.Save(execCtx, spec); err != nil {
+			return err
+		}
+		events := spec.PopEvents()
+		if len(events) > 0 && h.outbox != nil {
+			if err := h.outbox.WriteEvents(execCtx, "MotionSpecification", spec.ExerciseID(), events); err != nil {
 				return err
 			}
-			events := spec.PopEvents()
-			if len(events) > 0 && h.outbox != nil {
-				if err := h.outbox.WriteEvents(txCtx, "MotionSpecification", spec.ExerciseID(), events); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+		}
+		return nil
+	}
+
+	var saveErr error
+	if h.txManager != nil {
+		saveErr = h.txManager.WithTransaction(ctx, saveAndPublish)
 	} else {
-		saveErr = h.motionRepo.Save(ctx, spec)
+		saveErr = saveAndPublish(ctx)
 	}
 
 	if saveErr != nil {

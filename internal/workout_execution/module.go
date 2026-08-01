@@ -118,7 +118,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, outboxWriter, txManager, 1*time.Minute, 5*time.Minute)
 	exerciseCreatedConsumer := worker.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)
 
-	_ = worker.NewPREventConsumer(prProcessHandler)
+	prConsumer := worker.NewPREventConsumer(prProcessHandler)
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -185,6 +185,41 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 						if err := exerciseCreatedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
 							log.Printf("WorkoutExecution failed to process ExerciseCreated event: %v", err)
+						}
+					}
+				}
+			}()
+		}
+
+		// Start WorkoutSessionCompleted event consumer worker (listening to topic 'workout_execution.events')
+		sessionCompletedReader, err := deps.KafkaRegistry.GetReader("workout_execution_pr_consumer", "workout_execution.events", kafkaBrokers)
+		if err == nil && sessionCompletedReader != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("PANIC RECOVERED in WorkoutExecution PREventConsumer worker: %v", r)
+					}
+					_ = sessionCompletedReader.Close()
+				}()
+
+				for {
+					select {
+					case <-workerCtx.Done():
+						return
+					default:
+						msg, err := sessionCompletedReader.ReadMessage(workerCtx)
+						if err != nil {
+							if errors.Is(err, context.Canceled) {
+								return
+							}
+							time.Sleep(1 * time.Second)
+							continue
+						}
+
+						if err := prConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
+							log.Printf("WorkoutExecution failed to process WorkoutSessionCompleted event for PR: %v", err)
 						}
 					}
 				}

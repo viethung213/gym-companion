@@ -151,4 +151,71 @@ func TestPREventConsumer(t *testing.T) {
 			t.Fatalf("got err = %v, want nil", err)
 		}
 	})
+
+	t.Run("HandleMessage valid CloudEvent", func(t *testing.T) {
+		session, err := aggregate.NewWorkoutSession("sess-100", "user-100", "plan-1")
+		if err != nil {
+			t.Fatalf("failed to create session: %v", err)
+		}
+
+		handler := command.NewProcessCompletedSessionForPRHandler(
+			&mockSessionRepo{session: session},
+			&mockPRRepo{},
+			&mockOutboxWriter{},
+			&mockTxManager{},
+		)
+		consumer := worker.NewPREventConsumer(handler)
+
+		rawJSON := []byte(`{
+			"id": "evt-123",
+			"type": "contracts.core.workout_execution.v1.workoutSessionCompleted",
+			"data": {
+				"sessionId": "sess-100",
+				"userId": "user-100"
+			}
+		}`)
+
+		if err := consumer.HandleMessage(context.Background(), rawJSON); err != nil {
+			t.Fatalf("HandleMessage got err = %v, want nil", err)
+		}
+	})
+
+	t.Run("HandleMessage non-matching event type ignored", func(t *testing.T) {
+		handler := command.NewProcessCompletedSessionForPRHandler(&mockSessionRepo{}, &mockPRRepo{}, &mockOutboxWriter{}, &mockTxManager{})
+		consumer := worker.NewPREventConsumer(handler)
+
+		rawJSON := []byte(`{
+			"id": "evt-124",
+			"type": "contracts.core.workout_execution.v1.workoutSessionStarted",
+			"data": {"sessionId": "sess-100", "userId": "user-100"}
+		}`)
+
+		if err := consumer.HandleMessage(context.Background(), rawJSON); err != nil {
+			t.Fatalf("HandleMessage non-matching type got err = %v, want nil", err)
+		}
+	})
+
+	t.Run("HandleMessage invalid JSON payload", func(t *testing.T) {
+		handler := command.NewProcessCompletedSessionForPRHandler(&mockSessionRepo{}, &mockPRRepo{}, &mockOutboxWriter{}, &mockTxManager{})
+		consumer := worker.NewPREventConsumer(handler)
+
+		if err := consumer.HandleMessage(context.Background(), []byte(`invalid-json`)); err == nil {
+			t.Fatal("HandleMessage invalid json got nil error, want error")
+		}
+	})
+
+	t.Run("HandleMessage missing fields returns error", func(t *testing.T) {
+		handler := command.NewProcessCompletedSessionForPRHandler(&mockSessionRepo{}, &mockPRRepo{}, &mockOutboxWriter{}, &mockTxManager{})
+		consumer := worker.NewPREventConsumer(handler)
+
+		rawJSON := []byte(`{
+			"id": "evt-125",
+			"type": "contracts.core.workout_execution.v1.workoutSessionCompleted",
+			"data": {"sessionId": "", "userId": ""}
+		}`)
+
+		if err := consumer.HandleMessage(context.Background(), rawJSON); err == nil {
+			t.Fatal("HandleMessage missing fields got nil error, want error")
+		}
+	})
 }
