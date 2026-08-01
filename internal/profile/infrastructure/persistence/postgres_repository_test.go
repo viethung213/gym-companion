@@ -74,7 +74,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			partition_key TEXT NOT NULL,
 			created_at DATETIME,
 			published INTEGER DEFAULT 0,
-			published_at DATETIME
+			published_at DATETIME,
+			status TEXT DEFAULT 'PENDING',
+			locked_until DATETIME
 		);
 	`).Error
 	require.NoError(t, err)

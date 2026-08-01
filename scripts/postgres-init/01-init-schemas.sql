@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS auth.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS auth.outbox_log (
@@ -45,7 +47,9 @@ CREATE TABLE IF NOT EXISTS profile.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS profile.outbox_log (
@@ -72,7 +76,9 @@ CREATE TABLE IF NOT EXISTS coaching.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS coaching.outbox_log (
@@ -101,7 +107,9 @@ CREATE TABLE IF NOT EXISTS workout_execution.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
@@ -128,7 +136,9 @@ CREATE TABLE IF NOT EXISTS nutrition.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS nutrition.outbox_log (
@@ -155,7 +165,9 @@ CREATE TABLE IF NOT EXISTS notification.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS notification.outbox_log (
@@ -182,7 +194,9 @@ CREATE TABLE IF NOT EXISTS audio.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS audio.outbox_log (
@@ -209,7 +223,9 @@ CREATE TABLE IF NOT EXISTS exercise.outbox (
     partition_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMP WITH TIME ZONE
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS exercise.outbox_log (
@@ -234,4 +250,11 @@ CREATE INDEX IF NOT EXISTS idx_nutrition_outbox_published_created ON nutrition.o
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_published_created ON notification.outbox (published, created_at);
 CREATE INDEX IF NOT EXISTS idx_audio_outbox_published_created ON audio.outbox (published, created_at);
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_published_created ON exercise.outbox (published, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_auth_outbox_claim ON auth.outbox (published, status, locked_until, created_at);
+CREATE INDEX IF NOT EXISTS idx_profile_outbox_claim ON profile.outbox (published, status, locked_until, created_at);
+CREATE INDEX IF NOT EXISTS idx_coaching_outbox_claim ON coaching.outbox (published, status, locked_until, created_at);
+CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_claim ON workout_execution.outbox (published, status, locked_until, created_at);
+CREATE INDEX IF NOT EXISTS idx_exercise_outbox_claim ON exercise.outbox (published, status, locked_until, created_at);
+
 

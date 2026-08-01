@@ -155,6 +155,8 @@ type OutboxModel struct {
 	Published     bool         `gorm:"column:published;default:false"`
 	PublishedAt   sql.NullTime `gorm:"column:published_at"`
 	CreatedAt     time.Time    `gorm:"column:created_at"`
+	Status        string       `gorm:"column:status;default:PENDING"`
+	LockedUntil   sql.NullTime `gorm:"column:locked_until"`
 }
 
 // TableName returns table name for GORM.

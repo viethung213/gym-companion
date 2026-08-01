@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -169,8 +172,12 @@ func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 			partition_key VARCHAR(255) NOT NULL,
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 			published BOOLEAN DEFAULT FALSE,
-			published_at TIMESTAMP WITH TIME ZONE
+			published_at TIMESTAMP WITH TIME ZONE,
+			status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+			locked_until TIMESTAMP WITH TIME ZONE
 		)`,
+		`ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;`,
+		`ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;`,
 		`INSERT INTO exercise.body_parts (id, name) VALUES ('legs', 'Legs')`,
 		`INSERT INTO exercise.equipments (id, name) VALUES ('barbell', 'Barbell')`,
 		`INSERT INTO exercise.muscles (id, name, body_part_id) VALUES ('quads', 'Quads', 'legs')`,
@@ -232,5 +239,185 @@ func TestPostgresRepository_FindByIDNotFound(t *testing.T) {
 	_, err = repo.FindByID(ctx, "non-existent-uuid")
 	if !errors.Is(err, domain.ErrExerciseNotFound) {
 		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
+	}
+}
+
+func getExerciseTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL != "" {
+		db, err := InitDB(databaseURL)
+		if err != nil {
+			t.Fatalf("open database: %v", err)
+		}
+		_ = prepareExerciseSchema(context.Background(), db)
+		return db
+	}
+
+	sqlDB, err := database.GetRegistry().GetPool("exercise")
+	if err != nil {
+		t.Fatalf("Failed to initialize exercise test database: %v", err)
+	}
+
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to wrap database in gorm: %v", err)
+	}
+
+	_ = prepareExerciseSchema(context.Background(), db)
+	db.Exec("ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;")
+	db.Exec("ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;")
+	return db
+}
+
+func truncateExerciseOutbox(db *gorm.DB) {
+	db.Exec("TRUNCATE TABLE exercise.outbox CASCADE;")
+}
+
+func TestExerciseOutboxRepository_3ConcurrentNodes_Integration(t *testing.T) {
+	db := getExerciseTestDB(t)
+	truncateExerciseOutbox(db)
+	defer truncateExerciseOutbox(db)
+
+	repo := NewOutboxRepository(db)
+	ctx := context.Background()
+
+	const totalRecords = 30
+	const batchLimit = 10
+
+	for i := 0; i < totalRecords; i++ {
+		id := uuid.New().String()
+		rec := &port.OutboxRecord{
+			ID:           id,
+			EventID:      id,
+			EventType:    "ExerciseCreated",
+			Payload:      []byte(`{}`),
+			PartitionKey: fmt.Sprintf("key-%d", i),
+		}
+		err := repo.Save(ctx, rec)
+		if err != nil {
+			t.Fatalf("Failed to seed record %d: %v", i, err)
+		}
+	}
+
+	var mu sync.Mutex
+	processedIDs := make(map[string]int)
+
+	var wg sync.WaitGroup
+	const nodeCount = 3
+	wg.Add(nodeCount)
+
+	for nodeIdx := 1; nodeIdx <= nodeCount; nodeIdx++ {
+		go func(id int) {
+			defer wg.Done()
+			for {
+				records, err := repo.ClaimBatch(ctx, batchLimit, 5*time.Second)
+				if err != nil || len(records) == 0 {
+					break
+				}
+
+				mu.Lock()
+				recIDs := make([]string, len(records))
+				for i, r := range records {
+					processedIDs[r.ID]++
+					recIDs[i] = r.ID
+				}
+				mu.Unlock()
+
+				time.Sleep(10 * time.Millisecond)
+				_ = repo.MarkPublished(ctx, recIDs)
+			}
+		}(nodeIdx)
+	}
+
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(processedIDs) != totalRecords {
+		t.Errorf("Expected %d total unique records processed across 3 nodes, got %d", totalRecords, len(processedIDs))
+	}
+
+	for id, count := range processedIDs {
+		if count > 1 {
+			t.Errorf("Record %s was processed %d times (expected exactly 1)", id, count)
+		}
+	}
+}
+
+func TestExerciseOutboxRepository_NodeCrashFailover_Integration(t *testing.T) {
+	db := getExerciseTestDB(t)
+	truncateExerciseOutbox(db)
+	defer truncateExerciseOutbox(db)
+
+	repo := NewOutboxRepository(db)
+	ctx := context.Background()
+
+	for i := 0; i < 5; i++ {
+		id := uuid.New().String()
+		rec := &port.OutboxRecord{
+			ID:           id,
+			EventID:      id,
+			EventType:    "ExerciseCreated",
+			Payload:      []byte(`{}`),
+			PartitionKey: fmt.Sprintf("key-%d", i),
+		}
+		err := repo.Save(ctx, rec)
+		if err != nil {
+			t.Fatalf("Failed to seed record %d: %v", i, err)
+		}
+	}
+
+	// Node 1 claims with 100ms lock
+	node1Claimed, err := repo.ClaimBatch(ctx, 5, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Node 1 ClaimBatch failed: %v", err)
+	}
+	if len(node1Claimed) != 5 {
+		t.Fatalf("Node 1 expected 5 claimed records, got %d", len(node1Claimed))
+	}
+
+	// Node 1 CRASHES (no MarkPublished)
+
+	// Node 2 tries immediately -> 0 records
+	node2Immediate, err := repo.ClaimBatch(ctx, 5, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Node 2 immediate ClaimBatch failed: %v", err)
+	}
+	if len(node2Immediate) != 0 {
+		t.Errorf("Node 2 expected 0 records while Node 1 lock active, got %d", len(node2Immediate))
+	}
+
+	// Wait 150ms for lock expiration
+	time.Sleep(150 * time.Millisecond)
+
+	// Node 2 tries after lock expired -> claims all 5
+	node2Recovered, err := repo.ClaimBatch(ctx, 5, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Node 2 failover ClaimBatch failed: %v", err)
+	}
+	if len(node2Recovered) != 5 {
+		t.Errorf("Node 2 expected 5 recovered records after Node 1 crash, got %d", len(node2Recovered))
+	}
+
+	recIDs := make([]string, len(node2Recovered))
+	for i, r := range node2Recovered {
+		recIDs[i] = r.ID
+	}
+	if err := repo.MarkPublished(ctx, recIDs); err != nil {
+		t.Fatalf("Node 2 MarkPublished failed: %v", err)
+	}
+
+	unpub, err := repo.FetchUnpublished(ctx, 10)
+	if err != nil {
+		t.Fatalf("FetchUnpublished failed: %v", err)
+	}
+	if len(unpub) != 0 {
+		t.Errorf("Expected 0 leftover unpublished records, got %d", len(unpub))
 	}
 }

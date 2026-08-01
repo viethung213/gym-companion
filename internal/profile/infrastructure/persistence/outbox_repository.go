@@ -77,6 +77,7 @@ func (r *GormOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 		Updates(map[string]interface{}{
 			"published":    true,
 			"published_at": sql.NullTime{Time: now, Valid: true},
+			"status":       "PUBLISHED",
 		}).Error
 	if err != nil {
 		return fmt.Errorf("mark outbox records as published: %w", err)
@@ -84,23 +85,30 @@ func (r *GormOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 	return nil
 }
 
-func (r *GormOutboxRepository) ProcessBatch(
+func (r *GormOutboxRepository) ClaimBatch(
 	ctx context.Context,
 	limit int,
-	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
-) error {
+	lockDuration time.Duration,
+) ([]*port.OutboxRecord, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	if lockDuration <= 0 {
+		lockDuration = 30 * time.Second
+	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var records []*port.OutboxRecord
+	now := time.Now()
+	lockedUntil := now.Add(lockDuration)
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var models []*OutboxModel
 		err := tx.
 			Clauses(clause.Locking{
 				Strength: "UPDATE",
 				Options:  "SKIP LOCKED",
 			}).
-			Where("published = ?", false).
+			Where("published = ? AND (status = ? OR locked_until IS NULL OR locked_until < ?)", false, "PENDING", now).
 			Order("created_at ASC").
 			Limit(limit).
 			Find(&models).
@@ -114,7 +122,7 @@ func (r *GormOutboxRepository) ProcessBatch(
 			return nil
 		}
 
-		records := make([]*port.OutboxRecord, 0, len(models))
+		records = make([]*port.OutboxRecord, 0, len(models))
 		ids := make([]string, 0, len(models))
 		for _, m := range models {
 			records = append(records, &port.OutboxRecord{
@@ -127,24 +135,48 @@ func (r *GormOutboxRepository) ProcessBatch(
 			ids = append(ids, m.ID)
 		}
 
-		txCtx := context.WithValue(ctx, txKey{}, tx)
-		if pubErr := publishFn(txCtx, records); pubErr != nil {
-			return fmt.Errorf("publish outbox batch: %w", pubErr)
-		}
-
-		now := time.Now()
 		err = tx.Model(&OutboxModel{}).
 			Where("id IN ?", ids).
 			Updates(map[string]interface{}{
-				"published":    true,
-				"published_at": sql.NullTime{Time: now, Valid: true},
+				"status":       "PROCESSING",
+				"locked_until": lockedUntil,
 			}).
 			Error
 
 		if err != nil {
-			return fmt.Errorf("mark outbox records as published: %w", err)
+			return fmt.Errorf("claim outbox records: %w", err)
 		}
 
 		return nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func (r *GormOutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	records, err := r.ClaimBatch(ctx, limit, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return nil
+	}
+
+	if pubErr := publishFn(ctx, records); pubErr != nil {
+		return fmt.Errorf("publish outbox batch: %w", pubErr)
+	}
+
+	ids := make([]string, 0, len(records))
+	for _, rec := range records {
+		ids = append(ids, rec.ID)
+	}
+
+	return r.MarkAsPublished(ctx, ids)
 }

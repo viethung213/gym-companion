@@ -35,6 +35,9 @@ func getTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to wrap database in gorm: %v", err)
 	}
 
+	db.Exec("ALTER TABLE auth.outbox ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;")
+	db.Exec("ALTER TABLE auth.outbox ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;")
+
 	return db
 }
 
@@ -367,6 +370,139 @@ func TestOutboxRepository_ConcurrentWorkers_Integration(t *testing.T) {
 		if count > 1 {
 			t.Errorf("Record %s was processed %d times (expected exactly 1)", id, count)
 		}
+	}
+}
+
+func TestOutboxRepository_3ConcurrentNodes_Integration(t *testing.T) {
+	db := getTestDB(t)
+	truncateTables(db)
+	defer truncateTables(db)
+
+	repo := infraPostgres.NewOutboxRepository(db)
+	ctx := context.Background()
+
+	const totalRecords = 30
+	const batchLimit = 10
+
+	for i := 0; i < totalRecords; i++ {
+		eventID := uuid.New().String()
+		if err := repo.SaveEvent(ctx, eventID, "test.3nodes", []byte(`{}`), fmt.Sprintf("key-%d", i)); err != nil {
+			t.Fatalf("Failed to seed outbox record %d: %v", i, err)
+		}
+	}
+
+	var mu sync.Mutex
+	processedIDs := make(map[string]int)
+
+	var wg sync.WaitGroup
+	const nodeCount = 3
+	wg.Add(nodeCount)
+
+	for nodeIdx := 1; nodeIdx <= nodeCount; nodeIdx++ {
+		go func(id int) {
+			defer wg.Done()
+			for {
+				records, err := repo.ClaimBatch(ctx, batchLimit, 5*time.Second)
+				if err != nil || len(records) == 0 {
+					break
+				}
+
+				mu.Lock()
+				recIDs := make([]string, len(records))
+				for i, r := range records {
+					processedIDs[r.ID]++
+					recIDs[i] = r.ID
+				}
+				mu.Unlock()
+
+				// Simulate brief Kafka network push
+				time.Sleep(10 * time.Millisecond)
+
+				_ = repo.MarkPublished(ctx, recIDs)
+			}
+		}(nodeIdx)
+	}
+
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(processedIDs) != totalRecords {
+		t.Errorf("Expected %d total unique records processed across 3 nodes, got %d", totalRecords, len(processedIDs))
+	}
+
+	for id, count := range processedIDs {
+		if count > 1 {
+			t.Errorf("Record %s was processed %d times (expected exactly 1)", id, count)
+		}
+	}
+}
+
+func TestOutboxRepository_NodeCrashFailover_Integration(t *testing.T) {
+	db := getTestDB(t)
+	truncateTables(db)
+	defer truncateTables(db)
+
+	repo := infraPostgres.NewOutboxRepository(db)
+	ctx := context.Background()
+
+	// Seed 5 records
+	for i := 0; i < 5; i++ {
+		eventID := uuid.New().String()
+		if err := repo.SaveEvent(ctx, eventID, "test.failover", []byte(`{}`), fmt.Sprintf("key-%d", i)); err != nil {
+			t.Fatalf("Failed to seed record %d: %v", i, err)
+		}
+	}
+
+	// Step 1: Node 1 claims batch with a VERY SHORT lock duration of 100ms
+	node1Claimed, err := repo.ClaimBatch(ctx, 5, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Node 1 ClaimBatch failed: %v", err)
+	}
+	if len(node1Claimed) != 5 {
+		t.Fatalf("Node 1 expected 5 claimed records, got %d", len(node1Claimed))
+	}
+
+	// NODE 1 CRASHES HERE (does NOT call MarkPublished)
+
+	// Step 2: Immediate claim attempt by Node 2 (lock still active) -> Node 2 should get 0 records
+	node2Immediate, err := repo.ClaimBatch(ctx, 5, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Node 2 immediate ClaimBatch failed: %v", err)
+	}
+	if len(node2Immediate) != 0 {
+		t.Errorf("Node 2 expected 0 records while Node 1 lock is active, got %d", len(node2Immediate))
+	}
+
+	// Step 3: Wait 150ms for Node 1's lock to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Step 4: Node 2 attempts claim AFTER Node 1 lock expired -> Node 2 successfully takes over orphaned records!
+	node2Recovered, err := repo.ClaimBatch(ctx, 5, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Node 2 failover ClaimBatch failed: %v", err)
+	}
+	if len(node2Recovered) != 5 {
+		t.Errorf("Node 2 expected 5 recovered records after Node 1 crash, got %d", len(node2Recovered))
+	}
+
+	// Step 5: Node 2 publishes and marks published
+	recIDs := make([]string, len(node2Recovered))
+	for i, r := range node2Recovered {
+		recIDs[i] = r.ID
+	}
+	if err := repo.MarkPublished(ctx, recIDs); err != nil {
+		t.Fatalf("Node 2 MarkPublished failed: %v", err)
+	}
+
+	// Verify no unpublished records remain
+	leftover, err := repo.FetchUnpublished(ctx, 10)
+	if err != nil {
+		t.Fatalf("FetchUnpublished failed: %v", err)
+	}
+	if len(leftover) != 0 {
+		t.Errorf("Expected 0 leftover unpublished records, got %d", len(leftover))
 	}
 }
 

@@ -1,6 +1,9 @@
 package port
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // OutboxRecord is a plain data transfer object representing a database outbox log entry.
 type OutboxRecord struct {
@@ -15,6 +18,7 @@ type OutboxRecord struct {
 type OutboxRepository interface {
 	SaveEvent(ctx context.Context, eventID string, eventType string, payload []byte, partitionKey string) error
 	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
+	ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*OutboxRecord, error)
 	MarkPublished(ctx context.Context, ids []string) error
 	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 }
