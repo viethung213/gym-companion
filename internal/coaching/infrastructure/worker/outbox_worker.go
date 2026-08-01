@@ -56,37 +56,12 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) tick(ctx context.Context) error {
-	var records []*port.OutboxRecord
-
-	err := w.outbox.ExecuteInLock(ctx, LockID, func(txCtx context.Context) error {
-		var e error
-
-		records, e = w.outbox.FetchUnpublished(txCtx, w.batchSize)
-
-		return e
-	})
-
-	if err != nil {
-		return fmt.Errorf("fetch unpublished: %w", err)
-	}
-
-	if len(records) == 0 {
-		return nil
-	}
-
-	if w.publisher != nil {
-		if err := w.publisher.PublishBatch(ctx, records); err != nil {
-			return fmt.Errorf("publish batch: %w", err)
+	return w.outbox.ProcessBatch(ctx, w.batchSize, func(publishCtx context.Context, records []*port.OutboxRecord) error {
+		if w.publisher != nil {
+			if err := w.publisher.PublishBatch(publishCtx, records); err != nil {
+				return fmt.Errorf("publish batch: %w", err)
+			}
 		}
-	}
-
-	ids := make([]string, 0, len(records))
-
-	for _, r := range records {
-		ids = append(ids, r.ID)
-	}
-
-	return w.outbox.ExecuteInLock(ctx, LockID, func(txCtx context.Context) error {
-		return w.outbox.MarkPublished(txCtx, ids)
+		return nil
 	})
 }

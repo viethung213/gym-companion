@@ -53,34 +53,12 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processOutbox(ctx context.Context) error {
-	var events []*port.OutboxRecord
-
-	// Lock key 99887766 for workout_execution outbox
-	err := w.outboxRepo.ExecuteInLock(ctx, 99887766, func(txCtx context.Context) error {
-		var err error
-		events, err = w.outboxRepo.FetchUnpublished(txCtx, 100)
-		return err
-	})
-	if err != nil {
-		return err
-	}
-
-	if len(events) == 0 {
-		return nil
-	}
-
-	if w.publisher != nil {
-		if err := w.publisher.PublishBatch(ctx, events); err != nil {
-			return fmt.Errorf("publish batch failed: %w", err)
+	return w.outboxRepo.ProcessBatch(ctx, 100, func(publishCtx context.Context, events []*port.OutboxRecord) error {
+		if w.publisher != nil {
+			if err := w.publisher.PublishBatch(publishCtx, events); err != nil {
+				return fmt.Errorf("publish batch failed: %w", err)
+			}
 		}
-	}
-
-	ids := make([]string, len(events))
-	for i, ev := range events {
-		ids[i] = ev.ID
-	}
-
-	return w.outboxRepo.ExecuteInLock(ctx, 99887766, func(txCtx context.Context) error {
-		return w.outboxRepo.MarkPublished(txCtx, ids)
+		return nil
 	})
 }

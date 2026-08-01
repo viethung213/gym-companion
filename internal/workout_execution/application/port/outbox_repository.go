@@ -38,7 +38,7 @@ type OutboxRepository interface {
 
 	MarkPublished(ctx context.Context, ids []string) error
 
-	ExecuteInLock(ctx context.Context, lockID int64, fn func(txCtx context.Context) error) error
+	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 }
 
 // BrokerPublisher sends serialized outbox events to Kafka.

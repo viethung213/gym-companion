@@ -41,6 +41,28 @@ func (m *mockOutboxRepoForWorker) MarkAsPublished(ctx context.Context, ids []str
 	return nil
 }
 
+func (m *mockOutboxRepoForWorker) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	unpub, err := m.FetchUnpublished(ctx, limit)
+	if err != nil {
+		return err
+	}
+	if len(unpub) == 0 {
+		return nil
+	}
+	if err := publishFn(ctx, unpub); err != nil {
+		return err
+	}
+	ids := make([]string, len(unpub))
+	for i, r := range unpub {
+		ids[i] = r.ID
+	}
+	return m.MarkAsPublished(ctx, ids)
+}
+
 type mockBrokerPublisher struct {
 	publishedRecords []*port.OutboxRecord
 	failPub          bool

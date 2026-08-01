@@ -38,6 +38,10 @@ func (m *mockOutboxRepo) MarkAsPublished(ctx context.Context, ids []string) erro
 	return nil
 }
 
+func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, _ int, publishFn func(ctx context.Context, records []*port.OutboxRecord) error) error {
+	return publishFn(ctx, m.records)
+}
+
 func TestOutboxWriter(t *testing.T) {
 	repo := &mockOutboxRepo{}
 	writer := event.NewOutboxWriter(repo)

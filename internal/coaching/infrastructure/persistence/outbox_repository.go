@@ -115,20 +115,77 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) erro
 	return nil
 }
 
-// ExecuteInLock wraps fn in a transaction guarded by pg_try_advisory_xact_lock.
-func (r *OutboxRepository) ExecuteInLock(ctx context.Context, lockID int64, fn func(txCtx context.Context) error) error {
+// ProcessBatch fetches unpublished outbox events using FOR UPDATE SKIP LOCKED,
+// publishes them via publishFn, and marks them as published in a single transaction.
+func (r *OutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	if limit <= 0 {
+		limit = 100
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var acquired bool
+		var dbOutboxes []outboxRecord
+		err := tx.
+			Clauses(clause.Locking{
+				Strength: "UPDATE",
+				Options:  "SKIP LOCKED",
+			}).
+			Where("published = ?", false).
+			Order("created_at ASC").
+			Limit(limit).
+			Find(&dbOutboxes).
+			Error
 
-		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", lockID).Scan(&acquired).Error; err != nil {
-			return fmt.Errorf("try advisory lock: %w", err)
+		if err != nil {
+			return fmt.Errorf("fetch outbox for update skip locked: %w", err)
 		}
 
-		if !acquired {
-			return nil // Skip; another worker holds it.
+		if len(dbOutboxes) == 0 {
+			return nil
 		}
 
-		return fn(WithTx(ctx, tx))
+		records := make([]*port.OutboxRecord, len(dbOutboxes))
+		ids := make([]string, len(dbOutboxes))
+		for i, rec := range dbOutboxes {
+			var pubAt *time.Time
+			if rec.PublishedAt.Valid {
+				pubAt = &rec.PublishedAt.Time
+			}
+			records[i] = &port.OutboxRecord{
+				ID:           rec.ID,
+				EventID:      rec.EventID,
+				EventType:    rec.EventType,
+				Payload:      rec.Payload,
+				PartitionKey: rec.PartitionKey,
+				CreatedAt:    rec.CreatedAt,
+				Published:    rec.Published,
+				PublishedAt:  pubAt,
+			}
+			ids[i] = rec.ID
+		}
+
+		txCtx := WithTx(ctx, tx)
+		if err := publishFn(txCtx, records); err != nil {
+			return fmt.Errorf("publish outbox batch: %w", err)
+		}
+
+		now := time.Now()
+		err = tx.Model(&outboxRecord{}).
+			Where("id IN ?", ids).
+			Updates(map[string]any{
+				"published":    true,
+				"published_at": now,
+			}).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("mark published: %w", err)
+		}
+
+		return nil
 	})
 }
 

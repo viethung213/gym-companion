@@ -105,7 +105,7 @@ func (m *JSONWebKeyModel) ToRepositoryRecord() *port.JWKRecord {
 // SessionModel is the GORM model mapping to auth.sessions table.
 type SessionModel struct {
 	Token     string    `gorm:"primaryKey;column:token"`
-	UserID    string    `gorm:"column:user_id;not null"`
+	UserID    string    `gorm:"column:user_id;not null;index:idx_sessions_user_id"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 	ExpiresAt time.Time `gorm:"column:expires_at"`
 }
@@ -130,8 +130,8 @@ type OutboxModel struct {
 	EventType    string       `gorm:"column:event_type;not null"`
 	Payload      []byte       `gorm:"column:payload;not null;type:jsonb"`
 	PartitionKey string       `gorm:"column:partition_key;not null"`
-	CreatedAt    time.Time    `gorm:"column:created_at"`
-	Published    bool         `gorm:"column:published;default:false"`
+	CreatedAt    time.Time    `gorm:"column:created_at;index:idx_outbox_published_created,priority:2"`
+	Published    bool         `gorm:"column:published;default:false;index:idx_outbox_published_created,priority:1"`
 	PublishedAt  sql.NullTime `gorm:"column:published_at"`
 }
 

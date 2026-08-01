@@ -34,11 +34,25 @@ func (m *mockOutboxRepo) MarkPublished(ctx context.Context, ids []string) error 
 	return m.markErr
 }
 
-func (m *mockOutboxRepo) ExecuteInLock(ctx context.Context, lockKey int64, fn func(ctx context.Context) error) error {
+func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*port.OutboxRecord) error) error {
 	if m.lockErr != nil {
 		return m.lockErr
 	}
-	return fn(ctx)
+	events, err := m.FetchUnpublished(ctx, limit)
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	if err := publishFn(ctx, events); err != nil {
+		return err
+	}
+	ids := make([]string, len(events))
+	for i, e := range events {
+		ids[i] = e.ID
+	}
+	return m.MarkPublished(ctx, ids)
 }
 
 type mockPublisher struct {

@@ -4,10 +4,11 @@ import "context"
 
 // OAuthUserProfile represents user profile information retrieved from Google/Facebook.
 type OAuthUserProfile struct {
-	ID        string
-	Email     string
-	FullName  string
-	AvatarURL string
+	ID            string
+	Email         string
+	FullName      string
+	AvatarURL     string
+	EmailVerified bool
 }
 
 // OAuthService defines the application port for communicating with Google and Facebook OAuth APIs.

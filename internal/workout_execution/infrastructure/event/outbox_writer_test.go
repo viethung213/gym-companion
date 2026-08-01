@@ -38,10 +38,8 @@ func (m *mockOutboxRepo) MarkPublished(ctx context.Context, ids []string) error 
 
 }
 
-func (m *mockOutboxRepo) ExecuteInLock(ctx context.Context, lockID int64, fn func(txCtx context.Context) error) error {
-
-	return nil
-
+func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, limit int, publishFn func(txCtx context.Context, records []*port.OutboxRecord) error) error {
+	return publishFn(ctx, nil)
 }
 
 func TestOutboxWriter(t *testing.T) {

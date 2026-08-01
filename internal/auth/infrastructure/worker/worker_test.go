@@ -57,8 +57,26 @@ func (m *mockOutboxRepository) MarkPublished(ctx context.Context, ids []string) 
 	return nil
 }
 
-func (m *mockOutboxRepository) ExecuteInLock(ctx context.Context, lockID int64, fn func(ctx context.Context) error) error {
-	return fn(ctx)
+func (m *mockOutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	unpublished, err := m.FetchUnpublished(ctx, limit)
+	if err != nil {
+		return err
+	}
+	if len(unpublished) == 0 {
+		return nil
+	}
+	if err := publishFn(ctx, unpublished); err != nil {
+		return err
+	}
+	ids := make([]string, len(unpublished))
+	for i, u := range unpublished {
+		ids[i] = u.ID
+	}
+	return m.MarkPublished(ctx, ids)
 }
 
 type mockEventPublisher struct {

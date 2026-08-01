@@ -7,6 +7,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type OutboxRepository struct {
@@ -75,22 +76,68 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) erro
 	return nil
 }
 
-func (r *OutboxRepository) ExecuteInLock(
+func (r *OutboxRepository) ProcessBatch(
 	ctx context.Context,
-	lockID int64,
-	fn func(ctx context.Context) error,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
 ) error {
+	if limit <= 0 {
+		limit = 100
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var acquired bool
-		err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", lockID).Scan(&acquired).Error
+		var records []outboxRecord
+		err := tx.
+			Clauses(clause.Locking{
+				Strength: "UPDATE",
+				Options:  "SKIP LOCKED",
+			}).
+			Where("published = ?", false).
+			Order("created_at ASC").
+			Limit(limit).
+			Find(&records).
+			Error
+
 		if err != nil {
-			return fmt.Errorf("try advisory lock: %w", err)
+			return fmt.Errorf("gorm fetch outbox for update skip locked: %w", err)
 		}
-		if !acquired {
+
+		if len(records) == 0 {
 			return nil
 		}
 
+		results := make([]*port.OutboxRecord, len(records))
+		ids := make([]string, len(records))
+		for i := range records {
+			rec := &records[i]
+			results[i] = &port.OutboxRecord{
+				ID:           rec.ID,
+				EventID:      rec.EventID,
+				EventType:    rec.EventType,
+				Payload:      rec.Payload,
+				PartitionKey: rec.PartitionKey,
+			}
+			ids[i] = rec.ID
+		}
+
 		txCtx := WithTx(ctx, tx)
-		return fn(txCtx)
+		if err := publishFn(txCtx, results); err != nil {
+			return fmt.Errorf("publish outbox batch: %w", err)
+		}
+
+		now := time.Now()
+		err = tx.Model(&outboxRecord{}).
+			Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"published":    true,
+				"published_at": now,
+			}).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("gorm mark outbox events published: %w", err)
+		}
+
+		return nil
 	})
 }

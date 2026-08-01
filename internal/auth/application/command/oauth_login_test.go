@@ -266,3 +266,57 @@ func TestOAuthLoginHandler_FindBySocialID_DBError(t *testing.T) {
 		t.Errorf("got error %v, want error containing 'find user by social id'", err)
 	}
 }
+
+type mockUnverifiedOAuthService struct {
+	mockOAuthService
+}
+
+func (mockUnverifiedOAuthService) ExchangeCodeForProfile(ctx context.Context, provider string, code string, redirectURI string) (*port.OAuthUserProfile, error) {
+	return &port.OAuthUserProfile{
+		ID:            "unverified-social-id",
+		Email:         "existing@example.com",
+		FullName:      "Unverified User",
+		EmailVerified: false,
+	}, nil
+}
+
+func TestOAuthLoginHandler_UnverifiedEmail_LinkRejected(t *testing.T) {
+	ctx := context.Background()
+
+	existingUser, _ := aggregate.RegisterUser("11111111-1111-1111-1111-111111111111", "existing@example.com", "Existing User", "user")
+	userRepo := &mockUserRepo{
+		users: map[string]*aggregate.User{
+			existingUser.ID(): existingUser,
+		},
+	}
+	key := &port.JWKRecord{
+		ID:        "active-kid",
+		Status:    port.KeyStatusActive,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
+	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
+
+	handler := NewOAuthLoginHandler(
+		userRepo,
+		keyRepo,
+		sessRepo,
+		mockTokenService{},
+		mockUnverifiedOAuthService{},
+		&mockEventPublisher{},
+		&mockTxManager{},
+	)
+
+	_, _, _, err := handler.Handle(ctx, OAuthLoginCommand{
+		Provider: "google",
+		Code:     "valid_code",
+	})
+
+	if err == nil {
+		t.Fatal("expected error when attempting to link account with unverified social email, got nil")
+	}
+	if !strings.Contains(err.Error(), "is not verified by provider") {
+		t.Errorf("got error %v, want error containing 'is not verified by provider'", err)
+	}
+}

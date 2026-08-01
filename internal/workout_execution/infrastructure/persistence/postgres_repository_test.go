@@ -363,12 +363,12 @@ func TestPostgresOutboxRepository_Integration(t *testing.T) {
 		t.Fatalf("MarkPublished failed: %v", err)
 	}
 
-	// Advisory Lock test
-	err = repo.ExecuteInLock(ctx, 99887766, func(txCtx context.Context) error {
+	// ProcessBatch test
+	err = repo.ProcessBatch(ctx, 10, func(txCtx context.Context, records []*port.OutboxRecord) error {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("ExecuteInLock failed: %v", err)
+		t.Fatalf("ProcessBatch failed: %v", err)
 	}
 }
 
@@ -481,18 +481,11 @@ func TestPostgresRepository_CanceledContextAndLockConflict(t *testing.T) {
 		t.Error("expected error on canceled context MarkPublished")
 	}
 
-	// 2. Lock conflict (!acquired branch)
-	lockID := int64(11223344)
-	tx := db.Begin()
-	_ = tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error // Hold lock in tx
-
-	// Call ExecuteInLock from main DB connection; pg_try_advisory_xact_lock returns false
-	err := outboxRepo.ExecuteInLock(context.Background(), lockID, func(txCtx context.Context) error {
-		t.Error("callback should not run when lock is not acquired")
+	// 2. ProcessBatch test
+	err := outboxRepo.ProcessBatch(context.Background(), 10, func(txCtx context.Context, records []*port.OutboxRecord) error {
 		return nil
 	})
 	if err != nil {
-		t.Errorf("ExecuteInLock should return nil when lock is not acquired, got %v", err)
+		t.Errorf("ProcessBatch returned unexpected error: %v", err)
 	}
-	tx.Rollback()
 }

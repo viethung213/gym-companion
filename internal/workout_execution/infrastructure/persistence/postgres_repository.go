@@ -399,17 +399,62 @@ func (r *PostgresOutboxRepository) MarkPublished(ctx context.Context, ids []stri
 	}).Error
 }
 
-func (r *PostgresOutboxRepository) ExecuteInLock(ctx context.Context, lockID int64, fn func(txCtx context.Context) error) error {
+func (r *PostgresOutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	if limit <= 0 {
+		limit = 100
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var acquired bool
-		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", lockID).Scan(&acquired).Error; err != nil {
-			return err
+		var models []OutboxModel
+		err := tx.
+			Clauses(clause.Locking{
+				Strength: "UPDATE",
+				Options:  "SKIP LOCKED",
+			}).
+			Where("published = ?", false).
+			Order("created_at ASC").
+			Limit(limit).
+			Find(&models).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch unpublished outbox events for update: %w", err)
 		}
-		if !acquired {
+
+		if len(models) == 0 {
 			return nil
 		}
+
+		res := make([]*port.OutboxRecord, len(models))
+		ids := make([]string, len(models))
+		for i, m := range models {
+			res[i] = OutboxToDomain(&m)
+			ids[i] = m.ID
+		}
+
 		txCtx := WithTx(ctx, tx)
-		return fn(txCtx)
+		if err := publishFn(txCtx, res); err != nil {
+			return fmt.Errorf("publish outbox batch: %w", err)
+		}
+
+		now := time.Now().UTC()
+		err = tx.Model(&OutboxModel{}).
+			Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"published":    true,
+				"published_at": now,
+			}).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("mark outbox published: %w", err)
+		}
+
+		return nil
 	})
 }
 

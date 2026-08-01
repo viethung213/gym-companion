@@ -25,8 +25,8 @@ func (s *stubOutbox) FetchUnpublished(context.Context, int) ([]*port.OutboxRecor
 }
 
 func (s *stubOutbox) MarkPublished(context.Context, []string) error { return nil }
-func (s *stubOutbox) ExecuteInLock(ctx context.Context, _ int64, fn func(context.Context) error) error {
-	return fn(ctx)
+func (s *stubOutbox) ProcessBatch(ctx context.Context, _ int, publishFn func(context.Context, []*port.OutboxRecord) error) error {
+	return publishFn(ctx, s.records)
 }
 
 func (s *stubOutbox) LogProcessed(context.Context, string, string, string, []byte) (bool, error) {

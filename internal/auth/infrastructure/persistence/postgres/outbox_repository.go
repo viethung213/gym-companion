@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // OutboxRepository implements port.OutboxRepository using GORM over PostgreSQL.
@@ -25,7 +26,7 @@ func NewOutboxRepository(db *gorm.DB) *OutboxRepository {
 
 func (r *OutboxRepository) getDB(ctx context.Context) *gorm.DB {
 	if tx := GetTx(ctx); tx != nil {
-		return tx
+		return tx.WithContext(ctx)
 	}
 	return r.db.WithContext(ctx)
 }
@@ -89,25 +90,63 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) erro
 	return nil
 }
 
-// ExecuteInLock executes the provided function within a database transaction
-// guarded by a PostgreSQL Advisory Lock.
-func (r *OutboxRepository) ExecuteInLock(
+// ProcessBatch fetches unpublished outbox events using FOR UPDATE SKIP LOCKED,
+// publishes them via publishFn, and marks them as published in a single transaction.
+func (r *OutboxRepository) ProcessBatch(
 	ctx context.Context,
-	lockID int64,
-	fn func(ctx context.Context) error,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
 ) error {
+	if limit <= 0 {
+		limit = 100
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var acquired bool
-		err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", lockID).Scan(&acquired).Error
+		var dbOutboxes []OutboxModel
+		err := tx.
+			Clauses(clause.Locking{
+				Strength: "UPDATE",
+				Options:  "SKIP LOCKED",
+			}).
+			Where("published = ?", false).
+			Order("created_at ASC").
+			Limit(limit).
+			Find(&dbOutboxes).
+			Error
+
 		if err != nil {
-			return fmt.Errorf("try advisory lock: %w", err)
+			return fmt.Errorf("gorm fetch outbox for update skip locked: %w", err)
 		}
-		if !acquired {
-			// Lock not acquired, silently return nil to skip this processing iteration
+
+		if len(dbOutboxes) == 0 {
 			return nil
 		}
 
+		records := make([]*port.OutboxRecord, len(dbOutboxes))
+		ids := make([]string, len(dbOutboxes))
+		for i, o := range dbOutboxes {
+			records[i] = o.ToRepositoryRecord()
+			ids[i] = o.ID
+		}
+
 		txCtx := WithTx(ctx, tx)
-		return fn(txCtx)
+		if err := publishFn(txCtx, records); err != nil {
+			return fmt.Errorf("publish outbox batch: %w", err)
+		}
+
+		now := time.Now()
+		err = tx.Model(&OutboxModel{}).
+			Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"published":    true,
+				"published_at": now,
+			}).
+			Error
+
+		if err != nil {
+			return fmt.Errorf("gorm mark outbox events published: %w", err)
+		}
+
+		return nil
 	})
 }

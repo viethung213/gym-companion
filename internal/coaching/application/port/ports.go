@@ -55,7 +55,7 @@ type OutboxRepository interface {
 	Save(ctx context.Context, record *OutboxRecord) error
 	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
 	MarkPublished(ctx context.Context, ids []string) error
-	ExecuteInLock(ctx context.Context, lockID int64, fn func(txCtx context.Context) error) error
+	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 	// LogProcessed records that an inbound event has been consumed (D9 idempotency).
 	// Returns (true, nil) if this is a new event that was recorded, (false, nil) if
 	// the event_id was already present (duplicate delivery), or an error.
