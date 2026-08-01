@@ -11,8 +11,3 @@ type DailyWorkoutPlanClient interface {
 type ExerciseCatalogClient interface {
 	GetExerciseMuscleGroup(ctx context.Context, exerciseID string) (string, error)
 }
-
-// UserProfileClient provides integration with User Profile context (UC-03.4 A3).
-type UserProfileClient interface {
-	UpdateBodyWeight(ctx context.Context, userID string, weightKg float32) error
-}

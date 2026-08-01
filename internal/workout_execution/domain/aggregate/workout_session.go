@@ -425,6 +425,18 @@ func (s *WorkoutSession) Complete(confirmOverload, isOverloaded bool) error {
 	return nil
 }
 
+// RecordBodyMetricUpdate emits a BodyMetricUpdated event if body weight update is provided by user.
+func (s *WorkoutSession) RecordBodyMetricUpdate(weightKg float32) {
+	if weightKg <= 0 {
+		return
+	}
+	s.addDomainEvent(&event.BodyMetricUpdated{
+		UserID:     s.userID,
+		WeightKg:   weightKg,
+		RecordedAt: time.Now().UTC(),
+	})
+}
+
 // Abort transitions status to ABORTED.
 func (s *WorkoutSession) Abort(reason string) error {
 	if s.status == StatusCompleted || s.status == StatusAborted || s.status == StatusAnomalous {

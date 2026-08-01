@@ -62,7 +62,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	startSessionHandler := command.NewStartWorkoutSessionHandler(sessionRepo, nil, outboxWriter, txManager)
 	startScheduledSessionHandler := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
 	logSetHandler := command.NewLogWorkoutSetHandler(sessionRepo)
-	completeSessionHandler := command.NewCompleteWorkoutSessionHandler(sessionRepo, loadGuard, nil, nil, outboxWriter, txManager)
+	completeSessionHandler := command.NewCompleteWorkoutSessionHandler(sessionRepo, loadGuard, nil, outboxWriter, txManager)
 	abortSessionHandler := command.NewAbortWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
 	syncLogsHandler := command.NewSyncWorkoutLogsHandler(sessionRepo, outboxWriter, txManager)
 	prProcessHandler := command.NewProcessCompletedSessionForPRHandler(sessionRepo, prRepo, outboxWriter, txManager)

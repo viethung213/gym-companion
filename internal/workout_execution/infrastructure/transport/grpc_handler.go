@@ -201,8 +201,16 @@ func (h *GRPCHandler) AbortWorkoutSession(ctx context.Context, req *workoutexecu
 }
 
 func (h *GRPCHandler) CompleteWorkoutSession(ctx context.Context, req *workoutexecutionv1message.CompleteWorkoutSessionRequest) (*workoutexecutionv1message.CompleteWorkoutSessionResponse, error) {
+	var weightUpdate *float32
+	if req.WeightUpdateKg != nil {
+		w := req.GetWeightUpdateKg()
+		weightUpdate = &w
+	}
+
 	cmd := command.CompleteWorkoutSessionCommand{
-		SessionID: req.GetSessionId(),
+		SessionID:       req.GetSessionId(),
+		ConfirmOverload: req.GetConfirmOverload(),
+		WeightUpdateKg:  weightUpdate,
 	}
 
 	res, err := h.completeSessionHandler.Handle(ctx, cmd)
