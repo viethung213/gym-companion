@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
@@ -29,7 +30,7 @@ func (c *MotionSpecConsumer) ConsumeMotionSpecReady(ctx context.Context, payload
 	}
 
 	if event.ExerciseID == "" {
-		return fmt.Errorf("exerciseId is required in event payload")
+		return errors.New("exerciseId is required in event payload")
 	}
 
 	supported := true

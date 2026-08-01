@@ -52,16 +52,42 @@ func TestMotionSpecConsumer_ConsumeMotionSpecReady(t *testing.T) {
 		t.Fatalf("unexpected error creating exercise: %v", err)
 	}
 
-	repo := &mockExerciseRepo{exercise: ex}
-	handler := command.NewSetAISupportedHandler(repo, mockClock{now: now})
-	consumer := worker.NewMotionSpecConsumer(handler)
-
-	payload := []byte(`{"exerciseId":"ex-100","isReady":true}`)
-	if err := consumer.ConsumeMotionSpecReady(context.Background(), payload); err != nil {
-		t.Fatalf("expected no error consuming event, got %v", err)
+	tests := []struct {
+		name    string
+		payload []byte
+		wantErr bool
+	}{
+		{
+			name:    "valid payload",
+			payload: []byte(`{"exerciseId":"ex-100","isReady":true}`),
+			wantErr: false,
+		},
+		{
+			name:    "empty exerciseId",
+			payload: []byte(`{"exerciseId":"","isReady":true}`),
+			wantErr: true,
+		},
+		{
+			name:    "invalid json",
+			payload: []byte(`invalid json`),
+			wantErr: true,
+		},
 	}
 
-	if !repo.saved.Info().HasAISupported {
-		t.Errorf("expected HasAISupported to be true, got false")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockExerciseRepo{exercise: ex}
+			handler := command.NewSetAISupportedHandler(repo, mockClock{now: now})
+			consumer := worker.NewMotionSpecConsumer(handler)
+
+			err := consumer.ConsumeMotionSpecReady(context.Background(), tt.payload)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ConsumeMotionSpecReady() got error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if !tt.wantErr && !repo.saved.Info().HasAISupported {
+				t.Errorf("expected HasAISupported to be true, got false")
+			}
+		})
 	}
 }
