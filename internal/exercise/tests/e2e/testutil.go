@@ -20,7 +20,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type E2ETestSuite struct {
+type TestSuite struct {
 	DB         *gorm.DB
 	GRPCConn   *grpc.ClientConn
 	Client     exercisesvc.ExerciseServiceClient
@@ -106,7 +106,7 @@ func seedMetadata(db *gorm.DB) {
 	db.Exec(`INSERT INTO exercise.tags (id, name) VALUES ('strength', 'Strength') ON CONFLICT (id) DO NOTHING`)
 }
 
-func SetupE2ESuite(t *testing.T) *E2ETestSuite {
+func SetupE2ESuite(t *testing.T) *TestSuite {
 	t.Helper()
 
 	sqlDB, err := database.GetRegistry().GetPool("exercise")
@@ -137,7 +137,7 @@ func SetupE2ESuite(t *testing.T) *E2ETestSuite {
 	testAuthInterceptor := func(
 		ctx context.Context,
 		req any,
-		info *grpc.UnaryServerInfo,
+		_ *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
@@ -186,7 +186,7 @@ func SetupE2ESuite(t *testing.T) *E2ETestSuite {
 		cancel()
 	}
 
-	return &E2ETestSuite{
+	return &TestSuite{
 		DB:         db,
 		GRPCConn:   conn,
 		Client:     client,
