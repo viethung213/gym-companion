@@ -45,6 +45,10 @@ func (m *mockKeyRepository) UpdateStatus(ctx context.Context, id string, status 
 	return nil
 }
 
+func (m *mockKeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockKeyRepository) DeleteExpiredKeys(ctx context.Context) error {
 	return nil
 }

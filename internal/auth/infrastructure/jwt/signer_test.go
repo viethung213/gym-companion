@@ -56,6 +56,15 @@ func (m *mockKeyRepository) UpdateStatus(ctx context.Context, id string, status 
 	return apperror.ErrKeyNotFound
 }
 
+func (m *mockKeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
+	for _, key := range m.keys {
+		if key.Status == port.KeyStatusActive {
+			key.Status = port.KeyStatusInactive
+		}
+	}
+	return nil
+}
+
 func (m *mockKeyRepository) DeleteExpiredKeys(ctx context.Context) error {
 	var active []*port.JWKRecord
 	for _, key := range m.keys {
