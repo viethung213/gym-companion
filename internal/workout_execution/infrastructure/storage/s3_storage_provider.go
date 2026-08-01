@@ -37,6 +37,8 @@ type S3StorageConfig struct {
 type S3StorageProvider struct {
 	config S3StorageConfig
 
+	client *s3.Client
+
 	presignClient *s3.PresignClient
 }
 
@@ -118,6 +120,8 @@ func NewS3StorageProvider(cfg S3StorageConfig) *S3StorageProvider {
 
 		config: cfg,
 
+		client: client,
+
 		presignClient: presignClient,
 	}
 
@@ -190,24 +194,7 @@ func (p *S3StorageProvider) GetObject(ctx context.Context, objectKey string) ([]
 
 	}
 
-	opts := s3.Options{
-
-		Region: p.config.Region,
-
-		Credentials: credentials.NewStaticCredentialsProvider(p.config.AccessKey, p.config.SecretKey, ""),
-
-		UsePathStyle: true,
-	}
-
-	if p.config.Endpoint != "" {
-
-		opts.BaseEndpoint = aws.String(p.config.Endpoint)
-
-	}
-
-	client := s3.New(opts)
-
-	out, err := client.GetObject(ctx, &s3.GetObjectInput{
+	out, err := p.client.GetObject(ctx, &s3.GetObjectInput{
 
 		Bucket: aws.String(p.config.BucketName),
 
@@ -252,24 +239,7 @@ func (p *S3StorageProvider) PutObject(ctx context.Context, objectKey string, dat
 
 	}
 
-	opts := s3.Options{
-
-		Region: p.config.Region,
-
-		Credentials: credentials.NewStaticCredentialsProvider(p.config.AccessKey, p.config.SecretKey, ""),
-
-		UsePathStyle: true,
-	}
-
-	if p.config.Endpoint != "" {
-
-		opts.BaseEndpoint = aws.String(p.config.Endpoint)
-
-	}
-
-	client := s3.New(opts)
-
-	_, err := client.PutObject(ctx, &s3.PutObjectInput{
+	_, err := p.client.PutObject(ctx, &s3.PutObjectInput{
 
 		Bucket: aws.String(p.config.BucketName),
 

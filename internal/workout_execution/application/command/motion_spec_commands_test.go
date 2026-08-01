@@ -122,6 +122,32 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 			t.Error("want spec.IsReady = true after update with all URLs")
 		}
 	})
+
+	t.Run("Update existing spec publishes outbox event when txManager is nil", func(t *testing.T) {
+		repo := newMockMotionSpecRepo()
+		outbox := &mockOutboxWriter{}
+		handlerWithOutbox := command.NewUpdateMotionSpecificationHandler(repo, outbox, nil)
+
+		draft := aggregate.NewDraftMotionSpecification("ex-deadlift", "", "")
+		_ = repo.Save(context.Background(), draft)
+
+		cmd := command.UpdateMotionSpecificationCommand{
+			ExerciseID:             "ex-deadlift",
+			OnnxDetectorURL:        "http://cdn/detector.onnx",
+			OnnxSkeletonURL:        "http://cdn/skeleton.onnx",
+			LocalRulesURL:          "http://cdn/deadlift.json",
+			DialogueEngineURL:      "http://cdn/deadlift_dialogue.json",
+			RecommendedCameraAngle: "side",
+		}
+
+		_, err := handlerWithOutbox.Handle(context.Background(), cmd)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if outbox.writtenCount == 0 {
+			t.Error("want outbox events written when txManager is nil, got 0")
+		}
+	})
 }
 
 func TestDeleteMotionSpecificationHandler(t *testing.T) {

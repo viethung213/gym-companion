@@ -83,4 +83,18 @@ func TestS3StorageProvider_GeneratePresignedUploadURL(t *testing.T) {
 			t.Errorf("got fileURL = %s, want %s", fileURL, expectedFileURL)
 		}
 	})
+
+	t.Run("GetObject empty objectKey returns error", func(t *testing.T) {
+		_, err := provider.GetObject(context.Background(), "")
+		if err == nil {
+			t.Error("want error on empty object key, got nil")
+		}
+	})
+
+	t.Run("PutObject empty objectKey returns error", func(t *testing.T) {
+		_, err := provider.PutObject(context.Background(), "", []byte("test"), "application/json")
+		if err == nil {
+			t.Error("want error on empty object key, got nil")
+		}
+	})
 }
