@@ -14,7 +14,8 @@ func TestRotateKeysHandler(t *testing.T) {
 	ctx := context.Background()
 	keyRepo := &mockKeyRepo{}
 	keyGen := &mockKeyGenerator{privPEM: "mock-priv-pem", pubPEM: "mock-pub-pem"}
-	handler := NewRotateKeysHandler(keyRepo, keyGen)
+	txManager := &mockTxManager{}
+	handler := NewRotateKeysHandler(keyRepo, keyGen, txManager)
 
 	// --- First rotation ---
 	kid, err := handler.Handle(ctx, RotateKeysCommand{KeyTTL: 1 * time.Hour})

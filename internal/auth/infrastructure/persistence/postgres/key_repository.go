@@ -94,6 +94,20 @@ func (r *KeyRepository) UpdateStatus(ctx context.Context, id string, status stri
 	return nil
 }
 
+// DeactivateAllActiveKeys updates all active keys to inactive status.
+func (r *KeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
+	err := r.getDB(ctx).
+		Model(&JSONWebKeyModel{}).
+		Where("status = ?", port.KeyStatusActive).
+		Update("status", port.KeyStatusInactive).
+		Error
+
+	if err != nil {
+		return fmt.Errorf("gorm deactivate all active keys: %w", err)
+	}
+	return nil
+}
+
 // DeleteExpiredKeys purges inactive keys whose expiration time has passed.
 func (r *KeyRepository) DeleteExpiredKeys(ctx context.Context) error {
 	err := r.getDB(ctx).

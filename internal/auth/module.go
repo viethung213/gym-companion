@@ -105,7 +105,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		txManager,
 	)
 	logoutHandler := command.NewLogoutHandler(sessRepo)
-	rotateKeysHandler := command.NewRotateKeysHandler(keyRepo, keyGen)
+	rotateKeysHandler := command.NewRotateKeysHandler(keyRepo, keyGen, txManager)
 	getJWKSHandler := query.NewGetJWKSHandler(keyRepo)
 	getOAuthLoginURLHandler := query.NewGetOAuthLoginURLHandler(oauthServ)
 

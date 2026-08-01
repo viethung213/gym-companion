@@ -33,5 +33,6 @@ type KeyRepository interface {
 	GetActiveKey(ctx context.Context) (*JWKRecord, error)
 	GetAllActiveAndInactiveKeys(ctx context.Context) ([]*JWKRecord, error)
 	UpdateStatus(ctx context.Context, id string, status string) error
+	DeactivateAllActiveKeys(ctx context.Context) error
 	DeleteExpiredKeys(ctx context.Context) error
 }
