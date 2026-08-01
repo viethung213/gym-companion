@@ -102,6 +102,7 @@ type OutboxRecord struct {
 // OutboxRepository defines the persistence port for the outbox pattern.
 type OutboxRepository interface {
 	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
+	ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*OutboxRecord, error)
 	MarkPublished(ctx context.Context, ids []string) error
 	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 }

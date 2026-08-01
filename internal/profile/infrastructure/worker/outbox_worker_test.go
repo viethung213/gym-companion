@@ -41,6 +41,10 @@ func (m *mockOutboxRepoForWorker) MarkAsPublished(ctx context.Context, ids []str
 	return nil
 }
 
+func (m *mockOutboxRepoForWorker) ClaimBatch(ctx context.Context, limit int, _ time.Duration) ([]*port.OutboxRecord, error) {
+	return m.FetchUnpublished(ctx, limit)
+}
+
 func (m *mockOutboxRepoForWorker) ProcessBatch(
 	ctx context.Context,
 	limit int,

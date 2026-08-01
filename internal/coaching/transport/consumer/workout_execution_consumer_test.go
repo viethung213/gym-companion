@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 )
@@ -17,6 +18,9 @@ func (s *stubOutbox) FetchUnpublished(context.Context, int) ([]*port.OutboxRecor
 	return nil, nil
 }
 
+func (s *stubOutbox) ClaimBatch(context.Context, int, time.Duration) ([]*port.OutboxRecord, error) {
+	return nil, nil
+}
 func (s *stubOutbox) MarkPublished(context.Context, []string) error { return nil }
 func (s *stubOutbox) ProcessBatch(ctx context.Context, _ int, publishFn func(context.Context, []*port.OutboxRecord) error) error {
 	return publishFn(ctx, nil)

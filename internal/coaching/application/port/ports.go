@@ -54,6 +54,7 @@ type OutboxRecord struct {
 type OutboxRepository interface {
 	Save(ctx context.Context, record *OutboxRecord) error
 	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
+	ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*OutboxRecord, error)
 	MarkPublished(ctx context.Context, ids []string) error
 	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 	// LogProcessed records that an inbound event has been consumed (D9 idempotency).

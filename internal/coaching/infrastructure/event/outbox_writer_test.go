@@ -24,6 +24,9 @@ func (s *stubOutbox) FetchUnpublished(context.Context, int) ([]*port.OutboxRecor
 	return s.records, nil
 }
 
+func (s *stubOutbox) ClaimBatch(ctx context.Context, _ int, _ time.Duration) ([]*port.OutboxRecord, error) {
+	return s.records, nil
+}
 func (s *stubOutbox) MarkPublished(context.Context, []string) error { return nil }
 func (s *stubOutbox) ProcessBatch(ctx context.Context, _ int, publishFn func(context.Context, []*port.OutboxRecord) error) error {
 	return publishFn(ctx, s.records)

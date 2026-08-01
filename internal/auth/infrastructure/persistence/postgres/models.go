@@ -133,6 +133,8 @@ type OutboxModel struct {
 	CreatedAt    time.Time    `gorm:"column:created_at;index:idx_outbox_published_created,priority:2"`
 	Published    bool         `gorm:"column:published;default:false;index:idx_outbox_published_created,priority:1"`
 	PublishedAt  sql.NullTime `gorm:"column:published_at"`
+	Status       string       `gorm:"column:status;default:PENDING"`
+	LockedUntil  sql.NullTime `gorm:"column:locked_until"`
 }
 
 func (OutboxModel) TableName() string {

@@ -79,6 +79,8 @@ type outboxRecord struct {
 	CreatedAt    time.Time    `gorm:"column:created_at"`
 	Published    bool         `gorm:"column:published;default:false"`
 	PublishedAt  sql.NullTime `gorm:"column:published_at"`
+	Status       string       `gorm:"column:status;default:PENDING"`
+	LockedUntil  sql.NullTime `gorm:"column:locked_until"`
 }
 
 func (outboxRecord) TableName() string { return "coaching.outbox" }

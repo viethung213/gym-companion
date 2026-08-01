@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 )
@@ -38,6 +39,10 @@ func (m *mockOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 		}
 	}
 	return unpublished, nil
+}
+
+func (m *mockOutboxRepository) ClaimBatch(ctx context.Context, limit int, _ time.Duration) ([]*port.OutboxRecord, error) {
+	return m.FetchUnpublished(ctx, limit)
 }
 
 func (m *mockOutboxRepository) MarkPublished(ctx context.Context, ids []string) error {

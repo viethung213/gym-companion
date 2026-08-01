@@ -34,6 +34,13 @@ func (m *mockOutboxRepo) MarkPublished(ctx context.Context, ids []string) error 
 	return m.markErr
 }
 
+func (m *mockOutboxRepo) ClaimBatch(ctx context.Context, limit int, _ time.Duration) ([]*port.OutboxRecord, error) {
+	if m.lockErr != nil {
+		return nil, m.lockErr
+	}
+	return m.FetchUnpublished(ctx, limit)
+}
+
 func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*port.OutboxRecord) error) error {
 	if m.lockErr != nil {
 		return m.lockErr
