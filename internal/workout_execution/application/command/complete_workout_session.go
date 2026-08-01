@@ -15,7 +15,7 @@ import (
 type CompleteWorkoutSessionCommand struct {
 	SessionID       string
 	ConfirmOverload bool
-	WeightUpdateKg  *float32
+	WeightUpdateKg  *float32 // optional: nil nếu người dùng không cập nhật cân nặng mới
 }
 
 // CompleteWorkoutSessionResult result.
@@ -33,7 +33,6 @@ type CompleteWorkoutSessionHandler struct {
 	sessionRepo    repository.WorkoutSessionRepository
 	loadGuard      *service.TrainingLoadGuard
 	exerciseClient port.ExerciseCatalogClient
-	userClient     port.UserProfileClient
 	outbox         port.OutboxWriter
 	txManager      port.TxManager
 }
@@ -43,7 +42,6 @@ func NewCompleteWorkoutSessionHandler(
 	sessionRepo repository.WorkoutSessionRepository,
 	loadGuard *service.TrainingLoadGuard,
 	exerciseClient port.ExerciseCatalogClient,
-	userClient port.UserProfileClient,
 	outbox port.OutboxWriter,
 	txManager port.TxManager,
 ) *CompleteWorkoutSessionHandler {
@@ -51,7 +49,6 @@ func NewCompleteWorkoutSessionHandler(
 		sessionRepo:    sessionRepo,
 		loadGuard:      loadGuard,
 		exerciseClient: exerciseClient,
-		userClient:     userClient,
 		outbox:         outbox,
 		txManager:      txManager,
 	}
@@ -98,9 +95,9 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 		return nil, completeErr
 	}
 
-	// 3. User Weight Update (UC-03.4 Alternative Flow A3)
-	if cmd.WeightUpdateKg != nil && h.userClient != nil {
-		_ = h.userClient.UpdateBodyWeight(ctx, session.UserID(), *cmd.WeightUpdateKg)
+	// 3. Record optional BodyMetricUpdated event if weight update was provided by user (UC-03.4 A3)
+	if cmd.WeightUpdateKg != nil && *cmd.WeightUpdateKg > 0 {
+		session.RecordBodyMetricUpdate(*cmd.WeightUpdateKg)
 	}
 
 	// 4. Save and Publish Outbox Events

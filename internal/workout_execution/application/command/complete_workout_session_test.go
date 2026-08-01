@@ -22,7 +22,7 @@ func (m *mockVolumeProvider) GetRecentVolumesForMuscleGroup(ctx context.Context,
 
 func TestCompleteWorkoutSessionHandler(t *testing.T) {
 	t.Run("invalid input", func(t *testing.T) {
-		h := command.NewCompleteWorkoutSessionHandler(&mockSessionRepo{}, nil, nil, nil, nil, &mockTxManager{})
+		h := command.NewCompleteWorkoutSessionHandler(&mockSessionRepo{}, nil, nil, nil, &mockTxManager{})
 		_, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{})
 		if !errors.Is(err, apperror.ErrInvalidInput) {
 			t.Errorf("got %v, want %v", err, apperror.ErrInvalidInput)
@@ -30,7 +30,7 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 	})
 
 	t.Run("find session error", func(t *testing.T) {
-		h := command.NewCompleteWorkoutSessionHandler(&mockSessionRepo{findErr: errors.New("db error")}, nil, nil, nil, nil, &mockTxManager{})
+		h := command.NewCompleteWorkoutSessionHandler(&mockSessionRepo{findErr: errors.New("db error")}, nil, nil, nil, &mockTxManager{})
 		_, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{SessionID: "s1"})
 		if err == nil {
 			t.Fatal("got nil, want error")
@@ -38,7 +38,7 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 	})
 
 	t.Run("session not found", func(t *testing.T) {
-		h := command.NewCompleteWorkoutSessionHandler(&mockSessionRepo{}, nil, nil, nil, nil, &mockTxManager{})
+		h := command.NewCompleteWorkoutSessionHandler(&mockSessionRepo{}, nil, nil, nil, &mockTxManager{})
 		_, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{SessionID: "s1"})
 		if !errors.Is(err, derror.ErrWorkoutSessionNotFound) {
 			t.Errorf("got %v, want %v", err, derror.ErrWorkoutSessionNotFound)
@@ -61,7 +61,6 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 			guard,
 			&mockExerciseClient{group: "Chest"},
 			nil,
-			nil,
 			&mockTxManager{},
 		)
 
@@ -75,7 +74,7 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
 		h := command.NewCompleteWorkoutSessionHandler(
 			&mockSessionRepo{session: session, saveErr: errors.New("save error")},
-			nil, nil, nil, nil,
+			nil, nil, nil,
 			&mockTxManager{},
 		)
 		_, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{SessionID: "s1"})
@@ -88,7 +87,7 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
 		h := command.NewCompleteWorkoutSessionHandler(
 			&mockSessionRepo{session: session},
-			nil, nil, nil,
+			nil, nil,
 			&mockOutboxWriter{err: errors.New("outbox err")},
 			&mockTxManager{},
 		)
@@ -98,7 +97,7 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("success with weight update and exercise client", func(t *testing.T) {
+	t.Run("success with exercise client", func(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
 		_ = session.LogSet(aggregate.WorkoutSetLog{
 			SetNumber:  1,
@@ -108,23 +107,47 @@ func TestCompleteWorkoutSessionHandler(t *testing.T) {
 			Weight:     50.0,
 		})
 
-		weightKg := float32(75.5)
 		guard := service.NewTrainingLoadGuard(&mockVolumeProvider{volumes: []float32{500.0}})
 		h := command.NewCompleteWorkoutSessionHandler(
 			&mockSessionRepo{session: session},
 			guard,
 			&mockExerciseClient{group: "Chest"},
-			&mockUserClient{},
 			&mockOutboxWriter{},
 			&mockTxManager{},
 		)
 
-		res, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{SessionID: "s1", WeightUpdateKg: &weightKg})
+		res, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{SessionID: "s1"})
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)
 		}
 		if res.SessionID != "s1" || res.TotalSets != 1 {
 			t.Errorf("got invalid summary result: %+v", res)
+		}
+	})
+
+	t.Run("success with optional weight update emits BodyMetricUpdated event", func(t *testing.T) {
+		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
+		outbox := &mockOutboxWriter{}
+		h := command.NewCompleteWorkoutSessionHandler(
+			&mockSessionRepo{session: session},
+			nil, nil,
+			outbox,
+			&mockTxManager{},
+		)
+
+		weight := float32(75.5)
+		res, err := h.Handle(context.Background(), command.CompleteWorkoutSessionCommand{
+			SessionID:      "s1",
+			WeightUpdateKg: &weight,
+		})
+		if err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+		if res.SessionID != "s1" {
+			t.Errorf("got invalid result: %+v", res)
+		}
+		if len(outbox.events) != 3 {
+			t.Errorf("got %d events in outbox, want 3 (WorkoutSessionStarted + WorkoutSessionCompleted + BodyMetricUpdated)", len(outbox.events))
 		}
 	})
 }

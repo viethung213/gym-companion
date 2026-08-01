@@ -64,6 +64,7 @@ message AbortWorkoutSessionResponse {
 message CompleteWorkoutSessionRequest {
   string session_id = 1;
   optional bool confirm_overload = 2;
+  optional float weight_update_kg = 3;
 }
 
 message CompleteWorkoutSessionResponse {

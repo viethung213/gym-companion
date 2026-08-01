@@ -146,7 +146,7 @@ func TestGRPCHandler(t *testing.T) {
 	startH := command.NewStartWorkoutSessionHandler(sessionRepo, nil, nil, tx)
 	startScheduledH := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, nil, tx)
 	logSetH := command.NewLogWorkoutSetHandler(sessionRepo)
-	completeH := command.NewCompleteWorkoutSessionHandler(sessionRepo, nil, nil, nil, nil, tx)
+	completeH := command.NewCompleteWorkoutSessionHandler(sessionRepo, nil, nil, nil, tx)
 	abortH := command.NewAbortWorkoutSessionHandler(sessionRepo, nil, tx)
 	syncH := command.NewSyncWorkoutLogsHandler(sessionRepo, nil, tx)
 
@@ -475,7 +475,7 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 			startH := command.NewStartWorkoutSessionHandler(repo, nil, nil, tx)
 			startScheduledH := command.NewStartScheduledWorkoutSessionHandler(repo, nil, tx)
 			logSetH := command.NewLogWorkoutSetHandler(repo)
-			completeH := command.NewCompleteWorkoutSessionHandler(repo, nil, nil, nil, nil, tx)
+			completeH := command.NewCompleteWorkoutSessionHandler(repo, nil, nil, nil, tx)
 			abortH := command.NewAbortWorkoutSessionHandler(repo, nil, tx)
 			syncH := command.NewSyncWorkoutLogsHandler(repo, nil, tx)
 			motionQ := query.NewGetMotionSpecificationQueryHandler(motionRepo)
