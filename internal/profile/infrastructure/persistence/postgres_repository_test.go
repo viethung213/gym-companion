@@ -133,6 +133,19 @@ func TestPostgresUserProfileRepository(t *testing.T) {
 	assert.Equal(t, 175.0, fetched.BiologicalMetrics().HeightCm())
 	assert.Len(t, fetched.Injuries(), 1)
 	assert.Equal(t, "Shoulder", fetched.Injuries()[0].MuscleGroup())
+	assert.False(t, fetched.Injuries()[0].IsRecovered())
+
+	// Recover injury and update profile
+	err = fetched.RecoverInjury("inj-101", time.Now())
+	require.NoError(t, err)
+	err = repo.Update(ctx, fetched)
+	require.NoError(t, err)
+
+	// FindByUserID must still reconstitute recovered injury
+	fetchedAfterRecover, err := repo.FindByUserID(ctx, "user-infra-1")
+	require.NoError(t, err)
+	assert.Len(t, fetchedAfterRecover.Injuries(), 1)
+	assert.True(t, fetchedAfterRecover.Injuries()[0].IsRecovered())
 
 	// FindBodyMetricsHistory
 	metricsHist, err := repo.FindBodyMetricsHistory(ctx, "user-infra-1")
