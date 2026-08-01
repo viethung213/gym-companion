@@ -3,6 +3,10 @@ run:
   issues-exit-code: 1
   tests: true
   go: '1.26'
+  build-tags:
+    - unit
+    - integration
+    - e2e
 
 
 linters:
