@@ -13,13 +13,12 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	_ "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
-
-	_ "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 )
 
 var (
