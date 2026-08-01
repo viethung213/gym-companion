@@ -17,7 +17,14 @@ enum SessionPlanStatus {
   SESSION_PLAN_STATUS_UNSPECIFIED = 0;
   SESSION_PLAN_STATUS_PENDING = 1;   // Chưa tập / chờ tập
   SESSION_PLAN_STATUS_COMPLETED = 2; // Đã hoàn thành buổi tập
-  SESSION_PLAN_STATUS_SKIPPED = 3;   // Đã bỏ qua / không tập
+  SESSION_PLAN_STATUS_SKIPPED = 3;   // Đã bỏ qua / không tập (never started)
+  SESSION_PLAN_STATUS_ABORTED = 4;   // Hủy giữa chừng / hết 4h timeout
+}
+
+enum SessionPlanSource {
+  SESSION_PLAN_SOURCE_UNSPECIFIED = 0;
+  SESSION_PLAN_SOURCE_COACH_SCHEDULED = 1;
+  SESSION_PLAN_SOURCE_USER_ADHOC = 2;
 }
 
 enum RoadmapPhase {
@@ -112,7 +119,6 @@ message DayPlan {
   string roadmap_id = 3;
   string user_id = 4;
   google.type.Date scheduled_date = 5;
-  bool is_rest_day = 6;
   repeated SessionPlan session_plans = 7;
 }
 
@@ -129,6 +135,7 @@ message SessionPlan {
   WorkoutPrescription prescription = 10;
   string reasoning = 11;
   google.protobuf.Timestamp generated_at = 12;
+  SessionPlanSource source = 13;
 }
 
 message WorkoutPrescription {
@@ -148,4 +155,33 @@ message PrescribedExercise {
   int32 rest_set_sec = 8;
   int32 rest_exercise_sec = 9;
   float target_rpe = 10;
+}
+
+message CreateAdhocSessionPlanRequest {
+  string user_id = 1;
+  repeated string exercise_ids = 2;
+}
+
+message CreateAdhocSessionPlanResponse {
+  SessionPlan session_plan = 1;
+}
+
+message AdHocHint {
+  string free_text = 1;
+  repeated string muscle_groups = 2;
+  repeated string available_equipment = 3;
+  int32 duration_minutes = 4;
+  string intensity_hint = 5;
+}
+
+message SuggestAdHocSessionRequest {
+  string user_id = 1;
+  AdHocHint hint = 2;
+}
+
+message SuggestAdHocSessionResponse {
+  repeated string muscle_groups = 1;
+  WorkoutPrescription prescription = 2;
+  string reasoning = 3;
+  float estimated_rpe = 4;
 }

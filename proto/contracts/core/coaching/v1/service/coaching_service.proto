@@ -76,4 +76,20 @@ service CoachingService {
       body: "*"
     };
   }
+
+  // Create an ad-hoc session plan (Flow 2.1).
+  rpc CreateAdhocSessionPlan (contracts.core.coaching.v1.message.CreateAdhocSessionPlanRequest) returns (contracts.core.coaching.v1.message.CreateAdhocSessionPlanResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/session-plans/adhoc"
+      body: "*"
+    };
+  }
+
+  // Suggest an ad-hoc session plan prescription (read-only advisory function).
+  rpc SuggestAdHocSession (contracts.core.coaching.v1.message.SuggestAdHocSessionRequest) returns (contracts.core.coaching.v1.message.SuggestAdHocSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/session-plans/adhoc/suggest"
+      body: "*"
+    };
+  }
 }

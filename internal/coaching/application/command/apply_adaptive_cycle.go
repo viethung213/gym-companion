@@ -1,0 +1,154 @@
+package command
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+)
+
+// ApplyAdaptiveCycleCommand triggers UC-04.1 (BR-AC-04) evaluation.
+type ApplyAdaptiveCycleCommand struct {
+	UserID  string
+	Metrics []service.WeeklyMetrics
+}
+
+// ApplyAdaptiveCycleResult echoes the decision applied.
+type ApplyAdaptiveCycleResult struct {
+	Decision service.AdaptationDecision
+	Roadmap  *roadmap.Roadmap
+}
+
+// ApplyAdaptiveCycleHandler orchestrates BR-AC-04 Trigger A.
+type ApplyAdaptiveCycleHandler struct {
+	tx     port.TransactionManager
+	repo   port.RoadmapRepository
+	agent  port.CoachAgent
+	guard  *guardrail.Engine
+	outbox port.OutboxWriter
+	clock  port.Clock
+	engine *service.AdaptiveCoachEngine
+}
+
+// NewApplyAdaptiveCycleHandler wires the handler.
+func NewApplyAdaptiveCycleHandler(
+	tx port.TransactionManager,
+	repo port.RoadmapRepository,
+	agent port.CoachAgent,
+	guard *guardrail.Engine,
+	outbox port.OutboxWriter,
+	clock port.Clock,
+	engine *service.AdaptiveCoachEngine,
+) *ApplyAdaptiveCycleHandler {
+	if engine == nil {
+		engine = service.NewAdaptiveCoachEngine()
+	}
+
+	return &ApplyAdaptiveCycleHandler{
+		tx:     tx,
+		repo:   repo,
+		agent:  agent,
+		guard:  guard,
+		outbox: outbox,
+		clock:  clock,
+		engine: engine,
+	}
+}
+
+// Handle evaluates BR-AC-04 and applies the result via CoachAgent.Adapt.
+func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiveCycleCommand) (*ApplyAdaptiveCycleResult, error) {
+	if cmd.UserID == "" {
+		return nil, errors.New("user_id required")
+	}
+
+	decision := h.engine.EvaluateTriggerA(cmd.Metrics)
+
+	if decision.Kind == service.AdaptationNoOp {
+		return &ApplyAdaptiveCycleResult{Decision: decision}, nil
+	}
+
+	rm, err := h.repo.FindActiveByUser(ctx, cmd.UserID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	now := h.clock.Now()
+
+	pending := rm.PendingSessionsFrom(now)
+
+	if len(pending) == 0 {
+		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
+	}
+
+	drafts, err := h.agent.Adapt(ctx, cmd.UserID, decision.Reason)
+
+	if err != nil {
+		return nil, fmt.Errorf("agent adapt: %w", err)
+	}
+
+	// One draft per pending session, in the same order (D3 invariant).
+
+	if len(drafts) != len(pending) {
+		return nil, fmt.Errorf("agent returned %d drafts for %d pending sessions", len(drafts), len(pending))
+	}
+
+	applied := 0
+
+	for i, d := range drafts {
+		if d == nil {
+			continue
+		}
+
+		s := pending[i]
+
+		if s.Status() != roadmap.SessionPlanStatusPending {
+			continue
+		}
+
+		if rwErr := s.RewritePrescription(d.Prescription, d.TargetMuscleGroups, d.Reasoning, now); rwErr != nil {
+			return nil, rwErr
+		}
+
+		applied++
+	}
+
+	if applied == 0 {
+		return nil, fmt.Errorf("no session was adapted out of %d pending", len(pending))
+	}
+
+	if result := h.guard.Check(rm); result.Status != guardrail.StatusApproved {
+		return nil, fmt.Errorf("guardrail rejected adaptive cycle: %+v", result.Violations)
+	}
+
+	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		rm.Touch(now)
+
+		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
+			return saveErr
+		}
+
+		evt := &domainevent.RoadmapAdjusted{
+			RoadmapID: rm.ID(),
+
+			UserID: rm.UserID(),
+
+			Reason: "adaptive_cycle:" + decision.Reason,
+
+			AdjustedAt: now,
+		}
+
+		return h.outbox.Enqueue(txCtx, rm.UserID(), evt)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
+}

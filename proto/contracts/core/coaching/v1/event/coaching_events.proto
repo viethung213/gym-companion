@@ -7,14 +7,14 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 import "google/protobuf/timestamp.proto";
 import "contracts/core/coaching/v1/message/coaching_messages.proto";
 
-message RoadmapInitiatedEventPayload {
+message RoadmapInitiated {
   string roadmap_id = 1;
   string user_id = 2;
   google.protobuf.Timestamp initiated_at = 3;
   contracts.core.coaching.v1.message.Roadmap roadmap = 4;
 }
 
-message RoadmapAdjustedEventPayload {
+message RoadmapAdjusted {
   string roadmap_id = 1;
   string user_id = 2;
   string reason = 3;
@@ -22,7 +22,7 @@ message RoadmapAdjustedEventPayload {
   contracts.core.coaching.v1.message.Roadmap roadmap = 5;
 }
 
-message SessionPlanExecutedEventPayload {
+message SessionPlanExecuted {
   string session_plan_id = 1;
   string roadmap_id = 2;
   string user_id = 3;

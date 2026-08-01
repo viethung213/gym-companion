@@ -35,14 +35,14 @@ flowchart LR
 
 ---
 
-### ⚪ Core Flow 2.1 — Mở App ngoài giờ tập (`Dashboard / Non-Workout Hours Flow`)
-- **Kích hoạt khi**: Học viên mở App vào các thời điểm ngoài khung giờ tập (`slot_time`).
-- **Hành vi hệ thống**: **KHÔNG gọi AI Agent** để tiết kiệm tài nguyên.
-- **Màn hình Dashboard hiển thị (đọc trực tiếp từ DB)**:
-  1. **Lộ trình hiện tại**: Hiển thị Tiến độ Lộ trình 4 tuần (Ví dụ: `Tuần 2 / 4 - Pha Overload`).
-  2. **Buổi tập sắp tới**: Hiển thị tóm tắt `SessionPlan` tiếp theo (`status = PENDING`) kèm đồng hồ đếm ngược / nhắc nhở khung giờ tập (`slot_time`).
-  3. **Tiến độ Tuần**: Tỷ lệ hoàn thành buổi tập trong tuần (Ví dụ: `3/4 buổi completed`).
-  4. **Các nút thao tác chủ động**: *"Xem chi tiết Lịch 4 tuần"*, *"Yêu cầu đổi lịch tập"* (`RegenerateSchedule`), *"Khai báo chấn thương mới"*.
+### ⚪ Core Flow 2.1 — Mở App ngoài giờ tập
+1. Khi hết plan, ngày rest, hoặc ngoài roadmap.
+2. Chọn list bài tập: **tự chọn** (FE gọi Exercise catalog) hoặc **yêu cầu Coach AI gợi ý** (FE gọi Coaching `SuggestAdHocSession` — read-only, không lưu DB).
+3. User được chỉnh sửa list (swap/add/remove/đổi sets/weight) trước khi bắt đầu.
+4. Bấm "Bắt đầu tập" → FE gọi Workout Execution.
+5. Workout Execution khởi tạo buổi tập và phát event **`AdHocWorkoutStarted`** *(tracked ở #171)*. Coaching Context lắng nghe, tạo mới `SessionPlan status=PENDING` (`is_ad_hoc = true`) kèm `prescription` mục tiêu đã chọn và lưu vào PostgreSQL. `plan_id` do Workout Execution tự sinh được adopt làm `session_plan_id`.
+6. Khi kết thúc buổi tập, Workout Execution phát event **`AdHocWorkoutCompleted`** *(hoặc `WorkoutSessionAborted`)*.
+7. Coaching Context lắng nghe, nghiệm thu cập nhật trạng thái `SessionPlan status=COMPLETED` *(hoặc `ABORTED`)* trong PostgreSQL, **tính toán $SCR$ và $\Delta RPE$** giống với luồng nghiệm thu buổi tập chuẩn. *(Không phát `RoadmapAdjusted`, không apply BR-AC-01)*.
 
 ---
 
@@ -73,26 +73,54 @@ flowchart LR
 
 ## 3. Hexagonal Architecture (Ports & Adapters) Structure
 
-Module `internal/coaching/` được đóng gói độc lập theo mô hình Hexagonal Architecture:
+Module `internal/coaching/` được đóng gói độc lập theo mô hình Hexagonal Architecture. Toàn bộ agent-implementation (prompts, schemas, LLM adapter, retry loop, MCP-style tools) được gom vào 1 sub-module `agent/` sao cho coaching chỉ phụ thuộc vào 1 facade mỏng — có thể tách agent sang `internal/agent/` (hoặc repo/service khác) mà không đụng business code.
+
+> **Trạng thái:** Đây là cấu trúc đích. Refactor **chưa** thực hiện — code hiện tại còn phân tán (`application/contextbuilder/`, `infrastructure/ai/`, `infrastructure/guardrail/`, `application/port/coach_agent.go`).
 
 ```text
 internal/coaching/
 ├── domain/                         # Core Domain Logic (No external imports, No ORM tags)
 │   ├── roadmap/                    # Aggregate Root: Roadmap, WeekPlan, DayPlan, SessionPlan
 │   ├── service/                    # Domain Services: AdaptiveCoachEngine, OverloadValidator
+│   ├── guardrail/                  # Business rules BR-AC-01/02/09 (pure, no I/O)
 │   └── event/                      # Domain Events: RoadmapInitiated, RoadmapAdjusted
 ├── application/                    # Application Layer (Use Cases, Commands, Queries)
 │   ├── command/                    # InitiateRoadmapHandler, RegenerateScheduleHandler
 │   ├── query/                      # GetActiveRoadmapHandler, GetSessionPlanHandler
-│   ├── contextbuilder/             # ContextBuilder (Aggregate state from Profile & Execution)
-│   └── port/                       # Primary & Secondary Ports (Interfaces)
+│   ├── coachinput/                 # Assembler: Profile + sessions + roadmap snapshot → agent.CoachInput
+│   └── port/                       # Primary & Secondary Ports (Interfaces, incl. Coach facade)
+├── agent/                          # Self-contained AI agent module (extractable)
+│   ├── coach.go                    # Facade — impl of application/port.Coach
+│   ├── input.go                    # CoachInput (input contract)
+│   ├── output.go                   # AdHocHint, SuggestedSession
+│   ├── flow/                       # Per-agent definitions — source of truth cho "agent nào có tool gì"
+│   │   ├── flow.go                 #   type Flow { Name, Prompt, Schema, Tools, MaxRetries }
+│   │   ├── initiate_roadmap.go
+│   │   ├── regenerate.go
+│   │   ├── adapt.go
+│   │   └── suggest_ad_hoc.go
+│   ├── prompt/                     # Prompt templates (//go:embed .tmpl files)
+│   ├── schema/                     # JSON output schemas
+│   ├── tool/                       # Go-native tools; LLM adapter expose theo protocol nhà cung cấp
+│   │   ├── tool.go                 #   interface Tool + Registry
+│   │   ├── check_prescription.go   #   wrap domain/guardrail
+│   │   ├── lookup_pr.go
+│   │   ├── query_history.go
+│   │   └── exercise_catalog.go
+│   ├── llm/                        # LLM client abstraction
+│   │   ├── client.go               #   interface Client { Complete(ctx, req) (Resp, error) }
+│   │   ├── anthropic/              #   provider adapter (stub)
+│   │   ├── openai/                 #   provider adapter (stub)
+│   │   └── mock/                   #   deterministic mock cho test
+│   └── runtime/                    # Generic execution loop
+│       ├── runner.go               #   render prompt → llm.Complete → guardrail check → retry
+│       └── feedback.go
 ├── infrastructure/                 # Infrastructure Layer (Adapters)
-│   ├── persistence/                # PostgreSQL Repository & GORM/SQL Mappers
-│   ├── ai/                         # AI Coach Agent Adapter (LLM Client & Tools)
-│   └── guardrail/                  # Guardrail Enforcement Pipeline
+│   └── persistence/                # PostgreSQL Repository & GORM/SQL Mappers
 └── transport/                      # Transport Layer
     └── grpc/                       # gRPC Server implementation (CoachingServiceServer)
 ```
+
 
 ---
 
@@ -105,3 +133,21 @@ internal/coaching/
 | `search_eligible_exercises` | Tìm bài tập hợp lệ theo thiết bị & nhóm cơ |
 | `replace_injured_exercises` | Tìm bài tập thay thế an toàn né vùng chấn thương |
 | `get_exercise_history` | Đọc lịch sử 1RM & tạ PR gần nhất |
+
+---
+
+## 5. Danh mục Sự kiện Bất đồng bộ (Event Integration Contracts)
+
+### Consumed Events (Sự kiện đầu vào)
+- `contracts.supporting.profile.v1.event.ProfileCompletedEventPayload` $\rightarrow$ Kích hoạt `InitiateRoadmap`.
+- `contracts.supporting.profile.v1.event.ProfileUpdated` $\rightarrow$ Kích hoạt `RegenerateSchedule` (FR-AC-06).
+- `contracts.supporting.profile.v1.event.InjuryReported` / `InjuryRecovered` $\rightarrow$ Kích hoạt thích ứng chấn thương.
+- `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` $\rightarrow$ Nghiệm thu `SessionPlan` (`status = COMPLETED`) và tính $SCR$, $\Delta RPE$.
+- **`contracts.core.workout_execution.v1.event.WorkoutSessionAborted`** $\rightarrow$ **Cập nhật `SessionPlan.status = ABORTED`** khi học viên bỏ dở buổi tập / bị timeout.
+- **`contracts.core.workout_execution.v1.event.AdHocWorkoutStarted`** *(dự kiến — phase-2, tracked ở #171)* $\rightarrow$ **Lưu mới** `SessionPlan` vào Roadmap `ACTIVE` với `status = PENDING` (`is_ad_hoc = true`) cho buổi tập ngoài lịch (Flow 2.1). `plan_id` do Workout Execution tự sinh khi user bấm "Bắt đầu tập" $\rightarrow$ Coaching adopt làm `session_plan_id`.
+- **`contracts.core.workout_execution.v1.event.AdHocWorkoutCompleted`** *(dự kiến — phase-2, tracked ở #171)* $\rightarrow$ **Cập nhật** `SessionPlan.status = COMPLETED` trong PostgreSQL cho buổi tập ngoài lịch (Flow 2.1), **tính toán $SCR$ và $\Delta RPE$** giống buổi tập chuẩn. *(Không phát `RoadmapAdjusted`, không apply BR-AC-01)*.
+
+### Produced Events (Sự kiện đầu ra)
+- `contracts.core.coaching.v1.event.RoadmapInitiatedEventPayload` $\rightarrow$ Báo tin khởi tạo Lộ trình 4 tuần.
+- `contracts.core.coaching.v1.event.RoadmapAdjustedEventPayload` $\rightarrow$ Báo tin re-generate giáo án tương lai.
+- `contracts.core.coaching.v1.event.SessionPlanExecutedEventPayload` $\rightarrow$ Báo tin hoàn thành buổi tập (kèm chỉ số $SCR$ & $\Delta RPE$).
