@@ -41,6 +41,7 @@ type Info struct {
 	DefaultRestSeconds int32
 	TagIDs             []string
 	Status             Status
+	HasAISupported     bool
 	ArchivedAt         *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -108,6 +109,7 @@ func (e *Exercise) UpdateInfo(info Info, now time.Time) error {
 	current.Difficulty = info.Difficulty
 	current.DefaultRestSeconds = info.DefaultRestSeconds
 	current.TagIDs = copyStrings(info.TagIDs)
+	current.HasAISupported = info.HasAISupported
 	current.UpdatedAt = now
 
 	current = normalizeInfo(current)
@@ -149,6 +151,17 @@ func (e *Exercise) Archive(now time.Time) error {
 
 	e.info.Status = StatusArchived
 	e.info.ArchivedAt = &now
+	e.info.UpdatedAt = now
+
+	return nil
+}
+
+func (e *Exercise) SetAISupported(supported bool, now time.Time) error {
+	if e.info.Status == StatusArchived {
+		return ErrArchivedExercise
+	}
+
+	e.info.HasAISupported = supported
 	e.info.UpdatedAt = now
 
 	return nil

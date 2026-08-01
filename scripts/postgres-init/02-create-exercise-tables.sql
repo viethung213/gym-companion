@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS exercise.exercises (
     difficulty VARCHAR(50) DEFAULT 'Beginner',
     default_rest_seconds INT DEFAULT 60,
     status VARCHAR(50) DEFAULT 'DRAFT',
+    has_ai_supported BOOLEAN NOT NULL DEFAULT FALSE,
     archived_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

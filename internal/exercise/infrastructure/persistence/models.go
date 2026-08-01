@@ -18,6 +18,7 @@ type exerciseRecord struct {
 	Difficulty         string     `gorm:"column:difficulty"`
 	DefaultRestSeconds int32      `gorm:"column:default_rest_seconds"`
 	Status             string     `gorm:"column:status"`
+	HasAISupported     bool       `gorm:"column:has_ai_supported"`
 	ArchivedAt         *time.Time `gorm:"column:archived_at"`
 	CreatedAt          time.Time  `gorm:"column:created_at"`
 	UpdatedAt          time.Time  `gorm:"column:updated_at"`
