@@ -42,6 +42,16 @@ type ModuleDeps struct {
 
 // Initialize bootstraps all layers of the Auth Bounded Context.
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+	if deps.DB == nil {
+		return nil, errors.New("deps.DB is required")
+	}
+	if deps.GRPCServer == nil {
+		return nil, errors.New("deps.GRPCServer is required")
+	}
+	if deps.KafkaRegistry == nil {
+		return nil, errors.New("deps.KafkaRegistry is required")
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
