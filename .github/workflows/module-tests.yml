@@ -46,9 +46,6 @@ jobs:
             auth:
               - 'internal/auth/**'
               - 'proto/contracts/generic/auth/**'
-            catalog:
-              - 'internal/catalog/**'
-              - 'proto/contracts/**/catalog/**'
             coaching:
               - 'internal/coaching/**'
               - 'proto/contracts/core/coaching/**'
@@ -71,7 +68,7 @@ jobs:
       - name: Compute Target Modules Matrix
         id: set-modules
         run: |
-          ALL_MODULES='["audio","auth","catalog","coaching","exercise","notification","nutrition","profile","workout_execution"]'
+          ALL_MODULES='["audio","auth","coaching","exercise","notification","nutrition","profile","workout_execution"]'
           
           if [ "${{ steps.filter.outputs.global }}" == "true" ]; then
             echo "Global or core shared files changed. Running tests for ALL modules."
@@ -81,7 +78,6 @@ jobs:
             SELECTED=()
             [ "${{ steps.filter.outputs.audio }}" == "true" ] && SELECTED+=('"audio"')
             [ "${{ steps.filter.outputs.auth }}" == "true" ] && SELECTED+=('"auth"')
-            [ "${{ steps.filter.outputs.catalog }}" == "true" ] && SELECTED+=('"catalog"')
             [ "${{ steps.filter.outputs.coaching }}" == "true" ] && SELECTED+=('"coaching"')
             [ "${{ steps.filter.outputs.exercise }}" == "true" ] && SELECTED+=('"exercise"')
             [ "${{ steps.filter.outputs.notification }}" == "true" ] && SELECTED+=('"notification"')

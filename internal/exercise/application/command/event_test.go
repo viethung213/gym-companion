@@ -1,3 +1,5 @@
+//go:build unit
+
 package command
 
 import (
@@ -8,15 +10,6 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
-
-type mockIDGenerator struct {
-	id  string
-	err error
-}
-
-func (m mockIDGenerator) NewID() (string, error) {
-	return m.id, m.err
-}
 
 func TestNewEvent_CloudEvents(t *testing.T) {
 	t.Parallel()
@@ -46,30 +39,30 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		generator  mockIDGenerator
+		generator  *mockIDGenerator
 		eventType  string
 		wantErrIs  error
 		expectType string
 	}{
 		{
 			name: "success created event",
-			generator: mockIDGenerator{
-				id: "event-uuid-789",
+			generator: &mockIDGenerator{
+				nextID: "event-uuid-789",
 			},
 			eventType:  domain.EventTypeExerciseCreated,
 			expectType: "contracts.supporting.exercise.v1.exerciseCreated",
 		},
 		{
 			name: "success approved event",
-			generator: mockIDGenerator{
-				id: "event-uuid-abc",
+			generator: &mockIDGenerator{
+				nextID: "event-uuid-abc",
 			},
 			eventType:  domain.EventTypeExerciseApproved,
 			expectType: "contracts.supporting.exercise.v1.exerciseApproved",
 		},
 		{
 			name: "generator error",
-			generator: mockIDGenerator{
+			generator: &mockIDGenerator{
 				err: errors.New("id generator error"),
 			},
 			eventType: domain.EventTypeExerciseCreated,
@@ -94,8 +87,8 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 				t.Fatalf("got error %v, want nil", createErr)
 			}
 
-			if got := event.ID; got != tt.generator.id {
-				t.Errorf("got event ID %q, want %q", got, tt.generator.id)
+			if got := event.ID; got != tt.generator.nextID {
+				t.Errorf("got event ID %q, want %q", got, tt.generator.nextID)
 			}
 			if got := event.Type; got != tt.eventType {
 				t.Errorf("got event type %q, want %q", got, tt.eventType)
@@ -113,8 +106,8 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 			if got := envelope["specversion"]; got != "1.0" {
 				t.Errorf("got specversion %v, want 1.0", got)
 			}
-			if got := envelope["id"]; got != tt.generator.id {
-				t.Errorf("got ID %v, want %s", got, tt.generator.id)
+			if got := envelope["id"]; got != tt.generator.nextID {
+				t.Errorf("got ID %v, want %s", got, tt.generator.nextID)
 			}
 			if got := envelope["source"]; got != "services/exercise-service" {
 				t.Errorf("got source %v, want services/exercise-service", got)
