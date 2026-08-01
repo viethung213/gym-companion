@@ -2,10 +2,10 @@ package vo
 
 // SessionSummary represents the aggregated statistics of a completed workout session.
 type SessionSummary struct {
-	TotalSets        int      `json:"totalSets"`
-	TotalVolume      float32  `json:"totalVolume"`
-	AverageFormScore *float32 `json:"averageFormScore,omitempty"` // nil for non-AI sessions
-	AverageRPE       float32  `json:"averageRpe"`
+	TotalSets        int
+	TotalVolume      float32
+	AverageFormScore *float32 // nil for non-AI sessions
+	AverageRPE       float32
 }
 
 // NewSessionSummary constructs a new immutable SessionSummary.

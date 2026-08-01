@@ -67,11 +67,11 @@ func UnaryRateLimitInterceptor() grpc.UnaryServerInterceptor {
 }
 
 func getLimitForMethod(fullMethod string) int {
-	// Rule: "100 req/phút Onboarding API, 10 req/phút CompleteSession API"
+	// Rule in AGENTS.md: "100 req/phút Onboarding API, 10 req/phút CompleteSession API" (CompleteWorkoutSession)
 	if strings.Contains(fullMethod, "Onboarding") {
 		return 100
 	}
-	if strings.Contains(fullMethod, "CompleteSession") {
+	if strings.Contains(fullMethod, "CompleteWorkoutSession") {
 		return 10
 	}
 	// Default to 100 requests per minute for other APIs

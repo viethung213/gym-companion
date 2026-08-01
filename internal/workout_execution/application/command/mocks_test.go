@@ -2,11 +2,33 @@ package command_test
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
 )
+
+// Helper constructors for test mocks.
+func newMockSessionRepo(tb testing.TB) *mockSessionRepo {
+	tb.Helper()
+	return &mockSessionRepo{}
+}
+
+func newMockPRRepo(tb testing.TB) *mockPRRepo {
+	tb.Helper()
+	return &mockPRRepo{}
+}
+
+func newMockTxManager(tb testing.TB) *mockTxManager {
+	tb.Helper()
+	return &mockTxManager{}
+}
+
+func newMockOutboxWriter(tb testing.TB) *mockOutboxWriter {
+	tb.Helper()
+	return &mockOutboxWriter{}
+}
 
 type mockSessionRepo struct {
 	session       *aggregate.WorkoutSession

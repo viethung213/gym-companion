@@ -17,7 +17,10 @@ type mockMotionSpecRepo struct {
 
 var _ repository.MotionSpecificationRepository = (*mockMotionSpecRepo)(nil)
 
-func newMockMotionSpecRepo() *mockMotionSpecRepo {
+func newMockMotionSpecRepo(tb ...testing.TB) *mockMotionSpecRepo {
+	if len(tb) > 0 && tb[0] != nil {
+		tb[0].Helper()
+	}
 	return &mockMotionSpecRepo{
 		specs: make(map[string]*aggregate.MotionSpecification),
 	}

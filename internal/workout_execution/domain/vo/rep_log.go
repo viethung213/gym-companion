@@ -2,10 +2,10 @@ package vo
 
 // RepLog represents the tracking metrics for an individual repetition during an AI camera set.
 type RepLog struct {
-	RepNumber     int                `json:"repNumber"`
-	ROMPercentage float32            `json:"romPercentage"`
-	ErrorCodes    []string           `json:"errorCodes,omitempty"`
-	JointAngles   map[string]float32 `json:"jointAngles,omitempty"`
+	RepNumber     int
+	ROMPercentage float32
+	ErrorCodes    []string
+	JointAngles   map[string]float32
 }
 
 // NewRepLog creates a new RepLog with slice and map defensive copying.
