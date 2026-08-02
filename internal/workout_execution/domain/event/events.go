@@ -20,7 +20,7 @@ type WorkoutSessionStarted struct {
 
 // EventName returns the CloudEvent type for WorkoutSessionStarted.
 
-func (e WorkoutSessionStarted) EventName() string {
+func (e *WorkoutSessionStarted) EventName() string {
 
 	return "contracts.core.workout_execution.v1.workoutSessionStarted"
 
@@ -42,7 +42,7 @@ type WorkoutSessionCompleted struct {
 
 // EventName returns the CloudEvent type for WorkoutSessionCompleted.
 
-func (e WorkoutSessionCompleted) EventName() string {
+func (e *WorkoutSessionCompleted) EventName() string {
 
 	return "contracts.core.workout_execution.v1.workoutSessionCompleted"
 
@@ -66,7 +66,7 @@ type WorkoutSessionAborted struct {
 
 // EventName returns the CloudEvent type for WorkoutSessionAborted.
 
-func (e WorkoutSessionAborted) EventName() string {
+func (e *WorkoutSessionAborted) EventName() string {
 
 	return "contracts.core.workout_execution.v1.workoutSessionAborted"
 
@@ -92,7 +92,7 @@ type NewPersonalRecordAchieved struct {
 
 // EventName returns the CloudEvent type for NewPersonalRecordAchieved.
 
-func (e NewPersonalRecordAchieved) EventName() string {
+func (e *NewPersonalRecordAchieved) EventName() string {
 
 	return "contracts.core.workout_execution.v1.newPersonalRecordAchieved"
 
@@ -110,7 +110,7 @@ type BodyMetricUpdated struct {
 
 // EventName returns the CloudEvent type for BodyMetricUpdated.
 
-func (e BodyMetricUpdated) EventName() string {
+func (e *BodyMetricUpdated) EventName() string {
 
 	return "contracts.core.workout_execution.v1.bodyMetricUpdated"
 
@@ -138,7 +138,7 @@ type MotionSpecificationUpdated struct {
 
 // EventName returns the CloudEvent type for MotionSpecificationUpdated.
 
-func (e MotionSpecificationUpdated) EventName() string {
+func (e *MotionSpecificationUpdated) EventName() string {
 
 	return "contracts.core.workout_execution.v1.motionSpecificationUpdated"
 

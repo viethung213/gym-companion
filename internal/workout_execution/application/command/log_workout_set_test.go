@@ -13,7 +13,7 @@ import (
 
 func TestLogWorkoutSetHandler(t *testing.T) {
 	t.Run("invalid input", func(t *testing.T) {
-		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{})
+		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{}, newMockOutboxWriter(t), newMockTxManager(t))
 		_, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{})
 		if !errors.Is(err, apperror.ErrInvalidInput) {
 			t.Errorf("got %v, want %v", err, apperror.ErrInvalidInput)
@@ -21,7 +21,7 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 	})
 
 	t.Run("find session error", func(t *testing.T) {
-		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{findErr: errors.New("db error")})
+		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{findErr: errors.New("db error")}, newMockOutboxWriter(t), newMockTxManager(t))
 		_, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{SessionID: "s1", ExerciseID: "ex1"})
 		if err == nil {
 			t.Fatal("got nil, want error")
@@ -29,7 +29,7 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 	})
 
 	t.Run("session not found", func(t *testing.T) {
-		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{})
+		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{}, newMockOutboxWriter(t), newMockTxManager(t))
 		_, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{SessionID: "s1", ExerciseID: "ex1"})
 		if !errors.Is(err, derror.ErrWorkoutSessionNotFound) {
 			t.Errorf("got %v, want %v", err, derror.ErrWorkoutSessionNotFound)
@@ -39,7 +39,7 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 	t.Run("log set error", func(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
 		_ = session.Complete(false, false) // session no longer in progress
-		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{session: session})
+		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{session: session}, newMockOutboxWriter(t), newMockTxManager(t))
 		_, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{SessionID: "s1", ExerciseID: "ex1", SetNumber: 1})
 		if err == nil {
 			t.Fatal("got nil, want error")
@@ -48,7 +48,7 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 
 	t.Run("save session error", func(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
-		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{session: session, saveErr: errors.New("save err")})
+		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{session: session, saveErr: errors.New("save err")}, newMockOutboxWriter(t), newMockTxManager(t))
 		_, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{SessionID: "s1", ExerciseID: "ex1", SetNumber: 1})
 		if err == nil {
 			t.Fatal("got nil, want error")
@@ -57,7 +57,7 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
-		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{session: session})
+		h := command.NewLogWorkoutSetHandler(&mockSessionRepo{session: session}, newMockOutboxWriter(t), newMockTxManager(t))
 		res, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{SessionID: "s1", ExerciseID: "ex1", SetNumber: 1})
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)

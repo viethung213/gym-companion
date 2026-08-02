@@ -14,6 +14,8 @@ type WorkoutSessionRepository interface {
 
 	FindByID(ctx context.Context, id string) (*aggregate.WorkoutSession, error)
 
+	FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error)
+
 	FindActiveSessionByUserID(ctx context.Context, userID string) (*aggregate.WorkoutSession, error)
 
 	FindTimedOutSessions(ctx context.Context, maxDurationMinutes int) ([]*aggregate.WorkoutSession, error)

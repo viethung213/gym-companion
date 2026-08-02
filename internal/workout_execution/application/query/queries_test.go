@@ -122,6 +122,18 @@ func (m *mockSessionRepo) FindByID(ctx context.Context, id string) (*aggregate.W
 
 }
 
+func (m *mockSessionRepo) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
+
+	if m.err != nil {
+
+		return nil, m.err
+
+	}
+
+	return m.session, nil
+
+}
+
 func (m *mockSessionRepo) FindActiveSessionByUserID(ctx context.Context, userID string) (*aggregate.WorkoutSession, error) {
 
 	return nil, nil

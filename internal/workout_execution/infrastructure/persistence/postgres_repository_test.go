@@ -37,8 +37,10 @@ func ensureTablesExist(db *gorm.DB) {
 		started_at TIMESTAMP WITH TIME ZONE,
 		ended_at TIMESTAMP WITH TIME ZONE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		version INT NOT NULL DEFAULT 1
 	);`)
+	db.Exec(`ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;`)
 	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_workout_sessions_active_user ON workout_execution.workout_sessions(user_id) WHERE status = 'IN_PROGRESS';`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.workout_set_logs (
@@ -212,7 +214,7 @@ func TestPostgresWorkoutSessionRepository_Integration(t *testing.T) {
 		t.Fatalf("Failed to save session: %v", err)
 	}
 
-	// 2. FindByID (success and non-existent)
+	// 2. FindByID & FindByIDForUpdate (success and non-existent)
 	found, err := repo.FindByID(ctx, sessID)
 	if err != nil || found == nil {
 		t.Fatalf("FindByID failed: err=%v, found=%v", err, found)
@@ -221,9 +223,22 @@ func TestPostgresWorkoutSessionRepository_Integration(t *testing.T) {
 		t.Errorf("Mismatch in retrieved session fields: ID=%s, sets=%d, errors=%d", found.ID(), len(found.Sets()), len(found.Errors()))
 	}
 
+	foundForUpdate, err := repo.FindByIDForUpdate(ctx, sessID)
+	if err != nil || foundForUpdate == nil {
+		t.Fatalf("FindByIDForUpdate failed: err=%v, found=%v", err, foundForUpdate)
+	}
+	if foundForUpdate.ID() != sessID || len(foundForUpdate.Sets()) != 1 {
+		t.Errorf("Mismatch in FindByIDForUpdate fields: ID=%s, sets=%d", foundForUpdate.ID(), len(foundForUpdate.Sets()))
+	}
+
 	missingSession, err := repo.FindByID(ctx, "non-existent-id")
 	if err != nil || missingSession != nil {
 		t.Errorf("expected nil, nil for missing session FindByID, got %v, %v", missingSession, err)
+	}
+
+	missingSessionForUpdate, err := repo.FindByIDForUpdate(ctx, "non-existent-id")
+	if err != nil || missingSessionForUpdate != nil {
+		t.Errorf("expected nil, nil for missing session FindByIDForUpdate, got %v, %v", missingSessionForUpdate, err)
 	}
 
 	// 3. FindActiveSessionByUserID (success and non-existent)

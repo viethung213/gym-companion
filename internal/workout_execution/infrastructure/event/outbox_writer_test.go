@@ -54,7 +54,7 @@ func TestOutboxWriter(t *testing.T) {
 
 		writer := infraEvent.NewOutboxWriter(repo)
 
-		ev := event.WorkoutSessionStarted{
+		ev := &event.WorkoutSessionStarted{
 
 			SessionID: "sess-1",
 

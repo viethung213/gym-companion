@@ -39,6 +39,13 @@ func (m *mockSessionRepo) FindByID(ctx context.Context, id string) (*aggregate.W
 	return m.session, nil
 }
 
+func (m *mockSessionRepo) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.session, nil
+}
+
 func (m *mockSessionRepo) FindActiveSessionByUserID(ctx context.Context, userID string) (*aggregate.WorkoutSession, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -145,7 +152,7 @@ func TestGRPCHandler(t *testing.T) {
 
 	startH := command.NewStartWorkoutSessionHandler(sessionRepo, nil, nil, tx)
 	startScheduledH := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, nil, tx)
-	logSetH := command.NewLogWorkoutSetHandler(sessionRepo)
+	logSetH := command.NewLogWorkoutSetHandler(sessionRepo, nil, tx)
 	completeH := command.NewCompleteWorkoutSessionHandler(sessionRepo, nil, nil, nil, tx)
 	abortH := command.NewAbortWorkoutSessionHandler(sessionRepo, nil, tx)
 	syncH := command.NewSyncWorkoutLogsHandler(sessionRepo, nil, tx)
@@ -474,7 +481,7 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 
 			startH := command.NewStartWorkoutSessionHandler(repo, nil, nil, tx)
 			startScheduledH := command.NewStartScheduledWorkoutSessionHandler(repo, nil, tx)
-			logSetH := command.NewLogWorkoutSetHandler(repo)
+			logSetH := command.NewLogWorkoutSetHandler(repo, nil, tx)
 			completeH := command.NewCompleteWorkoutSessionHandler(repo, nil, nil, nil, tx)
 			abortH := command.NewAbortWorkoutSessionHandler(repo, nil, tx)
 			syncH := command.NewSyncWorkoutLogsHandler(repo, nil, tx)

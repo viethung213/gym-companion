@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
     ended_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    version INT NOT NULL DEFAULT 1,
     CONSTRAINT chk_workout_session_status CHECK (
         status IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'ABORTED', 'ANOMALOUS')
     )

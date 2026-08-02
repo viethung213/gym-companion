@@ -37,20 +37,52 @@ func (r *PostgresWorkoutSessionRepository) Save(ctx context.Context, session *ag
 	db := getDB(ctx, r.db)
 	model := SessionToPersistence(session)
 
-	err := db.Clauses(clause.OnConflict{
-		UpdateAll: true,
-	}).Create(model).Error
+	var count int64
+	if err := db.Model(&WorkoutSessionModel{}).Where("id = ?", model.ID).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to check session existence: %w", err)
+	}
 
-	if err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "uq_workout_sessions_active_user") {
-			return derror.ErrActiveSessionAlreadyExists
+	if count == 0 {
+		err := db.Create(model).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "uq_workout_sessions_active_user") {
+				return derror.ErrActiveSessionAlreadyExists
+			}
+			return fmt.Errorf("failed to save workout session: %w", err)
 		}
-		return fmt.Errorf("failed to save workout session: %w", err)
+	} else {
+		oldVersion := session.Version()
+		res := db.Model(&WorkoutSessionModel{}).
+			Where("id = ? AND version = ?", model.ID, oldVersion).
+			Updates(map[string]interface{}{
+				"status":             model.Status,
+				"total_sets":         model.TotalSets,
+				"total_volume":       model.TotalVolume,
+				"average_form_score": model.AverageFormScore,
+				"average_rpe":        model.AverageRPE,
+				"scheduled_at":       model.ScheduledAt,
+				"started_at":         model.StartedAt,
+				"ended_at":           model.EndedAt,
+				"updated_at":         model.UpdatedAt,
+				"version":            oldVersion + 1,
+			})
+		if res.Error != nil {
+			return fmt.Errorf("failed to update workout session: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return derror.ErrOptimisticLocking
+		}
 	}
 
 	for _, set := range model.Sets {
 		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&set).Error; err != nil {
 			return fmt.Errorf("failed to save set log: %w", err)
+		}
+	}
+
+	for _, sessErr := range model.Errors {
+		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&sessErr).Error; err != nil {
+			return fmt.Errorf("failed to save session error: %w", err)
 		}
 	}
 
@@ -66,6 +98,19 @@ func (r *PostgresWorkoutSessionRepository) FindByID(ctx context.Context, id stri
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to find session by id: %w", err)
+	}
+	return SessionToDomain(&model), nil
+}
+
+func (r *PostgresWorkoutSessionRepository) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
+	db := getDB(ctx, r.db)
+	var model WorkoutSessionModel
+	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("Sets.Reps").Preload("Errors").First(&model, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to find session by id for update: %w", err)
 	}
 	return SessionToDomain(&model), nil
 }

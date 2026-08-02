@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,6 +63,18 @@ func (w *OutboxWriter) writeSingleEvent(ctx context.Context, aggregateType, aggr
 	if nameProvider, ok := ev.(NameProvider); ok {
 
 		eventType = nameProvider.EventName()
+
+	} else if ev != nil && reflect.TypeOf(ev).Kind() == reflect.Struct {
+
+		vp := reflect.New(reflect.TypeOf(ev))
+
+		vp.Elem().Set(reflect.ValueOf(ev))
+
+		if nameProvider, ok := vp.Interface().(NameProvider); ok {
+
+			eventType = nameProvider.EventName()
+
+		}
 
 	}
 

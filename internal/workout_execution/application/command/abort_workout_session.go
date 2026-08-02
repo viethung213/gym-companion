@@ -51,19 +51,20 @@ func (h *AbortWorkoutSessionHandler) Handle(
 		return nil, apperror.ErrInvalidInput
 	}
 
-	session, err := h.sessionRepo.FindByID(ctx, cmd.SessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find session: %w", err)
-	}
-	if session == nil {
-		return nil, derror.ErrWorkoutSessionNotFound
-	}
+	var result *AbortWorkoutSessionResult
+	saveFunc := func(txCtx context.Context) error {
+		session, err := h.sessionRepo.FindByIDForUpdate(txCtx, cmd.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to find session: %w", err)
+		}
+		if session == nil {
+			return derror.ErrWorkoutSessionNotFound
+		}
 
-	if abortErr := session.Abort(cmd.Reason); abortErr != nil {
-		return nil, abortErr
-	}
+		if abortErr := session.Abort(cmd.Reason); abortErr != nil {
+			return abortErr
+		}
 
-	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		if saveErr := h.sessionRepo.Save(txCtx, session); saveErr != nil {
 			return saveErr
 		}
@@ -73,20 +74,28 @@ func (h *AbortWorkoutSessionHandler) Handle(
 				return writeErr
 			}
 		}
+
+		var abortedAtStr string
+		if session.EndedAt() != nil {
+			abortedAtStr = session.EndedAt().Format("2006-01-02T15:04:05Z07:00")
+		}
+
+		result = &AbortWorkoutSessionResult{
+			SessionID: session.ID(),
+			AbortedAt: abortedAtStr,
+		}
 		return nil
-	})
-
-	if txErr != nil {
-		return nil, fmt.Errorf("failed to abort session tx: %w", txErr)
 	}
 
-	var abortedAtStr string
-	if session.EndedAt() != nil {
-		abortedAtStr = session.EndedAt().Format("2006-01-02T15:04:05Z07:00")
+	if h.txManager != nil {
+		if txErr := h.txManager.WithTransaction(ctx, saveFunc); txErr != nil {
+			return nil, fmt.Errorf("failed to abort session tx: %w", txErr)
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
-	return &AbortWorkoutSessionResult{
-		SessionID: session.ID(),
-		AbortedAt: abortedAtStr,
-	}, nil
+	return result, nil
 }

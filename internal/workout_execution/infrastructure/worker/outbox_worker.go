@@ -53,11 +53,12 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processOutbox(ctx context.Context) error {
+	if w.publisher == nil {
+		return fmt.Errorf("outbox broker publisher is nil, cannot process outbox batch")
+	}
 	return w.outboxRepo.ProcessBatch(ctx, 100, func(publishCtx context.Context, events []*port.OutboxRecord) error {
-		if w.publisher != nil {
-			if err := w.publisher.PublishBatch(publishCtx, events); err != nil {
-				return fmt.Errorf("publish batch failed: %w", err)
-			}
+		if err := w.publisher.PublishBatch(publishCtx, events); err != nil {
+			return fmt.Errorf("publish batch failed: %w", err)
 		}
 		return nil
 	})

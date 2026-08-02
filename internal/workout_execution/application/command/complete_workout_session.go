@@ -63,46 +63,47 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 		return nil, apperror.ErrInvalidInput
 	}
 
-	session, err := h.sessionRepo.FindByID(ctx, cmd.SessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch session: %w", err)
-	}
-	if session == nil {
-		return nil, derror.ErrWorkoutSessionNotFound
-	}
+	var result *CompleteWorkoutSessionResult
+	saveFunc := func(txCtx context.Context) error {
+		session, err := h.sessionRepo.FindByIDForUpdate(txCtx, cmd.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch session: %w", err)
+		}
+		if session == nil {
+			return derror.ErrWorkoutSessionNotFound
+		}
 
-	// 1. Check Training Load Overload
-	var isOverloaded bool
-	if h.loadGuard != nil && len(session.Sets()) > 0 {
-		firstExerciseID := session.Sets()[0].ExerciseID
-		muscleGroup := "Chest" // Default fallback
-		if h.exerciseClient != nil {
-			mg, clientErr := h.exerciseClient.GetExerciseMuscleGroup(ctx, firstExerciseID)
-			if clientErr == nil && mg != "" {
-				muscleGroup = mg
+		// 1. Check Training Load Overload
+		var isOverloaded bool
+		if h.loadGuard != nil && len(session.Sets()) > 0 {
+			firstExerciseID := session.Sets()[0].ExerciseID
+			muscleGroup := "Chest" // Default fallback
+			if h.exerciseClient != nil {
+				mg, clientErr := h.exerciseClient.GetExerciseMuscleGroup(txCtx, firstExerciseID)
+				if clientErr == nil && mg != "" {
+					muscleGroup = mg
+				}
+			}
+
+			vol := session.CalculateTotalVolume()
+			overloaded, _, guardErr := h.loadGuard.IsOverloaded(txCtx, session.UserID(), muscleGroup, vol)
+			if guardErr == nil {
+				isOverloaded = overloaded
 			}
 		}
 
-		vol := session.CalculateTotalVolume()
-		overloaded, _, guardErr := h.loadGuard.IsOverloaded(ctx, session.UserID(), muscleGroup, vol)
-		if guardErr == nil {
-			isOverloaded = overloaded
+		// 2. Transition domain state to COMPLETED
+		if completeErr := session.Complete(cmd.ConfirmOverload, isOverloaded); completeErr != nil {
+			return completeErr
 		}
-	}
 
-	// 2. Transition domain state to COMPLETED
-	if completeErr := session.Complete(cmd.ConfirmOverload, isOverloaded); completeErr != nil {
-		return nil, completeErr
-	}
+		// 3. Record optional BodyMetricUpdated event if weight update was provided by user (UC-03.4 A3)
+		if cmd.WeightUpdateKg != nil && *cmd.WeightUpdateKg > 0 {
+			session.RecordBodyMetricUpdate(*cmd.WeightUpdateKg)
+		}
 
-	// 3. Record optional BodyMetricUpdated event if weight update was provided by user (UC-03.4 A3)
-	if cmd.WeightUpdateKg != nil && *cmd.WeightUpdateKg > 0 {
-		session.RecordBodyMetricUpdate(*cmd.WeightUpdateKg)
-	}
-
-	// 4. Save and Publish Outbox Events
-	summary := session.CalculateSummary()
-	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		// 4. Save and Publish Outbox Events
+		summary := session.CalculateSummary()
 		if err := h.sessionRepo.Save(txCtx, session); err != nil {
 			return err
 		}
@@ -112,24 +113,32 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 				return err
 			}
 		}
+
+		var completedAtStr string
+		if session.EndedAt() != nil {
+			completedAtStr = session.EndedAt().Format("2006-01-02T15:04:05Z07:00")
+		}
+
+		result = &CompleteWorkoutSessionResult{
+			SessionID:        session.ID(),
+			CompletedAt:      completedAtStr,
+			TotalSets:        summary.TotalSets,
+			TotalVolume:      summary.TotalVolume,
+			AverageFormScore: summary.AverageFormScore,
+			AverageRPE:       summary.AverageRPE,
+		}
 		return nil
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to complete session tx: %w", err)
 	}
 
-	var completedAtStr string
-	if session.EndedAt() != nil {
-		completedAtStr = session.EndedAt().Format("2006-01-02T15:04:05Z07:00")
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, fmt.Errorf("failed to complete session tx: %w", err)
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
-	return &CompleteWorkoutSessionResult{
-		SessionID:        session.ID(),
-		CompletedAt:      completedAtStr,
-		TotalSets:        summary.TotalSets,
-		TotalVolume:      summary.TotalVolume,
-		AverageFormScore: summary.AverageFormScore,
-		AverageRPE:       summary.AverageRPE,
-	}, nil
+	return result, nil
 }

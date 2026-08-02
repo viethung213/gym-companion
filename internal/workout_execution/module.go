@@ -18,6 +18,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
 	workoutEvent "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/event"
+	workoutKafka "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
@@ -61,7 +62,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	// Initialize Command Handlers
 	startSessionHandler := command.NewStartWorkoutSessionHandler(sessionRepo, nil, outboxWriter, txManager)
 	startScheduledSessionHandler := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
-	logSetHandler := command.NewLogWorkoutSetHandler(sessionRepo)
+	logSetHandler := command.NewLogWorkoutSetHandler(sessionRepo, outboxWriter, txManager)
 	completeSessionHandler := command.NewCompleteWorkoutSessionHandler(sessionRepo, loadGuard, nil, outboxWriter, txManager)
 	abortSessionHandler := command.NewAbortWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
 	syncLogsHandler := command.NewSyncWorkoutLogsHandler(sessionRepo, outboxWriter, txManager)
@@ -110,10 +111,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 
-	_ = kafkaBrokers
+	var kafkaPub *workoutKafka.Publisher
+	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
+		writer, err := deps.KafkaRegistry.GetWriter("workout_execution", kafkaBrokers)
+		if err == nil && writer != nil {
+			kafkaPub = workoutKafka.NewPublisher(writer)
+		}
+	}
 
 	// Initialize Workers
-	outboxWorker := worker.NewOutboxWorker(outboxRepo, nil, 2*time.Second)
+	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
 	timeoutWorker := worker.NewSessionTimeoutWorker(sessionRepo, outboxWriter, txManager, 5*time.Minute)
 	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, outboxWriter, txManager, 1*time.Minute, 5*time.Minute)
 	exerciseCreatedConsumer := worker.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)

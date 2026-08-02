@@ -26,6 +26,7 @@ type WorkoutSessionModel struct {
 	EndedAt          *time.Time           `gorm:"column:ended_at"`
 	CreatedAt        time.Time            `gorm:"column:created_at"`
 	UpdatedAt        time.Time            `gorm:"column:updated_at"`
+	Version          int                  `gorm:"column:version;default:1"`
 	Sets             []WorkoutSetLogModel `gorm:"foreignKey:SessionID;constraint:OnDelete:CASCADE"`
 	Errors           []SessionErrorModel  `gorm:"foreignKey:SessionID;constraint:OnDelete:CASCADE"`
 }
@@ -182,6 +183,7 @@ func SessionToPersistence(session *aggregate.WorkoutSession) *WorkoutSessionMode
 		EndedAt:          session.EndedAt(),
 		CreatedAt:        session.CreatedAt(),
 		UpdatedAt:        session.UpdatedAt(),
+		Version:          session.Version(),
 		Sets:             make([]WorkoutSetLogModel, 0, len(session.Sets())),
 		Errors:           make([]SessionErrorModel, 0, len(session.Errors())),
 	}
@@ -282,7 +284,7 @@ func SessionToDomain(m *WorkoutSessionModel) *aggregate.WorkoutSession {
 	status := aggregate.ParseSessionStatus(m.Status)
 	return aggregate.ReconstituteWorkoutSession(
 		m.ID, m.UserID, m.PlanID, status, sets, errs,
-		m.ScheduledAt, m.StartedAt, m.EndedAt, m.CreatedAt, m.UpdatedAt,
+		m.ScheduledAt, m.StartedAt, m.EndedAt, m.CreatedAt, m.UpdatedAt, m.Version,
 	)
 }
 
