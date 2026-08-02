@@ -268,5 +268,3 @@ CREATE INDEX IF NOT EXISTS idx_nutrition_outbox_log_event_status ON nutrition.ou
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_event_status ON notification.outbox_log (event_id, status);
 CREATE INDEX IF NOT EXISTS idx_audio_outbox_log_event_status ON audio.outbox_log (event_id, status);
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_log_event_status ON exercise.outbox_log (event_id, status);
-
-
