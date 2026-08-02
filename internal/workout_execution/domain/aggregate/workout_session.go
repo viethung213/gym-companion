@@ -121,7 +121,7 @@ type WorkoutSession struct {
 // NewWorkoutSession initializes a new WorkoutSession immediately in IN_PROGRESS state (JIT).
 func NewWorkoutSession(id, userID, planID string) (*WorkoutSession, error) {
 	if id == "" || userID == "" || planID == "" {
-		return nil, fmt.Errorf("id, userID and planID must not be empty: %w", derror.ErrInvalidSetNumber)
+		return nil, fmt.Errorf("id, userID and planID must not be empty: %w", derror.ErrInvalidInput)
 	}
 
 	now := time.Now().UTC()
@@ -151,7 +151,7 @@ func NewWorkoutSession(id, userID, planID string) (*WorkoutSession, error) {
 // NewScheduledWorkoutSession initializes a new WorkoutSession in SCHEDULED state.
 func NewScheduledWorkoutSession(id, userID, planID string, scheduledAt time.Time) (*WorkoutSession, error) {
 	if id == "" || userID == "" || planID == "" {
-		return nil, fmt.Errorf("id, userID and planID must not be empty: %w", derror.ErrInvalidSetNumber)
+		return nil, fmt.Errorf("id, userID and planID must not be empty: %w", derror.ErrInvalidInput)
 	}
 
 	now := time.Now().UTC()
