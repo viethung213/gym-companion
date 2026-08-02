@@ -1,10 +1,18 @@
 package kafka
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/segmentio/kafka-go/sasl/scram"
 )
 
 // Registry manages and isolates database connection pools and kafka readers/writers for all modules.
@@ -54,11 +62,17 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 		return w, nil
 	}
 
+	_, transport, err := buildSecurityConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build security config for writer (%s): %w", module, err)
+	}
+
 	w = &kafka.Writer{
 		Addr:                   kafka.TCP(brokers...),
 		Balancer:               &kafka.Hash{},
 		AllowAutoTopicCreation: true,
 		RequiredAcks:           kafka.RequireAll,
+		Transport:              transport,
 	}
 
 	r.writers[module] = w
@@ -88,15 +102,24 @@ func (r *Registry) GetReader(consumerGroup, topic string, brokers []string) (*ka
 		return reader, nil
 	}
 
-	reader = kafka.NewReader(kafka.ReaderConfig{
+	dialer, _, err := buildSecurityConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build security config for reader (%s/%s): %w", consumerGroup, topic, err)
+	}
+
+	readerConfig := kafka.ReaderConfig{
 		Brokers:     brokers,
 		GroupID:     consumerGroup,
 		Topic:       topic,
 		MinBytes:    10,
 		MaxBytes:    10 * 1024 * 1024,
 		StartOffset: kafka.FirstOffset,
-	})
+	}
+	if dialer != nil {
+		readerConfig.Dialer = dialer
+	}
 
+	reader = kafka.NewReader(readerConfig)
 	r.readers[key] = reader
 	return reader, nil
 }
@@ -119,4 +142,91 @@ func (r *Registry) CloseAll() {
 		}
 		delete(r.readers, key)
 	}
+}
+
+func buildSecurityConfig() (*kafka.Dialer, *kafka.Transport, error) {
+	protocol := strings.ToUpper(getEnvOrDefault("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT"))
+	if protocol == "" || protocol == "PLAINTEXT" {
+		return nil, nil, nil
+	}
+
+	var saslMech sasl.Mechanism
+	if strings.HasPrefix(protocol, "SASL") {
+		user := getFirstEnv("KAFKA_USER", "KAFKA_SASL_USER", "KAFKA_SASL_USERNAME")
+		pass := getFirstEnv("KAFKA_PASSWORD", "KAFKA_SASL_PASSWORD")
+		mechanism := strings.ToUpper(getEnvOrDefault("KAFKA_SASL_MECHANISM", "SCRAM-SHA-256"))
+
+		var err error
+		switch mechanism {
+		case "SCRAM-SHA-256":
+			saslMech, err = scram.Mechanism(scram.SHA256, user, pass)
+			if err != nil {
+				return nil, nil, fmt.Errorf("create SCRAM-SHA-256 mechanism: %w", err)
+			}
+		case "SCRAM-SHA-512":
+			saslMech, err = scram.Mechanism(scram.SHA512, user, pass)
+			if err != nil {
+				return nil, nil, fmt.Errorf("create SCRAM-SHA-512 mechanism: %w", err)
+			}
+		case "PLAIN":
+			saslMech = plain.Mechanism{
+				Username: user,
+				Password: pass,
+			}
+		default:
+			return nil, nil, fmt.Errorf("unsupported SASL mechanism: %s", mechanism)
+		}
+	}
+
+	var tlsConfig *tls.Config
+	if strings.Contains(protocol, "SSL") || strings.Contains(protocol, "TLS") {
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+
+		caPath := getFirstEnv("KAFKA_CA_CERT_PATH", "KAFKA_CA_PATH", "KAFKA_CA_CERT")
+		if caPath != "" {
+			caCert, err := os.ReadFile(caPath)
+			if err != nil {
+				return nil, nil, fmt.Errorf("read kafka ca cert from %s: %w", caPath, err)
+			}
+			caPool := x509.NewCertPool()
+			if !caPool.AppendCertsFromPEM(caCert) {
+				return nil, nil, fmt.Errorf("failed to parse kafka ca cert from %s", caPath)
+			}
+			tlsConfig.RootCAs = caPool
+		} else if os.Getenv("KAFKA_INSECURE_SKIP_VERIFY") == "true" {
+			tlsConfig.InsecureSkipVerify = true
+		}
+	}
+
+	dialer := &kafka.Dialer{
+		Timeout:       10 * time.Second,
+		DualStack:     true,
+		TLS:           tlsConfig,
+		SASLMechanism: saslMech,
+	}
+
+	transport := &kafka.Transport{
+		TLS:  tlsConfig,
+		SASL: saslMech,
+	}
+
+	return dialer, transport, nil
+}
+
+func getEnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+func getFirstEnv(keys ...string) string {
+	for _, key := range keys {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return ""
 }
