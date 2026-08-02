@@ -48,9 +48,16 @@ func (w *SessionTimeoutWorker) Start(ctx context.Context) {
 			log.Println("[WorkoutExecution] Stopping Session Timeout worker.")
 			return
 		case <-ticker.C:
-			if err := w.processTimedOutSessions(ctx); err != nil {
-				log.Printf("[WorkoutExecution] Session Timeout worker error: %v", err)
-			}
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[WorkoutExecution] PANIC RECOVERED in Session Timeout worker tick: %v", r)
+					}
+				}()
+				if err := w.processTimedOutSessions(ctx); err != nil {
+					log.Printf("[WorkoutExecution] Session Timeout worker error: %v", err)
+				}
+			}()
 		}
 	}
 }

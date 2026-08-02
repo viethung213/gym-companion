@@ -45,9 +45,16 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 			log.Println("[WorkoutExecution] Stopping Outbox worker due to context cancellation.")
 			return
 		case <-ticker.C:
-			if err := w.processOutbox(ctx); err != nil {
-				log.Printf("[WorkoutExecution] Outbox worker processing error: %v", err)
-			}
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[WorkoutExecution] PANIC RECOVERED in Outbox worker tick: %v", r)
+					}
+				}()
+				if err := w.processOutbox(ctx); err != nil {
+					log.Printf("[WorkoutExecution] Outbox worker processing error: %v", err)
+				}
+			}()
 		}
 	}
 }

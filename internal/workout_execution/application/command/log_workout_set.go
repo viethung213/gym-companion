@@ -76,6 +76,7 @@ func (h *LogWorkoutSetHandler) Handle(ctx context.Context, cmd LogWorkoutSetComm
 		CreatedAt:   time.Now().UTC(),
 	}
 
+	var isTimeout bool
 	saveFunc := func(txCtx context.Context) error {
 		session, err := h.sessionRepo.FindByIDForUpdate(txCtx, cmd.SessionID)
 		if err != nil {
@@ -89,7 +90,11 @@ func (h *LogWorkoutSetHandler) Handle(ctx context.Context, cmd LogWorkoutSetComm
 		}
 
 		if err := session.LogSet(setLog); err != nil {
-			return err
+			if errors.Is(err, derror.ErrAnomalousSessionTimeout) {
+				isTimeout = true
+			} else {
+				return err
+			}
 		}
 
 		if err := h.sessionRepo.Save(txCtx, session); err != nil {
@@ -118,6 +123,9 @@ func (h *LogWorkoutSetHandler) Handle(ctx context.Context, cmd LogWorkoutSetComm
 		}
 
 		if err == nil {
+			if isTimeout {
+				return nil, derror.ErrAnomalousSessionTimeout
+			}
 			return &LogWorkoutSetResult{
 				SetLogID: setLogID,
 			}, nil
