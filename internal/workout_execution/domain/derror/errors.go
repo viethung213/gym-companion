@@ -16,5 +16,6 @@ var (
 	ErrPersonalRecordNotFound       = errors.New("personal record not found")
 	ErrInvalidSetNumber             = errors.New("invalid set number")
 	ErrInvalidRepsOrWeight          = errors.New("invalid reps or weight value")
+	ErrOptimisticLocking            = errors.New("concurrent update detected for workout session")
 	ErrNotFound                     = ErrMotionSpecNotFound
 )

@@ -114,6 +114,7 @@ type WorkoutSession struct {
 	endedAt      *time.Time
 	createdAt    time.Time
 	updatedAt    time.Time
+	version      int
 	domainEvents []interface{}
 }
 
@@ -134,9 +135,10 @@ func NewWorkoutSession(id, userID, planID string) (*WorkoutSession, error) {
 		startedAt: &now,
 		createdAt: now,
 		updatedAt: now,
+		version:   1,
 	}
 
-	session.addDomainEvent(event.WorkoutSessionStarted{
+	session.addDomainEvent(&event.WorkoutSessionStarted{
 		SessionID: id,
 		UserID:    userID,
 		PlanID:    planID,
@@ -164,6 +166,7 @@ func NewScheduledWorkoutSession(id, userID, planID string, scheduledAt time.Time
 		startedAt:   nil,
 		createdAt:   now,
 		updatedAt:   now,
+		version:     1,
 	}, nil
 }
 
@@ -177,7 +180,12 @@ func ReconstituteWorkoutSession(
 	startedAt *time.Time,
 	endedAt *time.Time,
 	createdAt, updatedAt time.Time,
+	version ...int,
 ) *WorkoutSession {
+	v := 1
+	if len(version) > 0 && version[0] > 0 {
+		v = version[0]
+	}
 	return &WorkoutSession{
 		id:          id,
 		userID:      userID,
@@ -190,6 +198,7 @@ func ReconstituteWorkoutSession(
 		endedAt:     endedAt,
 		createdAt:   createdAt,
 		updatedAt:   updatedAt,
+		version:     v,
 	}
 }
 
@@ -204,6 +213,14 @@ func (s *WorkoutSession) PlanID() string { return s.planID }
 
 // Status returns current status.
 func (s *WorkoutSession) Status() SessionStatus { return s.status }
+
+// Version returns current optimistic locking version of the session aggregate.
+func (s *WorkoutSession) Version() int {
+	if s.version <= 0 {
+		return 1
+	}
+	return s.version
+}
 
 // ScheduledAt returns defensive copy of planned time.
 func (s *WorkoutSession) ScheduledAt() *time.Time {
@@ -236,7 +253,7 @@ func (s *WorkoutSession) Start() error {
 	s.startedAt = &now
 	s.updatedAt = now
 
-	s.addDomainEvent(event.WorkoutSessionStarted{
+	s.addDomainEvent(&event.WorkoutSessionStarted{
 		SessionID: s.id,
 		UserID:    s.userID,
 		PlanID:    s.planID,
@@ -304,7 +321,7 @@ func (s *WorkoutSession) CheckTimeoutAndAutoAbort(now time.Time) bool {
 		ended := now
 		s.endedAt = &ended
 		s.updatedAt = now
-		s.addDomainEvent(event.WorkoutSessionAborted{
+		s.addDomainEvent(&event.WorkoutSessionAborted{
 			SessionID:   s.id,
 			UserID:      s.userID,
 			PlanID:      s.planID,

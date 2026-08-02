@@ -55,14 +55,6 @@ func (h *SyncWorkoutLogsHandler) Handle(ctx context.Context, cmd SyncWorkoutLogs
 		return apperror.ErrInvalidInput
 	}
 
-	session, err := h.sessionRepo.FindByID(ctx, cmd.SessionID)
-	if err != nil {
-		return fmt.Errorf("failed to find session: %w", err)
-	}
-	if session == nil {
-		return derror.ErrWorkoutSessionNotFound
-	}
-
 	domainErrors := make([]aggregate.SessionError, len(cmd.Errors))
 	for i, e := range cmd.Errors {
 		domainErrors[i] = aggregate.SessionError{
@@ -77,9 +69,17 @@ func (h *SyncWorkoutLogsHandler) Handle(ctx context.Context, cmd SyncWorkoutLogs
 		}
 	}
 
-	session.AddErrors(domainErrors)
-
 	saveFunc := func(txCtx context.Context) error {
+		session, err := h.sessionRepo.FindByIDForUpdate(txCtx, cmd.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to find session: %w", err)
+		}
+		if session == nil {
+			return derror.ErrWorkoutSessionNotFound
+		}
+
+		session.AddErrors(domainErrors)
+
 		if err := h.sessionRepo.Save(txCtx, session); err != nil {
 			return err
 		}
