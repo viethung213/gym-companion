@@ -6,7 +6,9 @@
 CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
     id VARCHAR(255) PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
+    plan_id VARCHAR(255) NOT NULL DEFAULT '',
     status VARCHAR(50) NOT NULL DEFAULT 'SCHEDULED',
+    total_sets INT DEFAULT 0,
     total_volume NUMERIC(10, 2) DEFAULT 0.0,
     average_form_score NUMERIC(5, 2),
     average_rpe NUMERIC(5, 2),
@@ -20,6 +22,10 @@ CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
         status IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'ABORTED', 'ANOMALOUS')
     )
 );
+
+ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS plan_id VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS total_sets INT DEFAULT 0;
+
 
 CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_id ON workout_execution.workout_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_workout_sessions_status ON workout_execution.workout_sessions(status);
