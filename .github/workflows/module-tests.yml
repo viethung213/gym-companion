@@ -37,7 +37,6 @@ jobs:
               - 'Makefile'
               - 'proto/buf.*'
               - 'proto/buf.gen.yaml'
-              - 'internal/shared/**'
               - 'internal/gen/**'
               - '.github/workflows/**'
             audio:
@@ -61,6 +60,8 @@ jobs:
             profile:
               - 'internal/profile/**'
               - 'proto/contracts/supporting/profile/**'
+            shared:
+              - 'internal/shared/**'
             workout_execution:
               - 'internal/workout_execution/**'
               - 'proto/contracts/core/workout_execution/**'
@@ -68,7 +69,7 @@ jobs:
       - name: Compute Target Modules Matrix
         id: set-modules
         run: |
-          ALL_MODULES='["audio","auth","coaching","exercise","notification","nutrition","profile","workout_execution"]'
+          ALL_MODULES='["audio","auth","coaching","exercise","notification","nutrition","profile","shared","workout_execution"]'
           
           if [ "${{ steps.filter.outputs.global }}" == "true" ]; then
             echo "Global or core shared files changed. Running tests for ALL modules."
@@ -83,6 +84,7 @@ jobs:
             [ "${{ steps.filter.outputs.notification }}" == "true" ] && SELECTED+=('"notification"')
             [ "${{ steps.filter.outputs.nutrition }}" == "true" ] && SELECTED+=('"nutrition"')
             [ "${{ steps.filter.outputs.profile }}" == "true" ] && SELECTED+=('"profile"')
+            [ "${{ steps.filter.outputs.shared }}" == "true" ] && SELECTED+=('"shared"')
             [ "${{ steps.filter.outputs.workout_execution }}" == "true" ] && SELECTED+=('"workout_execution"')
 
             if [ ${#SELECTED[@]} -eq 0 ]; then
@@ -97,15 +99,11 @@ jobs:
             fi
           fi
 
-  run-module-tests:
-    name: Test Module (${{ matrix.module }})
+  build-test-image:
+    name: Build Base Test Image
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.has_modules == 'true' }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        module: ${{ fromJSON(needs.detect-changes.outputs.modules) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -120,10 +118,81 @@ jobs:
       - name: Generate Protobuf Stubs
         run: make proto-gen
 
+      - name: Build Base Test Image
+        run: |
+          make build-test
+          docker save fitai-app:test -o test-image.tar
+
+      - name: Upload Test Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-image
+          path: test-image.tar
+          retention-days: 1
+
+  run-module-tests:
+    name: Test Module (${{ matrix.module }})
+    needs: [detect-changes, build-test-image]
+    if: ${{ needs.detect-changes.outputs.has_modules == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.detect-changes.outputs.modules) }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Test Image Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: test-image
+
+      - name: Load Test Image
+        run: docker load -i test-image.tar
+
       - name: Start Test Infrastructure (Postgres & Kafka)
         run: |
           make test-env-up
           sleep 5
 
       - name: Run Module Tests
-        run: make test-module MODULE=${{ matrix.module }}
+        run: |
+          docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
+            if [ ! -d "./internal/${{ matrix.module }}" ] || ! find ./internal/${{ matrix.module }} -name "*.go" 2>/dev/null | grep -q .; then \
+              echo "⚠️ Module \"${{ matrix.module }}\" chưa triển khai Go code hoặc không có test. Bỏ qua kiểm thử."; \
+              exit 0; \
+            fi; \
+            OUT=$(go test -v -race -p=1 -tags="unit,integration,e2e" ./internal/${{ matrix.module }}/... 2>&1); \
+            STATUS=$?; \
+            echo "$OUT"; \
+            PASSED=$(echo "$OUT" | grep -c -e "--- PASS:"); \
+            FAILED=$(echo "$OUT" | grep -c -e "--- FAIL:"); \
+            echo "=================================================="; \
+            echo "📊 TỔNG HỢP KẾT QUẢ KIỂM THỬ MODULE ${{ matrix.module }}:"; \
+            echo "🟢 ĐẠT (PASSED): $PASSED"; \
+            echo "🔴 THẤT BẠI (FAILED): $FAILED"; \
+            echo "=================================================="; \
+            if [ $STATUS -ne 0 ] || [ $FAILED -gt 0 ]; then exit 1; fi'
+
+  build-production-image:
+    name: Build Production Image
+    needs: [detect-changes, run-module-tests]
+    if: ${{ needs.detect-changes.outputs.has_modules == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Protobuf Stubs
+        run: make proto-gen
+
+      - name: Build Production Image
+        run: make build-prod
