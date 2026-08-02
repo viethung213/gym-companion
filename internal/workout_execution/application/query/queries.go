@@ -3,11 +3,25 @@ package query
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
 )
+
+// MotionSpecificationDTO represents read-only motion specification data for query responses.
+type MotionSpecificationDTO struct {
+	ExerciseID             string    `json:"exerciseId"`
+	OnnxDetectorURL        string    `json:"onnxDetectorUrl"`
+	OnnxSkeletonURL        string    `json:"onnxSkeletonUrl"`
+	LocalRulesURL          string    `json:"localRulesUrl"`
+	DialogueEngineURL      string    `json:"dialogueEngineUrl"`
+	RecommendedCameraAngle string    `json:"recommendedCameraAngle"`
+	IsReady                bool      `json:"isReady"`
+	CreatedAt              time.Time `json:"createdAt"`
+	UpdatedAt              time.Time `json:"updatedAt"`
+}
 
 // GetMotionSpecificationQueryHandler handles fetching motion spec config.
 type GetMotionSpecificationQueryHandler struct {
@@ -22,7 +36,7 @@ func NewGetMotionSpecificationQueryHandler(motionRepo repository.MotionSpecifica
 }
 
 // Handle executes query.
-func (h *GetMotionSpecificationQueryHandler) Handle(ctx context.Context, exerciseID, _ string) (*aggregate.MotionSpecification, error) {
+func (h *GetMotionSpecificationQueryHandler) Handle(ctx context.Context, exerciseID, _ string) (*MotionSpecificationDTO, error) {
 	if exerciseID == "" {
 		return nil, derror.ErrMotionSpecNotFound
 	}
@@ -36,7 +50,17 @@ func (h *GetMotionSpecificationQueryHandler) Handle(ctx context.Context, exercis
 		return nil, derror.ErrMotionSpecNotFound
 	}
 
-	return spec, nil
+	return &MotionSpecificationDTO{
+		ExerciseID:             spec.ExerciseID(),
+		OnnxDetectorURL:        spec.OnnxDetectorURL(),
+		OnnxSkeletonURL:        spec.OnnxSkeletonURL(),
+		LocalRulesURL:          spec.LocalRulesURL(),
+		DialogueEngineURL:      spec.DialogueEngineURL(),
+		RecommendedCameraAngle: spec.RecommendedCameraAngle(),
+		IsReady:                spec.IsReady(),
+		CreatedAt:              spec.CreatedAt(),
+		UpdatedAt:              spec.UpdatedAt(),
+	}, nil
 }
 
 // GetPersonalRecordsQueryHandler handles fetching PR records.

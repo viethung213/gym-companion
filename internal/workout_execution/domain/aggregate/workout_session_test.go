@@ -304,3 +304,235 @@ func TestWorkoutSession_NewScheduledAndAbort(t *testing.T) {
 		}
 	})
 }
+
+func TestWorkoutSession_NewScheduledWorkoutSession_Validation(t *testing.T) {
+	tests := []struct {
+		name    string
+		id      string
+		userID  string
+		planID  string
+		wantErr bool
+	}{
+		{
+			name:    "empty id returns error",
+			id:      "",
+			userID:  "u1",
+			planID:  "p1",
+			wantErr: true,
+		},
+		{
+			name:    "empty userID returns error",
+			id:      "s1",
+			userID:  "",
+			planID:  "p1",
+			wantErr: true,
+		},
+		{
+			name:    "empty planID returns error",
+			id:      "s1",
+			userID:  "u1",
+			planID:  "",
+			wantErr: true,
+		},
+		{
+			name:    "valid params creates scheduled session",
+			id:      "s1",
+			userID:  "u1",
+			planID:  "p1",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			schedTime := time.Now().UTC()
+			sess, err := aggregate.NewScheduledWorkoutSession(tt.id, tt.userID, tt.planID, schedTime)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("NewScheduledWorkoutSession() err = %v, wantErr = %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if sess.Status() != aggregate.StatusScheduled {
+					t.Errorf("got status = %v, want SCHEDULED", sess.Status())
+				}
+				if sess.StartedAt() != nil {
+					t.Errorf("got startedAt = %v, want nil for scheduled session", sess.StartedAt())
+				}
+				if sess.ScheduledAt() == nil || !sess.ScheduledAt().Equal(schedTime) {
+					t.Errorf("got scheduledAt = %v, want %v", sess.ScheduledAt(), schedTime)
+				}
+			}
+		})
+	}
+}
+
+func TestWorkoutSession_AbortAndAbortAnomalous_Detailed(t *testing.T) {
+	t.Run("Abort emits non-anomalous event", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-ab-1", "u1", "p1")
+		sess.PopEvents() // clear start event
+
+		err := sess.Abort("user stopped early")
+		if err != nil {
+			t.Fatalf("Abort() err = %v, want nil", err)
+		}
+		if sess.Status() != aggregate.StatusAborted {
+			t.Errorf("got status = %v, want ABORTED", sess.Status())
+		}
+		if sess.EndedAt() == nil {
+			t.Error("want endedAt non-nil after Abort")
+		}
+
+		events := sess.PopEvents()
+		if len(events) != 1 {
+			t.Fatalf("got %d events, want 1", len(events))
+		}
+		ev, ok := events[0].(*event.WorkoutSessionAborted)
+		if !ok {
+			t.Fatalf("expected *event.WorkoutSessionAborted, got %T", events[0])
+		}
+		if ev.IsAnomalous {
+			t.Error("want IsAnomalous = false for Abort()")
+		}
+		if ev.Reason != "user stopped early" {
+			t.Errorf("got Reason = %q, want 'user stopped early'", ev.Reason)
+		}
+	})
+
+	t.Run("AbortAnomalous emits anomalous event", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-ab-2", "u1", "p1")
+		sess.PopEvents() // clear start event
+
+		err := sess.AbortAnomalous("critical fall detected")
+		if err != nil {
+			t.Fatalf("AbortAnomalous() err = %v, want nil", err)
+		}
+		if sess.Status() != aggregate.StatusAnomalous {
+			t.Errorf("got status = %v, want ANOMALOUS", sess.Status())
+		}
+		if sess.EndedAt() == nil {
+			t.Error("want endedAt non-nil after AbortAnomalous")
+		}
+
+		events := sess.PopEvents()
+		if len(events) != 1 {
+			t.Fatalf("got %d events, want 1", len(events))
+		}
+		ev, ok := events[0].(*event.WorkoutSessionAborted)
+		if !ok {
+			t.Fatalf("expected *event.WorkoutSessionAborted, got %T", events[0])
+		}
+		if !ev.IsAnomalous {
+			t.Error("want IsAnomalous = true for AbortAnomalous()")
+		}
+		if ev.Reason != "critical fall detected" {
+			t.Errorf("got Reason = %q, want 'critical fall detected'", ev.Reason)
+		}
+	})
+
+	t.Run("Abort and AbortAnomalous on terminated session returns error", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-ab-3", "u1", "p1")
+		_ = sess.Complete(false, false)
+
+		if err := sess.Abort("reason"); err == nil {
+			t.Error("want error calling Abort on completed session")
+		}
+		if err := sess.AbortAnomalous("reason"); err == nil {
+			t.Error("want error calling AbortAnomalous on completed session")
+		}
+	})
+}
+
+func TestWorkoutSession_RecordBodyMetricUpdate_EdgeCases(t *testing.T) {
+	t.Run("weight > 0 emits BodyMetricUpdated event", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-bm-edge", "u1", "p1")
+		sess.PopEvents()
+
+		sess.RecordBodyMetricUpdate(82.5)
+		events := sess.PopEvents()
+		if len(events) != 1 {
+			t.Fatalf("got %d events, want 1", len(events))
+		}
+		ev, ok := events[0].(*event.BodyMetricUpdated)
+		if !ok {
+			t.Fatalf("expected *event.BodyMetricUpdated, got %T", events[0])
+		}
+		if ev.UserID != "u1" || ev.WeightKg != 82.5 {
+			t.Errorf("got UserID=%s WeightKg=%v, want u1 82.5", ev.UserID, ev.WeightKg)
+		}
+	})
+
+	t.Run("weight <= 0 emits no event", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-bm-zero", "u1", "p1")
+		sess.PopEvents()
+
+		sess.RecordBodyMetricUpdate(0)
+		sess.RecordBodyMetricUpdate(-10.0)
+
+		events := sess.PopEvents()
+		if len(events) != 0 {
+			t.Errorf("got %d events, want 0 for weight <= 0", len(events))
+		}
+	})
+}
+
+func TestWorkoutSession_LogSet_DuplicateSetNumberOverwritesExisting(t *testing.T) {
+	sess, _ := aggregate.NewWorkoutSession("s-dup-1", "u1", "p1")
+
+	fs1 := float32(80.0)
+	set1 := aggregate.WorkoutSetLog{
+		ID:         "set-uuid-100",
+		SetNumber:  1,
+		ExerciseID: "ex-bench",
+		TargetReps: 10,
+		ActualReps: 10,
+		Weight:     50.0,
+		FormScore:  &fs1,
+		RPE:        7.0,
+	}
+
+	err := sess.LogSet(set1)
+	if err != nil {
+		t.Fatalf("first LogSet err = %v, want nil", err)
+	}
+
+	if len(sess.Sets()) != 1 {
+		t.Fatalf("got sets count = %d, want 1", len(sess.Sets()))
+	}
+
+	// Ghi đè set trùng set_number và exercise_id với input ID rỗng ("")
+	fs2 := float32(95.0)
+	set1Override := aggregate.WorkoutSetLog{
+		ID:         "", // empty ID should retain existing set ID "set-uuid-100"
+		SetNumber:  1,
+		ExerciseID: "ex-bench",
+		TargetReps: 10,
+		ActualReps: 12,
+		Weight:     55.0,
+		FormScore:  &fs2,
+		RPE:        8.5,
+	}
+
+	err = sess.LogSet(set1Override)
+	if err != nil {
+		t.Fatalf("second LogSet err = %v, want nil", err)
+	}
+
+	sets := sess.Sets()
+	if len(sets) != 1 {
+		t.Fatalf("got sets count after duplicate set_number = %d, want 1 (overwritten)", len(sets))
+	}
+
+	updatedSet := sets[0]
+	if updatedSet.ID != "set-uuid-100" {
+		t.Errorf("got set ID = %q, want 'set-uuid-100' (retained existing ID)", updatedSet.ID)
+	}
+	if updatedSet.Weight != 55.0 {
+		t.Errorf("got Weight = %v, want 55.0", updatedSet.Weight)
+	}
+	if updatedSet.ActualReps != 12 {
+		t.Errorf("got ActualReps = %d, want 12", updatedSet.ActualReps)
+	}
+	if updatedSet.FormScore == nil || *updatedSet.FormScore != 95.0 {
+		t.Errorf("got FormScore = %v, want 95.0", updatedSet.FormScore)
+	}
+}

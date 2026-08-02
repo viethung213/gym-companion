@@ -278,12 +278,12 @@ func (h *GRPCHandler) GetMotionSpecification(ctx context.Context, req *workoutex
 	}
 
 	return &workoutexecutionv1message.GetMotionSpecificationResponse{
-		ExerciseId:             spec.ExerciseID(),
-		OnnxDetectorUrl:        spec.OnnxDetectorURL(),
-		OnnxSkeletonUrl:        spec.OnnxSkeletonURL(),
-		LocalRulesUrl:          spec.LocalRulesURL(),
-		DialogueEngineUrl:      spec.DialogueEngineURL(),
-		RecommendedCameraAngle: spec.RecommendedCameraAngle(),
+		ExerciseId:             spec.ExerciseID,
+		OnnxDetectorUrl:        spec.OnnxDetectorURL,
+		OnnxSkeletonUrl:        spec.OnnxSkeletonURL,
+		LocalRulesUrl:          spec.LocalRulesURL,
+		DialogueEngineUrl:      spec.DialogueEngineURL,
+		RecommendedCameraAngle: spec.RecommendedCameraAngle,
 	}, nil
 }
 
@@ -629,8 +629,7 @@ func toGRPCError(msg string, err error) error {
 	// 404 Not Found
 	case errors.Is(err, derror.ErrWorkoutSessionNotFound),
 		errors.Is(err, derror.ErrMotionSpecNotFound),
-		errors.Is(err, derror.ErrPersonalRecordNotFound),
-		errors.Is(err, derror.ErrNotFound):
+		errors.Is(err, derror.ErrPersonalRecordNotFound):
 		return status.Errorf(codes.NotFound, "%s: %v", msg, err)
 
 	// 400 Bad Request / Invalid Argument

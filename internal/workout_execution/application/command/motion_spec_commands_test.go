@@ -34,14 +34,14 @@ func (m *mockMotionSpecRepo) Save(ctx context.Context, spec *aggregate.MotionSpe
 func (m *mockMotionSpecRepo) FindByExerciseID(ctx context.Context, exerciseID string) (*aggregate.MotionSpecification, error) {
 	spec, ok := m.specs[exerciseID]
 	if !ok {
-		return nil, derror.ErrNotFound
+		return nil, derror.ErrMotionSpecNotFound
 	}
 	return spec, nil
 }
 
 func (m *mockMotionSpecRepo) Delete(ctx context.Context, exerciseID string) error {
 	if _, ok := m.specs[exerciseID]; !ok {
-		return derror.ErrNotFound
+		return derror.ErrMotionSpecNotFound
 	}
 	delete(m.specs, exerciseID)
 	return nil
@@ -69,7 +69,7 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 
 		_, err := handler.Handle(context.Background(), cmd)
 		if err == nil {
-			t.Fatal("got nil error, want ErrNotFound")
+			t.Fatal("got nil error, want ErrMotionSpecNotFound")
 		}
 	})
 

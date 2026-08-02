@@ -236,10 +236,8 @@ func TestGetMotionSpecificationQueryHandler(t *testing.T) {
 
 		}
 
-		if res.ExerciseID() != "ex-1" {
-
-			t.Errorf("got %v, want ex-1", res.ExerciseID())
-
+		if res.ExerciseID != "ex-1" {
+			t.Errorf("got %v, want ex-1", res.ExerciseID)
 		}
 
 	})

@@ -64,3 +64,11 @@ func TestIsCritical(t *testing.T) {
 		})
 	}
 }
+
+func TestIsCritical_Nil(t *testing.T) {
+	t.Parallel()
+
+	if got := policy.IsCritical(nil); got != false {
+		t.Errorf("IsCritical(nil) = %v, want false", got)
+	}
+}
