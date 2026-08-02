@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,7 +78,8 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 			formVerified := set.FormScore != nil && *set.FormScore >= 70.0
 			existingPR, findErr := h.prRepo.FindByUserIDAndExerciseIDForUpdate(txCtx, userID, exerciseID)
 			if findErr != nil {
-				return fmt.Errorf("find personal record for update: %w", findErr)
+				log.Printf("[WARN] Failed to find PR for exercise %s (user %s): %v", exerciseID, userID, findErr)
+				return nil
 			}
 
 			var pr *aggregate.PersonalRecord
