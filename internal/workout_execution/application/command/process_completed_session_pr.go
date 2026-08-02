@@ -99,7 +99,7 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 			}
 		}
 
-		txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		saveFunc := func(txCtx context.Context) error {
 			if saveErr := h.prRepo.Save(txCtx, pr); saveErr != nil {
 				return saveErr
 			}
@@ -110,7 +110,14 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 				}
 			}
 			return nil
-		})
+		}
+
+		var txErr error
+		if h.txManager != nil {
+			txErr = h.txManager.WithTransaction(ctx, saveFunc)
+		} else {
+			txErr = saveFunc(ctx)
+		}
 		if txErr != nil {
 			return fmt.Errorf("failed to save PR for exercise %s: %w", exerciseID, txErr)
 		}

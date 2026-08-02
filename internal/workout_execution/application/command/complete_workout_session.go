@@ -14,6 +14,7 @@ import (
 // CompleteWorkoutSessionCommand parameters.
 type CompleteWorkoutSessionCommand struct {
 	SessionID       string
+	UserID          string
 	ConfirmOverload bool
 	WeightUpdateKg  *float32 // optional: nil nếu người dùng không cập nhật cân nặng mới
 }
@@ -71,6 +72,9 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 		}
 		if session == nil {
 			return derror.ErrWorkoutSessionNotFound
+		}
+		if cmd.UserID != "" && session.UserID() != cmd.UserID {
+			return derror.ErrForbidden
 		}
 
 		// 1. Check Training Load Overload

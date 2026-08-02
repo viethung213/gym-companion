@@ -75,8 +75,13 @@ func (r *PostgresWorkoutSessionRepository) Save(ctx context.Context, session *ag
 	}
 
 	for _, set := range model.Sets {
-		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&set).Error; err != nil {
+		if err := db.Omit("Reps").Clauses(clause.OnConflict{UpdateAll: true}).Create(&set).Error; err != nil {
 			return fmt.Errorf("failed to save set log: %w", err)
+		}
+		if len(set.Reps) > 0 {
+			if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&set.Reps).Error; err != nil {
+				return fmt.Errorf("failed to save rep logs: %w", err)
+			}
 		}
 	}
 

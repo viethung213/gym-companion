@@ -91,7 +91,7 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 			continue
 		}
 
-		_ = w.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		saveFunc := func(txCtx context.Context) error {
 			if err := w.sessionRepo.Save(txCtx, session); err != nil {
 				return err
 			}
@@ -100,7 +100,17 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 				return w.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events)
 			}
 			return nil
-		})
+		}
+
+		var txErr error
+		if w.txManager != nil {
+			txErr = w.txManager.WithTransaction(ctx, saveFunc)
+		} else {
+			txErr = saveFunc(ctx)
+		}
+		if txErr != nil {
+			log.Printf("[WorkoutExecution] Failed to save critically inactive session %s: %v", session.ID(), txErr)
+		}
 	}
 
 	return nil

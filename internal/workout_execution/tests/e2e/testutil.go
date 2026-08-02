@@ -11,10 +11,12 @@ import (
 	"github.com/google/uuid"
 	workoutexecutionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service"
 	"github.com/viethung213/gym-companion/internal/shared/database"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
 	infraPostgres "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -231,7 +233,24 @@ func SetupE2ESuite(t *testing.T) *E2ETestSuite {
 		t.Fatalf("Failed to listen on random port: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	testAuthInterceptor := func(
+		ctx context.Context,
+		req any,
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get("x-user-id"); len(vals) > 0 && vals[0] != "" {
+				ctx = context.WithValue(ctx, middleware.UserIDKey, vals[0])
+			}
+			if vals := md.Get("x-user-role"); len(vals) > 0 && vals[0] != "" {
+				ctx = context.WithValue(ctx, middleware.UserRoleKey, vals[0])
+			}
+		}
+		return handler(ctx, req)
+	}
+
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cleanup, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{

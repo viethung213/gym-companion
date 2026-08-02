@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
@@ -18,6 +17,7 @@ import (
 // LogWorkoutSetCommand contains parameters to log a completed set.
 type LogWorkoutSetCommand struct {
 	SessionID   string
+	UserID      string
 	SetNumber   int
 	ExerciseID  string
 	TargetReps  int
@@ -60,7 +60,7 @@ func (h *LogWorkoutSetHandler) Handle(ctx context.Context, cmd LogWorkoutSetComm
 		return nil, apperror.ErrInvalidInput
 	}
 
-	setLogID := uuid.NewString()
+	setLogID := fmt.Sprintf("set-%s-%s-%d", cmd.SessionID, cmd.ExerciseID, cmd.SetNumber)
 	setLog := aggregate.WorkoutSetLog{
 		ID:          setLogID,
 		SessionID:   cmd.SessionID,
@@ -83,6 +83,9 @@ func (h *LogWorkoutSetHandler) Handle(ctx context.Context, cmd LogWorkoutSetComm
 		}
 		if session == nil {
 			return derror.ErrWorkoutSessionNotFound
+		}
+		if cmd.UserID != "" && session.UserID() != cmd.UserID {
+			return derror.ErrForbidden
 		}
 
 		if err := session.LogSet(setLog); err != nil {

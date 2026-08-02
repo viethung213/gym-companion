@@ -26,6 +26,7 @@ type ErrorLogDTO struct {
 // SyncWorkoutLogsCommand parameters.
 type SyncWorkoutLogsCommand struct {
 	SessionID string
+	UserID    string
 	Errors    []ErrorLogDTO
 }
 
@@ -76,6 +77,9 @@ func (h *SyncWorkoutLogsHandler) Handle(ctx context.Context, cmd SyncWorkoutLogs
 		}
 		if session == nil {
 			return derror.ErrWorkoutSessionNotFound
+		}
+		if cmd.UserID != "" && session.UserID() != cmd.UserID {
+			return derror.ErrForbidden
 		}
 
 		session.AddErrors(domainErrors)
