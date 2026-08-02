@@ -107,6 +107,8 @@ CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_log_event_status ON workout_execution.outbox_log (event_id, status);
+
 
 
 

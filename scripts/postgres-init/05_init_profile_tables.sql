@@ -51,3 +51,4 @@ CREATE TABLE IF NOT EXISTS profile.injuries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_profile_injuries_user_id ON profile.injuries(user_id);
+CREATE INDEX IF NOT EXISTS idx_profile_outbox_log_event_status ON profile.outbox_log (event_id, status);
