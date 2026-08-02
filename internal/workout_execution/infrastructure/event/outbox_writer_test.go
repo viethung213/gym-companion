@@ -139,7 +139,10 @@ func TestOutboxWriter(t *testing.T) {
 		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
 			t.Fatalf("failed to unmarshal payload: %v", err)
 		}
-		dataMap := envelope["data"].(map[string]interface{})
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data to be map[string]interface{}, got %T", envelope["data"])
+		}
 		if got, want := dataMap["planId"], "plan-2"; got != want {
 			t.Errorf("got data.planId = %v, want %v", got, want)
 		}
@@ -164,7 +167,10 @@ func TestOutboxWriter(t *testing.T) {
 		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
 			t.Fatalf("failed to unmarshal payload: %v", err)
 		}
-		dataMap := envelope["data"].(map[string]interface{})
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data to be map[string]interface{}, got %T", envelope["data"])
+		}
 		if got, want := dataMap["planId"], "plan-3"; got != want {
 			t.Errorf("got data.planId = %v, want %v", got, want)
 		}
