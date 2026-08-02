@@ -11,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  packages: read
+  packages: write
 
 jobs:
   detect-changes:
@@ -176,7 +176,7 @@ jobs:
             if [ $STATUS -ne 0 ] || [ $FAILED -gt 0 ]; then exit 1; fi'
 
   build-production-image:
-    name: Build Production Image
+    name: Build & Push Production Image
     needs: [detect-changes, run-module-tests]
     if: ${{ needs.detect-changes.outputs.has_modules == 'true' }}
     runs-on: ubuntu-latest
@@ -194,5 +194,11 @@ jobs:
       - name: Generate Protobuf Stubs
         run: make proto-gen
 
-      - name: Build Production Image
-        run: make build-prod
+      - name: Build & Push Production Image to GHCR
+        run: |
+          IMAGE_ID=ghcr.io/${{ github.repository }}
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          
+          docker build --target prod -t $IMAGE_ID:latest -t $IMAGE_ID:${{ github.sha }} .
+          docker push $IMAGE_ID:latest
+          docker push $IMAGE_ID:${{ github.sha }}
