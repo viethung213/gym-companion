@@ -32,4 +32,5 @@ CREATE INDEX IF NOT EXISTS idx_users_google_id ON auth.users (google_id) WHERE g
 CREATE INDEX IF NOT EXISTS idx_users_facebook_id ON auth.users (facebook_id) WHERE facebook_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON auth.sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_jwk_keys_status ON auth.jwk_keys (status);
+CREATE INDEX IF NOT EXISTS idx_auth_outbox_log_event_status ON auth.outbox_log (event_id, status);
 

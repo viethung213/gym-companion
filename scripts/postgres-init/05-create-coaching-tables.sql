@@ -88,3 +88,5 @@ CREATE INDEX IF NOT EXISTS ix_session_plans_pending
 -- 5. Consumer idempotency (D9): unique event_id on outbox_log
 CREATE UNIQUE INDEX IF NOT EXISTS ux_coaching_outbox_log_event_id
     ON coaching.outbox_log(event_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_outbox_log_event_status
+    ON coaching.outbox_log(event_id, status);

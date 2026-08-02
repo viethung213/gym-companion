@@ -257,4 +257,16 @@ CREATE INDEX IF NOT EXISTS idx_coaching_outbox_claim ON coaching.outbox (publish
 CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_claim ON workout_execution.outbox (published, status, locked_until, created_at);
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_claim ON exercise.outbox (published, status, locked_until, created_at);
 
+-- ------------------------------------------
+-- 10. OUTBOX LOG IDEMPOTENCY INDEXES
+-- ------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_auth_outbox_log_event_status ON auth.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_profile_outbox_log_event_status ON profile.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_coaching_outbox_log_event_status ON coaching.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_log_event_status ON workout_execution.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_nutrition_outbox_log_event_status ON nutrition.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_event_status ON notification.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_audio_outbox_log_event_status ON audio.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_exercise_outbox_log_event_status ON exercise.outbox_log (event_id, status);
+
 
