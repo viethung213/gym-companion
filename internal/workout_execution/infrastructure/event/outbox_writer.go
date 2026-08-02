@@ -217,112 +217,65 @@ func mapToProtoEvent(ev interface{}) proto.Message {
 		return mapWorkoutSessionCompletedToProto(e)
 
 	case domainEvent.WorkoutSessionAborted:
-
 		return &workoutexecutionv1event.WorkoutSessionAborted{
-
 			SessionId: e.SessionID,
-
-			UserId: e.UserID,
-
+			UserId:    e.UserID,
+			PlanId:    e.PlanID,
 			AbortedAt: timestamppb.New(e.AbortedAt),
-
-			Reason: e.Reason,
+			Reason:    e.Reason,
 		}
-
 	case *domainEvent.WorkoutSessionAborted:
-
 		if e == nil {
-
 			return nil
-
 		}
-
 		return &workoutexecutionv1event.WorkoutSessionAborted{
-
 			SessionId: e.SessionID,
-
-			UserId: e.UserID,
-
+			UserId:    e.UserID,
+			PlanId:    e.PlanID,
 			AbortedAt: timestamppb.New(e.AbortedAt),
-
-			Reason: e.Reason,
+			Reason:    e.Reason,
 		}
-
 	case domainEvent.NewPersonalRecordAchieved:
-
 		return &workoutexecutionv1event.NewPersonalRecordAchieved{
-
-			UserId: e.UserID,
-
+			UserId:     e.UserID,
 			ExerciseId: e.ExerciseID,
-
-			OneRepMax: e.OneRepMax,
-
-			Weight: e.Weight,
-
-			Reps: int32(e.Reps),
-
+			OneRepMax:  e.OneRepMax,
+			Weight:     e.Weight,
+			Reps:       int32(e.Reps),
 			AchievedAt: timestamppb.New(e.AchievedAt),
 		}
-
 	case *domainEvent.NewPersonalRecordAchieved:
-
 		if e == nil {
-
 			return nil
-
 		}
-
 		return &workoutexecutionv1event.NewPersonalRecordAchieved{
-
-			UserId: e.UserID,
-
+			UserId:     e.UserID,
 			ExerciseId: e.ExerciseID,
-
-			OneRepMax: e.OneRepMax,
-
-			Weight: e.Weight,
-
-			Reps: int32(e.Reps),
-
+			OneRepMax:  e.OneRepMax,
+			Weight:     e.Weight,
+			Reps:       int32(e.Reps),
 			AchievedAt: timestamppb.New(e.AchievedAt),
 		}
-
 	default:
-
 		return nil
-
 	}
-
 }
 
 func mapWorkoutSessionCompletedToProto(e *domainEvent.WorkoutSessionCompleted) *workoutexecutionv1event.WorkoutSessionCompleted {
-
 	var avgScore *float32
-
 	if e.Summary.AverageFormScore != nil {
-
 		score := float32(*e.Summary.AverageFormScore)
-
 		avgScore = &score
-
 	}
 
 	return &workoutexecutionv1event.WorkoutSessionCompleted{
-
-		SessionId: e.SessionID,
-
-		UserId: e.UserID,
-
-		CompletedAt: timestamppb.New(e.CompletedAt),
-
-		TotalSets: int32(e.Summary.TotalSets),
-
-		TotalVolume: float32(e.Summary.TotalVolume),
-
+		SessionId:        e.SessionID,
+		UserId:           e.UserID,
+		PlanId:           e.PlanID,
+		CompletedAt:      timestamppb.New(e.CompletedAt),
+		TotalSets:        int32(e.Summary.TotalSets),
+		TotalVolume:      float32(e.Summary.TotalVolume),
 		AverageFormScore: avgScore,
-
-		AverageRpe: float32(e.Summary.AverageRPE),
+		AverageRpe:       float32(e.Summary.AverageRPE),
 	}
-
 }
