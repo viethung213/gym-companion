@@ -165,13 +165,15 @@ endif
 # 4. Data Initialization & Seeding (Khởi tạo dữ liệu)
 # =====================================================================
 
-# Tìm và chạy tất cả các file SQL khởi tạo dữ liệu (*init*.sql) ở các module trong internal/ vào Postgres
+# Tìm và chạy tất cả các file SQL khởi tạo dữ liệu ở internal/shared/database/migrations/ vào Postgres
 db-init-postgres:
-	@echo "Running PostgreSQL init scripts found in internal/..."
-	@for file in $$(find internal -name "*init*.sql" 2>/dev/null); do \
+	@echo "Running PostgreSQL init scripts found in internal/shared/database/migrations/..."
+	@for file in $$(find internal/shared/database/migrations -name "*.sql" 2>/dev/null | sort); do \
 		echo "Executing $$file in Postgres..."; \
 		docker exec -i fitai-postgres-test psql -U postgres -d fitai < $$file; \
 	done
+
+
 
 # Tìm và chạy tất cả các file Go khởi tạo dữ liệu (*init*.go) ở các module trong internal/
 db-init-go:

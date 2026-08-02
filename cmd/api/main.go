@@ -59,6 +59,14 @@ func run() error {
 	}
 	log.Println("Initialized isolated Auth Database Pool successfully.")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Run embedded SQL migrations (idempotent CREATE TABLE IF NOT EXISTS / ON CONFLICT)
+	if migErr := database.RunAutoMigrations(ctx, db); migErr != nil {
+		return fmt.Errorf("run database auto migrations: %w", migErr)
+	}
+
 	exerciseDB, err := dbRegistry.GetPool("exercise")
 	if err != nil {
 		return fmt.Errorf("initialize exercise database pool: %w", err)
@@ -90,9 +98,6 @@ func run() error {
 		),
 	)
 	log.Printf("Starting gRPC server on port %s...\n", grpcPort)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Initialize Auth Module
 	shutdown, err := auth.Initialize(ctx, auth.ModuleDeps{

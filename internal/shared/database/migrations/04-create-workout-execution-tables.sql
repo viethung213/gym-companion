@@ -2,15 +2,11 @@
 -- SCHEMA: workout_execution - Tables definitions
 -- ==========================================
 
-CREATE SCHEMA IF NOT EXISTS workout_execution;
-
 -- 1. Table: workout_sessions
 CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
     id VARCHAR(255) PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
-    plan_id VARCHAR(255) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'SCHEDULED',
-    total_sets INT DEFAULT 0,
     total_volume NUMERIC(10, 2) DEFAULT 0.0,
     average_form_score NUMERIC(5, 2),
     average_rpe NUMERIC(5, 2),
@@ -108,8 +104,3 @@ CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 );
 
 CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_log_event_status ON workout_execution.outbox_log (event_id, status);
-
-
-
-
-

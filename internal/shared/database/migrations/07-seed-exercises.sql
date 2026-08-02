@@ -774,3 +774,21 @@ INSERT INTO exercise.exercise_tags (exercise_id, tag_id) VALUES ('ex_0026', 'tag
 INSERT INTO exercise.exercise_tags (exercise_id, tag_id) VALUES ('ex_0026', 'tag_synergist_glutes') ON CONFLICT (exercise_id, tag_id) DO NOTHING;
 INSERT INTO exercise.motion_specifications (exercise_id, min_rom_percent, calibration_distance_min, calibration_distance_max, calibration_angle) VALUES ('ex_0026', 70, 1.5, 2.0, 0.0) ON CONFLICT (exercise_id) DO NOTHING;
 
+-- 6. Seed workout_execution.motion_specifications (AI models and specs for key exercises)
+INSERT INTO workout_execution.motion_specifications (
+    exercise_id,
+    onnx_detector_url,
+    onnx_skeleton_url,
+    local_rules_url,
+    dialogue_engine_url,
+    recommended_camera_angle,
+    is_ready
+) VALUES
+('ex_0001', 'https://storage.supabase.co/storage/v1/object/public/detectors/yolox_tiny.onnx', 'https://storage.supabase.co/storage/v1/object/public/skeletons/rtmpose_s.onnx', 'https://storage.supabase.co/storage/v1/object/public/rules/ex_0001_rules.json', 'https://storage.supabase.co/storage/v1/object/public/dialogues/ex_0001_dialogue.json', 'SIDE', TRUE),
+('ex_0002', 'https://storage.supabase.co/storage/v1/object/public/detectors/yolox_tiny.onnx', 'https://storage.supabase.co/storage/v1/object/public/skeletons/rtmpose_s.onnx', 'https://storage.supabase.co/storage/v1/object/public/rules/ex_0002_rules.json', 'https://storage.supabase.co/storage/v1/object/public/dialogues/ex_0002_dialogue.json', 'FRONT', TRUE),
+('ex_0003', 'https://storage.supabase.co/storage/v1/object/public/detectors/yolox_tiny.onnx', 'https://storage.supabase.co/storage/v1/object/public/skeletons/rtmpose_s.onnx', 'https://storage.supabase.co/storage/v1/object/public/rules/ex_0003_rules.json', 'https://storage.supabase.co/storage/v1/object/public/dialogues/ex_0003_dialogue.json', 'SIDE', TRUE),
+('ex_0025', 'https://storage.supabase.co/storage/v1/object/public/detectors/yolox_tiny.onnx', 'https://storage.supabase.co/storage/v1/object/public/skeletons/rtmpose_s.onnx', 'https://storage.supabase.co/storage/v1/object/public/rules/ex_0025_rules.json', 'https://storage.supabase.co/storage/v1/object/public/dialogues/ex_0025_dialogue.json', 'SIDE', TRUE),
+('ex_0026', 'https://storage.supabase.co/storage/v1/object/public/detectors/yolox_tiny.onnx', 'https://storage.supabase.co/storage/v1/object/public/skeletons/rtmpose_s.onnx', 'https://storage.supabase.co/storage/v1/object/public/rules/ex_0026_rules.json', 'https://storage.supabase.co/storage/v1/object/public/dialogues/ex_0026_dialogue.json', 'SIDE', TRUE)
+ON CONFLICT (exercise_id) DO NOTHING;
+
+
