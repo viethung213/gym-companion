@@ -53,7 +53,7 @@ func (h *UpdateMotionSpecificationHandler) Handle(
 
 	spec, err := h.motionRepo.FindByExerciseID(ctx, cmd.ExerciseID)
 	if err != nil {
-		if errors.Is(err, derror.ErrNotFound) || errors.Is(err, derror.ErrMotionSpecNotFound) {
+		if errors.Is(err, derror.ErrMotionSpecNotFound) {
 			return nil, fmt.Errorf("update motion spec: %w: exercise_id '%s'", derror.ErrMotionSpecNotFound, cmd.ExerciseID)
 		}
 		return nil, fmt.Errorf("update motion spec find: %w", err)

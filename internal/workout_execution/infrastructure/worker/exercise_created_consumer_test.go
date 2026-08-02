@@ -31,7 +31,7 @@ func (m *mockMotionRepo) Save(ctx context.Context, spec *aggregate.MotionSpecifi
 func (m *mockMotionRepo) FindByExerciseID(ctx context.Context, exerciseID string) (*aggregate.MotionSpecification, error) {
 	spec, ok := m.specs[exerciseID]
 	if !ok {
-		return nil, derror.ErrNotFound
+		return nil, derror.ErrMotionSpecNotFound
 	}
 	return spec, nil
 }

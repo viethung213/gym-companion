@@ -340,8 +340,8 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	}
 
 	missingSpec, err := repo.FindByExerciseID(ctx, "non-existent-ex")
-	if !errors.Is(err, derror.ErrNotFound) || missingSpec != nil {
-		t.Errorf("expected derror.ErrNotFound for missing MotionSpec, got %v, %v", missingSpec, err)
+	if !errors.Is(err, derror.ErrMotionSpecNotFound) || missingSpec != nil {
+		t.Errorf("expected derror.ErrMotionSpecNotFound for missing MotionSpec, got %v, %v", missingSpec, err)
 	}
 }
 

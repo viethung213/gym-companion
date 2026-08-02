@@ -365,7 +365,7 @@ func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Con
 	err := db.First(&model, "exercise_id = ?", exerciseID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, derror.ErrNotFound
+			return nil, derror.ErrMotionSpecNotFound
 		}
 		return nil, fmt.Errorf("failed to find motion specification: %w", err)
 	}
@@ -384,7 +384,7 @@ func (r *PostgresMotionSpecificationRepository) Delete(ctx context.Context, exer
 		return fmt.Errorf("failed to delete motion specification: %w", res.Error)
 	}
 	if res.RowsAffected == 0 {
-		return derror.ErrNotFound
+		return derror.ErrMotionSpecNotFound
 	}
 	return nil
 }

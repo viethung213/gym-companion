@@ -108,3 +108,130 @@ func TestMotionSpecificationUpdateSpecAndEvents(t *testing.T) {
 		t.Error("want 0 events after PopEvents")
 	}
 }
+
+func TestMotionSpecification_UpdateSpec_PartialUpdates(t *testing.T) {
+	spec := aggregate.RestoreMotionSpecification(
+		"ex-4",
+		"http://det1.onnx",
+		"http://skel1.onnx",
+		"http://rules1.json",
+		"http://dialogue1.json",
+		"side",
+		true,
+		time.Now().UTC().Add(-time.Hour),
+		time.Now().UTC().Add(-time.Hour),
+	)
+
+	prevUpdatedAt := spec.UpdatedAt()
+	time.Sleep(2 * time.Millisecond)
+
+	// Partial update: empty strings should not overwrite existing URLs
+	spec.UpdateSpec("", "", "http://rules2.json", "", "")
+
+	if got, want := spec.OnnxDetectorURL(), "http://det1.onnx"; got != want {
+		t.Errorf("got OnnxDetectorURL = %v, want %v", got, want)
+	}
+	if got, want := spec.OnnxSkeletonURL(), "http://skel1.onnx"; got != want {
+		t.Errorf("got OnnxSkeletonURL = %v, want %v", got, want)
+	}
+	if got, want := spec.LocalRulesURL(), "http://rules2.json"; got != want {
+		t.Errorf("got LocalRulesURL = %v, want %v", got, want)
+	}
+	if got, want := spec.DialogueEngineURL(), "http://dialogue1.json"; got != want {
+		t.Errorf("got DialogueEngineURL = %v, want %v", got, want)
+	}
+	if got, want := spec.RecommendedCameraAngle(), "side"; got != want {
+		t.Errorf("got RecommendedCameraAngle = %v, want %v", got, want)
+	}
+
+	if !spec.UpdatedAt().After(prevUpdatedAt) {
+		t.Errorf("got UpdatedAt = %v, want after %v", spec.UpdatedAt(), prevUpdatedAt)
+	}
+}
+
+func TestMotionSpecification_IsComplete(t *testing.T) {
+	tests := []struct {
+		name              string
+		detectorURL       string
+		skeletonURL       string
+		localRulesURL     string
+		dialogueEngineURL string
+		want              bool
+	}{
+		{
+			name:              "all URLs populated",
+			detectorURL:       "http://det.onnx",
+			skeletonURL:       "http://skel.onnx",
+			localRulesURL:     "http://rules.json",
+			dialogueEngineURL: "http://dialogue.json",
+			want:              true,
+		},
+		{
+			name:              "missing detector URL",
+			detectorURL:       "",
+			skeletonURL:       "http://skel.onnx",
+			localRulesURL:     "http://rules.json",
+			dialogueEngineURL: "http://dialogue.json",
+			want:              false,
+		},
+		{
+			name:              "missing skeleton URL",
+			detectorURL:       "http://det.onnx",
+			skeletonURL:       "",
+			localRulesURL:     "http://rules.json",
+			dialogueEngineURL: "http://dialogue.json",
+			want:              false,
+		},
+		{
+			name:              "missing local rules URL",
+			detectorURL:       "http://det.onnx",
+			skeletonURL:       "http://skel.onnx",
+			localRulesURL:     "",
+			dialogueEngineURL: "http://dialogue.json",
+			want:              false,
+		},
+		{
+			name:              "missing dialogue engine URL",
+			detectorURL:       "http://det.onnx",
+			skeletonURL:       "http://skel.onnx",
+			localRulesURL:     "http://rules.json",
+			dialogueEngineURL: "",
+			want:              false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			spec := aggregate.RestoreMotionSpecification(
+				"ex-test",
+				tt.detectorURL,
+				tt.skeletonURL,
+				tt.localRulesURL,
+				tt.dialogueEngineURL,
+				"front",
+				false,
+				time.Now().UTC(),
+				time.Now().UTC(),
+			)
+			if got := spec.IsComplete(); got != tt.want {
+				t.Errorf("IsComplete() got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMotionSpecification_PopEvents(t *testing.T) {
+	spec := aggregate.NewDraftMotionSpecification("ex-pop", "http://det.onnx", "http://skel.onnx")
+	spec.UpdateSpec("http://det2.onnx", "http://skel2.onnx", "http://rules.json", "http://dialogue.json", "front")
+
+	evs1 := spec.PopEvents()
+	if got, want := len(evs1), 1; got != want {
+		t.Fatalf("first PopEvents() count got %d, want %d", got, want)
+	}
+
+	evs2 := spec.PopEvents()
+	if got, want := len(evs2), 0; got != want {
+		t.Errorf("second PopEvents() count got %d, want %d", got, want)
+	}
+}

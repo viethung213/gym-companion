@@ -85,7 +85,7 @@ func (h *PatchMotionSpecificationAssetHandler) Handle(
 	// 1. Check if MotionSpecification exists in Database
 	spec, err := h.motionRepo.FindByExerciseID(ctx, exerciseID)
 	if err != nil {
-		if errors.Is(err, derror.ErrNotFound) || errors.Is(err, derror.ErrMotionSpecNotFound) {
+		if errors.Is(err, derror.ErrMotionSpecNotFound) {
 			return nil, fmt.Errorf("patch motion asset: %w: exercise_id '%s'", derror.ErrMotionSpecNotFound, exerciseID)
 		}
 		return nil, fmt.Errorf("patch motion asset find spec: %w", err)

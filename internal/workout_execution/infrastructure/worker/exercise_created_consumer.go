@@ -117,7 +117,7 @@ func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exercis
 		log.Printf("[WorkoutExecution] Draft MotionSpecification already exists for exercise_id: %s, skipping", exerciseID)
 		return nil
 	}
-	if err != nil && !errors.Is(err, derror.ErrNotFound) {
+	if err != nil && !errors.Is(err, derror.ErrMotionSpecNotFound) {
 		return fmt.Errorf("exercise created consumer check existing: %w", err)
 	}
 
