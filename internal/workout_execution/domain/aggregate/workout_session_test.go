@@ -241,3 +241,66 @@ func TestWorkoutSession_DefensiveCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkoutSession_NewScheduledAndAbort(t *testing.T) {
+	t.Run("NewScheduledWorkoutSession validation and state", func(t *testing.T) {
+		_, err := aggregate.NewScheduledWorkoutSession("", "u1", "p1", time.Now())
+		if err == nil {
+			t.Error("want error for empty ID")
+		}
+
+		scheduledAt := time.Now().UTC()
+		sess, err := aggregate.NewScheduledWorkoutSession("s-sched-1", "u1", "p1", scheduledAt)
+		if err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+		if sess.Status() != aggregate.StatusScheduled {
+			t.Errorf("got status = %v, want SCHEDULED", sess.Status())
+		}
+		if sess.ScheduledAt() == nil || !sess.ScheduledAt().Equal(scheduledAt) {
+			t.Errorf("got scheduledAt = %v, want %v", sess.ScheduledAt(), scheduledAt)
+		}
+
+		err = sess.Start()
+		if err != nil {
+			t.Fatalf("Start() err = %v, want nil", err)
+		}
+		if sess.Status() != aggregate.StatusInProgress {
+			t.Errorf("got status = %v, want IN_PROGRESS", sess.Status())
+		}
+	})
+
+	t.Run("Abort and AbortAnomalous", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-abort-1", "u1", "p1")
+		sess.PopEvents() // clear start
+
+		err := sess.Abort("user cancelled")
+		if err != nil {
+			t.Fatalf("Abort err = %v, want nil", err)
+		}
+		if sess.Status() != aggregate.StatusAborted {
+			t.Errorf("got status = %v, want ABORTED", sess.Status())
+		}
+		events := sess.PopEvents()
+		if len(events) != 1 {
+			t.Fatalf("got %d events, want 1", len(events))
+		}
+
+		// Double abort should return error
+		err = sess.Abort("again")
+		if err == nil {
+			t.Error("want error on double abort")
+		}
+	})
+
+	t.Run("RecordBodyMetricUpdate", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-bm-1", "u1", "p1")
+		sess.PopEvents()
+
+		sess.RecordBodyMetricUpdate(75.5)
+		events := sess.PopEvents()
+		if len(events) != 1 {
+			t.Fatalf("got %d events, want 1 for RecordBodyMetricUpdate", len(events))
+		}
+	})
+}

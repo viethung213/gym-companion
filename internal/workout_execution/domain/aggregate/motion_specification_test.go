@@ -74,3 +74,37 @@ func TestNewDraftMotionSpecification(t *testing.T) {
 	}
 
 }
+
+func TestMotionSpecificationUpdateSpecAndEvents(t *testing.T) {
+	spec := aggregate.NewDraftMotionSpecification("ex-3", "http://detector.onnx", "http://skeleton.onnx")
+
+	if spec.IsComplete() {
+		t.Error("want IsComplete = false when rules and dialogue are empty")
+	}
+
+	spec.UpdateSpec(
+		"http://detector-v2.onnx",
+		"http://skeleton-v2.onnx",
+		"http://rules-v2.json",
+		"http://dialogue-v2.json",
+		"front",
+	)
+
+	if !spec.IsReady() {
+		t.Error("want IsReady = true after UpdateSpec with all URLs")
+	}
+	if !spec.IsComplete() {
+		t.Error("want IsComplete = true after UpdateSpec with all URLs")
+	}
+	if spec.RecommendedCameraAngle() != "front" {
+		t.Errorf("got camera angle %s, want front", spec.RecommendedCameraAngle())
+	}
+
+	events := spec.PopEvents()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	if len(spec.PopEvents()) != 0 {
+		t.Error("want 0 events after PopEvents")
+	}
+}

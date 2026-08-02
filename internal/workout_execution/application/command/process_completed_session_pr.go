@@ -77,7 +77,7 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 			formVerified := set.FormScore != nil && *set.FormScore >= 70.0
 			existingPR, findErr := h.prRepo.FindByUserIDAndExerciseIDForUpdate(txCtx, userID, exerciseID)
 			if findErr != nil {
-				return nil
+				return fmt.Errorf("find personal record for update: %w", findErr)
 			}
 
 			var pr *aggregate.PersonalRecord
