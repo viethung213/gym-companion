@@ -35,6 +35,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
 	}), &gorm.Config{
+		PrepareStmt:            false,
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
