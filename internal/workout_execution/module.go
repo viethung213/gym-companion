@@ -190,9 +190,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 							continue
 						}
 
-						if err := exerciseCreatedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-							log.Printf("WorkoutExecution failed to process ExerciseCreated event: %v", err)
-						}
+						func() {
+							defer func() {
+								if r := recover(); r != nil {
+									log.Printf("PANIC RECOVERED in ExerciseCreated event handling: %v", r)
+								}
+							}()
+							if err := exerciseCreatedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
+								log.Printf("WorkoutExecution failed to process ExerciseCreated event: %v", err)
+							}
+						}()
 					}
 				}
 			}()
@@ -225,9 +232,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 							continue
 						}
 
-						if err := prConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-							log.Printf("WorkoutExecution failed to process WorkoutSessionCompleted event for PR: %v", err)
-						}
+						func() {
+							defer func() {
+								if r := recover(); r != nil {
+									log.Printf("PANIC RECOVERED in PREventConsumer event handling: %v", r)
+								}
+							}()
+							if err := prConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
+								log.Printf("WorkoutExecution failed to process WorkoutSessionCompleted event for PR: %v", err)
+							}
+						}()
 					}
 				}
 			}()

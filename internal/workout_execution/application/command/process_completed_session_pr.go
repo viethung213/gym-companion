@@ -71,35 +71,37 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 	}
 
 	for exerciseID, set := range bestSets {
-		formVerified := set.FormScore != nil && *set.FormScore >= 70.0
-		existingPR, findErr := h.prRepo.FindByUserIDAndExerciseID(ctx, userID, exerciseID)
-		if findErr != nil {
-			continue
-		}
-
-		var pr *aggregate.PersonalRecord
-		achievedAt := session.EndedAt()
-		var t time.Time
-		if achievedAt != nil {
-			t = *achievedAt
-		} else {
-			t = time.Now().UTC()
-		}
-
-		if existingPR == nil {
-			prID := uuid.NewString()
-			pr = aggregate.NewPersonalRecord(
-				prID, userID, exerciseID, set.Weight, set.ActualReps, formVerified, t,
-			)
-		} else {
-			pr = existingPR
-			updated := pr.UpdateIfHigher(set.Weight, set.ActualReps, formVerified, t)
-			if !updated {
-				continue
+		exerciseID := exerciseID
+		set := set
+		processExercisePR := func(txCtx context.Context) error {
+			formVerified := set.FormScore != nil && *set.FormScore >= 70.0
+			existingPR, findErr := h.prRepo.FindByUserIDAndExerciseIDForUpdate(txCtx, userID, exerciseID)
+			if findErr != nil {
+				return nil
 			}
-		}
 
-		saveFunc := func(txCtx context.Context) error {
+			var pr *aggregate.PersonalRecord
+			achievedAt := session.EndedAt()
+			var t time.Time
+			if achievedAt != nil {
+				t = *achievedAt
+			} else {
+				t = time.Now().UTC()
+			}
+
+			if existingPR == nil {
+				prID := uuid.NewString()
+				pr = aggregate.NewPersonalRecord(
+					prID, userID, exerciseID, set.Weight, set.ActualReps, formVerified, t,
+				)
+			} else {
+				pr = existingPR
+				updated := pr.UpdateIfHigher(set.Weight, set.ActualReps, formVerified, t)
+				if !updated {
+					return nil
+				}
+			}
+
 			if saveErr := h.prRepo.Save(txCtx, pr); saveErr != nil {
 				return saveErr
 			}
@@ -114,9 +116,9 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 
 		var txErr error
 		if h.txManager != nil {
-			txErr = h.txManager.WithTransaction(ctx, saveFunc)
+			txErr = h.txManager.WithTransaction(ctx, processExercisePR)
 		} else {
-			txErr = saveFunc(ctx)
+			txErr = processExercisePR(ctx)
 		}
 		if txErr != nil {
 			return fmt.Errorf("failed to save PR for exercise %s: %w", exerciseID, txErr)

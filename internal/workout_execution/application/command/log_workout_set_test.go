@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
@@ -64,6 +65,28 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 		}
 		if res.SetLogID == "" {
 			t.Errorf("got empty SetLogID")
+		}
+	})
+
+	t.Run("anomalous timeout persists session state and returns error", func(t *testing.T) {
+		now := time.Now().UTC()
+		started := now.Add(-250 * time.Minute)
+		session := aggregate.ReconstituteWorkoutSession(
+			"s1", "u1", "p1",
+			aggregate.StatusInProgress,
+			nil, nil, nil, &started, nil,
+			started, started,
+		)
+		repo := &mockSessionRepo{session: session}
+		outbox := newMockOutboxWriter(t)
+		h := command.NewLogWorkoutSetHandler(repo, outbox, newMockTxManager(t))
+
+		_, err := h.Handle(context.Background(), command.LogWorkoutSetCommand{SessionID: "s1", ExerciseID: "ex1", SetNumber: 1})
+		if !errors.Is(err, derror.ErrAnomalousSessionTimeout) {
+			t.Fatalf("got err = %v, want %v", err, derror.ErrAnomalousSessionTimeout)
+		}
+		if repo.session.Status() != aggregate.StatusAnomalous {
+			t.Errorf("got session status = %v, want StatusAnomalous", repo.session.Status())
 		}
 	})
 }

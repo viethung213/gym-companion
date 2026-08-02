@@ -80,6 +80,10 @@ func (m *mockPRRepo) FindByUserIDAndExerciseID(ctx context.Context, userID, exer
 	return nil, m.err
 }
 
+func (m *mockPRRepo) FindByUserIDAndExerciseIDForUpdate(ctx context.Context, userID, exerciseID string) (*aggregate.PersonalRecord, error) {
+	return nil, m.err
+}
+
 func (m *mockPRRepo) FindByUserIDAndExerciseIDs(ctx context.Context, userID string, exerciseIDs []string) ([]*aggregate.PersonalRecord, error) {
 	return nil, m.err
 }

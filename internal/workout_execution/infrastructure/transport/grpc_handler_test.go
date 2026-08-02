@@ -93,6 +93,10 @@ func (m *mockPRRepo) FindByUserIDAndExerciseID(ctx context.Context, userID, exer
 	return nil, m.err
 }
 
+func (m *mockPRRepo) FindByUserIDAndExerciseIDForUpdate(ctx context.Context, userID, exerciseID string) (*aggregate.PersonalRecord, error) {
+	return nil, m.err
+}
+
 func (m *mockPRRepo) FindByUserIDAndExerciseIDs(ctx context.Context, userID string, exerciseIDs []string) ([]*aggregate.PersonalRecord, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -440,6 +444,26 @@ func TestGRPCHandler(t *testing.T) {
 		}
 		if len(res.GetSessions()) != 1 {
 			t.Errorf("got count = %d, want 1", len(res.GetSessions()))
+		}
+	})
+
+	t.Run("GetPresignedUploadURL forbidden for User and success for Admin", func(t *testing.T) {
+		ctxUser := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "u1"), middleware.UserRoleKey, "User")
+		ctxAdmin := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "admin1"), middleware.UserRoleKey, "Admin")
+
+		// User attempt -> Forbidden
+		_, err := grpcHandler.GetPresignedUploadURL(ctxUser, &workoutexecutionv1message.GetPresignedUploadURLRequest{FileName: "model.onnx"})
+		if err == nil {
+			t.Fatal("expected forbidden error for User calling GetPresignedUploadURL, got nil")
+		}
+
+		// Admin attempt -> Success
+		res, err := grpcHandler.GetPresignedUploadURL(ctxAdmin, &workoutexecutionv1message.GetPresignedUploadURLRequest{FileName: "model.onnx"})
+		if err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+		if res.GetUploadUrl() == "" {
+			t.Error("expected non-empty upload url")
 		}
 	})
 }

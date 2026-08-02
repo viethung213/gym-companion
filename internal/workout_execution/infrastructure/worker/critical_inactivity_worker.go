@@ -67,9 +67,16 @@ func (w *CriticalInactivityWorker) Start(ctx context.Context) {
 			log.Println("[WorkoutExecution] Stopping Critical Inactivity worker.")
 			return
 		case <-ticker.C:
-			if err := w.processCriticalInactiveSessions(ctx); err != nil {
-				log.Printf("[WorkoutExecution] Critical Inactivity worker error: %v", err)
-			}
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[WorkoutExecution] PANIC RECOVERED in Critical Inactivity worker tick: %v", r)
+					}
+				}()
+				if err := w.processCriticalInactiveSessions(ctx); err != nil {
+					log.Printf("[WorkoutExecution] Critical Inactivity worker error: %v", err)
+				}
+			}()
 		}
 	}
 }

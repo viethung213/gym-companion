@@ -139,8 +139,9 @@ func (r *PostgresWorkoutSessionRepository) FindTimedOutSessions(ctx context.Cont
 	threshold := time.Now().UTC().Add(-time.Duration(maxDurationMinutes) * time.Minute)
 
 	var models []WorkoutSessionModel
-	err := db.Preload("Sets.Reps").Preload("Errors").
+	err := db.Preload("Errors").
 		Where("status = ? AND started_at <= ?", "IN_PROGRESS", threshold).
+		Limit(100).
 		Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find timed out sessions: %w", err)
@@ -161,7 +162,7 @@ func (r *PostgresWorkoutSessionRepository) FindSessionsWithCriticalInactivity(
 	updatedBefore := time.Now().UTC().Add(-inactivityThreshold)
 
 	var models []WorkoutSessionModel
-	err := db.Preload("Sets.Reps").Preload("Errors").
+	err := db.Preload("Errors").
 		Where(
 			`status = ? AND updated_at <= ? AND EXISTS (
 				SELECT 1 FROM workout_execution.session_errors se
@@ -171,6 +172,7 @@ func (r *PostgresWorkoutSessionRepository) FindSessionsWithCriticalInactivity(
 			)`,
 			"IN_PROGRESS", updatedBefore,
 		).
+		Limit(100).
 		Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sessions with critical inactivity: %w", err)
@@ -188,6 +190,14 @@ func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(
 	userID string,
 	limit, offset int,
 ) ([]*aggregate.WorkoutSession, error) {
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	db := getDB(ctx, r.db)
 	var models []WorkoutSessionModel
 	err := db.Preload("Sets.Reps").Preload("Errors").
@@ -243,8 +253,15 @@ func (r *PostgresPersonalRecordRepository) Save(ctx context.Context, pr *aggrega
 	db := getDB(ctx, r.db)
 	model := PersonalRecordToPersistence(pr)
 	err := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "exercise_id"}},
-		UpdateAll: true,
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "exercise_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"one_rep_max":   gorm.Expr("GREATEST(personal_records.one_rep_max, EXCLUDED.one_rep_max)"),
+			"weight":        gorm.Expr("CASE WHEN EXCLUDED.one_rep_max > personal_records.one_rep_max THEN EXCLUDED.weight ELSE personal_records.weight END"),
+			"reps":          gorm.Expr("CASE WHEN EXCLUDED.one_rep_max > personal_records.one_rep_max THEN EXCLUDED.reps ELSE personal_records.reps END"),
+			"form_verified": gorm.Expr("CASE WHEN EXCLUDED.one_rep_max > personal_records.one_rep_max THEN EXCLUDED.form_verified ELSE personal_records.form_verified END"),
+			"achieved_at":   gorm.Expr("CASE WHEN EXCLUDED.one_rep_max > personal_records.one_rep_max THEN EXCLUDED.achieved_at ELSE personal_records.achieved_at END"),
+			"updated_at":    gorm.Expr("CASE WHEN EXCLUDED.one_rep_max > personal_records.one_rep_max THEN EXCLUDED.updated_at ELSE personal_records.updated_at END"),
+		}),
 	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("failed to save personal record: %w", err)
@@ -264,6 +281,23 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseID(
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to find personal record: %w", err)
+	}
+	return PersonalRecordToDomain(&model), nil
+}
+
+func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseIDForUpdate(
+	ctx context.Context,
+	userID, exerciseID string,
+) (*aggregate.PersonalRecord, error) {
+	db := getDB(ctx, r.db)
+	var model PersonalRecordModel
+	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&model, "user_id = ? AND exercise_id = ?", userID, exerciseID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to find personal record for update: %w", err)
 	}
 	return PersonalRecordToDomain(&model), nil
 }
@@ -356,6 +390,14 @@ func (r *PostgresMotionSpecificationRepository) Delete(ctx context.Context, exer
 }
 
 func (r *PostgresMotionSpecificationRepository) List(ctx context.Context, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	db := getDB(ctx, r.db)
 
 	var total int64

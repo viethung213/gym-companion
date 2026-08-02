@@ -450,6 +450,10 @@ func (h *GRPCHandler) AdminGetWorkoutHistory(ctx context.Context, req *workoutex
 
 // GetPresignedUploadURL generates a presigned URL allowing the Client to upload files directly to Cloud Storage.
 func (h *GRPCHandler) GetPresignedUploadURL(ctx context.Context, req *workoutexecutionv1message.GetPresignedUploadURLRequest) (*workoutexecutionv1message.GetPresignedUploadURLResponse, error) {
+	if _, err := requireAdminOrCoach(ctx); err != nil {
+		return nil, err
+	}
+
 	if req == nil || req.GetFileName() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "file_name is required")
 	}
@@ -471,6 +475,10 @@ func (h *GRPCHandler) GetPresignedUploadURL(ctx context.Context, req *workoutexe
 
 // UpdateMotionSpecification updates motion specification files/rules for an exercise.
 func (h *GRPCHandler) UpdateMotionSpecification(ctx context.Context, req *workoutexecutionv1message.UpdateMotionSpecificationRequest) (*workoutexecutionv1message.UpdateMotionSpecificationResponse, error) {
+	if _, err := requireAdminOrCoach(ctx); err != nil {
+		return nil, err
+	}
+
 	if req == nil || req.GetExerciseId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "exercise_id is required")
 	}
@@ -496,6 +504,10 @@ func (h *GRPCHandler) UpdateMotionSpecification(ctx context.Context, req *workou
 
 // PatchMotionSpecificationAsset updates partial JSON contents of pose rules or dialogue config on S3.
 func (h *GRPCHandler) PatchMotionSpecificationAsset(ctx context.Context, req *workoutexecutionv1message.PatchMotionSpecificationAssetRequest) (*workoutexecutionv1message.PatchMotionSpecificationAssetResponse, error) {
+	if _, err := requireAdminOrCoach(ctx); err != nil {
+		return nil, err
+	}
+
 	if req == nil || req.GetExerciseId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "exercise_id is required")
 	}
@@ -521,8 +533,11 @@ func (h *GRPCHandler) PatchMotionSpecificationAsset(ctx context.Context, req *wo
 }
 
 // DeleteMotionSpecification deletes a MotionSpecification.
-
 func (h *GRPCHandler) DeleteMotionSpecification(ctx context.Context, req *workoutexecutionv1message.DeleteMotionSpecificationRequest) (*workoutexecutionv1message.DeleteMotionSpecificationResponse, error) {
+	if _, err := requireAdminOrCoach(ctx); err != nil {
+		return nil, err
+	}
+
 	if req == nil || req.GetExerciseId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "exercise_id is required")
 	}

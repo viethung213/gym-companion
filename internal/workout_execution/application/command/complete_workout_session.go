@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
@@ -65,6 +66,7 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 	}
 
 	var result *CompleteWorkoutSessionResult
+	var isTimeout bool
 	saveFunc := func(txCtx context.Context) error {
 		session, err := h.sessionRepo.FindByIDForUpdate(txCtx, cmd.SessionID)
 		if err != nil {
@@ -96,18 +98,21 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 			}
 		}
 
-		// 2. Transition domain state to COMPLETED
+		// 2. Transition domain state to COMPLETED (or ANOMALOUS if timed out)
 		if completeErr := session.Complete(cmd.ConfirmOverload, isOverloaded); completeErr != nil {
-			return completeErr
+			if errors.Is(completeErr, derror.ErrAnomalousSessionTimeout) {
+				isTimeout = true
+			} else {
+				return completeErr
+			}
 		}
 
 		// 3. Record optional BodyMetricUpdated event if weight update was provided by user (UC-03.4 A3)
-		if cmd.WeightUpdateKg != nil && *cmd.WeightUpdateKg > 0 {
+		if !isTimeout && cmd.WeightUpdateKg != nil && *cmd.WeightUpdateKg > 0 {
 			session.RecordBodyMetricUpdate(*cmd.WeightUpdateKg)
 		}
 
 		// 4. Save and Publish Outbox Events
-		summary := session.CalculateSummary()
 		if err := h.sessionRepo.Save(txCtx, session); err != nil {
 			return err
 		}
@@ -118,6 +123,11 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 			}
 		}
 
+		if isTimeout {
+			return nil
+		}
+
+		summary := session.CalculateSummary()
 		var completedAtStr string
 		if session.EndedAt() != nil {
 			completedAtStr = session.EndedAt().Format("2006-01-02T15:04:05Z07:00")
@@ -142,6 +152,10 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 		if err := saveFunc(ctx); err != nil {
 			return nil, err
 		}
+	}
+
+	if isTimeout {
+		return nil, derror.ErrAnomalousSessionTimeout
 	}
 
 	return result, nil
