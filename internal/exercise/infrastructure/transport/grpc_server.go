@@ -322,6 +322,7 @@ func toProtoExercise(info *domain.Info) *exercisemsg.ExerciseInfo {
 		DefaultRestSeconds: info.DefaultRestSeconds,
 		TagIds:             info.TagIDs,
 		Status:             toProtoStatus(info.Status),
+		HasAiSupported:     info.HasAISupported,
 	}
 }
 

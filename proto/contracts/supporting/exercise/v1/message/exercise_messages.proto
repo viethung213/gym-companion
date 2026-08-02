@@ -27,6 +27,7 @@ message ExerciseInfo {
   int32 default_rest_seconds = 12;
   repeated string tag_ids = 13;
   ExerciseStatus status = 14;
+  bool has_ai_supported = 15;
 }
 
 message CreateExerciseRequest {
