@@ -114,11 +114,66 @@ func TestOutboxWriter(t *testing.T) {
 		}
 
 		if got, want := dataMap["userId"], "user-1"; got != want {
-
 			t.Errorf("got data.userId = %v, want %v", got, want)
+		}
+		if got, want := dataMap["planId"], "plan-1"; got != want {
+			t.Errorf("got data.planId = %v, want %v", got, want)
+		}
+	})
 
+	t.Run("WriteEvents with WorkoutSessionCompleted maps planId", func(t *testing.T) {
+		repo := &mockOutboxRepo{}
+		writer := infraEvent.NewOutboxWriter(repo)
+		ev := &event.WorkoutSessionCompleted{
+			SessionID:   "sess-2",
+			UserID:      "user-2",
+			PlanID:      "plan-2",
+			CompletedAt: time.Now().UTC(),
 		}
 
+		if err := writer.WriteEvents(context.Background(), "WorkoutSession", "sess-2", []interface{}{ev}); err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
+			t.Fatalf("failed to unmarshal payload: %v", err)
+		}
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data to be map[string]interface{}, got %T", envelope["data"])
+		}
+		if got, want := dataMap["planId"], "plan-2"; got != want {
+			t.Errorf("got data.planId = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("WriteEvents with WorkoutSessionAborted maps planId", func(t *testing.T) {
+		repo := &mockOutboxRepo{}
+		writer := infraEvent.NewOutboxWriter(repo)
+		ev := &event.WorkoutSessionAborted{
+			SessionID: "sess-3",
+			UserID:    "user-3",
+			PlanID:    "plan-3",
+			Reason:    "timeout",
+			AbortedAt: time.Now().UTC(),
+		}
+
+		if err := writer.WriteEvents(context.Background(), "WorkoutSession", "sess-3", []interface{}{ev}); err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
+			t.Fatalf("failed to unmarshal payload: %v", err)
+		}
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data to be map[string]interface{}, got %T", envelope["data"])
+		}
+		if got, want := dataMap["planId"], "plan-3"; got != want {
+			t.Errorf("got data.planId = %v, want %v", got, want)
+		}
 	})
 
 	t.Run("WriteEvents with generic struct (unknown event type)", func(t *testing.T) {
