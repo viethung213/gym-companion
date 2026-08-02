@@ -13,6 +13,7 @@ import (
 // AbortWorkoutSessionCommand parameters.
 type AbortWorkoutSessionCommand struct {
 	SessionID string
+	UserID    string
 	Reason    string
 }
 
@@ -59,6 +60,9 @@ func (h *AbortWorkoutSessionHandler) Handle(
 		}
 		if session == nil {
 			return derror.ErrWorkoutSessionNotFound
+		}
+		if cmd.UserID != "" && session.UserID() != cmd.UserID {
+			return derror.ErrForbidden
 		}
 
 		if abortErr := session.Abort(cmd.Reason); abortErr != nil {

@@ -66,7 +66,7 @@ func (w *SessionTimeoutWorker) processTimedOutSessions(ctx context.Context) erro
 
 	for _, session := range sessions {
 		if session.CheckTimeoutAndAutoAbort(now) {
-			_ = w.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+			saveFunc := func(txCtx context.Context) error {
 				if err := w.sessionRepo.Save(txCtx, session); err != nil {
 					return err
 				}
@@ -75,7 +75,17 @@ func (w *SessionTimeoutWorker) processTimedOutSessions(ctx context.Context) erro
 					return w.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events)
 				}
 				return nil
-			})
+			}
+
+			var txErr error
+			if w.txManager != nil {
+				txErr = w.txManager.WithTransaction(ctx, saveFunc)
+			} else {
+				txErr = saveFunc(ctx)
+			}
+			if txErr != nil {
+				log.Printf("[WorkoutExecution] Failed to save timed out session %s: %v", session.ID(), txErr)
+			}
 		}
 	}
 

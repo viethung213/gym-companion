@@ -353,6 +353,17 @@ func (s *WorkoutSession) LogSet(setLog WorkoutSetLog) error {
 		setLog.CreatedAt = time.Now().UTC()
 	}
 
+	for i, existingSet := range s.sets {
+		if existingSet.SetNumber == setLog.SetNumber && existingSet.ExerciseID == setLog.ExerciseID {
+			if setLog.ID == "" {
+				setLog.ID = existingSet.ID
+			}
+			s.sets[i] = setLog.DeepCopy()
+			s.updatedAt = time.Now().UTC()
+			return nil
+		}
+	}
+
 	s.sets = append(s.sets, setLog.DeepCopy())
 	s.updatedAt = time.Now().UTC()
 	return nil

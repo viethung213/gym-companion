@@ -72,7 +72,7 @@ func (h *StartWorkoutSessionHandler) Handle(
 		return nil, err
 	}
 
-	if err := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+	saveFunc := func(txCtx context.Context) error {
 		activeSession, err := h.sessionRepo.FindActiveSessionByUserID(txCtx, cmd.UserID)
 		if err != nil {
 			return fmt.Errorf("failed to query active sessions: %w", err)
@@ -91,8 +91,16 @@ func (h *StartWorkoutSessionHandler) Handle(
 			}
 		}
 		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to execute start session tx: %w", err)
+	}
+
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, fmt.Errorf("failed to execute start session tx: %w", err)
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	var startedAtStr string

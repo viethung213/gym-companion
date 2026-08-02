@@ -15,7 +15,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -87,15 +86,6 @@ func extractUserID(ctx context.Context) (string, error) {
 		return actor.UserID, nil
 	}
 
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if vals := md.Get("x-user-id"); len(vals) > 0 && vals[0] != "" {
-			return vals[0], nil
-		}
-		if vals := md.Get("user_id"); len(vals) > 0 && vals[0] != "" {
-			return vals[0], nil
-		}
-	}
-
 	return "", status.Errorf(codes.Unauthenticated, "unauthenticated request: missing or invalid JWT identity: %v", err)
 }
 
@@ -155,6 +145,11 @@ func (h *GRPCHandler) StartScheduledWorkoutSession(ctx context.Context, req *wor
 }
 
 func (h *GRPCHandler) LogWorkoutSet(ctx context.Context, req *workoutexecutionv1message.LogWorkoutSetRequest) (*workoutexecutionv1message.LogWorkoutSetResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	reps := make([]vo.RepLog, 0, len(req.GetReps()))
 	for _, r := range req.GetReps() {
 		reps = append(reps, vo.NewRepLog(int(r.GetRepNumber()), r.GetRomPercentage(), r.GetErrorCodes(), r.GetJointAngles()))
@@ -162,6 +157,7 @@ func (h *GRPCHandler) LogWorkoutSet(ctx context.Context, req *workoutexecutionv1
 
 	cmd := command.LogWorkoutSetCommand{
 		SessionID:   req.GetSessionId(),
+		UserID:      userID,
 		SetNumber:   int(req.GetSetNumber()),
 		ExerciseID:  req.GetExerciseId(),
 		TargetReps:  int(req.GetTargetReps()),
@@ -184,8 +180,14 @@ func (h *GRPCHandler) LogWorkoutSet(ctx context.Context, req *workoutexecutionv1
 }
 
 func (h *GRPCHandler) AbortWorkoutSession(ctx context.Context, req *workoutexecutionv1message.AbortWorkoutSessionRequest) (*workoutexecutionv1message.AbortWorkoutSessionResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	cmd := command.AbortWorkoutSessionCommand{
 		SessionID: req.GetSessionId(),
+		UserID:    userID,
 		Reason:    req.GetReason(),
 	}
 
@@ -201,6 +203,11 @@ func (h *GRPCHandler) AbortWorkoutSession(ctx context.Context, req *workoutexecu
 }
 
 func (h *GRPCHandler) CompleteWorkoutSession(ctx context.Context, req *workoutexecutionv1message.CompleteWorkoutSessionRequest) (*workoutexecutionv1message.CompleteWorkoutSessionResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var weightUpdate *float32
 	if req.WeightUpdateKg != nil {
 		w := req.GetWeightUpdateKg()
@@ -209,6 +216,7 @@ func (h *GRPCHandler) CompleteWorkoutSession(ctx context.Context, req *workoutex
 
 	cmd := command.CompleteWorkoutSessionCommand{
 		SessionID:       req.GetSessionId(),
+		UserID:          userID,
 		ConfirmOverload: req.GetConfirmOverload(),
 		WeightUpdateKg:  weightUpdate,
 	}
@@ -229,6 +237,11 @@ func (h *GRPCHandler) CompleteWorkoutSession(ctx context.Context, req *workoutex
 }
 
 func (h *GRPCHandler) SyncWorkoutLogs(ctx context.Context, req *workoutexecutionv1message.SyncWorkoutLogsRequest) (*workoutexecutionv1message.SyncWorkoutLogsResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	errorsDTO := make([]command.ErrorLogDTO, 0, len(req.GetErrors()))
 	for _, e := range req.GetErrors() {
 		var ts timestamppb.Timestamp
@@ -247,6 +260,7 @@ func (h *GRPCHandler) SyncWorkoutLogs(ctx context.Context, req *workoutexecution
 
 	cmd := command.SyncWorkoutLogsCommand{
 		SessionID: req.GetSessionId(),
+		UserID:    userID,
 		Errors:    errorsDTO,
 	}
 
@@ -301,9 +315,14 @@ func (h *GRPCHandler) GetPersonalRecords(ctx context.Context, req *workoutexecut
 }
 
 func (h *GRPCHandler) GetWorkoutSessionErrors(ctx context.Context, req *workoutexecutionv1message.GetWorkoutSessionErrorsRequest) (*workoutexecutionv1message.GetWorkoutSessionErrorsResponse, error) {
-	errs, err := h.getErrorsQuery.Handle(ctx, req.GetSessionId())
+	userID, err := extractUserID(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "failed to fetch session errors: %v", err)
+		return nil, err
+	}
+
+	errs, err := h.getErrorsQuery.Handle(ctx, req.GetSessionId(), userID)
+	if err != nil {
+		return nil, toGRPCError("failed to fetch session errors", err)
 	}
 
 	pbErrors := make([]*workoutexecutionv1message.ErrorLog, len(errs))
@@ -605,6 +624,10 @@ func toGRPCError(msg string, err error) error {
 		errors.Is(err, derror.ErrInvalidRepsOrWeight),
 		errors.Is(err, derror.ErrInvalidROM):
 		return status.Errorf(codes.InvalidArgument, "%s: %v", msg, err)
+
+	// 403 Forbidden / Permission Denied
+	case errors.Is(err, derror.ErrForbidden):
+		return status.Errorf(codes.PermissionDenied, "%s: %v", msg, err)
 
 	// 409 Failed Precondition — session lifecycle violations
 	case errors.Is(err, derror.ErrSessionNotInProgress),

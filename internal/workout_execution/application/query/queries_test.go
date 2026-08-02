@@ -305,7 +305,7 @@ func TestGetWorkoutSessionErrorsQueryHandler(t *testing.T) {
 
 		h := query.NewGetWorkoutSessionErrorsQueryHandler(&mockSessionRepo{})
 
-		_, err := h.Handle(context.Background(), "sess-1")
+		_, err := h.Handle(context.Background(), "sess-1", "u-1")
 
 		if !errors.Is(err, derror.ErrWorkoutSessionNotFound) {
 
@@ -323,7 +323,7 @@ func TestGetWorkoutSessionErrorsQueryHandler(t *testing.T) {
 
 		h := query.NewGetWorkoutSessionErrorsQueryHandler(&mockSessionRepo{session: session})
 
-		errs, err := h.Handle(context.Background(), "sess-1")
+		errs, err := h.Handle(context.Background(), "sess-1", "u-1")
 
 		if err != nil {
 

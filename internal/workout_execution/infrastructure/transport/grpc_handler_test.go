@@ -227,7 +227,8 @@ func TestGRPCHandler(t *testing.T) {
 		sessionRepo.session = session
 		formScore := float32(90.0)
 
-		res, err := grpcHandler.LogWorkoutSet(context.Background(), &workoutexecutionv1message.LogWorkoutSetRequest{
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+		res, err := grpcHandler.LogWorkoutSet(ctxUser, &workoutexecutionv1message.LogWorkoutSetRequest{
 			SessionId:   "sess-1",
 			SetNumber:   1,
 			ExerciseId:  "ex1",
@@ -258,7 +259,8 @@ func TestGRPCHandler(t *testing.T) {
 
 		session, _ := aggregate.NewWorkoutSession("sess-1", "u1", "p1")
 		sessionRepo.session = session
-		res, err := grpcHandler.AbortWorkoutSession(context.Background(), &workoutexecutionv1message.AbortWorkoutSessionRequest{SessionId: "sess-1", Reason: "stop"})
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+		res, err := grpcHandler.AbortWorkoutSession(ctxUser, &workoutexecutionv1message.AbortWorkoutSessionRequest{SessionId: "sess-1", Reason: "stop"})
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)
 		}
@@ -276,7 +278,8 @@ func TestGRPCHandler(t *testing.T) {
 
 		session, _ := aggregate.NewWorkoutSession("sess-1", "u1", "p1")
 		sessionRepo.session = session
-		res, err := grpcHandler.CompleteWorkoutSession(context.Background(), &workoutexecutionv1message.CompleteWorkoutSessionRequest{SessionId: "sess-1"})
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+		res, err := grpcHandler.CompleteWorkoutSession(ctxUser, &workoutexecutionv1message.CompleteWorkoutSessionRequest{SessionId: "sess-1"})
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)
 		}
@@ -295,7 +298,8 @@ func TestGRPCHandler(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("sess-1", "u1", "p1")
 		sessionRepo.session = session
 		now := timestamppb.Now()
-		_, err = grpcHandler.SyncWorkoutLogs(context.Background(), &workoutexecutionv1message.SyncWorkoutLogsRequest{
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+		_, err = grpcHandler.SyncWorkoutLogs(ctxUser, &workoutexecutionv1message.SyncWorkoutLogsRequest{
 			SessionId: "sess-1",
 			Errors: []*workoutexecutionv1message.ErrorLog{
 				{ErrorCode: "ERR1", Severity: "HIGH", Timestamp: now},
@@ -357,7 +361,8 @@ func TestGRPCHandler(t *testing.T) {
 		session.AddErrors([]aggregate.SessionError{{ErrorCode: "ERR1"}})
 		sessionRepo.session = session
 
-		res, err := grpcHandler.GetWorkoutSessionErrors(context.Background(), &workoutexecutionv1message.GetWorkoutSessionErrorsRequest{SessionId: "sess-1"})
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+		res, err := grpcHandler.GetWorkoutSessionErrors(ctxUser, &workoutexecutionv1message.GetWorkoutSessionErrorsRequest{SessionId: "sess-1"})
 		if err != nil {
 			t.Fatalf("got err = %v, want nil", err)
 		}
@@ -500,7 +505,8 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 				command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
 			)
 
-			_, err := h.LogWorkoutSet(context.Background(), &workoutexecutionv1message.LogWorkoutSetRequest{
+			ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+			_, err := h.LogWorkoutSet(ctxUser, &workoutexecutionv1message.LogWorkoutSetRequest{
 				SessionId:  "sess-1",
 				ExerciseId: "ex-1",
 				SetNumber:  1,

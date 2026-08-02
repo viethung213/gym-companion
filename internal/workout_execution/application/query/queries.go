@@ -128,13 +128,19 @@ func NewGetWorkoutSessionErrorsQueryHandler(sessionRepo repository.WorkoutSessio
 
 // Handle executes query.
 
-func (h *GetWorkoutSessionErrorsQueryHandler) Handle(ctx context.Context, sessionID string) ([]aggregate.SessionError, error) {
+func (h *GetWorkoutSessionErrorsQueryHandler) Handle(ctx context.Context, sessionID, userID string) ([]aggregate.SessionError, error) {
 
 	session, err := h.sessionRepo.FindByID(ctx, sessionID)
 
 	if err != nil || session == nil {
 
 		return nil, derror.ErrWorkoutSessionNotFound
+
+	}
+
+	if userID != "" && session.UserID() != userID {
+
+		return nil, derror.ErrForbidden
 
 	}
 

@@ -60,7 +60,7 @@ func (h *StartScheduledWorkoutSessionHandler) Handle(ctx context.Context, cmd St
 		return nil, fmt.Errorf("failed to start scheduled session: %w", err)
 	}
 
-	if err := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+	saveFunc := func(txCtx context.Context) error {
 		if err := h.sessionRepo.Save(txCtx, session); err != nil {
 			return err
 		}
@@ -71,8 +71,16 @@ func (h *StartScheduledWorkoutSessionHandler) Handle(ctx context.Context, cmd St
 			}
 		}
 		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to execute start scheduled session tx: %w", err)
+	}
+
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, fmt.Errorf("failed to execute start scheduled session tx: %w", err)
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	var startedAtStr string
