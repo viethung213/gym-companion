@@ -12,7 +12,9 @@ import (
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
 	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -75,12 +77,24 @@ func (h *GRPCHandler) Logout(
 	ctx context.Context,
 	req *authv1message.LogoutRequest,
 ) (*authv1message.LogoutResponse, error) {
+	userID, _ := ctx.Value(middleware.UserIDKey).(string)
+	if userID == "" {
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get("x-user-id"); len(vals) > 0 {
+				userID = vals[0]
+			}
+		}
+	}
+
 	err := h.logoutHandler.Handle(ctx, command.LogoutCommand{
 		RefreshToken: req.RefreshToken,
+		UserID:       userID,
 	})
 	if err != nil {
 		if errors.Is(err, apperror.ErrUnauthorized) {
-			return nil, status.Errorf(codes.Unauthenticated, "invalid refresh token: %v", err)
+			return &authv1message.LogoutResponse{
+				Success: false,
+			}, nil
 		}
 		return nil, status.Errorf(codes.Internal, "failed to logout: %v", err)
 	}
@@ -202,6 +216,9 @@ func (c *ConnectAuthHandler) Logout(
 	ctx context.Context,
 	req *connect.Request[authv1message.LogoutRequest],
 ) (*connect.Response[authv1message.LogoutResponse], error) {
+	if userID := req.Header().Get("X-User-Id"); userID != "" {
+		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
+	}
 	res, err := c.grpcHandler.Logout(ctx, req.Msg)
 	if err != nil {
 		return nil, err
