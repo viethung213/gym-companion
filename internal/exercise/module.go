@@ -5,32 +5,32 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
-	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
 	DB            *sql.DB
-	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*transport.ExerciseServer, func(), error) {
+
 	// Initialize GORM DB wrapper over sql.DB
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
@@ -39,7 +39,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
+		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
 	// Initialize Repositories
@@ -117,7 +117,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getTagHandler,
 		listTagsHandler,
 	)
-	exercisesvc.RegisterExerciseServiceServer(deps.GRPCServer, grpcHandler)
 
 	// Start Background Worker for Outbox Pattern & Kafka
 	kafkaBrokersStr := os.Getenv("EXERCISE_KAFKA_BROKERS")
@@ -131,7 +130,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 	writer, err := deps.KafkaRegistry.GetWriter("exercise", kafkaBrokers)
 	if err != nil {
-		return nil, fmt.Errorf("get exercise kafka writer: %w", err)
+		return nil, nil, fmt.Errorf("get exercise kafka writer: %w", err)
 	}
 
 	kafkaPub := kafka.NewPublisher(writer)
@@ -164,18 +163,18 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 
 	log.Println("Exercise Bounded Context initialized successfully.")
-	return shutdown, nil
+	return grpcHandler, shutdown, nil
 }
 
-func RegisterGateway(
-	ctx context.Context,
-	mux *runtime.ServeMux,
-	grpcEndpoint string,
-	opts []grpc.DialOption,
-) error {
-	err := exercisesvc.RegisterExerciseServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts)
-	if err != nil {
-		return fmt.Errorf("register exercise service gateway handler: %w", err)
-	}
-	return nil
+// RegisterConnectHandler mounts the ConnectRPC handler for the Exercise module on an http.ServeMux.
+func RegisterConnectHandler(
+	mux *http.ServeMux,
+	grpcServer *transport.ExerciseServer,
+	opts ...connect.HandlerOption,
+) {
+	connectHandler := transport.NewConnectExerciseHandler(grpcServer)
+	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(connectHandler, opts...)
+	mux.Handle(path, handler)
 }
+
+

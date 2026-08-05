@@ -6,12 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
 	"github.com/viethung213/gym-companion/internal/auth/application/query"
@@ -22,12 +23,11 @@ import (
 	authKafka "github.com/viethung213/gym-companion/internal/auth/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/oauth"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
-	grpcAuth "github.com/viethung213/gym-companion/internal/auth/infrastructure/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/auth/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/worker"
-	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
-	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -35,26 +35,22 @@ import (
 // ModuleDeps holds the external database connection and gRPC server instances needed by Auth.
 type ModuleDeps struct {
 	DB                *sql.DB
-	GRPCServer        *grpc.Server
 	AssignKeyProvider func(middleware.KeyProvider)
 	KafkaRegistry     *sharedKafka.Registry
 }
 
 // Initialize bootstraps all layers of the Auth Bounded Context.
-func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
 	if deps.DB == nil {
-		return nil, errors.New("deps.DB is required")
-	}
-	if deps.GRPCServer == nil {
-		return nil, errors.New("deps.GRPCServer is required")
+		return nil, nil, errors.New("deps.DB is required")
 	}
 	if deps.KafkaRegistry == nil {
-		return nil, errors.New("deps.KafkaRegistry is required")
+		return nil, nil, errors.New("deps.KafkaRegistry is required")
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
+		return nil, nil, fmt.Errorf("load config: %w", err)
 	}
 
 	// 2. Initialize GORM DB wrapper over sql.DB
@@ -65,7 +61,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
+		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
 	// 3. Initialize Repositories
@@ -89,7 +85,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 	tokenServ := jwt.NewJWTSigner(keyRepo, cfg.JWTIssuer, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	if deps.AssignKeyProvider != nil {
-		deps.AssignKeyProvider(&grpcAuth.AuthKeyProvider{KeyRepo: keyRepo})
+		deps.AssignKeyProvider(&transport.AuthKeyProvider{KeyRepo: keyRepo})
 	}
 	keyGen := crypto.NewRSAKeyGenerator()
 	txManager := postgres.NewSQLTransactionManager(gormDB)
@@ -119,10 +115,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 				KeyTTL: cfg.KeyRotationTTL,
 			})
 			if err != nil {
-				return nil, fmt.Errorf("generate initial active key: %w", err)
+				return nil, nil, fmt.Errorf("generate initial active key: %w", err)
 			}
 		} else {
-			return nil, fmt.Errorf("get active key on startup failed: %w", err)
+			return nil, nil, fmt.Errorf("get active key on startup failed: %w", err)
 		}
 	}
 
@@ -176,7 +172,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	writer, err := deps.KafkaRegistry.GetWriter("auth", kafkaBrokers)
 	if err != nil {
 		cancelWorkers()
-		return nil, fmt.Errorf("get auth kafka writer: %w", err)
+		return nil, nil, fmt.Errorf("get auth kafka writer: %w", err)
 	}
 
 	kafkaPub := authKafka.NewPublisher(writer)
@@ -211,7 +207,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	refreshTokenHandler := command.NewRefreshTokenHandler(userRepo, keyRepo, sessRepo, tokenServ)
 
 	// 9. Register AuthService Server to gRPC Server
-	grpcHandler := grpcAuth.NewGRPCHandler(
+	grpcHandler := transport.NewGRPCHandler(
 		oauthLoginHandler,
 		logoutHandler,
 		rotateKeysHandler,
@@ -219,23 +215,20 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getJWKSHandler,
 		getOAuthLoginURLHandler,
 	)
-	authv1service.RegisterAuthServiceServer(deps.GRPCServer, grpcHandler)
 
 	log.Println("Auth Bounded Context initialized successfully.")
-	return shutdown, nil
+	return grpcHandler, shutdown, nil
 }
 
-// RegisterGateway configures and registers the gRPC-Gateway multiplexer for the Auth module.
-func RegisterGateway(
-	ctx context.Context,
-	mux *runtime.ServeMux,
-	grpcEndpoint string,
-	opts []grpc.DialOption,
-) error {
-	err := authv1service.RegisterAuthServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts)
-	if err != nil {
-		return fmt.Errorf("register auth service gateway handler: %w", err)
-	}
-
-	return nil
+// RegisterConnectHandler mounts the ConnectRPC handler for the Auth module on an http.ServeMux.
+func RegisterConnectHandler(
+	mux *http.ServeMux,
+	grpcHandler *transport.GRPCHandler,
+	opts ...connect.HandlerOption,
+) {
+	connectHandler := transport.NewConnectAuthHandler(grpcHandler)
+	path, handler := authv1serviceconnect.NewAuthServiceHandler(connectHandler, opts...)
+	mux.Handle(path, handler)
 }
+
+

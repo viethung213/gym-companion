@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	nutritionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service"
+	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
@@ -30,7 +31,6 @@ import (
 
 type ModuleDeps struct {
 	DB            *sql.DB
-	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
 	// ProfileConn là kết nối gRPC in-process đến ProfileService để lấy dữ liệu sinh trắc học.
 	// Có thể nil — khi đó DailyMenuCronWorker dùng fallback metrics.
@@ -124,12 +124,12 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 	}
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
 	var gormDB *gorm.DB
 	if deps.DB != nil {
 		gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: deps.DB}), &gorm.Config{})
 		if err != nil {
-			return nil, fmt.Errorf("nutrition module gorm open: %w", err)
+			return nil, nil, fmt.Errorf("nutrition module gorm open: %w", err)
 		}
 		gormDB = gdb
 	}
@@ -140,9 +140,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 
 	mod := NewModule(ctx, gormDB, "", deps.KafkaRegistry, profileCli)
-	if deps.GRPCServer != nil {
-		nutritionv1service.RegisterNutritionServiceServer(deps.GRPCServer, mod.GRPCHandler)
-	}
 
 	workerCtx, cancel := context.WithCancel(ctx)
 	mod.StartWorkers(workerCtx)
@@ -156,14 +153,18 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		log.Println("[Nutrition Module] Shutdown completed cleanly")
 	}
 
-	return shutdown, nil
+	return mod.GRPCHandler, shutdown, nil
 }
 
-func RegisterGateway(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) error {
-	if err := nutritionv1service.RegisterNutritionServiceHandlerFromEndpoint(ctx, mux, endpoint, opts); err != nil {
-		return fmt.Errorf("nutrition module gateway registration: %w", err)
-	}
-	return nil
+// RegisterConnectHandler mounts the ConnectRPC handler for the Nutrition module on an http.ServeMux.
+func RegisterConnectHandler(
+	mux *http.ServeMux,
+	grpcHandler *transport.GRPCHandler,
+	opts ...connect.HandlerOption,
+) {
+	connectHandler := transport.NewConnectNutritionHandler(grpcHandler)
+	path, handler := nutritionv1serviceconnect.NewNutritionServiceHandler(connectHandler, opts...)
+	mux.Handle(path, handler)
 }
 
 func (m *Module) StartWorkers(ctx context.Context) {
