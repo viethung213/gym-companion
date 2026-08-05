@@ -39,9 +39,9 @@ jobs:
           make proto-gen
 
       - name: Publish TypeScript ConnectRPC package to GHCR
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         working-directory: ./internal/gen/es
         run: |
+          sudo chown -R $USER:$USER .
           if [ ! -f "package.json" ]; then
             echo '{"name":"@viethung213/contracts","version":"1.0.0","description":"TypeScript ConnectRPC stubs for Gym Companion","publishConfig":{"registry":"https://npm.pkg.github.com"},"dependencies":{"@bufbuild/protobuf":"^1.10.0","@connectrpc/connect":"^1.6.0"}}' > package.json
           fi
