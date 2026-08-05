@@ -7,6 +7,13 @@ on:
       - main
     paths:
       - 'proto/**'
+      - '.github/workflows/publish-proto-stubs.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'proto/**'
+      - '.github/workflows/publish-proto-stubs.yml'
 
 jobs:
   generate-and-publish:
@@ -32,6 +39,7 @@ jobs:
           make proto-gen
 
       - name: Publish TypeScript ConnectRPC package to GHCR
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         working-directory: ./gen/es
         run: |
           npm publish --access public || echo "Version already published"
