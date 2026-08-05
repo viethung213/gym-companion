@@ -1,0 +1,39 @@
+name: Publish Proto Stubs (ConnectRPC TS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'proto/**'
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@viethung213'
+
+      - name: Generate Contracts Stubs via Buf
+        run: |
+          make proto-docker-build
+          make proto-gen
+
+      - name: Publish TypeScript ConnectRPC package to GHCR
+        working-directory: ./gen/es
+        run: |
+          npm publish --access public || echo "Version already published"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
