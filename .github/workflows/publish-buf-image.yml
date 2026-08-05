@@ -1,11 +1,13 @@
 name: Publish Buf Docker Image
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
-      - 'infra/buf/buf.Dockerfile' # Chỉ kích hoạt build lại khi thay đổi Dockerfile này
+      - 'infra/buf/buf.Dockerfile'
+ # Chỉ kích hoạt build lại khi thay đổi Dockerfile này
 
 env:
   REGISTRY: ghcr.io

@@ -49,6 +49,8 @@ logs/
 # Generated code directories (Compiled by Buf toolchain)
 /internal/gen/
 /docs/swagger/
+/gen/es/*
+!/gen/es/package.json
 
 # Tooling, CLI and temporary files
 .gemini/
