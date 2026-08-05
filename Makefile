@@ -7,14 +7,19 @@ BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
 # 1. API Contract & Protobuf Commands (Buf CLI)
 # =====================================================================
 
-# Bước 1: Build Docker image chứa Buf CLI và các plugins Go sinh stubs
+# Lấy Docker Image Buf Generator thống nhất từ GitHub Container Registry (GHCR)
+proto-docker-pull:
+	@echo "Pulling unified Buf custom Docker image from GHCR..."
+	docker pull ghcr.io/viethung213/gym-companion/buf-generator:latest || true
+
+# Bước 1: Build Docker image chứa Buf CLI và các plugins (nếu muốn tự build local)
 proto-docker-build:
 	@echo "Building Buf custom Docker image..."
 	docker build -t ghcr.io/viethung213/gym-companion/buf-generator:latest -f infra/buf/buf.Dockerfile .
 
-# Bước 2: Sinh mã nguồn Go (stubs) và tài liệu Swagger OpenAPI từ các hợp đồng Proto
-proto-gen: clean
-	@echo "Generating API contracts via Buf using Docker..."
+# Bước 2: Sinh mã nguồn Go/TS (stubs) và tài liệu OpenAPI từ Proto (Chạy qua Docker 100% với image từ GHCR)
+proto-gen: clean proto-docker-pull
+	@echo "Generating API contracts via Buf using Docker (GHCR Image)..."
 	$(BUF_COMPOSE) run --rm buf generate proto --template proto/buf.gen.yaml
 
 # Cập nhật các phụ thuộc bên ngoài của Protobuf (như googleapis, grpc-gateway) từ buf.lock
@@ -195,7 +200,7 @@ db-init-all: db-init-postgres db-init-go
 # Chạy việc xóa này qua Docker để tránh lỗi phân quyền (permission errors) khi mount volume (do container chạy dưới quyền root).
 clean:
 	@echo "Cleaning up generated stubs..."
-	-docker compose -f infra/buf/docker-compose.yml run --rm --entrypoint rm buf -rf internal/gen/go docs/swagger
+	-docker compose -f infra/buf/docker-compose.yml run --rm --entrypoint rm buf -rf internal/gen/go docs/swagger gen/es/contracts
 	@echo "Cleanup completed."
 
 # Đăng ký Git hooks tự động kiểm soát format commit message chuẩn Conventional Commits

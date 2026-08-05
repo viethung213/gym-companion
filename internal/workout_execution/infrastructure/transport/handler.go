@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	workoutexecutionv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
 	workoutexecutionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
@@ -659,4 +661,154 @@ func toGRPCError(msg string, err error) error {
 	default:
 		return status.Errorf(codes.Internal, "%s: %v", msg, err)
 	}
+}
+
+// --- ConnectRPC Adapter ---
+
+type ConnectWorkoutExecutionHandler struct {
+	grpcHandler *GRPCHandler
+}
+
+var _ workoutexecutionv1serviceconnect.WorkoutExecutionServiceHandler = (*ConnectWorkoutExecutionHandler)(nil)
+var _ workoutexecutionv1serviceconnect.AdminWorkoutExecutionServiceHandler = (*ConnectWorkoutExecutionHandler)(nil)
+
+func NewConnectWorkoutExecutionHandler(grpcHandler *GRPCHandler) *ConnectWorkoutExecutionHandler {
+	return &ConnectWorkoutExecutionHandler{grpcHandler: grpcHandler}
+}
+
+func (c *ConnectWorkoutExecutionHandler) StartWorkoutSession(ctx context.Context, req *connect.Request[workoutexecutionv1message.StartWorkoutSessionRequest]) (*connect.Response[workoutexecutionv1message.StartWorkoutSessionResponse], error) {
+	res, err := c.grpcHandler.StartWorkoutSession(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) StartScheduledWorkoutSession(ctx context.Context, req *connect.Request[workoutexecutionv1message.StartScheduledWorkoutSessionRequest]) (*connect.Response[workoutexecutionv1message.StartScheduledWorkoutSessionResponse], error) {
+	res, err := c.grpcHandler.StartScheduledWorkoutSession(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) LogWorkoutSet(ctx context.Context, req *connect.Request[workoutexecutionv1message.LogWorkoutSetRequest]) (*connect.Response[workoutexecutionv1message.LogWorkoutSetResponse], error) {
+	res, err := c.grpcHandler.LogWorkoutSet(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) CompleteWorkoutSession(ctx context.Context, req *connect.Request[workoutexecutionv1message.CompleteWorkoutSessionRequest]) (*connect.Response[workoutexecutionv1message.CompleteWorkoutSessionResponse], error) {
+	res, err := c.grpcHandler.CompleteWorkoutSession(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) AbortWorkoutSession(ctx context.Context, req *connect.Request[workoutexecutionv1message.AbortWorkoutSessionRequest]) (*connect.Response[workoutexecutionv1message.AbortWorkoutSessionResponse], error) {
+	res, err := c.grpcHandler.AbortWorkoutSession(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) SyncWorkoutLogs(ctx context.Context, req *connect.Request[workoutexecutionv1message.SyncWorkoutLogsRequest]) (*connect.Response[workoutexecutionv1message.SyncWorkoutLogsResponse], error) {
+	res, err := c.grpcHandler.SyncWorkoutLogs(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetMotionSpecification(ctx context.Context, req *connect.Request[workoutexecutionv1message.GetMotionSpecificationRequest]) (*connect.Response[workoutexecutionv1message.GetMotionSpecificationResponse], error) {
+	res, err := c.grpcHandler.GetMotionSpecification(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetPersonalRecords(ctx context.Context, req *connect.Request[workoutexecutionv1message.GetPersonalRecordsRequest]) (*connect.Response[workoutexecutionv1message.GetPersonalRecordsResponse], error) {
+	res, err := c.grpcHandler.GetPersonalRecords(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetWorkoutSessionErrors(ctx context.Context, req *connect.Request[workoutexecutionv1message.GetWorkoutSessionErrorsRequest]) (*connect.Response[workoutexecutionv1message.GetWorkoutSessionErrorsResponse], error) {
+	res, err := c.grpcHandler.GetWorkoutSessionErrors(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetWorkoutHistory(ctx context.Context, req *connect.Request[workoutexecutionv1message.GetWorkoutHistoryRequest]) (*connect.Response[workoutexecutionv1message.GetWorkoutHistoryResponse], error) {
+	res, err := c.grpcHandler.GetWorkoutHistory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+// Admin Methods
+func (c *ConnectWorkoutExecutionHandler) AdminGetPersonalRecords(ctx context.Context, req *connect.Request[workoutexecutionv1message.AdminGetPersonalRecordsRequest]) (*connect.Response[workoutexecutionv1message.AdminGetPersonalRecordsResponse], error) {
+	res, err := c.grpcHandler.AdminGetPersonalRecords(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) AdminGetWorkoutHistory(ctx context.Context, req *connect.Request[workoutexecutionv1message.AdminGetWorkoutHistoryRequest]) (*connect.Response[workoutexecutionv1message.AdminGetWorkoutHistoryResponse], error) {
+	res, err := c.grpcHandler.AdminGetWorkoutHistory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) UpdateMotionSpecification(ctx context.Context, req *connect.Request[workoutexecutionv1message.UpdateMotionSpecificationRequest]) (*connect.Response[workoutexecutionv1message.UpdateMotionSpecificationResponse], error) {
+	res, err := c.grpcHandler.UpdateMotionSpecification(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) DeleteMotionSpecification(ctx context.Context, req *connect.Request[workoutexecutionv1message.DeleteMotionSpecificationRequest]) (*connect.Response[workoutexecutionv1message.DeleteMotionSpecificationResponse], error) {
+	res, err := c.grpcHandler.DeleteMotionSpecification(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) ListMotionSpecifications(ctx context.Context, req *connect.Request[workoutexecutionv1message.ListMotionSpecificationsRequest]) (*connect.Response[workoutexecutionv1message.ListMotionSpecificationsResponse], error) {
+	res, err := c.grpcHandler.ListMotionSpecifications(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetPresignedUploadURL(ctx context.Context, req *connect.Request[workoutexecutionv1message.GetPresignedUploadURLRequest]) (*connect.Response[workoutexecutionv1message.GetPresignedUploadURLResponse], error) {
+	res, err := c.grpcHandler.GetPresignedUploadURL(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) PatchMotionSpecificationAsset(ctx context.Context, req *connect.Request[workoutexecutionv1message.PatchMotionSpecificationAssetRequest]) (*connect.Response[workoutexecutionv1message.PatchMotionSpecificationAssetResponse], error) {
+	res, err := c.grpcHandler.PatchMotionSpecificationAsset(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
 }

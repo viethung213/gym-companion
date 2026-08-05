@@ -1,13 +1,15 @@
-package grpc
+package transport
 
 import (
 	"context"
 	"errors"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	profilev1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
@@ -16,7 +18,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-//nolint:revive // GRPCHandler stutters with package name but matches module convention
 type GRPCHandler struct {
 	profilev1service.UnimplementedProfileServiceServer
 	saveHealthProfileHandler     *command.SaveHealthProfileHandler
@@ -379,4 +380,104 @@ func (h *GRPCHandler) GetInjuryHistory(ctx context.Context, req *profilev1messag
 		UserId:   targetUserID,
 		Injuries: pbInjuries,
 	}, nil
+}
+
+// --- ConnectRPC Adapter ---
+
+type ConnectProfileHandler struct {
+	grpcHandler *GRPCHandler
+}
+
+var _ profilev1serviceconnect.ProfileServiceHandler = (*ConnectProfileHandler)(nil)
+
+func NewConnectProfileHandler(grpcHandler *GRPCHandler) profilev1serviceconnect.ProfileServiceHandler {
+	return &ConnectProfileHandler{grpcHandler: grpcHandler}
+}
+
+func (c *ConnectProfileHandler) SaveHealthProfile(
+	ctx context.Context,
+	req *connect.Request[profilev1message.SaveHealthProfileRequest],
+) (*connect.Response[profilev1message.SaveHealthProfileResponse], error) {
+	res, err := c.grpcHandler.SaveHealthProfile(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) GetProfile(
+	ctx context.Context,
+	req *connect.Request[profilev1message.GetProfileRequest],
+) (*connect.Response[profilev1message.GetProfileResponse], error) {
+	res, err := c.grpcHandler.GetProfile(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) UpdateProfile(
+	ctx context.Context,
+	req *connect.Request[profilev1message.UpdateProfileRequest],
+) (*connect.Response[profilev1message.UpdateProfileResponse], error) {
+	res, err := c.grpcHandler.UpdateProfile(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) LogPeriodicMetrics(
+	ctx context.Context,
+	req *connect.Request[profilev1message.LogPeriodicMetricsRequest],
+) (*connect.Response[profilev1message.LogPeriodicMetricsResponse], error) {
+	res, err := c.grpcHandler.LogPeriodicMetrics(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) GetBodyMetricsHistory(
+	ctx context.Context,
+	req *connect.Request[profilev1message.GetBodyMetricsHistoryRequest],
+) (*connect.Response[profilev1message.GetBodyMetricsHistoryResponse], error) {
+	res, err := c.grpcHandler.GetBodyMetricsHistory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) ReportInjury(
+	ctx context.Context,
+	req *connect.Request[profilev1message.ReportInjuryRequest],
+) (*connect.Response[profilev1message.ReportInjuryResponse], error) {
+	res, err := c.grpcHandler.ReportInjury(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) RecoverInjury(
+	ctx context.Context,
+	req *connect.Request[profilev1message.RecoverInjuryRequest],
+) (*connect.Response[profilev1message.RecoverInjuryResponse], error) {
+	res, err := c.grpcHandler.RecoverInjury(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) GetInjuryHistory(
+	ctx context.Context,
+	req *connect.Request[profilev1message.GetInjuryHistoryRequest],
+) (*connect.Response[profilev1message.GetInjuryHistoryResponse], error) {
+	res, err := c.grpcHandler.GetInjuryHistory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
 }

@@ -5,45 +5,43 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	profilev1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service"
+	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
 	profileEvent "github.com/viethung213/gym-companion/internal/profile/infrastructure/event"
 	profileKafka "github.com/viethung213/gym-companion/internal/profile/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/persistence"
-	grpcProfile "github.com/viethung213/gym-companion/internal/profile/infrastructure/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/profile/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/worker"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
 	DB            *sql.DB
-	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
 	}), &gorm.Config{
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
+		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
 	userRepo := persistence.NewPostgresUserProfileRepository(gormDB)
 	outboxRepo := persistence.NewGormOutboxRepository(gormDB)
-	outboxLogRepo := persistence.NewGormOutboxLogRepository(gormDB)
 	txManager := persistence.NewSQLTransactionManager(gormDB)
 	eventPub := profileEvent.NewOutboxWriter(outboxRepo)
 
@@ -52,60 +50,35 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	logPeriodicMetricsHandler := command.NewLogPeriodicMetricsHandler(userRepo, eventPub, txManager)
 	reportInjuryHandler := command.NewReportInjuryHandler(userRepo, eventPub, txManager)
 	recoverInjuryHandler := command.NewRecoverInjuryHandler(userRepo, eventPub, txManager)
+
 	getProfileHandler := query.NewGetProfileHandler(userRepo)
 	getBodyMetricsHistoryHandler := query.NewGetBodyMetricsHistoryHandler(userRepo)
 	getInjuryHistoryHandler := query.NewGetInjuryHistoryHandler(userRepo)
 
+	var kafkaPub *profileKafka.Publisher
+	if deps.KafkaRegistry != nil {
+		brokersStr := os.Getenv("KAFKA_BROKERS")
+		if brokersStr == "" {
+			brokersStr = "localhost:9092"
+		}
+		brokers := strings.Split(brokersStr, ",")
+
+		writer, wErr := deps.KafkaRegistry.GetWriter("profile-events", brokers)
+		if wErr == nil && writer != nil {
+			kafkaPub = profileKafka.NewPublisher(writer)
+		}
+	}
+
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 
-	kafkaBrokersStr := os.Getenv("PROFILE_KAFKA_BROKERS")
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = os.Getenv("KAFKA_BROKERS")
-	}
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = "localhost:9092"
-	}
-	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
-
-	var kafkaPub *profileKafka.Publisher
-	if deps.KafkaRegistry != nil {
-		writer, err := deps.KafkaRegistry.GetWriter("profile", kafkaBrokers)
-		if err != nil {
-			cancelWorkers()
-			return nil, fmt.Errorf("get profile kafka writer: %w", err)
-		}
-		kafkaPub = profileKafka.NewPublisher(writer)
-		outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
-
+	if kafkaPub != nil {
+		outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 5*time.Second)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("PANIC RECOVERED in Profile Outbox worker: %v", r)
-				}
-			}()
 			outboxWorker.Start(workerCtx)
 		}()
-
-		// Start UserRegistered Kafka Consumer to automatically create blank profiles
-		reader, err := deps.KafkaRegistry.GetReader("profile-user-registered-consumer", "auth.events", kafkaBrokers)
-		if err == nil {
-			consumer := worker.NewUserRegisteredConsumer(reader, userRepo, outboxLogRepo, txManager)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in UserRegistered Consumer: %v", r)
-					}
-				}()
-				consumer.Start(workerCtx)
-			}()
-		} else {
-			log.Printf("Warning: failed to get kafka reader for auth.events: %v", err)
-		}
 	}
 
 	shutdown := func() {
@@ -118,7 +91,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		log.Println("Profile Bounded Context background workers stopped.")
 	}
 
-	grpcHandler := grpcProfile.NewGRPCHandler(
+	grpcHandler := transport.NewGRPCHandler(
 		saveHealthProfileHandler,
 		updateProfileHandler,
 		logPeriodicMetricsHandler,
@@ -128,21 +101,17 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getBodyMetricsHistoryHandler,
 		getInjuryHistoryHandler,
 	)
-	profilev1service.RegisterProfileServiceServer(deps.GRPCServer, grpcHandler)
-
 	log.Println("Profile Bounded Context initialized successfully.")
-	return shutdown, nil
+	return grpcHandler, shutdown, nil
 }
 
-func RegisterGateway(
-	ctx context.Context,
-	mux *runtime.ServeMux,
-	grpcEndpoint string,
-	opts []grpc.DialOption,
-) error {
-	err := profilev1service.RegisterProfileServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts)
-	if err != nil {
-		return fmt.Errorf("register profile service gateway handler: %w", err)
-	}
-	return nil
+// RegisterConnectHandler mounts the ConnectRPC handler for the Profile module on an http.ServeMux.
+func RegisterConnectHandler(
+	mux *http.ServeMux,
+	grpcHandler *transport.GRPCHandler,
+	opts ...connect.HandlerOption,
+) {
+	connectHandler := transport.NewConnectProfileHandler(grpcHandler)
+	path, handler := profilev1serviceconnect.NewProfileServiceHandler(connectHandler, opts...)
+	mux.Handle(path, handler)
 }

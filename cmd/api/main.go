@@ -6,25 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"connectrpc.com/connect"
+	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/nutrition"
+	"github.com/viethung213/gym-companion/internal/profile"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 func main() {
@@ -36,14 +37,9 @@ func main() {
 func run() error {
 	loadEnvFile()
 
-	httpPort := os.Getenv("APP_PORT")
-	if httpPort == "" {
-		httpPort = "1010"
-	}
-
-	grpcPort := os.Getenv("GRPC_PORT")
-	if grpcPort == "" {
-		grpcPort = "9090"
+	appPort := os.Getenv("APP_PORT")
+	if appPort == "" {
+		appPort = "8080"
 	}
 
 	// Initialize Database Registry & connection pools
@@ -82,40 +78,22 @@ func run() error {
 		log.Println("Initialized isolated Workout Execution Database Pool successfully.")
 	}
 
-	// Listen on gRPC port
-	lis, err := net.Listen("tcp", ":"+grpcPort)
-	if err != nil {
-		return fmt.Errorf("grpc listen on port %s: %w", grpcPort, err)
-	}
-
 	lazyKP := &lazyKeyProvider{}
 
-	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			middleware.UnaryRecoveryInterceptor(),
-			middleware.UnaryLoggingInterceptor(),
-			middleware.UnaryAuthInterceptor(lazyKP),
-			middleware.UnaryRateLimitInterceptor(),
-		),
-	)
-	log.Printf("Starting gRPC server on port %s...\n", grpcPort)
-
 	// Initialize Auth Module
-	shutdown, err := auth.Initialize(ctx, auth.ModuleDeps{
+	authGRPCHandler, shutdownAuth, err := auth.Initialize(ctx, auth.ModuleDeps{
 		DB:                db,
-		GRPCServer:        grpcServer,
 		AssignKeyProvider: lazyKP.Set,
 		KafkaRegistry:     kafkaRegistry,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize auth module: %w", err)
 	}
-	defer shutdown()
+	defer shutdownAuth()
 
 	// Initialize Exercise Module
-	shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
+	exerciseServer, shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
 		DB:            exerciseDB,
-		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
@@ -124,9 +102,8 @@ func run() error {
 	defer shutdownExercise()
 
 	// Initialize Workout Execution Module
-	shutdownWorkout, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
+	workoutServer, shutdownWorkout, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
 		DB:            workoutDB,
-		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
@@ -140,9 +117,8 @@ func run() error {
 		log.Println("Warning: nutrition database pool not found, falling back to auth pool.")
 		nutritionDB = db
 	}
-	shutdownNutrition, err := nutrition.Initialize(ctx, nutrition.ModuleDeps{
+	nutritionGRPCHandler, shutdownNutrition, err := nutrition.Initialize(ctx, nutrition.ModuleDeps{
 		DB:            nutritionDB,
-		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
@@ -150,10 +126,23 @@ func run() error {
 	}
 	defer shutdownNutrition()
 
+	// Initialize Profile Module
+	profileDB, err := dbRegistry.GetPool("profile")
+	if err != nil {
+		log.Println("Warning: profile database pool not found, falling back to auth pool.")
+		profileDB = db
+	}
+	profileGRPCHandler, shutdownProfile, err := profile.Initialize(ctx, profile.ModuleDeps{
+		DB:            profileDB,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize profile module: %w", err)
+	}
+	defer shutdownProfile()
+
 	// Initialize Coaching Module.
-	// TODO(#197): all three readers are mocks; coaching runs on fixture data.
 	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
-		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
 		ProfileReader: &adapters.MockUserProfileReader{},
 		SessionReader: &adapters.MockWorkoutSessionReader{},
@@ -165,47 +154,27 @@ func run() error {
 	}
 	defer shutdownCoaching()
 
-	errChan := make(chan error, 2)
-	go func() {
-		if serveErr := grpcServer.Serve(lis); serveErr != nil {
-			errChan <- fmt.Errorf("grpc server serve: %w", serveErr)
-		}
-	}()
-
-	// 2. Start HTTP Server (gRPC-Gateway)
-	log.Printf("Starting HTTP API gateway server on port %s...\n", httpPort)
+	// 2. Start Unified HTTP Server with ConnectRPC, h2c, and CORS on Port 8080
+	log.Printf("🚀 Starting Unified API Server (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	// Register Coaching HTTP Handler FIRST (before gwmux catch-all)
+	connectInterceptors := connect.WithInterceptors(
+		middleware.NewConnectRecoveryInterceptor(),
+		middleware.NewConnectLoggingInterceptor(),
+		middleware.NewConnectAuthInterceptor(lazyKP),
+		middleware.NewConnectRateLimitInterceptor(),
+	)
+
+	// Mount ConnectRPC Service Handlers directly onto HTTP multiplexer
+	auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors)
+	exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors)
+	workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)
+	nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors)
+	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
+
+	// Register Coaching REST HTTP Handler
 	coachingHandler := coaching.NewCoachingHandler(coachAgent)
 	coaching.RegisterHandlers(mux, coachingHandler)
-
-	// Setup shared gRPC-Gateway multiplexer
-	gwmux := runtime.NewServeMux()
-
-	err = auth.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
-	if err != nil {
-		return fmt.Errorf("register auth gateway: %w", err)
-	}
-
-	err = exercise.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
-	if err != nil {
-		return fmt.Errorf("register exercise gateway: %w", err)
-	}
-
-	err = workoutexecution.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
-	if err != nil {
-		return fmt.Errorf("register workout execution gateway: %w", err)
-	}
-
-	err = nutrition.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
-	if err != nil {
-		return fmt.Errorf("register nutrition gateway: %w", err)
-	}
-
-	// Register gwmux LAST (catch-all for remaining routes)
-	mux.Handle("/", gwmux)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -213,8 +182,31 @@ func run() error {
 		_, _ = w.Write([]byte("OK"))
 	})
 
+	// Wrap multiplexer with CORS middleware for browser clients
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{
+			"Accept", "Content-Type", "Content-Length", "Accept-Encoding",
+			"Authorization", "Connect-Protocol-Version", "Connect-Timeout-Ms",
+			"Connect-Accept-Encoding", "Connect-Content-Encoding", "X-User-Id", "X-GRPC-Web",
+		},
+		ExposedHeaders:   []string{"Content-Type", "Content-Length", "Connect-Content-Encoding", "Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin"},
+		AllowCredentials: true,
+		MaxAge:           7200,
+	}).Handler(mux)
+
+	// Wrap with h2c for unencrypted HTTP/2 support (allows gRPC CLI & standard gRPC clients over HTTP/2)
+	h2cHandler := h2c.NewHandler(corsHandler, &http2.Server{})
+
+	server := &http.Server{
+		Addr:    ":" + appPort,
+		Handler: h2cHandler,
+	}
+
+	errChan := make(chan error, 1)
 	go func() {
-		if err := http.ListenAndServe(":"+httpPort, mux); err != nil {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errChan <- fmt.Errorf("http server listen and serve: %w", err)
 		}
 	}()

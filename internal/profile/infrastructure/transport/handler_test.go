@@ -1,6 +1,6 @@
 //go:build unit
 
-package grpc_test
+package transport_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
 	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
-	grpcProfile "github.com/viethung213/gym-companion/internal/profile/infrastructure/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/profile/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -88,7 +88,7 @@ func (m *mockEventPub) PublishEvents(ctx context.Context, events []any) error {
 	return nil
 }
 
-func setupGRPCHandler(repo *mockRepo) *grpcProfile.GRPCHandler {
+func setupGRPCHandler(repo *mockRepo) *transport.GRPCHandler {
 	txManager := &mockTxManager{}
 	eventPub := &mockEventPub{}
 
@@ -101,7 +101,7 @@ func setupGRPCHandler(repo *mockRepo) *grpcProfile.GRPCHandler {
 	getMetricsHandler := query.NewGetBodyMetricsHistoryHandler(repo)
 	getInjuriesHandler := query.NewGetInjuryHistoryHandler(repo)
 
-	return grpcProfile.NewGRPCHandler(
+	return transport.NewGRPCHandler(
 		saveHandler,
 		updateHandler,
 		logHandler,

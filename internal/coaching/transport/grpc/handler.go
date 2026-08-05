@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 
+	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
 	pbsvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service/coachingv1serviceconnect"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -488,4 +490,104 @@ func pbSourceToDomain(src pbmsg.SessionPlanSource) roadmap.SessionPlanSource {
 	default:
 		return ""
 	}
+}
+
+// --- ConnectRPC Adapter ---
+
+type ConnectCoachingHandler struct {
+	server *Server
+}
+
+var _ coachingv1serviceconnect.CoachingServiceHandler = (*ConnectCoachingHandler)(nil)
+
+func NewConnectCoachingHandler(server *Server) coachingv1serviceconnect.CoachingServiceHandler {
+	return &ConnectCoachingHandler{server: server}
+}
+
+func (c *ConnectCoachingHandler) InitiateRoadmap(
+	ctx context.Context,
+	req *connect.Request[pbmsg.InitiateRoadmapRequest],
+) (*connect.Response[pbmsg.InitiateRoadmapResponse], error) {
+	res, err := c.server.InitiateRoadmap(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) ListRoadmaps(
+	ctx context.Context,
+	req *connect.Request[pbmsg.ListRoadmapsRequest],
+) (*connect.Response[pbmsg.ListRoadmapsResponse], error) {
+	res, err := c.server.ListRoadmaps(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) GetRoadmap(
+	ctx context.Context,
+	req *connect.Request[pbmsg.GetRoadmapRequest],
+) (*connect.Response[pbmsg.GetRoadmapResponse], error) {
+	res, err := c.server.GetRoadmap(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) GetActiveRoadmap(
+	ctx context.Context,
+	req *connect.Request[pbmsg.GetActiveRoadmapRequest],
+) (*connect.Response[pbmsg.GetActiveRoadmapResponse], error) {
+	res, err := c.server.GetActiveRoadmap(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) GetSessionPlan(
+	ctx context.Context,
+	req *connect.Request[pbmsg.GetSessionPlanRequest],
+) (*connect.Response[pbmsg.GetSessionPlanResponse], error) {
+	res, err := c.server.GetSessionPlan(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) RegenerateSchedule(
+	ctx context.Context,
+	req *connect.Request[pbmsg.RegenerateScheduleRequest],
+) (*connect.Response[pbmsg.RegenerateScheduleResponse], error) {
+	res, err := c.server.RegenerateSchedule(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) CreateAdhocSessionPlan(
+	ctx context.Context,
+	req *connect.Request[pbmsg.CreateAdhocSessionPlanRequest],
+) (*connect.Response[pbmsg.CreateAdhocSessionPlanResponse], error) {
+	res, err := c.server.CreateAdhocSessionPlan(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectCoachingHandler) SuggestAdHocSession(
+	ctx context.Context,
+	req *connect.Request[pbmsg.SuggestAdHocSessionRequest],
+) (*connect.Response[pbmsg.SuggestAdHocSessionResponse], error) {
+	res, err := c.server.SuggestAdHocSession(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
 }

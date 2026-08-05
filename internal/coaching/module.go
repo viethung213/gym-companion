@@ -4,17 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 
+	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
+	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service/coachingv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/kafka"
-	"google.golang.org/grpc"
 )
 
 // ModuleDeps contains dependencies for coaching module initialization.
 type ModuleDeps struct {
-	GRPCServer    *grpc.Server
 	KafkaRegistry *kafka.Registry
 	ProfileReader port.UserProfileReader
 	SessionReader port.WorkoutSessionReader
@@ -51,4 +53,18 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 	}
 
 	return coachAgent, shutdown, nil
+}
+
+// RegisterConnectHandler mounts the ConnectRPC handler for Coaching module on an http.ServeMux.
+func RegisterConnectHandler(
+	mux *http.ServeMux,
+	server *coachingGrpc.Server,
+	opts ...connect.HandlerOption,
+) {
+	if server == nil {
+		return
+	}
+	connectHandler := coachingGrpc.NewConnectCoachingHandler(server)
+	path, handler := coachingv1serviceconnect.NewCoachingServiceHandler(connectHandler, opts...)
+	mux.Handle(path, handler)
 }

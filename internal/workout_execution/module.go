@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	workoutexecutionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service"
+	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
@@ -23,7 +24,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
-	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -31,12 +31,12 @@ import (
 // ModuleDeps contains external dependencies required to boot the Workout Execution module.
 type ModuleDeps struct {
 	DB            *sql.DB
-	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
 }
 
 // Initialize wires dependencies, registers gRPC services, and starts background workers.
-func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
+
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
 	}), &gorm.Config{
@@ -44,7 +44,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
+		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
 
 	// Initialize Repositories & Storage & Transaction Manager
@@ -98,9 +98,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getPresignedUploadURLQuery,
 		patchMotionSpecAssetHandler,
 	)
-
-	workoutexecutionv1service.RegisterWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
-	workoutexecutionv1service.RegisterAdminWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
 
 	// Kafka Setup
 	kafkaBrokersStr := os.Getenv("WORKOUT_EXECUTION_KAFKA_BROKERS")
@@ -257,23 +254,19 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 	}
 
 	log.Println("Workout Execution Bounded Context initialized successfully.")
-	return shutdown, nil
+	return grpcHandler, shutdown, nil
 }
 
-// RegisterGateway registers gRPC-Gateway endpoints for REST proxy.
-func RegisterGateway(
-	ctx context.Context,
-	mux *runtime.ServeMux,
-	grpcEndpoint string,
-	opts []grpc.DialOption,
-) error {
-	err := workoutexecutionv1service.RegisterWorkoutExecutionServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts)
-	if err != nil {
-		return fmt.Errorf("register workout execution service gateway handler: %w", err)
-	}
-	err = workoutexecutionv1service.RegisterAdminWorkoutExecutionServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts)
-	if err != nil {
-		return fmt.Errorf("register admin workout execution service gateway handler: %w", err)
-	}
-	return nil
+// RegisterConnectHandler mounts the ConnectRPC handlers for the Workout Execution module on an http.ServeMux.
+func RegisterConnectHandler(
+	mux *http.ServeMux,
+	grpcHandler *transport.GRPCHandler,
+	opts ...connect.HandlerOption,
+) {
+	connectHandler := transport.NewConnectWorkoutExecutionHandler(grpcHandler)
+	path, handler := workoutexecutionv1serviceconnect.NewWorkoutExecutionServiceHandler(connectHandler, opts...)
+	mux.Handle(path, handler)
+
+	adminPath, adminHandler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(connectHandler, opts...)
+	mux.Handle(adminPath, adminHandler)
 }
