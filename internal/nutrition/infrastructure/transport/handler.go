@@ -336,7 +336,10 @@ func NewConnectNutritionHandler(grpcHandler *GRPCHandler) nutritionv1serviceconn
 	return &ConnectNutritionHandler{grpcHandler: grpcHandler}
 }
 
-func (c *ConnectNutritionHandler) GetTodayMenu(ctx context.Context, req *connect.Request[nutritionv1msg.GetTodayMenuRequest]) (*connect.Response[nutritionv1msg.GetTodayMenuResponse], error) {
+func (c *ConnectNutritionHandler) GetTodayMenu(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.GetTodayMenuRequest],
+) (*connect.Response[nutritionv1msg.GetTodayMenuResponse], error) {
 	res, err := c.grpcHandler.GetTodayMenu(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -344,7 +347,10 @@ func (c *ConnectNutritionHandler) GetTodayMenu(ctx context.Context, req *connect
 	return connect.NewResponse(res), nil
 }
 
-func (c *ConnectNutritionHandler) LogMeal(ctx context.Context, req *connect.Request[nutritionv1msg.LogMealRequest]) (*connect.Response[nutritionv1msg.LogMealResponse], error) {
+func (c *ConnectNutritionHandler) LogMeal(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.LogMealRequest],
+) (*connect.Response[nutritionv1msg.LogMealResponse], error) {
 	res, err := c.grpcHandler.LogMeal(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -352,7 +358,10 @@ func (c *ConnectNutritionHandler) LogMeal(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(res), nil
 }
 
-func (c *ConnectNutritionHandler) GetNutritionHistory(ctx context.Context, req *connect.Request[nutritionv1msg.GetNutritionHistoryRequest]) (*connect.Response[nutritionv1msg.GetNutritionHistoryResponse], error) {
+func (c *ConnectNutritionHandler) GetNutritionHistory(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.GetNutritionHistoryRequest],
+) (*connect.Response[nutritionv1msg.GetNutritionHistoryResponse], error) {
 	res, err := c.grpcHandler.GetNutritionHistory(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -360,7 +369,10 @@ func (c *ConnectNutritionHandler) GetNutritionHistory(ctx context.Context, req *
 	return connect.NewResponse(res), nil
 }
 
-func (c *ConnectNutritionHandler) GetNutritionSummary(ctx context.Context, req *connect.Request[nutritionv1msg.GetNutritionSummaryRequest]) (*connect.Response[nutritionv1msg.GetNutritionSummaryResponse], error) {
+func (c *ConnectNutritionHandler) GetNutritionSummary(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.GetNutritionSummaryRequest],
+) (*connect.Response[nutritionv1msg.GetNutritionSummaryResponse], error) {
 	res, err := c.grpcHandler.GetNutritionSummary(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -368,7 +380,10 @@ func (c *ConnectNutritionHandler) GetNutritionSummary(ctx context.Context, req *
 	return connect.NewResponse(res), nil
 }
 
-func (c *ConnectNutritionHandler) RecalibratePlanWithPantry(ctx context.Context, req *connect.Request[nutritionv1msg.RecalibratePlanWithPantryRequest]) (*connect.Response[nutritionv1msg.RecalibratePlanWithPantryResponse], error) {
+func (c *ConnectNutritionHandler) RecalibratePlanWithPantry(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.RecalibratePlanWithPantryRequest],
+) (*connect.Response[nutritionv1msg.RecalibratePlanWithPantryResponse], error) {
 	res, err := c.grpcHandler.RecalibratePlanWithPantry(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -376,7 +391,10 @@ func (c *ConnectNutritionHandler) RecalibratePlanWithPantry(ctx context.Context,
 	return connect.NewResponse(res), nil
 }
 
-func (c *ConnectNutritionHandler) CreateFoodItem(ctx context.Context, req *connect.Request[nutritionv1msg.CreateFoodItemRequest]) (*connect.Response[nutritionv1msg.CreateFoodItemResponse], error) {
+func (c *ConnectNutritionHandler) CreateFoodItem(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.CreateFoodItemRequest],
+) (*connect.Response[nutritionv1msg.CreateFoodItemResponse], error) {
 	res, err := c.grpcHandler.CreateFoodItem(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -384,7 +402,10 @@ func (c *ConnectNutritionHandler) CreateFoodItem(ctx context.Context, req *conne
 	return connect.NewResponse(res), nil
 }
 
-func (c *ConnectNutritionHandler) GetNutritionInsight(ctx context.Context, req *connect.Request[nutritionv1msg.GetNutritionInsightRequest]) (*connect.Response[nutritionv1msg.GetNutritionInsightResponse], error) {
+func (c *ConnectNutritionHandler) GetNutritionInsight(
+	ctx context.Context,
+	req *connect.Request[nutritionv1msg.GetNutritionInsightRequest],
+) (*connect.Response[nutritionv1msg.GetNutritionInsightResponse], error) {
 	res, err := c.grpcHandler.GetNutritionInsight(ctx, req.Msg)
 	if err != nil {
 		return nil, err

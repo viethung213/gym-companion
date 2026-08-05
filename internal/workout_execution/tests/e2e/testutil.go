@@ -253,9 +253,8 @@ func SetupE2ESuite(t *testing.T) *E2ETestSuite {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	ctx, cancel := context.WithCancel(context.Background())
 
-	cleanup, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
-		DB:         sqlDB,
-		GRPCServer: grpcServer,
+	_, cleanup, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
+		DB: sqlDB,
 	})
 	if err != nil {
 		cancel()

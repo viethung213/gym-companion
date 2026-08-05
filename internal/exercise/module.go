@@ -176,5 +176,3 @@ func RegisterConnectHandler(
 	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }
-
-

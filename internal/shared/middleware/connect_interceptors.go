@@ -23,7 +23,8 @@ func NewConnectLoggingInterceptor() connect.UnaryInterceptorFunc {
 			procedure := req.Spec().Procedure
 			if err != nil {
 				connectErr := connect.NewError(connect.CodeInternal, err)
-				if cErr, ok := err.(*connect.Error); ok {
+				var cErr *connect.Error
+				if errors.As(err, &cErr) {
 					connectErr = cErr
 				}
 				log.Printf("Connect Unary | Procedure: %s | Duration: %v | Code: %s | Message: %s",
@@ -141,4 +142,3 @@ func extractPeerIPFromConnect(ctx context.Context, req connect.AnyRequest) strin
 	}
 	return "unknown"
 }
-

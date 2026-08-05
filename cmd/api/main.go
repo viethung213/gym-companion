@@ -184,9 +184,13 @@ func run() error {
 
 	// Wrap multiplexer with CORS middleware for browser clients
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "Authorization", "Connect-Protocol-Version", "Connect-Timeout-Ms", "Connect-Accept-Encoding", "Connect-Content-Encoding", "X-User-Id", "X-GRPC-Web"},
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{
+			"Accept", "Content-Type", "Content-Length", "Accept-Encoding",
+			"Authorization", "Connect-Protocol-Version", "Connect-Timeout-Ms",
+			"Connect-Accept-Encoding", "Connect-Content-Encoding", "X-User-Id", "X-GRPC-Web",
+		},
 		ExposedHeaders:   []string{"Content-Type", "Content-Length", "Connect-Content-Encoding", "Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin"},
 		AllowCredentials: true,
 		MaxAge:           7200,

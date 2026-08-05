@@ -68,4 +68,3 @@ func RegisterConnectHandler(
 	path, handler := coachingv1serviceconnect.NewCoachingServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }
-

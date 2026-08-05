@@ -99,7 +99,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 		patchMotionSpecAssetHandler,
 	)
 
-
 	// Kafka Setup
 	kafkaBrokersStr := os.Getenv("WORKOUT_EXECUTION_KAFKA_BROKERS")
 	if kafkaBrokersStr == "" {
@@ -271,5 +270,3 @@ func RegisterConnectHandler(
 	adminPath, adminHandler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(connectHandler, opts...)
 	mux.Handle(adminPath, adminHandler)
 }
-
-

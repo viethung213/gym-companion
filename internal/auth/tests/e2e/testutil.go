@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -14,14 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	"github.com/viethung213/gym-companion/internal/shared/middleware"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -79,33 +73,7 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 	}
 	truncateTables(db)
 
-	// 2. Start gRPC Server on free port
-	grpcListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		cancel()
-		t.Fatalf("Failed to listen on free port for gRPC: %v", err)
-	}
-	grpcAddr := grpcListener.Addr().String()
-
-	testAuthInterceptor := func(
-		ctx context.Context,
-		req any,
-		_ *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (any, error) {
-		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			if vals := md.Get("x-user-id"); len(vals) > 0 && vals[0] != "" {
-				ctx = context.WithValue(ctx, middleware.UserIDKey, vals[0])
-			}
-			if vals := md.Get("x-user-role"); len(vals) > 0 && vals[0] != "" {
-				ctx = context.WithValue(ctx, middleware.UserRoleKey, vals[0])
-			}
-		}
-		return handler(ctx, req)
-	}
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
-
-	// 3. Start HTTP Gateway on free port
+	// 2. Start HTTP Server on free port
 	httpListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		cancel()
@@ -113,41 +81,25 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 	}
 	httpAddr := httpListener.Addr().String()
 
-	// 4. Bootstrap Auth module via Initialize
+	// 3. Bootstrap Auth module via Initialize
 	deps := auth.ModuleDeps{
 		DB:            rawSQL,
-		GRPCServer:    grpcServer,
 		KafkaRegistry: sharedKafka.GetRegistry(),
 	}
-	shutdown, err := auth.Initialize(ctx, deps)
+	grpcHandler, shutdown, err := auth.Initialize(ctx, deps)
 	if err != nil {
 		cancel()
 		t.Fatalf("Failed to initialize Auth module: %v", err)
 	}
 
-	// Run gRPC server in background
-	go func() {
-		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			log.Printf("gRPC server run error: %v", err)
-		}
-	}()
-
-	// Register Gateway
-	gwmux := runtime.NewServeMux()
-	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	err = auth.RegisterGateway(ctx, gwmux, grpcAddr, dialOpts)
-	if err != nil {
-		cancel()
-		t.Fatalf("Failed to register Auth gRPC-Gateway: %v", err)
-	}
-
 	mux := http.NewServeMux()
-	mux.Handle("/", gwmux)
+	auth.RegisterConnectHandler(mux, grpcHandler)
 	httpServer := &http.Server{Handler: mux}
+
 	// Run HTTP server in background
 	go func() {
 		if err := httpServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP Gateway run error: %v", err)
+			log.Printf("HTTP Server run error: %v", err)
 		}
 	}()
 
@@ -155,9 +107,7 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 	cleanup := func() {
 		cancel()
 		shutdown()
-		grpcServer.GracefulStop()
 		_ = httpServer.Shutdown(context.Background())
-		_ = grpcListener.Close()
 		_ = httpListener.Close()
 		truncateTables(db)
 	}

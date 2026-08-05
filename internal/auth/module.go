@@ -230,5 +230,3 @@ func RegisterConnectHandler(
 	path, handler := authv1serviceconnect.NewAuthServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }
-
-

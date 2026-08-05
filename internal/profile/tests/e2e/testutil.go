@@ -145,9 +145,8 @@ func SetupE2ESuite(t *testing.T) *TestSuite {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	ctx, cancel := context.WithCancel(context.Background())
 
-	cleanup, err := profile.Initialize(ctx, profile.ModuleDeps{
+	_, cleanup, err := profile.Initialize(ctx, profile.ModuleDeps{
 		DB:            sqlDB,
-		GRPCServer:    grpcServer,
 		KafkaRegistry: sharedKafka.GetRegistry(),
 	})
 	if err != nil {
