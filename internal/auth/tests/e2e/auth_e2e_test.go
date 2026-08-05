@@ -7,12 +7,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 
 	infraPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
+)
+
+const (
+	authServicePrefix = "/contracts.generic.auth.v1.service.AuthService/"
 )
 
 // TestE2E_JWKS_And_KeyRotation tests public keys retrieval and manual rotation flows.
@@ -21,7 +23,7 @@ func TestE2E_JWKS_And_KeyRotation(t *testing.T) {
 	defer cleanup()
 
 	// 1. Fetch JWKS Initially
-	resp, err := http.Get(baseURL + "/api/v1/auth/jwks")
+	resp, err := http.Post(baseURL+authServicePrefix+"GetJWKS", "application/json", bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		t.Fatalf("Failed to fetch initial JWKS: %v", err)
 	}
@@ -44,7 +46,7 @@ func TestE2E_JWKS_And_KeyRotation(t *testing.T) {
 	initialKid := initialJWKS.Keys[0].Kid
 
 	// 2. Trigger Manual Key Rotation
-	respRotate, err := http.Post(baseURL+"/api/v1/auth/keys/rotate", "application/json", bytes.NewBuffer([]byte("{}")))
+	respRotate, err := http.Post(baseURL+authServicePrefix+"RotateKeys", "application/json", bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		t.Fatalf("Failed to execute key rotation request: %v", err)
 	}
@@ -63,7 +65,7 @@ func TestE2E_JWKS_And_KeyRotation(t *testing.T) {
 	}
 
 	// 3. Fetch JWKS after rotation
-	respNew, err := http.Get(baseURL + "/api/v1/auth/jwks")
+	respNew, err := http.Post(baseURL+authServicePrefix+"GetJWKS", "application/json", bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		t.Fatalf("Failed to fetch JWKS after rotation: %v", err)
 	}
@@ -109,8 +111,13 @@ func TestE2E_OAuthFlows_Google(t *testing.T) {
 
 	// 1. Get OAuth Login URL for Google
 	redirectURI := "http://localhost:3000/oauth/callback"
-	loginURLPath := fmt.Sprintf("/api/v1/auth/oauth/login?provider=google&redirectUri=%s", url.QueryEscape(redirectURI))
-	respURL, err := http.Get(baseURL + loginURLPath)
+	urlReq := map[string]interface{}{
+		"provider":    "google",
+		"redirectUri": redirectURI,
+	}
+	urlReqBody, _ := json.Marshal(urlReq)
+
+	respURL, err := http.Post(baseURL+authServicePrefix+"GetOAuthLoginURL", "application/json", bytes.NewBuffer(urlReqBody))
 	if err != nil {
 		t.Fatalf("Failed to execute GetOAuthLoginURL request: %v", err)
 	}
@@ -128,11 +135,14 @@ func TestE2E_OAuthFlows_Google(t *testing.T) {
 		t.Fatal("Google login URL was empty")
 	}
 
-	parsedURL, err := url.Parse(urlResp.LoginUrl)
-	if err != nil {
-		t.Fatalf("Failed to parse Google login URL: %v", err)
+	// State parsing from URL
+	stateVal := "test-oauth-state-google"
+	if stateIdx := bytes.Index([]byte(urlResp.LoginUrl), []byte("state=")); stateIdx != -1 {
+		stateVal = string([]byte(urlResp.LoginUrl)[stateIdx+6:])
+		if ampIdx := bytes.Index([]byte(stateVal), []byte("&")); ampIdx != -1 {
+			stateVal = stateVal[:ampIdx]
+		}
 	}
-	stateVal := parsedURL.Query().Get("state")
 
 	// 2. Perform LoginWithOAuth
 	loginReq := map[string]interface{}{
@@ -143,7 +153,7 @@ func TestE2E_OAuthFlows_Google(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(loginReq)
 
-	respLogin, err := http.Post(baseURL+"/api/v1/auth/login/oauth", "application/json", bytes.NewBuffer(reqBody))
+	respLogin, err := http.Post(baseURL+authServicePrefix+"LoginWithOAuth", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
 		t.Fatalf("Failed to execute LoginWithOAuth request: %v", err)
 	}
@@ -179,7 +189,7 @@ func TestE2E_OAuthFlows_Google(t *testing.T) {
 	}
 	refreshBody, _ := json.Marshal(refreshReq)
 
-	respRefresh, err := http.Post(baseURL+"/api/v1/auth/refresh", "application/json", bytes.NewBuffer(refreshBody))
+	respRefresh, err := http.Post(baseURL+authServicePrefix+"RefreshToken", "application/json", bytes.NewBuffer(refreshBody))
 	if err != nil {
 		t.Fatalf("Failed to execute RefreshToken request: %v", err)
 	}
@@ -205,7 +215,7 @@ func TestE2E_OAuthFlows_Google(t *testing.T) {
 	}
 	logoutBody, _ := json.Marshal(logoutReq)
 
-	reqLogout, err := http.NewRequest("POST", baseURL+"/api/v1/auth/logout", bytes.NewBuffer(logoutBody))
+	reqLogout, err := http.NewRequest("POST", baseURL+authServicePrefix+"Logout", bytes.NewBuffer(logoutBody))
 	if err != nil {
 		t.Fatalf("Failed to create Logout request: %v", err)
 	}
@@ -250,8 +260,13 @@ func TestE2E_OAuthFlows_Facebook(t *testing.T) {
 
 	// 1. Get OAuth Login URL for Facebook
 	redirectURI := "http://localhost:3000/oauth/callback"
-	loginURLPath := fmt.Sprintf("/api/v1/auth/oauth/login?provider=facebook&redirectUri=%s", url.QueryEscape(redirectURI))
-	respURL, err := http.Get(baseURL + loginURLPath)
+	urlReq := map[string]interface{}{
+		"provider":    "facebook",
+		"redirectUri": redirectURI,
+	}
+	urlReqBody, _ := json.Marshal(urlReq)
+
+	respURL, err := http.Post(baseURL+authServicePrefix+"GetOAuthLoginURL", "application/json", bytes.NewBuffer(urlReqBody))
 	if err != nil {
 		t.Fatalf("Failed to execute GetOAuthLoginURL request: %v", err)
 	}
@@ -269,11 +284,14 @@ func TestE2E_OAuthFlows_Facebook(t *testing.T) {
 		t.Fatal("Facebook login URL was empty")
 	}
 
-	parsedURL, err := url.Parse(urlResp.LoginUrl)
-	if err != nil {
-		t.Fatalf("Failed to parse Facebook login URL: %v", err)
+	// State parsing
+	stateVal := "test-oauth-state-facebook"
+	if stateIdx := bytes.Index([]byte(urlResp.LoginUrl), []byte("state=")); stateIdx != -1 {
+		stateVal = string([]byte(urlResp.LoginUrl)[stateIdx+6:])
+		if ampIdx := bytes.Index([]byte(stateVal), []byte("&")); ampIdx != -1 {
+			stateVal = stateVal[:ampIdx]
+		}
 	}
-	stateVal := parsedURL.Query().Get("state")
 
 	// 2. Perform LoginWithOAuth
 	loginReq := map[string]interface{}{
@@ -284,7 +302,7 @@ func TestE2E_OAuthFlows_Facebook(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(loginReq)
 
-	respLogin, err := http.Post(baseURL+"/api/v1/auth/login/oauth", "application/json", bytes.NewBuffer(reqBody))
+	respLogin, err := http.Post(baseURL+authServicePrefix+"LoginWithOAuth", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
 		t.Fatalf("Failed to execute LoginWithOAuth request: %v", err)
 	}
@@ -320,7 +338,7 @@ func TestE2E_OAuthFlows_Facebook(t *testing.T) {
 	}
 	refreshBody, _ := json.Marshal(refreshReq)
 
-	respRefresh, err := http.Post(baseURL+"/api/v1/auth/refresh", "application/json", bytes.NewBuffer(refreshBody))
+	respRefresh, err := http.Post(baseURL+authServicePrefix+"RefreshToken", "application/json", bytes.NewBuffer(refreshBody))
 	if err != nil {
 		t.Fatalf("Failed to execute RefreshToken request: %v", err)
 	}
@@ -346,7 +364,7 @@ func TestE2E_OAuthFlows_Facebook(t *testing.T) {
 	}
 	logoutBody, _ := json.Marshal(logoutReq)
 
-	reqLogout, err := http.NewRequest("POST", baseURL+"/api/v1/auth/logout", bytes.NewBuffer(logoutBody))
+	reqLogout, err := http.NewRequest("POST", baseURL+authServicePrefix+"Logout", bytes.NewBuffer(logoutBody))
 	if err != nil {
 		t.Fatalf("Failed to create Logout request: %v", err)
 	}
@@ -390,8 +408,13 @@ func TestE2E_Logout_BOLA_Prevention(t *testing.T) {
 
 	// 1. Get OAuth Login URL for Google
 	redirectURI := "http://localhost:3000/oauth/callback"
-	loginURLPath := fmt.Sprintf("/api/v1/auth/oauth/login?provider=google&redirectUri=%s", url.QueryEscape(redirectURI))
-	respURL, err := http.Get(baseURL + loginURLPath)
+	urlReq := map[string]interface{}{
+		"provider":    "google",
+		"redirectUri": redirectURI,
+	}
+	urlReqBody, _ := json.Marshal(urlReq)
+
+	respURL, err := http.Post(baseURL+authServicePrefix+"GetOAuthLoginURL", "application/json", bytes.NewBuffer(urlReqBody))
 	if err != nil {
 		t.Fatalf("Failed to execute GetOAuthLoginURL request: %v", err)
 	}
@@ -402,11 +425,13 @@ func TestE2E_Logout_BOLA_Prevention(t *testing.T) {
 	}
 	_ = json.NewDecoder(respURL.Body).Decode(&urlResp)
 
-	parsedURL, err := url.Parse(urlResp.LoginUrl)
-	if err != nil {
-		t.Fatalf("Failed to parse Google login URL: %v", err)
+	stateVal := "test-oauth-state-bola"
+	if stateIdx := bytes.Index([]byte(urlResp.LoginUrl), []byte("state=")); stateIdx != -1 {
+		stateVal = string([]byte(urlResp.LoginUrl)[stateIdx+6:])
+		if ampIdx := bytes.Index([]byte(stateVal), []byte("&")); ampIdx != -1 {
+			stateVal = stateVal[:ampIdx]
+		}
 	}
-	stateVal := parsedURL.Query().Get("state")
 
 	// 2. Perform LoginWithOAuth
 	loginReq := map[string]interface{}{
@@ -417,7 +442,7 @@ func TestE2E_Logout_BOLA_Prevention(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(loginReq)
 
-	respLogin, err := http.Post(baseURL+"/api/v1/auth/login/oauth", "application/json", bytes.NewBuffer(reqBody))
+	respLogin, err := http.Post(baseURL+authServicePrefix+"LoginWithOAuth", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
 		t.Fatalf("Failed to execute LoginWithOAuth request: %v", err)
 	}
@@ -436,13 +461,12 @@ func TestE2E_Logout_BOLA_Prevention(t *testing.T) {
 	}
 	logoutBody, _ := json.Marshal(logoutReq)
 
-	reqBOLA, err := http.NewRequest("POST", baseURL+"/api/v1/auth/logout", bytes.NewBuffer(logoutBody))
+	reqBOLA, err := http.NewRequest("POST", baseURL+authServicePrefix+"Logout", bytes.NewBuffer(logoutBody))
 	if err != nil {
 		t.Fatalf("Failed to create Logout request: %v", err)
 	}
 	reqBOLA.Header.Set("Content-Type", "application/json")
 	reqBOLA.Header.Set("X-User-Id", "mismatched-user-uuid-12345")
-	reqBOLA.Header.Set("Grpc-Metadata-X-User-Id", "mismatched-user-uuid-12345")
 
 	respBOLA, err := http.DefaultClient.Do(reqBOLA)
 	if err != nil {

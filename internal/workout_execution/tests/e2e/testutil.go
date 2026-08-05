@@ -253,13 +253,16 @@ func SetupE2ESuite(t *testing.T) *E2ETestSuite {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	ctx, cancel := context.WithCancel(context.Background())
 
-	_, cleanup, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
+	grpcHandler, cleanup, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
 		DB: sqlDB,
 	})
 	if err != nil {
 		cancel()
 		t.Fatalf("Failed to initialize workout_execution module: %v", err)
 	}
+
+	workoutexecutionv1service.RegisterWorkoutExecutionServiceServer(grpcServer, grpcHandler)
+	workoutexecutionv1service.RegisterAdminWorkoutExecutionServiceServer(grpcServer, grpcHandler)
 
 	go func() {
 		_ = grpcServer.Serve(lis)

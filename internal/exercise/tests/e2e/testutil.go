@@ -154,7 +154,7 @@ func SetupE2ESuite(t *testing.T) *TestSuite {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	ctx, cancel := context.WithCancel(context.Background())
 
-	_, cleanup, err := exercise.Initialize(ctx, exercise.ModuleDeps{
+	grpcHandler, cleanup, err := exercise.Initialize(ctx, exercise.ModuleDeps{
 		DB:            sqlDB,
 		KafkaRegistry: sharedKafka.GetRegistry(),
 	})
@@ -162,6 +162,8 @@ func SetupE2ESuite(t *testing.T) *TestSuite {
 		cancel()
 		t.Fatalf("Failed to initialize exercise module: %v", err)
 	}
+
+	exercisesvc.RegisterExerciseServiceServer(grpcServer, grpcHandler)
 
 	go func() {
 		_ = grpcServer.Serve(lis)

@@ -145,7 +145,7 @@ func SetupE2ESuite(t *testing.T) *TestSuite {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	ctx, cancel := context.WithCancel(context.Background())
 
-	_, cleanup, err := profile.Initialize(ctx, profile.ModuleDeps{
+	grpcHandler, cleanup, err := profile.Initialize(ctx, profile.ModuleDeps{
 		DB:            sqlDB,
 		KafkaRegistry: sharedKafka.GetRegistry(),
 	})
@@ -153,6 +153,8 @@ func SetupE2ESuite(t *testing.T) *TestSuite {
 		cancel()
 		t.Fatalf("Failed to initialize profile module: %v", err)
 	}
+
+	profilev1service.RegisterProfileServiceServer(grpcServer, grpcHandler)
 
 	go func() {
 		_ = grpcServer.Serve(lis)
