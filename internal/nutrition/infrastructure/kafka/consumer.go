@@ -11,15 +11,15 @@ import (
 )
 
 type WorkoutSessionCompletedPayload struct {
-	SessionID            string  `json:"sessionId"`
-	UserID               string  `json:"userId"`
-	TotalCaloriesBurned  float64 `json:"totalCaloriesBurned"`
-	CompletedAt          time.Time `json:"completedAt"`
+	SessionID           string    `json:"sessionId"`
+	UserID              string    `json:"userId"`
+	TotalCaloriesBurned float64   `json:"totalCaloriesBurned"`
+	CompletedAt         time.Time `json:"completedAt"`
 }
 
 type Consumer struct {
-	reader               *segmentio.Reader
-	recalibrateHandler   *command.RecalibratePlanWithPantryHandler
+	reader             *segmentio.Reader
+	recalibrateHandler *command.RecalibratePlanWithPantryHandler
 }
 
 func NewConsumer(reader *segmentio.Reader, recalibrateHandler *command.RecalibratePlanWithPantryHandler) *Consumer {

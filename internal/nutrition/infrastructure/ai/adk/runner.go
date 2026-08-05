@@ -13,7 +13,7 @@ import (
 
 // runWorkflow chạy một workflow agent với userID và flow type cho trước,
 // thu thập GeneratedMealPlan từ node kết quả và trả về.
-func (a *ADKNutritionAgent) runWorkflow(
+func (a *NutritionAgent) runWorkflow(
 	ctx context.Context,
 	wfAgent agent.Agent,
 	userID, flow string,
@@ -33,9 +33,9 @@ func (a *ADKNutritionAgent) runWorkflow(
 
 	// Encode input context cho workflow agent.
 	inputBytes, err := json.Marshal(map[string]any{
-		"user_id":          userID,
-		"flow":             flow,
-		"available_foods":  availableFoods,
+		"user_id":         userID,
+		"flow":            flow,
+		"available_foods": availableFoods,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal workflow input: %w", err)
@@ -60,21 +60,21 @@ func (a *ADKNutritionAgent) runWorkflow(
 }
 
 // runInitWorkflow là helper cho luồng 5:00 AM.
-func (a *ADKNutritionAgent) runInitWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
+func (a *NutritionAgent) runInitWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
 	return a.runWorkflow(ctx, a.dailyWorkflowAgent, userID, FlowDaily, availableFoods)
 }
 
 // runPostWorkoutWorkflow là helper cho luồng bù Calo sau buổi tập.
-func (a *ADKNutritionAgent) runPostWorkoutWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
+func (a *NutritionAgent) runPostWorkoutWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
 	return a.runWorkflow(ctx, a.postWorkoutWorkflowAgent, userID, FlowPostWorkout, availableFoods)
 }
 
 // runPantryWorkflow là helper cho luồng chế biến từ tủ lạnh.
-func (a *ADKNutritionAgent) runPantryWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
+func (a *NutritionAgent) runPantryWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
 	return a.runWorkflow(ctx, a.pantryWorkflowAgent, userID, FlowPantry, availableFoods)
 }
 
 // runAdhocWorkflow là helper cho luồng gợi ý bữa nhanh.
-func (a *ADKNutritionAgent) runAdhocWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
+func (a *NutritionAgent) runAdhocWorkflow(ctx context.Context, userID string, availableFoods interface{}) (*GeneratedMealPlan, error) {
 	return a.runWorkflow(ctx, a.adhocWorkflowAgent, userID, FlowAdhoc, availableFoods)
 }

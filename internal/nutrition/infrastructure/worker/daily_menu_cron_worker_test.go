@@ -34,7 +34,7 @@ func (m *mockPlanRepo) FindByUserIDAndDate(_ context.Context, _ string, _ interf
 	return nil, nil
 }
 
-func (m *mockPlanRepo) Save(_ context.Context, _ interface{}) error  { return nil }
+func (m *mockPlanRepo) Save(_ context.Context, _ interface{}) error   { return nil }
 func (m *mockPlanRepo) Update(_ context.Context, _ interface{}) error { return nil }
 
 func TestNewDailyMenuCronWorker_WithNilProfileClient(t *testing.T) {

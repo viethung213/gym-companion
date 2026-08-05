@@ -34,7 +34,7 @@ type ModuleDeps struct {
 	KafkaRegistry *sharedKafka.Registry
 	// ProfileConn là kết nối gRPC in-process đến ProfileService để lấy dữ liệu sinh trắc học.
 	// Có thể nil — khi đó DailyMenuCronWorker dùng fallback metrics.
-	ProfileConn   grpc.ClientConnInterface
+	ProfileConn grpc.ClientConnInterface
 }
 
 type Module struct {
@@ -57,7 +57,7 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 	outboxLogRepo := persistence.NewPostgresOutboxLogRepository(db)
 
 	outboxWriter := nutritionEvent.NewOutboxWriter(outboxRepo)
-	aiAgent, err := nutritionAdk.NewADKNutritionAgent(ctx, aiAPIKey, foodRepo)
+	aiAgent, err := nutritionAdk.NewNutritionAgent(ctx, aiAPIKey, foodRepo)
 	if err != nil {
 		log.Printf("[Nutrition Module] ADK agent init failed (fallback): %v", err)
 		aiAgent = nil

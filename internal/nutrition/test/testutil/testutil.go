@@ -203,12 +203,12 @@ func CreateSchema(db *sql.DB) error {
 
 // Repos chứa toàn bộ repositories được khởi tạo cho một test DB.
 type Repos struct {
-	FoodItem    *persistence.PostgresFoodItemRepository
+	FoodItem      *persistence.PostgresFoodItemRepository
 	NutritionPlan *persistence.PostgresNutritionPlanRepository
-	MealHistory *persistence.PostgresMealHistoryRepository
-	RecipeCache *persistence.PostgresRecipeCacheRepository
-	Outbox      *persistence.PostgresOutboxRepository
-	OutboxLog   *persistence.PostgresOutboxLogRepository
+	MealHistory   *persistence.PostgresMealHistoryRepository
+	RecipeCache   *persistence.PostgresRecipeCacheRepository
+	Outbox        *persistence.PostgresOutboxRepository
+	OutboxLog     *persistence.PostgresOutboxLogRepository
 }
 
 // NewRepos tạo toàn bộ repositories từ một *gorm.DB.
@@ -281,7 +281,6 @@ func (m *MockAIService) GenerateNutritionInsight(
 		WeeklyTrend: "STABLE",
 	}, nil
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Domain object factories

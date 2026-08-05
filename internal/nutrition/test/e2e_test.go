@@ -244,7 +244,6 @@ func TestE2E_GetTodayMenu_Idempotent(t *testing.T) {
 	}
 }
 
-
 // TestE2E_RecalibratePlan kiểm tra luồng RecalibratePlanWithPantry
 // sau khi plan đã tồn tại.
 func TestE2E_RecalibratePlan(t *testing.T) {

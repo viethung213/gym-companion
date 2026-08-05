@@ -95,7 +95,6 @@ func (p *schemaTxPool) PrepareContext(ctx context.Context, query string) (*sql.S
 	return p.Tx.PrepareContext(ctx, p.strip(query))
 }
 
-
 // setupTestDB mở SQLite in-memory với schemaStripPool để strip `schema`.`table`
 // khỏi toàn bộ SQL do GORM/glebarez sinh ra, rồi tạo bảng bằng tên đơn giản.
 func setupTestDB(t *testing.T) *gorm.DB {

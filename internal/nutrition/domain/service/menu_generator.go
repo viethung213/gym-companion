@@ -41,11 +41,13 @@ type mealSlot struct {
 	percentage float64
 }
 
-var dailyMealSlots = []mealSlot{
-	{"Breakfast", 0.25},
-	{"Lunch", 0.35},
-	{"Dinner", 0.30},
-	{"Snack", 0.10},
+func getDailyMealSlots() []mealSlot {
+	return []mealSlot{
+		{"Breakfast", 0.25},
+		{"Lunch", 0.35},
+		{"Dinner", 0.30},
+		{"Snack", 0.10},
+	}
 }
 
 // GenerateDailyPlan sinh thực đơn 4 bữa cho userID.
@@ -68,9 +70,10 @@ func (g *MenuGenerator) GenerateDailyPlan(
 		return nil, fmt.Errorf("menu generator fetch nuti products: %w", err)
 	}
 
-	dailyMeals := make([]aggregate.DailyMeal, 0, len(dailyMealSlots))
+	slots := getDailyMealSlots()
+	dailyMeals := make([]aggregate.DailyMeal, 0, len(slots))
 
-	for _, slot := range dailyMealSlots {
+	for _, slot := range slots {
 		targetMealCalo := allocation.TargetCalories() * slot.percentage
 
 		promptCtx := repository.AIMenuPromptContext{

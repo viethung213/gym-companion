@@ -19,9 +19,9 @@ func NewDailyMeal(mealType string, targetCalories float64, mealOptions []MealOpt
 	}
 }
 
-func (m DailyMeal) MealType() string         { return m.mealType }
-func (m DailyMeal) TargetCalories() float64   { return m.targetCalories }
-func (m DailyMeal) Consumed() bool           { return m.consumed }
+func (m DailyMeal) MealType() string        { return m.mealType }
+func (m DailyMeal) TargetCalories() float64 { return m.targetCalories }
+func (m DailyMeal) Consumed() bool          { return m.consumed }
 func (m DailyMeal) MealOptions() []MealOption {
 	copied := make([]MealOption, len(m.mealOptions))
 	copy(copied, m.mealOptions)

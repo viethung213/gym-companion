@@ -94,17 +94,17 @@ func ReconstructFoodItem(
 	}
 }
 
-func (f *FoodItem) ID() string                { return f.id }
-func (f *FoodItem) Name() string              { return f.name }
-func (f *FoodItem) Category() string          { return f.category }
+func (f *FoodItem) ID() string               { return f.id }
+func (f *FoodItem) Name() string             { return f.name }
+func (f *FoodItem) Category() string         { return f.category }
 func (f *FoodItem) CaloriesPer100g() float64 { return f.caloriesPer100g }
 func (f *FoodItem) ProteinPer100g() float64  { return f.proteinPer100g }
 func (f *FoodItem) CarbsPer100g() float64    { return f.carbsPer100g }
 func (f *FoodItem) FatPer100g() float64      { return f.fatPer100g }
-func (f *FoodItem) Status() string          { return f.status }
+func (f *FoodItem) Status() string           { return f.status }
 func (f *FoodItem) IsNutiFoodProduct() bool  { return f.isNutiFoodProduct }
-func (f *FoodItem) ProteinSource() string     { return f.proteinSource }
-func (f *FoodItem) CarbSource() string        { return f.carbSource }
+func (f *FoodItem) ProteinSource() string    { return f.proteinSource }
+func (f *FoodItem) CarbSource() string       { return f.carbSource }
 func (f *FoodItem) AllergenTags() []string {
 	copied := make([]string, len(f.allergenTags))
 	copy(copied, f.allergenTags)

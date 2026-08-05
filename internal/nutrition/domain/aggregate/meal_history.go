@@ -40,16 +40,16 @@ func NewMealLog(
 	}
 }
 
-func (m MealLog) ID() string        { return m.id }
-func (m MealLog) HistoryID() string { return m.historyID }
-func (m MealLog) UserID() string    { return m.userID }
-func (m MealLog) MealType() string  { return m.mealType }
-func (m MealLog) MealName() string  { return m.mealName }
-func (m MealLog) Portion() string   { return m.portion }
-func (m MealLog) Calories() float64 { return m.calories }
-func (m MealLog) Protein() float64  { return m.protein }
-func (m MealLog) Carbs() float64    { return m.carbs }
-func (m MealLog) Fat() float64      { return m.fat }
+func (m MealLog) ID() string          { return m.id }
+func (m MealLog) HistoryID() string   { return m.historyID }
+func (m MealLog) UserID() string      { return m.userID }
+func (m MealLog) MealType() string    { return m.mealType }
+func (m MealLog) MealName() string    { return m.mealName }
+func (m MealLog) Portion() string     { return m.portion }
+func (m MealLog) Calories() float64   { return m.calories }
+func (m MealLog) Protein() float64    { return m.protein }
+func (m MealLog) Carbs() float64      { return m.carbs }
+func (m MealLog) Fat() float64        { return m.fat }
 func (m MealLog) LoggedAt() time.Time { return m.loggedAt }
 
 // MealHistory Aggregate Root for managing historical logged meals and lockout registries.
@@ -74,8 +74,8 @@ func NewMealHistory(id, userID string, lockoutRegistry vo.LockoutRegistry) *Meal
 	}
 }
 
-func (h *MealHistory) ID() string                              { return h.id }
-func (h *MealHistory) UserID() string                          { return h.userID }
+func (h *MealHistory) ID() string                          { return h.id }
+func (h *MealHistory) UserID() string                      { return h.userID }
 func (h *MealHistory) LockoutRegistry() vo.LockoutRegistry { return h.lockoutRegistry }
 func (h *MealHistory) MealLogs() []MealLog {
 	copied := make([]MealLog, len(h.mealLogs))

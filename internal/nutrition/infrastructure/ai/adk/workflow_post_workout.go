@@ -8,7 +8,7 @@ import (
 )
 
 // ExecutePostWorkoutRecalibrationWorkflow runs the post-workout calorie rebalancing workflow.
-func (a *ADKNutritionAgent) ExecutePostWorkoutRecalibrationWorkflow(
+func (a *NutritionAgent) ExecutePostWorkoutRecalibrationWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,
 	_ float64,

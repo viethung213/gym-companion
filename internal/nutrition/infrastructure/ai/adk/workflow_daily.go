@@ -8,7 +8,7 @@ import (
 )
 
 // ExecuteDailyMenuWorkflow runs the 5:00 AM full day 4-meal generation workflow.
-func (a *ADKNutritionAgent) ExecuteDailyMenuWorkflow(
+func (a *NutritionAgent) ExecuteDailyMenuWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,
 	lockoutRegistry vo.LockoutRegistry,

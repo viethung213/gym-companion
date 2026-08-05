@@ -8,7 +8,7 @@ import (
 )
 
 // ExecuteAdhocMealSuggestionWorkflow runs the quick standalone meal suggestion workflow.
-func (a *ADKNutritionAgent) ExecuteAdhocMealSuggestionWorkflow(
+func (a *NutritionAgent) ExecuteAdhocMealSuggestionWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,
 	lockoutRegistry vo.LockoutRegistry,

@@ -64,7 +64,7 @@ func TestADKAI_MultiIterationEvaluation(t *testing.T) {
 	ctx := context.Background()
 	foodRepo := &mockFoodRepoForAIEval{}
 
-	agent, err := nutritionAdk.NewADKNutritionAgent(ctx, apiKey, foodRepo)
+	agent, err := nutritionAdk.NewNutritionAgent(ctx, apiKey, foodRepo)
 	if err != nil {
 		t.Skipf("Skipping live AI Agent eval test (ADK init error or missing key): %v", err)
 		return

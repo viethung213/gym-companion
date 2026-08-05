@@ -36,8 +36,12 @@ func (m *mockFoodRepoFull) Update(_ context.Context, item *aggregate.FoodItem) e
 	return nil
 }
 
-func (m *mockFoodRepoFull) FindActiveCatalog(_ context.Context) ([]vo.FoodNutrient, error) { return nil, nil }
-func (m *mockFoodRepoFull) FindNutiFoodProducts(_ context.Context) ([]vo.FoodNutrient, error) { return nil, nil }
+func (m *mockFoodRepoFull) FindActiveCatalog(_ context.Context) ([]vo.FoodNutrient, error) {
+	return nil, nil
+}
+func (m *mockFoodRepoFull) FindNutiFoodProducts(_ context.Context) ([]vo.FoodNutrient, error) {
+	return nil, nil
+}
 
 func TestCreateAndApproveFoodItemHandler(t *testing.T) {
 	t.Parallel()

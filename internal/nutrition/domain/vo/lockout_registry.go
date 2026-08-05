@@ -29,8 +29,8 @@ func NewLockoutItem(itemType, itemName string, unlockedAt time.Time) LockoutItem
 	}
 }
 
-func (l LockoutItem) ItemType() string       { return l.itemType }
-func (l LockoutItem) ItemName() string       { return l.itemName }
+func (l LockoutItem) ItemType() string      { return l.itemType }
+func (l LockoutItem) ItemName() string      { return l.itemName }
 func (l LockoutItem) UnlockedAt() time.Time { return l.unlockedAt }
 func (l LockoutItem) IsActive(now time.Time) bool {
 	return now.Before(l.unlockedAt)

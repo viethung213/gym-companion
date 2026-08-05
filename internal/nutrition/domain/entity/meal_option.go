@@ -14,9 +14,9 @@ func NewIngredientGram(ingredientName string, amountGram float64, isNutiFoodProd
 	}
 }
 
-func (i IngredientGram) IngredientName() string   { return i.ingredientName }
-func (i IngredientGram) AmountGram() float64       { return i.amountGram }
-func (i IngredientGram) IsNutiFoodProduct() bool  { return i.isNutiFoodProduct }
+func (i IngredientGram) IngredientName() string  { return i.ingredientName }
+func (i IngredientGram) AmountGram() float64     { return i.amountGram }
+func (i IngredientGram) IsNutiFoodProduct() bool { return i.isNutiFoodProduct }
 
 type MealOption struct {
 	id                       string
@@ -55,10 +55,10 @@ func NewMealOption(
 	}
 }
 
-func (o MealOption) ID() string                              { return o.id }
-func (o MealOption) RecipeName() string                      { return o.recipeName }
-func (o MealOption) CookingStyle() string                    { return o.cookingStyle }
-func (o MealOption) IngredientHash() string                  { return o.ingredientHash }
-func (o MealOption) CookingSteps() []string                  { return o.cookingSteps }
-func (o MealOption) Ingredients() []IngredientGram          { return o.ingredients }
+func (o MealOption) ID() string                                 { return o.id }
+func (o MealOption) RecipeName() string                         { return o.recipeName }
+func (o MealOption) CookingStyle() string                       { return o.cookingStyle }
+func (o MealOption) IngredientHash() string                     { return o.ingredientHash }
+func (o MealOption) CookingSteps() []string                     { return o.cookingSteps }
+func (o MealOption) Ingredients() []IngredientGram              { return o.ingredients }
 func (o MealOption) SupplementaryIngredients() []IngredientGram { return o.supplementaryIngredients }

@@ -29,7 +29,7 @@ func readPromptFile(path string) ([]byte, error) {
 }
 
 // build khởi tạo Gemini model (với cơ chế Fallback tự động), LLM generator node và tất cả workflow agents.
-func (a *ADKNutritionAgent) build(ctx context.Context) error {
+func (a *NutritionAgent) build(ctx context.Context) error {
 	geminiModel, err := NewFallbackLLMFromEnv(ctx)
 	if err != nil {
 		return fmt.Errorf("new fallback gemini model: %w", err)
@@ -44,7 +44,7 @@ func (a *ADKNutritionAgent) build(ctx context.Context) error {
 
 // buildLLMNodes đọc prompt generator.txt và khởi tạo LLM generator node.
 // Cũng khởi tạo estimatorNode và insightNode cho các single-turn call.
-func (a *ADKNutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM) error {
+func (a *NutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM) error {
 	generatorInstruction, err := readPromptFile("prompts/generator.txt")
 	if err != nil {
 		return fmt.Errorf("read generator prompt: %w", err)
@@ -122,7 +122,7 @@ type macroGramResult struct {
 }
 
 // buildADKTools tạo danh sách tool.Tool từ NutritionTools để truyền vào llmagent.
-func (a *ADKNutritionAgent) buildADKTools() ([]tool.Tool, error) {
+func (a *NutritionAgent) buildADKTools() ([]tool.Tool, error) {
 	fetchTool, err := functiontool.New(
 		functiontool.Config{
 			Name:        "fetch_food_catalog",
@@ -167,7 +167,7 @@ func (a *ADKNutritionAgent) buildADKTools() ([]tool.Tool, error) {
 }
 
 // buildWorkflowAgents tạo 4 workflow agents cho 4 luồng dinh dưỡng.
-func (a *ADKNutritionAgent) buildWorkflowAgents(ctx context.Context) error {
+func (a *NutritionAgent) buildWorkflowAgents(ctx context.Context) error {
 	var err error
 
 	a.dailyWorkflowAgent, err = a.buildDailyWorkflowAgent(ctx)
@@ -206,7 +206,7 @@ func parseMealPlanFromNode(planJSON string) (*GeneratedMealPlan, error) {
 }
 
 // buildDailyWorkflowAgent tạo workflow agent cho luồng sinh thực đơn 5:00 AM.
-func (a *ADKNutritionAgent) buildDailyWorkflowAgent(_ context.Context) (agent.Agent, error) {
+func (a *NutritionAgent) buildDailyWorkflowAgent(_ context.Context) (agent.Agent, error) {
 	systemPrompt, err := readPromptFile("prompts/daily.txt")
 	if err != nil {
 		return nil, fmt.Errorf("read daily prompt: %w", err)
@@ -250,7 +250,7 @@ func (a *ADKNutritionAgent) buildDailyWorkflowAgent(_ context.Context) (agent.Ag
 }
 
 // buildPostWorkoutWorkflowAgent tạo workflow agent cho luồng bù Calo sau buổi tập.
-func (a *ADKNutritionAgent) buildPostWorkoutWorkflowAgent(_ context.Context) (agent.Agent, error) {
+func (a *NutritionAgent) buildPostWorkoutWorkflowAgent(_ context.Context) (agent.Agent, error) {
 	systemPrompt, err := readPromptFile("prompts/post_workout.txt")
 	if err != nil {
 		return nil, fmt.Errorf("read post_workout prompt: %w", err)
@@ -295,7 +295,7 @@ func (a *ADKNutritionAgent) buildPostWorkoutWorkflowAgent(_ context.Context) (ag
 }
 
 // buildPantryWorkflowAgent tạo workflow agent cho luồng chế biến từ tủ lạnh.
-func (a *ADKNutritionAgent) buildPantryWorkflowAgent(_ context.Context) (agent.Agent, error) {
+func (a *NutritionAgent) buildPantryWorkflowAgent(_ context.Context) (agent.Agent, error) {
 	systemPrompt, err := readPromptFile("prompts/pantry.txt")
 	if err != nil {
 		return nil, fmt.Errorf("read pantry prompt: %w", err)
@@ -339,7 +339,7 @@ func (a *ADKNutritionAgent) buildPantryWorkflowAgent(_ context.Context) (agent.A
 }
 
 // buildAdhocWorkflowAgent tạo workflow agent cho luồng gợi ý bữa ăn nhanh độc lập.
-func (a *ADKNutritionAgent) buildAdhocWorkflowAgent(_ context.Context) (agent.Agent, error) {
+func (a *NutritionAgent) buildAdhocWorkflowAgent(_ context.Context) (agent.Agent, error) {
 	systemPrompt, err := readPromptFile("prompts/adhoc.txt")
 	if err != nil {
 		return nil, fmt.Errorf("read adhoc prompt: %w", err)

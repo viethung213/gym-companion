@@ -66,11 +66,11 @@ func NewMealLoggedEvent(mealLogID, userID, mealType, mealName string, calories f
 	}
 }
 
-func (e *MealLoggedEvent) MealLogID() string { return e.mealLogID }
-func (e *MealLoggedEvent) UserID() string    { return e.userID }
-func (e *MealLoggedEvent) MealType() string  { return e.mealType }
-func (e *MealLoggedEvent) MealName() string  { return e.mealName }
-func (e *MealLoggedEvent) Calories() float64 { return e.calories }
+func (e *MealLoggedEvent) MealLogID() string   { return e.mealLogID }
+func (e *MealLoggedEvent) UserID() string      { return e.userID }
+func (e *MealLoggedEvent) MealType() string    { return e.mealType }
+func (e *MealLoggedEvent) MealName() string    { return e.mealName }
+func (e *MealLoggedEvent) Calories() float64   { return e.calories }
 func (e *MealLoggedEvent) LoggedAt() time.Time { return e.loggedAt }
 
 type LockoutAppliedEvent struct {
@@ -89,7 +89,7 @@ func NewLockoutAppliedEvent(userID, itemType, itemName string, unlockedAt time.T
 	}
 }
 
-func (e *LockoutAppliedEvent) UserID() string       { return e.userID }
-func (e *LockoutAppliedEvent) ItemType() string     { return e.itemType }
-func (e *LockoutAppliedEvent) ItemName() string     { return e.itemName }
+func (e *LockoutAppliedEvent) UserID() string        { return e.userID }
+func (e *LockoutAppliedEvent) ItemType() string      { return e.itemType }
+func (e *LockoutAppliedEvent) ItemName() string      { return e.itemName }
 func (e *LockoutAppliedEvent) UnlockedAt() time.Time { return e.unlockedAt }

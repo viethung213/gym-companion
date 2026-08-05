@@ -28,8 +28,8 @@ func NewIngredientGram(name string, grams float64, isSupplementary bool) Ingredi
 }
 
 func (i IngredientGram) IngredientName() string { return i.ingredientName }
-func (i IngredientGram) Grams() float64          { return i.grams }
-func (i IngredientGram) IsSupplementary() bool   { return i.isSupplementary }
+func (i IngredientGram) Grams() float64         { return i.grams }
+func (i IngredientGram) IsSupplementary() bool  { return i.isSupplementary }
 
 type MealOption struct {
 	optionID          string
@@ -70,14 +70,14 @@ func NewMealOption(
 	}
 }
 
-func (m MealOption) OptionID() string              { return m.optionID }
-func (m MealOption) MealName() string              { return m.mealName }
-func (m MealOption) Calories() float64              { return m.calories }
-func (m MealOption) ProteinGrams() float64         { return m.proteinGrams }
-func (m MealOption) CarbGrams() float64            { return m.carbGrams }
-func (m MealOption) FatGrams() float64             { return m.fatGrams }
-func (m MealOption) IsLogged() bool                { return m.isLogged }
-func (m MealOption) IsNutiFoodProduct() bool       { return m.isNutiFoodProduct }
+func (m MealOption) OptionID() string        { return m.optionID }
+func (m MealOption) MealName() string        { return m.mealName }
+func (m MealOption) Calories() float64       { return m.calories }
+func (m MealOption) ProteinGrams() float64   { return m.proteinGrams }
+func (m MealOption) CarbGrams() float64      { return m.carbGrams }
+func (m MealOption) FatGrams() float64       { return m.fatGrams }
+func (m MealOption) IsLogged() bool          { return m.isLogged }
+func (m MealOption) IsNutiFoodProduct() bool { return m.isNutiFoodProduct }
 func (m MealOption) Ingredients() []IngredientGram {
 	copied := make([]IngredientGram, len(m.ingredients))
 	copy(copied, m.ingredients)
@@ -151,8 +151,8 @@ func (p *NutritionPlan) DailyMeals() []DailyMeal {
 	copy(copied, p.dailyMeals)
 	return copied
 }
-func (p *NutritionPlan) CreatedAt() time.Time                    { return p.createdAt }
-func (p *NutritionPlan) UpdatedAt() time.Time                    { return p.updatedAt }
+func (p *NutritionPlan) CreatedAt() time.Time { return p.createdAt }
+func (p *NutritionPlan) UpdatedAt() time.Time { return p.updatedAt }
 
 func (p *NutritionPlan) MarkOptionLogged(optionID string) (*MealOption, error) {
 	for i, meal := range p.dailyMeals {
@@ -172,7 +172,7 @@ func (p *NutritionPlan) MarkOptionLogged(optionID string) (*MealOption, error) {
 
 func (p *NutritionPlan) UpdateRemainingUnconsumedMeals(updatedMeals []DailyMeal, newAllocation vo.CalorieAllocation) {
 	p.calorieAllocation = newAllocation
-	
+
 	for i, existingMeal := range p.dailyMeals {
 		var hasLoggedOption bool
 		for _, opt := range existingMeal.options {

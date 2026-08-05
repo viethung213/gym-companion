@@ -13,7 +13,7 @@ type NutritionPromptContext struct {
 	TargetMealCalories   float64           `json:"target_meal_calories"`
 	TargetProteinGrams   float64           `json:"target_protein_grams"`
 	TargetCarbGrams      float64           `json:"target_carb_grams"`
-	TargetFatGrams        float64           `json:"target_fat_grams"`
+	TargetFatGrams       float64           `json:"target_fat_grams"`
 	UserRestrictions     []string          `json:"user_restrictions"`
 	AvailableIngredients []vo.FoodNutrient `json:"available_ingredients"`
 }

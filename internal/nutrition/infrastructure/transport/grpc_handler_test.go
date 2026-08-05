@@ -322,4 +322,3 @@ func TestGRPCHandler_GetNutritionSummary(t *testing.T) {
 		t.Fatalf("got target calories %f, want > 0", resp.GetTargetCalories())
 	}
 }
-

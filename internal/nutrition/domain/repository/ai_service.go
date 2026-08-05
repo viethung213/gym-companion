@@ -55,18 +55,18 @@ type DailyNutritionData struct {
 
 // ImprovementArea mô tả một khu vực cần cải thiện do AI phân tích.
 type ImprovementArea struct {
-	Area        string  // ví dụ: "Protein Intake", "Meal Timing", "Hydration"
-	CurrentAvg  float64 // giá trị trung bình hiện tại
-	Target      float64 // giá trị mục tiêu
-	Suggestion  string  // gợi ý hành động cụ thể
-	Priority    string  // HIGH, MEDIUM, LOW
+	Area       string  // ví dụ: "Protein Intake", "Meal Timing", "Hydration"
+	CurrentAvg float64 // giá trị trung bình hiện tại
+	Target     float64 // giá trị mục tiêu
+	Suggestion string  // gợi ý hành động cụ thể
+	Priority   string  // HIGH, MEDIUM, LOW
 }
 
 // RecommendedAdjustments là các điều chỉnh AI đề xuất cho kế hoạch dinh dưỡng.
 type RecommendedAdjustments struct {
-	CaloriesDelta      float64  // dương = tăng, âm = giảm
-	ProteinRatioDelta  float64
-	FocusFoods         []string
+	CaloriesDelta     float64 // dương = tăng, âm = giảm
+	ProteinRatioDelta float64
+	FocusFoods        []string
 }
 
 // NutritionInsightResult là kết quả phân tích insight từ AI.
@@ -81,10 +81,10 @@ type NutritionInsightResult struct {
 
 // InsightPromptContext là ngữ cảnh đầu vào cho AI khi phân tích insight dinh dưỡng.
 type InsightPromptContext struct {
-	UserID      string
-	GoalType    string // "WEIGHT_LOSS", "MUSCLE_GAIN", "MAINTENANCE"
-	DailyData   []DailyNutritionData
-	RangeDays   int
+	UserID    string
+	GoalType  string // "WEIGHT_LOSS", "MUSCLE_GAIN", "MAINTENANCE"
+	DailyData []DailyNutritionData
+	RangeDays int
 }
 
 // AIService là port interface cho AI Agent trong module Nutrition.

@@ -8,7 +8,7 @@ import (
 )
 
 // ExecutePantryRecipeWorkflow runs the meal creation workflow using available pantry ingredients.
-func (a *ADKNutritionAgent) ExecutePantryRecipeWorkflow(
+func (a *NutritionAgent) ExecutePantryRecipeWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,
 	_ []string,

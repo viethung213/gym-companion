@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
+	"gorm.io/gorm"
 )
 
 type PostgresFoodItemRepository struct {

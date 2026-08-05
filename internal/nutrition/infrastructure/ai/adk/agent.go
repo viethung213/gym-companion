@@ -32,10 +32,10 @@ const (
 )
 
 // compile-time interface check.
-var _ repository.AIService = (*ADKNutritionAgent)(nil)
+var _ repository.AIService = (*NutritionAgent)(nil)
 
-// ADKNutritionAgent orchestrates Google ADK multi-agent workflows cho module Nutrition.
-type ADKNutritionAgent struct {
+// NutritionAgent orchestrates Google ADK multi-agent workflows cho module Nutrition.
+type NutritionAgent struct {
 	generatorNode *workflow.AgentNode
 
 	dailyWorkflowAgent       agent.Agent
@@ -55,17 +55,17 @@ type ADKNutritionAgent struct {
 	results map[string]*GeneratedMealPlan
 }
 
-// NewADKNutritionAgent khởi tạo tất cả ADK agents, tools, LLM nodes và workflow agents.
-func NewADKNutritionAgent(
+// NewNutritionAgent khởi tạo tất cả ADK agents, tools, LLM nodes và workflow agents.
+func NewNutritionAgent(
 	ctx context.Context,
 	_ string,
 	foodRepo repository.FoodItemRepository,
-) (*ADKNutritionAgent, error) {
+) (*NutritionAgent, error) {
 	if foodRepo == nil {
 		return nil, errors.New("food repository is required")
 	}
 
-	a := &ADKNutritionAgent{
+	a := &NutritionAgent{
 		foodRepo: foodRepo,
 		tools:    NewNutritionTools(foodRepo),
 		results:  make(map[string]*GeneratedMealPlan),
@@ -80,7 +80,7 @@ func NewADKNutritionAgent(
 
 // EstimateNutrient implements repository.AIService.
 // Gọi LLM thực để ước tính dinh dưỡng từ tên món và khẩu phần.
-func (a *ADKNutritionAgent) EstimateNutrient(
+func (a *NutritionAgent) EstimateNutrient(
 	ctx context.Context,
 	mealName, portion string,
 ) (*repository.EstimatedNutrientResult, error) {
@@ -99,6 +99,7 @@ func (a *ADKNutritionAgent) EstimateNutrient(
 	}
 
 	var result repository.EstimatedNutrientResult
+	//nolint:musttag
 	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
 		return nil, fmt.Errorf("estimate nutrient parse json: %w", err)
 	}
@@ -108,7 +109,7 @@ func (a *ADKNutritionAgent) EstimateNutrient(
 
 // GenerateNutritionInsight implements repository.AIService.
 // Gọi LLM để phân tích lịch sử dinh dưỡng và sinh insight cải tiến.
-func (a *ADKNutritionAgent) GenerateNutritionInsight(
+func (a *NutritionAgent) GenerateNutritionInsight(
 	ctx context.Context,
 	promptCtx repository.InsightPromptContext,
 ) (*repository.NutritionInsightResult, error) {
@@ -116,6 +117,7 @@ func (a *ADKNutritionAgent) GenerateNutritionInsight(
 		return nil, errors.New("insight agent not initialised")
 	}
 
+	//nolint:musttag
 	historyJSON, err := json.Marshal(promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("generate nutrition insight marshal context: %w", err)
@@ -138,8 +140,8 @@ func (a *ADKNutritionAgent) GenerateNutritionInsight(
 
 // insightLLMResponse là schema JSON mà LLM trả về cho insight.
 type insightLLMResponse struct {
-	OverallScore     int    `json:"overall_score"`
-	Summary          string `json:"summary"`
+	OverallScore     int      `json:"overall_score"`
+	Summary          string   `json:"summary"`
 	Strengths        []string `json:"strengths"`
 	ImprovementAreas []struct {
 		Area       string  `json:"area"`
@@ -192,7 +194,7 @@ func mapInsightToResult(r insightLLMResponse) *repository.NutritionInsightResult
 // SelectCreativeMealOptions implements repository.AIService.
 // Nhận AIMenuPromptContext từ domain, map sang internal NutritionPromptContext,
 // rồi chạy workflow ADK tương ứng theo MealType.
-func (a *ADKNutritionAgent) SelectCreativeMealOptions(
+func (a *NutritionAgent) SelectCreativeMealOptions(
 	ctx context.Context,
 	promptCtx repository.AIMenuPromptContext,
 	lockoutRegistry vo.LockoutRegistry,
@@ -246,7 +248,7 @@ func (a *ADKNutritionAgent) SelectCreativeMealOptions(
 }
 
 // persistNewFoodItemsAndMap lưu nguyên liệu mới do AI đề xuất vào CSDL, sau đó map sang GeneratedRecipeResult.
-func (a *ADKNutritionAgent) persistNewFoodItemsAndMap(
+func (a *NutritionAgent) persistNewFoodItemsAndMap(
 	ctx context.Context,
 	plan *GeneratedMealPlan,
 ) ([]repository.GeneratedRecipeResult, error) {
@@ -292,10 +294,10 @@ func (a *ADKNutritionAgent) persistNewFoodItemsAndMap(
 				aggregate.NewIngredientGram(opt.CarbFoodName, 200.0, false),
 				aggregate.NewIngredientGram(opt.VeggieFoodName, 120.0, false),
 			}, suppIngredients...),
-			NewFoodCatalogItems:  newCatalogNutrients,
-			TotalProteinGrams:    opt.TotalProteinGrams,
-			TotalCarbGrams:       opt.TotalCarbGrams,
-			TotalFatGrams:        opt.TotalFatGrams,
+			NewFoodCatalogItems: newCatalogNutrients,
+			TotalProteinGrams:   opt.TotalProteinGrams,
+			TotalCarbGrams:      opt.TotalCarbGrams,
+			TotalFatGrams:       opt.TotalFatGrams,
 		})
 	}
 
@@ -303,14 +305,14 @@ func (a *ADKNutritionAgent) persistNewFoodItemsAndMap(
 }
 
 // putResult lưu kết quả workflow vào map nội bộ (thread-safe).
-func (a *ADKNutritionAgent) putResult(sessionID string, plan *GeneratedMealPlan) {
+func (a *NutritionAgent) putResult(sessionID string, plan *GeneratedMealPlan) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.results[sessionID] = plan
 }
 
 // getResult lấy kết quả workflow từ map nội bộ (thread-safe).
-func (a *ADKNutritionAgent) getResult(sessionID string) (*GeneratedMealPlan, bool) {
+func (a *NutritionAgent) getResult(sessionID string) (*GeneratedMealPlan, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	plan, ok := a.results[sessionID]

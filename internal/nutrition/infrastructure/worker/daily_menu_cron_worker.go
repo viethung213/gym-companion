@@ -18,13 +18,15 @@ const (
 	activeUserWithinDays = 7
 )
 
-// defaultBiologicalMetrics là fallback khi không lấy được profile thực của user.
-var defaultBiologicalMetrics = service.BiologicalMetrics{
-	WeightKg:      70.0,
-	HeightCm:      170.0,
-	Age:           25,
-	Gender:        "MALE",
-	ActivityLevel: "MODERATELY_ACTIVE",
+// getDefaultBiologicalMetrics trả về chỉ số sinh trắc học mặc định khi không lấy được profile thực của user.
+func getDefaultBiologicalMetrics() service.BiologicalMetrics {
+	return service.BiologicalMetrics{
+		WeightKg:      70.0,
+		HeightCm:      170.0,
+		Age:           25,
+		Gender:        "MALE",
+		ActivityLevel: "MODERATELY_ACTIVE",
+	}
 }
 
 // DailyMenuCronWorker sinh thực đơn hằng ngày cho các user hoạt động.
@@ -133,17 +135,17 @@ func (w *DailyMenuCronWorker) runDailyGeneration(ctx context.Context) {
 func (w *DailyMenuCronWorker) fetchBiologicalMetrics(ctx context.Context, userID string) service.BiologicalMetrics {
 	if w.profileClient == nil {
 		log.Printf("[DailyMenuCronWorker] profileClient chưa được cấu hình, dùng fallback cho user %s", userID)
-		return defaultBiologicalMetrics
+		return getDefaultBiologicalMetrics()
 	}
 
 	profileMetrics, err := w.profileClient.GetBiologicalMetrics(ctx, userID)
 	if err != nil {
 		log.Printf("[DailyMenuCronWorker] Không lấy được profile user %s (err: %v), dùng fallback", userID, err)
-		return defaultBiologicalMetrics
+		return getDefaultBiologicalMetrics()
 	}
 	if profileMetrics == nil {
 		log.Printf("[DailyMenuCronWorker] User %s chưa có profile, dùng fallback", userID)
-		return defaultBiologicalMetrics
+		return getDefaultBiologicalMetrics()
 	}
 
 	return service.BiologicalMetrics{

@@ -3,7 +3,7 @@ package apperror
 import "errors"
 
 var (
-	ErrInvalidInput         = errors.New("invalid request parameters")
+	ErrInvalidInput          = errors.New("invalid request parameters")
 	ErrNutritionPlanNotFound = errors.New("nutrition plan not found")
 	ErrFoodItemNotFound      = errors.New("food item not found")
 	ErrMealHistoryNotFound   = errors.New("meal history not found")
