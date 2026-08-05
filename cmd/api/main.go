@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
@@ -99,12 +100,19 @@ func run() error {
 	)
 	log.Printf("Starting gRPC server on port %s...\n", grpcPort)
 
+	// HTTP mux is created before module initialization so each module can register
+	// Connect-protocol handlers directly on it (paths like /contracts.<svc>/ are
+	// subtree patterns and take precedence over the "/" catch-all).
+	httpMux := http.NewServeMux()
+
 	// Initialize Auth Module
 	shutdown, err := auth.Initialize(ctx, auth.ModuleDeps{
 		DB:                db,
 		GRPCServer:        grpcServer,
 		AssignKeyProvider: lazyKP.Set,
 		KafkaRegistry:     kafkaRegistry,
+		ConnectMux:        httpMux,
+		KeyProvider:       lazyKP,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize auth module: %w", err)
@@ -116,6 +124,8 @@ func run() error {
 		DB:            exerciseDB,
 		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
+		ConnectMux:    httpMux,
+		KeyProvider:   lazyKP,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize exercise module: %w", err)
@@ -127,6 +137,8 @@ func run() error {
 		DB:            workoutDB,
 		GRPCServer:    grpcServer,
 		KafkaRegistry: kafkaRegistry,
+		ConnectMux:    httpMux,
+		KeyProvider:   lazyKP,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize workout execution module: %w", err)
@@ -155,14 +167,13 @@ func run() error {
 		}
 	}()
 
-	// 2. Start HTTP Server (gRPC-Gateway)
+	// 2. Finish configuring HTTP mux (Connect handlers already registered above by each module)
 	log.Printf("Starting HTTP API gateway server on port %s...\n", httpPort)
-	mux := http.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	// Register Coaching HTTP Handler FIRST (before gwmux catch-all)
+	// Register Coaching HTTP Handler before gwmux catch-all
 	coachingHandler := coaching.NewCoachingHandler(coachAgent)
-	coaching.RegisterHandlers(mux, coachingHandler)
+	coaching.RegisterHandlers(httpMux, coachingHandler)
 
 	// Setup shared gRPC-Gateway multiplexer
 	gwmux := runtime.NewServeMux()
@@ -182,17 +193,33 @@ func run() error {
 		return fmt.Errorf("register workout execution gateway: %w", err)
 	}
 
-	// Register gwmux LAST (catch-all for remaining routes)
-	mux.Handle("/", gwmux)
+	// Register gwmux LAST as catch-all; Connect handler paths (e.g. /contracts.<svc>/)
+	// are more specific and take precedence.
+	httpMux.Handle("/", gwmux)
 
-	// Health endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+	httpMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
 
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders: []string{
+			"Authorization",
+			"Content-Type",
+			"Connect-Protocol-Version",
+			"Connect-Timeout-Ms",
+			"Grpc-Timeout",
+			"X-Grpc-Web",
+			"X-User-Agent",
+		},
+		ExposedHeaders: []string{"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin"},
+		MaxAge:         300,
+	})
+
 	go func() {
-		if err := http.ListenAndServe(":"+httpPort, mux); err != nil {
+		if err := http.ListenAndServe(":"+httpPort, corsHandler.Handler(httpMux)); err != nil {
 			errChan <- fmt.Errorf("http server listen and serve: %w", err)
 		}
 	}()

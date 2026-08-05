@@ -5,20 +5,25 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport"
+	connecttransport "github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport/connect"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
 	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
+	exercisev1serviceconnect "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -28,6 +33,8 @@ type ModuleDeps struct {
 	DB            *sql.DB
 	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
+	ConnectMux    *http.ServeMux
+	KeyProvider   middleware.KeyProvider
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
@@ -118,6 +125,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		listTagsHandler,
 	)
 	exercisesvc.RegisterExerciseServiceServer(deps.GRPCServer, grpcHandler)
+
+	if deps.ConnectMux != nil && deps.KeyProvider != nil {
+		connectHandler := connecttransport.NewHandler(grpcHandler)
+		interceptor := middleware.ConnectAuthInterceptor(deps.KeyProvider)
+		path, h := exercisev1serviceconnect.NewExerciseServiceHandler(connectHandler, connect.WithInterceptors(interceptor))
+		deps.ConnectMux.Handle(path, h)
+		log.Printf("Exercise Connect handler registered at %s", path)
+	}
 
 	// Start Background Worker for Outbox Pattern & Kafka
 	kafkaBrokersStr := os.Getenv("EXERCISE_KAFKA_BROKERS")

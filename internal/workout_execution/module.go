@@ -6,14 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	workoutexecutionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service"
+	workoutexecutionv1serviceconnect "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
@@ -22,6 +26,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
+	connecttransport "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport/connect"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -33,6 +38,8 @@ type ModuleDeps struct {
 	DB            *sql.DB
 	GRPCServer    *grpc.Server
 	KafkaRegistry *sharedKafka.Registry
+	ConnectMux    *http.ServeMux
+	KeyProvider   middleware.KeyProvider
 }
 
 // Initialize wires dependencies, registers gRPC services, and starts background workers.
@@ -101,6 +108,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 	workoutexecutionv1service.RegisterWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
 	workoutexecutionv1service.RegisterAdminWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
+
+	if deps.ConnectMux != nil && deps.KeyProvider != nil {
+		connectHandler := connecttransport.NewHandler(grpcHandler)
+		interceptor := middleware.ConnectAuthInterceptor(deps.KeyProvider)
+		path, h := workoutexecutionv1serviceconnect.NewWorkoutExecutionServiceHandler(connectHandler, connect.WithInterceptors(interceptor))
+		deps.ConnectMux.Handle(path, h)
+		log.Printf("WorkoutExecution Connect handler registered at %s", path)
+	}
 
 	// Kafka Setup
 	kafkaBrokersStr := os.Getenv("WORKOUT_EXECUTION_KAFKA_BROKERS")

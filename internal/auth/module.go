@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
@@ -23,8 +25,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/oauth"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
 	grpcAuth "github.com/viethung213/gym-companion/internal/auth/infrastructure/transport/grpc"
+	connecttransport "github.com/viethung213/gym-companion/internal/auth/infrastructure/transport/connect"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/worker"
 	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
+	authv1serviceconnect "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
@@ -38,6 +42,8 @@ type ModuleDeps struct {
 	GRPCServer        *grpc.Server
 	AssignKeyProvider func(middleware.KeyProvider)
 	KafkaRegistry     *sharedKafka.Registry
+	ConnectMux        *http.ServeMux
+	KeyProvider       middleware.KeyProvider
 }
 
 // Initialize bootstraps all layers of the Auth Bounded Context.
@@ -220,6 +226,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		getOAuthLoginURLHandler,
 	)
 	authv1service.RegisterAuthServiceServer(deps.GRPCServer, grpcHandler)
+
+	if deps.ConnectMux != nil && deps.KeyProvider != nil {
+		connectHandler := connecttransport.NewHandler(grpcHandler)
+		interceptor := middleware.ConnectAuthInterceptor(deps.KeyProvider)
+		path, h := authv1serviceconnect.NewAuthServiceHandler(connectHandler, connect.WithInterceptors(interceptor))
+		deps.ConnectMux.Handle(path, h)
+		log.Printf("Auth Connect handler registered at %s", path)
+	}
 
 	log.Println("Auth Bounded Context initialized successfully.")
 	return shutdown, nil

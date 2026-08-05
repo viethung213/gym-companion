@@ -19,6 +19,12 @@ plugins:
       - paths=source_relative
       - generate_unbound_methods=true
 
+  # Plugin Connect-Go — generates *_connect.go files (Connect + gRPC-Web + gRPC protocols)
+  - remote: buf.build/connectrpc/go
+    out: internal/gen/go
+    opt:
+      - paths=source_relative
+
   # Plugin OpenAPI v2 for Swagger docs
   - local: protoc-gen-openapiv2
     out: docs/swagger
