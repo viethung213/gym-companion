@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
+
+message LockoutApplied {
+  string user_id = 1;
+  string item_type = 2;
+  string item_name = 3;
+  string unlocked_at = 4;
+}

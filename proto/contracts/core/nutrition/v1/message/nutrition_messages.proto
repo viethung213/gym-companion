@@ -86,3 +86,75 @@ message GetNutritionSummaryResponse {
   float consumed_calories = 3;
   Macros consumed_macros = 4;
 }
+
+message RecalibratePlanWithPantryRequest {
+  string user_id = 1;
+  repeated string available_ingredients = 2;
+}
+
+message RecalibratePlanWithPantryResponse {
+  float target_calories = 1;
+  Macros macros = 2;
+  DailyMeals meals = 3;
+  string message = 4;
+}
+
+message CreateFoodItemRequest {
+  string name = 1;
+  string category = 2; // PROTEIN, CARB, VEGGIE, FAT, NUTIFOOD
+  float calories_per_100g = 3;
+  float protein_per_100g = 4;
+  float carbs_per_100g = 5;
+  float fat_per_100g = 6;
+  repeated string allergen_tags = 7;
+  string protein_source = 8;
+  string carb_source = 9;
+  bool is_nutifood_product = 10;
+}
+
+message CreateFoodItemResponse {
+  string food_item_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message ApproveFoodItemRequest {
+  string food_item_id = 1;
+}
+
+message ApproveFoodItemResponse {
+  string food_item_id = 1;
+  string status = 2;
+  bool success = 3;
+  string message = 4;
+}
+
+message ImprovementAreaProto {
+  string area = 1;
+  float current_avg = 2;
+  float target = 3;
+  string suggestion = 4;
+  string priority = 5; // "HIGH", "MEDIUM", "LOW"
+}
+
+message RecommendedAdjustmentsProto {
+  float calories_delta = 1;
+  float protein_ratio_delta = 2;
+  repeated string focus_foods = 3;
+}
+
+message GetNutritionInsightRequest {
+  string user_id = 1;
+  string goal_type = 2;  // "WEIGHT_LOSS", "MUSCLE_GAIN", "MAINTENANCE"
+  int32 range_days = 3;  // số ngày phân tích, mặc định 7
+}
+
+message GetNutritionInsightResponse {
+  int32 overall_score = 1;
+  string summary = 2;
+  repeated string strengths = 3;
+  repeated ImprovementAreaProto improvement_areas = 4;
+  string weekly_trend = 5; // "IMPROVING", "DECLINING", "STABLE"
+  RecommendedAdjustmentsProto recommended_adjustments = 6;
+}
+
