@@ -10,7 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"net/http"
+
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	connectExercise "github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport/connect"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
@@ -18,6 +21,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
 	exercisesvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service"
+	exercisev1serviceconnect "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -27,6 +31,7 @@ import (
 type ModuleDeps struct {
 	DB            *sql.DB
 	GRPCServer    *grpc.Server
+	ConnectMux    *http.ServeMux
 	KafkaRegistry *sharedKafka.Registry
 }
 
@@ -118,6 +123,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 		listTagsHandler,
 	)
 	exercisesvc.RegisterExerciseServiceServer(deps.GRPCServer, grpcHandler)
+
+	if deps.ConnectMux != nil {
+		path, h := exercisev1serviceconnect.NewExerciseServiceHandler(connectExercise.NewAdapter(grpcHandler))
+		deps.ConnectMux.Handle(path, h)
+		log.Println("Exercise ConnectRPC handler mounted at", path)
+	}
 
 	// Start Background Worker for Outbox Pattern & Kafka
 	kafkaBrokersStr := os.Getenv("EXERCISE_KAFKA_BROKERS")

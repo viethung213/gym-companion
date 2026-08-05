@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync"
 
+	connectcors "connectrpc.com/cors"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
@@ -22,6 +24,8 @@ import (
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -99,10 +103,14 @@ func run() error {
 	)
 	log.Printf("Starting gRPC server on port %s...\n", grpcPort)
 
+	// HTTP mux created early so modules can mount ConnectRPC routes during initialization
+	mux := http.NewServeMux()
+
 	// Initialize Auth Module
 	shutdown, err := auth.Initialize(ctx, auth.ModuleDeps{
 		DB:                db,
 		GRPCServer:        grpcServer,
+		ConnectMux:        mux,
 		AssignKeyProvider: lazyKP.Set,
 		KafkaRegistry:     kafkaRegistry,
 	})
@@ -115,6 +123,7 @@ func run() error {
 	shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
 		DB:            exerciseDB,
 		GRPCServer:    grpcServer,
+		ConnectMux:    mux,
 		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
@@ -126,6 +135,7 @@ func run() error {
 	shutdownWorkout, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
 		DB:            workoutDB,
 		GRPCServer:    grpcServer,
+		ConnectMux:    mux,
 		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
@@ -155,9 +165,8 @@ func run() error {
 		}
 	}()
 
-	// 2. Start HTTP Server (gRPC-Gateway)
+	// 2. Start HTTP Server (gRPC-Gateway + ConnectRPC)
 	log.Printf("Starting HTTP API gateway server on port %s...\n", httpPort)
-	mux := http.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
 	// Register Coaching HTTP Handler FIRST (before gwmux catch-all)
@@ -191,8 +200,16 @@ func run() error {
 		_, _ = w.Write([]byte("OK"))
 	})
 
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: connectcors.AllowedMethods(),
+		AllowedHeaders: append(connectcors.AllowedHeaders(), "Authorization"),
+		ExposedHeaders: connectcors.ExposedHeaders(),
+	}).Handler(mux)
+	h2cHandler := h2c.NewHandler(corsHandler, &http2.Server{})
+
 	go func() {
-		if err := http.ListenAndServe(":"+httpPort, mux); err != nil {
+		if err := http.ListenAndServe(":"+httpPort, h2cHandler); err != nil {
 			errChan <- fmt.Errorf("http server listen and serve: %w", err)
 		}
 	}()

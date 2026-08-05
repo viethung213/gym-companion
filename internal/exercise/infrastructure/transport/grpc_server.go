@@ -320,9 +320,8 @@ func toProtoExercise(info *domain.Info) *exercisemsg.ExerciseInfo {
 		VideoUrl:           info.VideoURL,
 		Difficulty:         info.Difficulty,
 		DefaultRestSeconds: info.DefaultRestSeconds,
-		TagIds:             info.TagIDs,
-		Status:             toProtoStatus(info.Status),
-		HasAiSupported:     info.HasAISupported,
+		TagIds: info.TagIDs,
+		Status: toProtoStatus(info.Status),
 	}
 }
 

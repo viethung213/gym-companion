@@ -11,8 +11,11 @@ import (
 	"sync"
 	"time"
 
+	"net/http"
+
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	workoutexecutionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service"
+	workoutv1serviceconnect "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
@@ -22,6 +25,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
+	connectWorkout "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport/connect"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
 	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -32,6 +36,7 @@ import (
 type ModuleDeps struct {
 	DB            *sql.DB
 	GRPCServer    *grpc.Server
+	ConnectMux    *http.ServeMux
 	KafkaRegistry *sharedKafka.Registry
 }
 
@@ -101,6 +106,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (func(), error) {
 
 	workoutexecutionv1service.RegisterWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
 	workoutexecutionv1service.RegisterAdminWorkoutExecutionServiceServer(deps.GRPCServer, grpcHandler)
+
+	if deps.ConnectMux != nil {
+		path, h := workoutv1serviceconnect.NewWorkoutExecutionServiceHandler(connectWorkout.NewAdapter(grpcHandler))
+		deps.ConnectMux.Handle(path, h)
+		log.Println("WorkoutExecution ConnectRPC handler mounted at", path)
+
+		adminPath, adminH := workoutv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(connectWorkout.NewAdminAdapter(grpcHandler))
+		deps.ConnectMux.Handle(adminPath, adminH)
+		log.Println("AdminWorkoutExecution ConnectRPC handler mounted at", adminPath)
+	}
 
 	// Kafka Setup
 	kafkaBrokersStr := os.Getenv("WORKOUT_EXECUTION_KAFKA_BROKERS")
