@@ -29,9 +29,9 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, category st
 	}
 
 	filtered := make([]vo.FoodNutrient, 0, len(catalog))
-	for _, item := range catalog {
-		if strings.EqualFold(item.Category(), category) {
-			filtered = append(filtered, item)
+	for i := range catalog {
+		if strings.EqualFold(catalog[i].Category(), category) {
+			filtered = append(filtered, catalog[i])
 		}
 	}
 	return filtered, nil
@@ -41,7 +41,7 @@ func (t *NutritionTools) CheckLockoutRules(
 	_ context.Context,
 	lockoutRegistry vo.LockoutRegistry,
 	ingredients []string,
-) (collisions []string, warnings []string) {
+) (collisions, warnings []string) {
 	return lockoutRegistry.CheckCollisions(ingredients, time.Now())
 }
 

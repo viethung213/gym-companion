@@ -8,6 +8,8 @@ import (
 )
 
 // ExecuteDailyMenuWorkflow runs the 5:00 AM full day 4-meal generation workflow.
+//
+//nolint:gocritic // promptCtx parameter struct is passed by value
 func (a *NutritionAgent) ExecuteDailyMenuWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,

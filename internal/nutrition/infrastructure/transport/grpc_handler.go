@@ -220,7 +220,9 @@ func (h *GRPCHandler) GetNutritionHistory(
 
 	protoLogs := make([]*nutritionv1msg.MealLogItem, 0)
 	if history != nil {
-		for _, l := range history.MealLogs() {
+		logs := history.MealLogs()
+		for i := range logs {
+			l := &logs[i]
 			protoLogs = append(protoLogs, &nutritionv1msg.MealLogItem{
 				MealLogId: l.ID(),
 				MealName:  l.MealName(),

@@ -38,7 +38,8 @@ func (v *planValidator) validate(ctx context.Context, plan *GeneratedMealPlan, r
 		restrictionMap[strings.ToUpper(strings.TrimSpace(r))] = true
 	}
 
-	for idx, opt := range plan.Options {
+	for idx := range plan.Options {
+		opt := &plan.Options[idx]
 		optIssues := make([]string, 0)
 
 		// 1. Verify Protein Food in DB Catalog
@@ -86,7 +87,7 @@ func (v *planValidator) validate(ctx context.Context, plan *GeneratedMealPlan, r
 		if len(optIssues) > 0 {
 			issues = append(issues, optIssues...)
 		} else {
-			validOptions = append(validOptions, opt)
+			validOptions = append(validOptions, *opt)
 		}
 	}
 

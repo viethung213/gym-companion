@@ -70,20 +70,20 @@ func NewMealOption(
 	}
 }
 
-func (m MealOption) OptionID() string        { return m.optionID }
-func (m MealOption) MealName() string        { return m.mealName }
-func (m MealOption) Calories() float64       { return m.calories }
-func (m MealOption) ProteinGrams() float64   { return m.proteinGrams }
-func (m MealOption) CarbGrams() float64      { return m.carbGrams }
-func (m MealOption) FatGrams() float64       { return m.fatGrams }
-func (m MealOption) IsLogged() bool          { return m.isLogged }
-func (m MealOption) IsNutiFoodProduct() bool { return m.isNutiFoodProduct }
-func (m MealOption) Ingredients() []IngredientGram {
+func (m *MealOption) OptionID() string        { return m.optionID }
+func (m *MealOption) MealName() string        { return m.mealName }
+func (m *MealOption) Calories() float64       { return m.calories }
+func (m *MealOption) ProteinGrams() float64   { return m.proteinGrams }
+func (m *MealOption) CarbGrams() float64      { return m.carbGrams }
+func (m *MealOption) FatGrams() float64       { return m.fatGrams }
+func (m *MealOption) IsLogged() bool          { return m.isLogged }
+func (m *MealOption) IsNutiFoodProduct() bool { return m.isNutiFoodProduct }
+func (m *MealOption) Ingredients() []IngredientGram {
 	copied := make([]IngredientGram, len(m.ingredients))
 	copy(copied, m.ingredients)
 	return copied
 }
-func (m MealOption) CookingSteps() []string {
+func (m *MealOption) CookingSteps() []string {
 	copied := make([]string, len(m.cookingSteps))
 	copy(copied, m.cookingSteps)
 	return copied

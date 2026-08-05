@@ -31,6 +31,7 @@ func NewCreateFoodItemHandler(foodRepo repository.FoodItemRepository) *CreateFoo
 	return &CreateFoodItemHandler{foodRepo: foodRepo}
 }
 
+//nolint:gocritic // cmd is passed by value per command pattern
 func (h *CreateFoodItemHandler) Handle(ctx context.Context, cmd CreateFoodItemCommand) (*aggregate.FoodItem, error) {
 	item := aggregate.ReconstructFoodItem(
 		uuid.New().String(),

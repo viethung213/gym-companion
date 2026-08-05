@@ -66,7 +66,8 @@ func (r *PostgresOutboxRepository) FetchUnpublished(ctx context.Context, limit i
 	}
 
 	result := make([]port.OutboxRecord, 0, len(gormRecords))
-	for _, rec := range gormRecords {
+	for i := range gormRecords {
+		rec := &gormRecords[i]
 		result = append(result, port.OutboxRecord{
 			ID:           rec.ID,
 			EventID:      rec.EventID,
@@ -120,7 +121,8 @@ func (r *PostgresOutboxRepository) ClaimBatch(
 
 		records = make([]port.OutboxRecord, 0, len(models))
 		ids := make([]string, 0, len(models))
-		for _, m := range models {
+		for i := range models {
+			m := &models[i]
 			records = append(records, port.OutboxRecord{
 				ID:           m.ID,
 				EventID:      m.EventID,

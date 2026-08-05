@@ -40,17 +40,17 @@ func NewMealLog(
 	}
 }
 
-func (m MealLog) ID() string          { return m.id }
-func (m MealLog) HistoryID() string   { return m.historyID }
-func (m MealLog) UserID() string      { return m.userID }
-func (m MealLog) MealType() string    { return m.mealType }
-func (m MealLog) MealName() string    { return m.mealName }
-func (m MealLog) Portion() string     { return m.portion }
-func (m MealLog) Calories() float64   { return m.calories }
-func (m MealLog) Protein() float64    { return m.protein }
-func (m MealLog) Carbs() float64      { return m.carbs }
-func (m MealLog) Fat() float64        { return m.fat }
-func (m MealLog) LoggedAt() time.Time { return m.loggedAt }
+func (m *MealLog) ID() string          { return m.id }
+func (m *MealLog) HistoryID() string   { return m.historyID }
+func (m *MealLog) UserID() string      { return m.userID }
+func (m *MealLog) MealType() string    { return m.mealType }
+func (m *MealLog) MealName() string    { return m.mealName }
+func (m *MealLog) Portion() string     { return m.portion }
+func (m *MealLog) Calories() float64   { return m.calories }
+func (m *MealLog) Protein() float64    { return m.protein }
+func (m *MealLog) Carbs() float64      { return m.carbs }
+func (m *MealLog) Fat() float64        { return m.fat }
+func (m *MealLog) LoggedAt() time.Time { return m.loggedAt }
 
 // MealHistory Aggregate Root for managing historical logged meals and lockout registries.
 type MealHistory struct {
@@ -83,6 +83,7 @@ func (h *MealHistory) MealLogs() []MealLog {
 	return copied
 }
 
+//nolint:gocritic // log parameter is passed by value per domain aggregate design
 func (h *MealHistory) AddMealLog(log MealLog) {
 	h.mealLogs = append(h.mealLogs, log)
 	h.updatedAt = time.Now()
@@ -95,7 +96,8 @@ func (h *MealHistory) ApplyLockoutRule(itemType, itemName string, duration time.
 
 func (h *MealHistory) CalculateConsumedToday(targetDate time.Time) (calories, protein, carbs, fat float64) {
 	targetYear, targetMonth, targetDay := targetDate.Date()
-	for _, log := range h.mealLogs {
+	for i := range h.mealLogs {
+		log := &h.mealLogs[i]
 		y, m, d := log.loggedAt.Date()
 		if y == targetYear && m == targetMonth && d == targetDay {
 			calories += log.calories

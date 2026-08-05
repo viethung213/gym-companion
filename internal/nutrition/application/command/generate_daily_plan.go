@@ -49,6 +49,7 @@ func NewGenerateDailyPlanHandler(
 	}
 }
 
+//nolint:gocritic // cmd is passed by value per command pattern
 func (h *GenerateDailyPlanHandler) Handle(ctx context.Context, cmd GenerateDailyPlanCommand) (*aggregate.NutritionPlan, error) {
 	existing, err := h.planRepo.FindByUserIDAndDate(ctx, cmd.UserID, cmd.PlanDate)
 	if err == nil && existing != nil {

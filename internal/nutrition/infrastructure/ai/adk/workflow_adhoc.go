@@ -8,6 +8,8 @@ import (
 )
 
 // ExecuteAdhocMealSuggestionWorkflow runs the quick standalone meal suggestion workflow.
+//
+//nolint:gocritic // promptCtx parameter struct is passed by value
 func (a *NutritionAgent) ExecuteAdhocMealSuggestionWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,

@@ -47,6 +47,7 @@ func NewLogMealHandler(
 	}
 }
 
+//nolint:gocritic // cmd is passed by value per command pattern
 func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggregate.MealLog, error) {
 	now := time.Now()
 	var calories, protein, carbs, fat float64

@@ -236,6 +236,8 @@ type MockAIService struct {
 }
 
 // SelectCreativeMealOptions implements repository.AIService.
+//
+//nolint:gocritic // mock implementation of domain interface
 func (m *MockAIService) SelectCreativeMealOptions(
 	_ context.Context,
 	_ repository.AIMenuPromptContext,

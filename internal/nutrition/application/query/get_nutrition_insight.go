@@ -70,8 +70,9 @@ func (h *GetNutritionInsightHandler) Handle(
 
 		// Đếm số bữa đã log trong ngày.
 		mealCount := 0
-		for _, log := range history.MealLogs() {
-			y, m, d := log.LoggedAt().Date()
+		logs := history.MealLogs()
+		for i := range logs {
+			y, m, d := logs[i].LoggedAt().Date()
 			dy, dm, dd := day.Date()
 			if y == dy && m == dm && d == dd {
 				mealCount++

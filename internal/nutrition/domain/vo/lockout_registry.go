@@ -68,7 +68,8 @@ func (r LockoutRegistry) FilterAvailableIngredients(catalog []FoodNutrient, now 
 	}
 
 	available := make([]FoodNutrient, 0, len(catalog))
-	for _, food := range catalog {
+	for i := range catalog {
+		food := &catalog[i]
 		foodNameUpper := strings.ToUpper(food.Name())
 		proteinSrcUpper := strings.ToUpper(food.ProteinSource())
 		carbSrcUpper := strings.ToUpper(food.CarbSource())
@@ -76,13 +77,13 @@ func (r LockoutRegistry) FilterAvailableIngredients(catalog []FoodNutrient, now 
 		if activeLockouts[foodNameUpper] || activeLockouts[proteinSrcUpper] || activeLockouts[carbSrcUpper] {
 			continue
 		}
-		available = append(available, food)
+		available = append(available, catalog[i])
 	}
 
 	return available
 }
 
-func (r LockoutRegistry) CheckCollisions(candidateIngredients []string, now time.Time) ([]string, []string) {
+func (r LockoutRegistry) CheckCollisions(candidateIngredients []string, now time.Time) (collisions, warnings []string) {
 	activeLockouts := make(map[string]bool)
 	for _, l := range r.items {
 		if l.IsActive(now) {

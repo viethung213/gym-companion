@@ -99,7 +99,7 @@ func (a *NutritionAgent) EstimateNutrient(
 	}
 
 	var result repository.EstimatedNutrientResult
-	//nolint:musttag
+	//nolint:musttag // LLM response struct does not require tags
 	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
 		return nil, fmt.Errorf("estimate nutrient parse json: %w", err)
 	}
@@ -117,7 +117,7 @@ func (a *NutritionAgent) GenerateNutritionInsight(
 		return nil, errors.New("insight agent not initialised")
 	}
 
-	//nolint:musttag
+	//nolint:musttag // LLM response struct does not require tags
 	historyJSON, err := json.Marshal(promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("generate nutrition insight marshal context: %w", err)
@@ -159,6 +159,8 @@ type insightLLMResponse struct {
 }
 
 // mapInsightToResult chuyển đổi insightLLMResponse sang repository.NutritionInsightResult.
+//
+//nolint:gocritic // r is an internal response struct
 func mapInsightToResult(r insightLLMResponse) *repository.NutritionInsightResult {
 	areas := make([]repository.ImprovementArea, 0, len(r.ImprovementAreas))
 	for _, a := range r.ImprovementAreas {
@@ -194,6 +196,8 @@ func mapInsightToResult(r insightLLMResponse) *repository.NutritionInsightResult
 // SelectCreativeMealOptions implements repository.AIService.
 // Nhận AIMenuPromptContext từ domain, map sang internal NutritionPromptContext,
 // rồi chạy workflow ADK tương ứng theo MealType.
+//
+//nolint:gocritic // promptCtx implements repository.AIService port interface
 func (a *NutritionAgent) SelectCreativeMealOptions(
 	ctx context.Context,
 	promptCtx repository.AIMenuPromptContext,
@@ -280,7 +284,8 @@ func (a *NutritionAgent) persistNewFoodItemsAndMap(
 	}
 
 	recipeResults := make([]repository.GeneratedRecipeResult, 0, len(plan.Options))
-	for _, opt := range plan.Options {
+	for i := range plan.Options {
+		opt := &plan.Options[i]
 		suppIngredients := make([]aggregate.IngredientGram, 0, len(opt.SupplementaryIngredients))
 		for _, supp := range opt.SupplementaryIngredients {
 			suppIngredients = append(suppIngredients, aggregate.NewIngredientGram(supp.Name, supp.AmountGram, supp.IsNutiFoodProduct))

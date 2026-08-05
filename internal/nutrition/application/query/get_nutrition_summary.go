@@ -52,13 +52,14 @@ func (h *GetNutritionSummaryHandler) Handle(ctx context.Context, q GetNutritionS
 
 	history, histErr := h.historyRepo.FindByUserID(ctx, q.UserID)
 	if histErr == nil && history != nil {
-		for _, log := range history.MealLogs() {
-			if log.LoggedAt().Year() == q.PlanDate.Year() &&
-				log.LoggedAt().YearDay() == q.PlanDate.YearDay() {
-				result.ConsumedCalories += log.Calories()
-				result.ConsumedProtein += log.Protein()
-				result.ConsumedCarbs += log.Carbs()
-				result.ConsumedFat += log.Fat()
+		logs := history.MealLogs()
+		for i := range logs {
+			if logs[i].LoggedAt().Year() == q.PlanDate.Year() &&
+				logs[i].LoggedAt().YearDay() == q.PlanDate.YearDay() {
+				result.ConsumedCalories += logs[i].Calories()
+				result.ConsumedProtein += logs[i].Protein()
+				result.ConsumedCarbs += logs[i].Carbs()
+				result.ConsumedFat += logs[i].Fat()
 			}
 		}
 	}

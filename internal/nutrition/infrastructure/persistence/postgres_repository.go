@@ -55,8 +55,8 @@ func (r *PostgresFoodItemRepository) FindActiveCatalog(ctx context.Context) ([]v
 	}
 
 	result := make([]vo.FoodNutrient, 0, len(gormItems))
-	for _, item := range gormItems {
-		result = append(result, item.ToNutrientDomain())
+	for i := range gormItems {
+		result = append(result, gormItems[i].ToNutrientDomain())
 	}
 	return result, nil
 }
@@ -69,8 +69,8 @@ func (r *PostgresFoodItemRepository) FindNutiFoodProducts(ctx context.Context) (
 	}
 
 	result := make([]vo.FoodNutrient, 0, len(gormItems))
-	for _, item := range gormItems {
-		result = append(result, item.ToNutrientDomain())
+	for i := range gormItems {
+		result = append(result, gormItems[i].ToNutrientDomain())
 	}
 	return result, nil
 }
@@ -261,10 +261,11 @@ func (r *PostgresMealHistoryRepository) FindByUserID(ctx context.Context, userID
 
 	var gormLogs []GormMealLog
 	_ = db.Where("history_id = ?", gormHist.ID).Find(&gormLogs).Error
-	for _, log := range gormLogs {
+	for i := range gormLogs {
+		logItem := &gormLogs[i]
 		history.AddMealLog(aggregate.NewMealLog(
-			log.ID, log.HistoryID, log.UserID, log.MealType, log.MealName, log.Portion,
-			log.Calories, log.Protein, log.Carbs, log.Fat, log.LoggedAt,
+			logItem.ID, logItem.HistoryID, logItem.UserID, logItem.MealType, logItem.MealName, logItem.Portion,
+			logItem.Calories, logItem.Protein, logItem.Carbs, logItem.Fat, logItem.LoggedAt,
 		))
 	}
 
@@ -283,19 +284,21 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 			return err
 		}
 
-		for _, log := range history.MealLogs() {
+		logs := history.MealLogs()
+		for i := range logs {
+			logItem := &logs[i]
 			gormLog := &GormMealLog{
-				ID:        log.ID(),
+				ID:        logItem.ID(),
 				HistoryID: history.ID(),
-				UserID:    log.UserID(),
-				MealType:  log.MealType(),
-				MealName:  log.MealName(),
-				Portion:   log.Portion(),
-				Calories:  log.Calories(),
-				Protein:   log.Protein(),
-				Carbs:     log.Carbs(),
-				Fat:       log.Fat(),
-				LoggedAt:  log.LoggedAt(),
+				UserID:    logItem.UserID(),
+				MealType:  logItem.MealType(),
+				MealName:  logItem.MealName(),
+				Portion:   logItem.Portion(),
+				Calories:  logItem.Calories(),
+				Protein:   logItem.Protein(),
+				Carbs:     logItem.Carbs(),
+				Fat:       logItem.Fat(),
+				LoggedAt:  logItem.LoggedAt(),
 			}
 			if err := tx.Save(gormLog).Error; err != nil {
 				return err

@@ -8,6 +8,8 @@ import (
 )
 
 // ExecutePantryRecipeWorkflow runs the meal creation workflow using available pantry ingredients.
+//
+//nolint:gocritic // promptCtx parameter struct is passed by value
 func (a *NutritionAgent) ExecutePantryRecipeWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,

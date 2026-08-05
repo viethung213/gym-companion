@@ -118,6 +118,8 @@ func (g *MenuGenerator) GenerateDailyPlan(
 }
 
 // resolveOptionsViaAI gọi AI Agent để sinh options, sau đó lưu Recipe Cache cho lần sau.
+//
+//nolint:gocritic // promptCtx parameter struct is passed by value
 func (g *MenuGenerator) resolveOptionsViaAI(
 	ctx context.Context,
 	promptCtx repository.AIMenuPromptContext,

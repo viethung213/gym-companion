@@ -61,6 +61,7 @@ func (c *Consumer) Start(ctx context.Context) error {
 	}
 }
 
+//nolint:gocritic // msg is passed by value per kafka library signature
 func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	var payload WorkoutSessionCompletedPayload
 	if err := json.Unmarshal(msg.Value, &payload); err != nil {
