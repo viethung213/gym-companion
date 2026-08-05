@@ -18,6 +18,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise"
+	"github.com/viethung213/gym-companion/internal/nutrition"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
@@ -133,6 +134,22 @@ func run() error {
 	}
 	defer shutdownWorkout()
 
+	// Initialize Nutrition Module
+	nutritionDB, err := dbRegistry.GetPool("nutrition")
+	if err != nil {
+		log.Println("Warning: nutrition database pool not found, falling back to auth pool.")
+		nutritionDB = db
+	}
+	shutdownNutrition, err := nutrition.Initialize(ctx, nutrition.ModuleDeps{
+		DB:            nutritionDB,
+		GRPCServer:    grpcServer,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize nutrition module: %w", err)
+	}
+	defer shutdownNutrition()
+
 	// Initialize Coaching Module.
 	// TODO(#197): all three readers are mocks; coaching runs on fixture data.
 	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
@@ -180,6 +197,11 @@ func run() error {
 	err = workoutexecution.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
 	if err != nil {
 		return fmt.Errorf("register workout execution gateway: %w", err)
+	}
+
+	err = nutrition.RegisterGateway(ctx, gwmux, ":"+grpcPort, opts)
+	if err != nil {
+		return fmt.Errorf("register nutrition gateway: %w", err)
 	}
 
 	// Register gwmux LAST (catch-all for remaining routes)

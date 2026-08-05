@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
+
+message NutritionPlanRecalibrated {
+  string plan_id = 1;
+  string user_id = 2;
+  string reason = 3;
+  string timestamp = 4;
+}

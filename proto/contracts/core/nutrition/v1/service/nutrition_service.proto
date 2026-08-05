@@ -34,6 +34,11 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service NutritionService {
+  option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_tag) = {
+    name: "Nutrition / User"
+    description: "API dành cho người dùng tra cứu thực đơn, ghi nhật ký ăn uống và phân tích dinh dưỡng"
+  };
+
   // Lấy thực đơn gợi ý trong ngày dựa theo TDEE và mục tiêu người dùng
   rpc GetTodayMenu (contracts.core.nutrition.v1.message.GetTodayMenuRequest) returns (contracts.core.nutrition.v1.message.GetTodayMenuResponse) {
     option (google.api.http) = {
@@ -60,6 +65,48 @@ service NutritionService {
   rpc GetNutritionSummary (contracts.core.nutrition.v1.message.GetNutritionSummaryRequest) returns (contracts.core.nutrition.v1.message.GetNutritionSummaryResponse) {
     option (google.api.http) = {
       get: "/api/v1/users/{user_id}/nutrition/summary"
+    };
+  }
+
+  // Tái hiệu chỉnh thực đơn động theo nguyên liệu có sẵn trong tủ lạnh (BR-NU-06)
+  rpc RecalibratePlanWithPantry (contracts.core.nutrition.v1.message.RecalibratePlanWithPantryRequest) returns (contracts.core.nutrition.v1.message.RecalibratePlanWithPantryResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users/{user_id}/nutrition/recalibrate-pantry"
+      body: "*"
+    };
+  }
+
+  // Đăng ký thực phẩm mới vào danh mục (Dành cho đối tác / sản phẩm NutiFood)
+  rpc CreateFoodItem (contracts.core.nutrition.v1.message.CreateFoodItemRequest) returns (contracts.core.nutrition.v1.message.CreateFoodItemResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/nutrition/food-items"
+      body: "*"
+    };
+  }
+
+  // Lấy insight AI phân tích xu hướng dinh dưỡng và hướng cải thiện cá nhân hóa
+  rpc GetNutritionInsight (contracts.core.nutrition.v1.message.GetNutritionInsightRequest) returns (contracts.core.nutrition.v1.message.GetNutritionInsightResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{user_id}/nutrition/insight"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "AI Nutrition Insight"
+      description: "Phân tích lịch sử dinh dưỡng và đưa ra hướng cải thiện từ AI"
+    };
+  }
+}
+
+// Service dành riêng cho Admin quản lý danh mục thực phẩm
+service AdminNutritionService {
+  option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_tag) = {
+    name: "Nutrition / Admin"
+    description: "API dành cho Admin quản lý và phê duyệt danh mục thực phẩm"
+  };
+
+  // Admin phê duyệt thực phẩm vào danh mục Active
+  rpc ApproveFoodItem (contracts.core.nutrition.v1.message.ApproveFoodItemRequest) returns (contracts.core.nutrition.v1.message.ApproveFoodItemResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/admin/nutrition/food-items/{food_item_id}/approve"
     };
   }
 }
