@@ -72,7 +72,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		brokers := []string{cfg.KafkaBrokers}
 
 		// Outbound Outbox Worker Publisher
-		writer, wErr := deps.KafkaRegistry.GetWriter("events.v1", brokers)
+		writer, wErr := deps.KafkaRegistry.GetWriter("notification.events", brokers)
 		if wErr == nil && writer != nil {
 			kafkaPub = notificationKafka.NewPublisher(writer)
 			outboxWorker := notificationWorker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
@@ -84,7 +84,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		}
 
 		// Inbound Event Consumer
-		reader, rErr := deps.KafkaRegistry.GetReader("notification-group", "events.v1", brokers)
+		reader, rErr := deps.KafkaRegistry.GetReader("notification-group", "notification.events", brokers)
 		if rErr == nil && reader != nil {
 			consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, outboxLogRepo)
 			go consumer.Start(ctxWorkers)

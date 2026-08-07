@@ -33,7 +33,7 @@ func TestPublisher_PublishBatch_Empty(t *testing.T) {
 func TestPublisher_PublishBatch_WithPopulatedWriterTopic(t *testing.T) {
 	writer := &kafka.Writer{
 		Addr:  kafka.TCP("127.0.0.1:9092"),
-		Topic: "auth",
+		Topic: "auth.events",
 	}
 	pub := authKafka.NewPublisher(writer)
 

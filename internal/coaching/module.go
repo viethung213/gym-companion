@@ -121,7 +121,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 		cfg := config.LoadConfig()
 		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
-		writer, wErr := deps.KafkaRegistry.GetWriter("events.v1", brokers)
+		writer, wErr := deps.KafkaRegistry.GetWriter("coaching.events", brokers)
 		if wErr == nil && writer != nil {
 			kafkaPub := coachingKafka.NewPublisher(writer)
 			outboxWorker = worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)

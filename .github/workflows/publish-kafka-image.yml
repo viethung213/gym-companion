@@ -1,0 +1,55 @@
+name: Publish Dedicated Kafka Docker Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/kafka/**'
+      - '.github/workflows/publish-kafka-image.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infra/kafka/**'
+      - '.github/workflows/publish-kafka-image.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: fitai-kafka
+
+jobs:
+  build-and-push-kafka:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Image Name
+        id: prep
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_tag=${{ env.REGISTRY }}/${REPO_OWNER}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "sha_tag=${{ env.REGISTRY }}/${REPO_OWNER}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Kafka Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./infra/kafka/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.prep.outputs.image_tag }}
+            ${{ steps.prep.outputs.sha_tag }}

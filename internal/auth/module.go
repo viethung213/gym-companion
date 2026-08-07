@@ -169,7 +169,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	}
 	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 
-	writer, err := deps.KafkaRegistry.GetWriter("auth", kafkaBrokers)
+	writer, err := deps.KafkaRegistry.GetWriter("auth.events", kafkaBrokers)
 	if err != nil {
 		cancelWorkers()
 		return nil, nil, fmt.Errorf("get auth kafka writer: %w", err)
