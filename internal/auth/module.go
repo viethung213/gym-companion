@@ -13,9 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
 	"github.com/viethung213/gym-companion/internal/auth/application/query"
@@ -31,6 +28,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 // ModuleDeps holds the external database connection and gRPC server instances needed by Auth.
