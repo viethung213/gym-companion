@@ -45,8 +45,6 @@ COPY --from=prod-builder /bin/fitai-api /app/fitai-api
 COPY internal/coaching/infrastructure/ai/adk/prompts ./internal/coaching/infrastructure/ai/adk/prompts
 COPY internal/coaching/infrastructure/ai/adk/skills ./internal/coaching/infrastructure/ai/adk/skills
 
-# Copy service-account.json (nếu có) để FCM Push SDK khởi tạo bên trong Docker container
-COPY service-account.json* /app/
 
 EXPOSE 8080
 EXPOSE 9090

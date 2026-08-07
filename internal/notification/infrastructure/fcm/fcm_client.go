@@ -2,8 +2,10 @@ package fcm
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log"
-	"os"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
@@ -18,24 +20,50 @@ type Client struct {
 	messagingClient *messaging.Client
 }
 
-func findServiceAccountFile(specifiedPath string) string {
-	if specifiedPath != "" {
-		if _, err := os.Stat(specifiedPath); err == nil {
-			return specifiedPath
-		}
+type serviceAccountJSON struct {
+	Type                    string `json:"type"`
+	ProjectID               string `json:"project_id"`
+	PrivateKeyID            string `json:"private_key_id,omitempty"`
+	PrivateKey              string `json:"private_key"`
+	ClientEmail             string `json:"client_email"`
+	ClientID                string `json:"client_id,omitempty"`
+	AuthURI                 string `json:"auth_uri"`
+	TokenURI                string `json:"token_uri"`
+	AuthProviderX509CertURL string `json:"auth_provider_x509_cert_url"`
+	UniverseDomain          string `json:"universe_domain,omitempty"`
+}
+
+func buildServiceAccountJSON(cfg config.Config) ([]byte, error) {
+	if cfg.FCMClientEmail == "" || cfg.FCMPrivateKey == "" {
+		return nil, errors.New("missing FCM client email or private key")
 	}
-	return ""
+
+	privateKey := strings.ReplaceAll(cfg.FCMPrivateKey, "\\n", "\n")
+
+	sa := serviceAccountJSON{
+		Type:                    "service_account",
+		ProjectID:               cfg.FCMProjectID,
+		PrivateKeyID:            cfg.FCMPrivateKeyID,
+		PrivateKey:              privateKey,
+		ClientEmail:             cfg.FCMClientEmail,
+		ClientID:                cfg.FCMClientID,
+		AuthURI:                 "https://accounts.google.com/o/oauth2/auth",
+		TokenURI:                "https://oauth2.googleapis.com/token",
+		AuthProviderX509CertURL: "https://www.googleapis.com/oauth2/v1/certs",
+		UniverseDomain:          "googleapis.com",
+	}
+
+	return json.Marshal(sa)
 }
 
 func NewClient(cfg config.Config) *Client {
 	ctx := context.Background()
 
 	var opts []option.ClientOption
-	credFile := findServiceAccountFile(cfg.FCMServiceAccountFile)
-	if credFile != "" {
-		opts = append(opts, option.WithCredentialsFile(credFile))
-	} else if cfg.FCMServiceAccountFile != "" {
-		log.Printf("⚠️ Warning: FCM service account file '%s' not found or unreadable.", cfg.FCMServiceAccountFile)
+	if saJSON, err := buildServiceAccountJSON(cfg); err == nil {
+		opts = append(opts, option.WithCredentialsJSON(saJSON))
+	} else if cfg.FCMClientEmail != "" || cfg.FCMPrivateKey != "" {
+		log.Printf("⚠️ Warning: failed to construct FCM service account JSON: %v", err)
 	}
 
 	var fbCfg *firebase.Config
@@ -44,7 +72,7 @@ func NewClient(cfg config.Config) *Client {
 	}
 
 	if len(opts) == 0 && cfg.FCMProjectID == "" {
-		log.Println("⚠️ Warning: FCMProjectID and FCMServiceAccountFile are empty. FCM Push SDK disabled.")
+		log.Println("⚠️ Warning: FCM credentials and FCMProjectID are empty. FCM Push SDK disabled.")
 		return &Client{messagingClient: nil}
 	}
 
