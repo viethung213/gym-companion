@@ -128,7 +128,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.ExerciseServer
 	}
 	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 
-	writer, err := deps.KafkaRegistry.GetWriter("exercise", kafkaBrokers)
+	writer, err := deps.KafkaRegistry.GetWriter("exercise.events", kafkaBrokers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get exercise kafka writer: %w", err)
 	}

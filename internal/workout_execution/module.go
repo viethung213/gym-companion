@@ -111,7 +111,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 
 	var kafkaPub *workoutKafka.Publisher
 	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
-		writer, err := deps.KafkaRegistry.GetWriter("workout_execution", kafkaBrokers)
+		writer, err := deps.KafkaRegistry.GetWriter("workout_execution.events", kafkaBrokers)
 		if err == nil && writer != nil {
 			kafkaPub = workoutKafka.NewPublisher(writer)
 		}

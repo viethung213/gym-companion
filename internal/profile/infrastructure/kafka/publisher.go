@@ -26,7 +26,6 @@ func (p *Publisher) PublishBatch(ctx context.Context, records []*port.OutboxReco
 	msgs := make([]kafka.Message, len(records))
 	for i, r := range records {
 		msgs[i] = kafka.Message{
-			Topic: "profile.events",
 			Key:   []byte(r.PartitionKey),
 			Value: r.Payload,
 		}
