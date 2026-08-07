@@ -174,9 +174,6 @@ func run() error {
 	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
 		DB:            coachingDB,
 		KafkaRegistry: kafkaRegistry,
-		ProfileReader: &adapters.MockUserProfileReader{},
-		SessionReader: &adapters.MockWorkoutSessionReader{},
-		CatalogReader: &adapters.MockExerciseCatalogReader{},
 		IDGenerator:   coachingpersistence.UUIDGenerator{},
 	})
 	if err != nil {
