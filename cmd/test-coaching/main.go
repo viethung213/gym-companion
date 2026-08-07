@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
@@ -80,7 +80,7 @@ func run() error {
 
 	// A dedicated FlagSet, not the global one: the launcher parses os.Args with
 	// its own flags on the other branch, and ContinueOnError keeps a bad flag
-	// from calling os.Exit past the deferred span flush.
+	// from calling os.Exit instead of returning here.
 	fs := flag.NewFlagSet("test-coaching", flag.ContinueOnError)
 	userID := fs.String("user", "test-user-123", "User ID to generate roadmap for")
 	if parseErr := fs.Parse(args); parseErr != nil {
@@ -88,20 +88,57 @@ func run() error {
 	}
 
 	log.Printf("Generating roadmap for user: %s\n", *userID)
-	roadmap, err := coachAgent.GenerateRoadmap(ctx, *userID)
+	plan, err := coachAgent.GenerateRoadmap(ctx, *userID)
 	if err != nil {
-		// Deliberately not fatal: a failed generation still produced spans,
+		// Deliberately not fatal: a failed run still wrote its prompt dumps,
 		// and those are often exactly what needs inspecting.
 		log.Printf("Note: Execution error: %v\n", err)
 		return nil
 	}
 
-	data, err := json.MarshalIndent(roadmap, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal roadmap: %w", err)
-	}
-	fmt.Println("\n✅ Generated Roadmap:")
-	fmt.Println(string(data))
+	printRoadmap(plan)
 
 	return nil
+}
+
+// printRoadmap walks the aggregate through its accessors.
+//
+// json.Marshal cannot be used here: Roadmap keeps its state in unexported
+// fields and declares no MarshalJSON, so it encodes as "{}" — which is what
+// this tool printed for every successful run until now.
+func printRoadmap(r *roadmap.Roadmap) {
+	if r == nil {
+		fmt.Println("\n(no roadmap)")
+		return
+	}
+
+	fmt.Printf("\n✅ Roadmap %s — %d weeks\n", r.ID(), len(r.Weeks()))
+
+	for _, w := range r.Weeks() {
+		sets, exercises := 0, 0
+		for _, d := range w.Days() {
+			for _, s := range d.Sessions() {
+				for _, ex := range s.Info().Prescription.MainExercises {
+					sets += int(ex.TargetSets)
+					exercises++
+				}
+			}
+		}
+
+		fmt.Printf("\n  Week %d  %-13s  %d sessions, %d main exercises, %d working sets\n",
+			w.WeekNumber(), w.Phase(), w.TotalSessions(), exercises, sets)
+
+		for _, d := range w.Days() {
+			for _, s := range d.Sessions() {
+				info := s.Info()
+				fmt.Printf("    %s  %-22s", info.ScheduledDate.Format("2006-01-02"),
+					strings.Join(info.TargetMuscleGroups, "+"))
+				for _, ex := range info.Prescription.MainExercises {
+					fmt.Printf("  %s %dx%d @%.0fkg RPE%.1f",
+						ex.ExerciseID, ex.TargetSets, ex.TargetReps, ex.TargetWeight, ex.TargetRPE)
+				}
+				fmt.Println()
+			}
+		}
+	}
 }

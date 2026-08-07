@@ -208,7 +208,7 @@ Hai luồng vá **dùng chung một builder** (`buildRewriteAgent`): cùng một
 
 ## Debug
 
-Đặt `COACH_PROMPT_DUMP_DIR` để ghi ra **nguyên văn `Contents` gửi lên Gemini**, một file JSON mỗi lần gọi model:
+Đặt `COACH_PROMPT_DUMP_DIR` để ghi **cả hai chiều** của mỗi lần gọi model — request và response — thành một cặp file JSON:
 
 ```powershell
 $env:COACH_PROMPT_DUMP_DIR = "tmp/prompts"
@@ -217,17 +217,24 @@ go run ./cmd/test-coaching     # chạy từ gốc repo
 
 ```
 tmp/prompts/
-  20260807T085934.037-CoachGeneratorAgent-01.json   ← xin search_exercises
-  20260807T085935.093-CoachGeneratorAgent-02.json   ← xin get_exercise_pr
-  20260807T085936.197-CoachGeneratorAgent-03.json   ← sinh plan
-  20260807T085947.473-CoachReviewerAgent-01.json    ← verdict
+  ...-CoachGeneratorAgent-01-req.json   ...-01-res.json   → gọi tool search_exercises
+  ...-CoachGeneratorAgent-02-req.json   ...-02-res.json   → gọi tool get_exercise_pr
+  ...-CoachGeneratorAgent-03-req.json   ...-03-res.json   → plan JSON
+  ...-CoachReviewerAgent-01-req.json    ...-01-res.json   → verdict
 ```
 
-Tên file sắp theo thứ tự gọi, nên **số file cũng là số lần gọi model** — dùng để canh quota. Mỗi file có `branch`, `content_count`, `system_instruction`, `tool_names` và toàn bộ `contents`.
+Tên file sắp theo thứ tự gọi và request nằm cạnh response của nó. **Số cặp file cũng là số lần gọi model** — dùng để canh quota.
+
+| File | Chứa gì |
+|---|---|
+| `-req.json` | `branch`, `content_count`, `system_instruction`, `tool_names`, toàn bộ `contents` |
+| `-res.json` | `text` (câu trả lời), `thinking` (tách riêng), `function_calls`, `finish_reason`, `error`, và `usage` |
+
+`usage` mang `prompt_tokens`, `output_tokens`, `thinking_tokens`, `cached_tokens` — `thinking` được tách khỏi câu trả lời vì nó bị tính là output nhưng không phải nội dung trả về. Đây là cách duy nhất thấy được một reviewer tiêu 1200 output token để trả về verdict 10 token.
+
+Lần gọi thất bại cũng được ghi, với `error` — nên một chuỗi retry đọc được từ đầu đến cuối.
 
 Opt-in: không set biến thì callback không được tạo, đường chạy production không đổi (`prompt_dump.go`).
-
-> Đây là `BeforeModelCallback`, nên nó chỉ chụp **request**, không chụp response.
 
 ---
 

@@ -89,6 +89,7 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		Toolsets:             []tool.Toolset{deps.injurySkill},
 		OutputKey:            "generated_plan_text",
 		BeforeModelCallbacks: beforeModelCallbacks("CoachGeneratorAgent", validateInputSafety),
+		AfterModelCallbacks:  afterModelCallbacks("CoachGeneratorAgent"),
 		BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
 	})
 	if err != nil {
@@ -114,6 +115,7 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		Instruction:          string(reviewerInstruction),
 		OutputSchema:         buildPlanReviewSchema(),
 		BeforeModelCallbacks: beforeModelCallbacks("CoachReviewerAgent"),
+		AfterModelCallbacks:  afterModelCallbacks("CoachReviewerAgent"),
 	})
 	if err != nil {
 		return fmt.Errorf("new reviewer agent: %w", err)
