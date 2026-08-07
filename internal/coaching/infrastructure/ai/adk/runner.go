@@ -70,7 +70,7 @@ func (c *CoachingContextAgent) reviewPlan(
 	nodeCtx agent.Context,
 	coachInput *CoachInput,
 ) planReviewFunc {
-	return func(round int, plan *GeneratedPlan, report ValidationReport) (*PlanReview, error) {
+	return func(round int, plan *GeneratedPlan, report ValidationReport, prior []ReviewNote) (*PlanReview, error) {
 		if c.reviewerNode == nil {
 			return nil, fmt.Errorf("%w: no reviewer configured", errReviewUnusable)
 		}
@@ -82,6 +82,7 @@ func (c *CoachingContextAgent) reviewPlan(
 			GeneratorOutput:  plan,
 			ValidationResult: report,
 			ReviewRound:      round,
+			PreviousFeedback: prior,
 		}
 
 		raw, err := retryTransient(nodeCtx, "reviewer", func() (map[string]any, error) {
@@ -92,7 +93,7 @@ func (c *CoachingContextAgent) reviewPlan(
 		}
 
 		verdict := decodePlanReview(raw)
-		if err := validateReview(verdict); err != nil {
+		if err := validateReview(verdict, prior); err != nil {
 			return nil, err
 		}
 		return verdict, nil
@@ -118,29 +119,59 @@ func decodePlanReview(raw map[string]any) *PlanReview {
 		out.Confidence = v
 	}
 
-	rawNotes, ok := raw["feedback"].([]any)
-	if !ok {
-		return &out
-	}
-	for _, item := range rawNotes {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, item := range objectsAt(raw, "feedback") {
 		note := ReviewNote{}
-		if s, ok := m["area"].(string); ok {
+		if s, ok := item["area"].(string); ok {
 			note.Area = s
 		}
-		if s, ok := m["detail"].(string); ok {
+		if s, ok := item["detail"].(string); ok {
 			note.Detail = s
 		}
-		if s, ok := m["fix"].(string); ok {
+		if s, ok := item["fix"].(string); ok {
 			note.Fix = s
 		}
 		out.Feedback = append(out.Feedback, note)
 	}
 
+	for _, item := range objectsAt(raw, "previous_feedback") {
+		outcome := FeedbackOutcome{}
+		if s, ok := item["area"].(string); ok {
+			outcome.Area = s
+		}
+		if b, ok := item["applied"].(bool); ok {
+			outcome.Applied = b
+		}
+		if s, ok := item["evidence"].(string); ok {
+			outcome.Evidence = s
+		}
+		out.PreviousFeedback = append(out.PreviousFeedback, outcome)
+	}
+
+	if rawStrings, ok := raw["notes"].([]any); ok {
+		for _, item := range rawStrings {
+			if s, ok := item.(string); ok {
+				out.Notes = append(out.Notes, s)
+			}
+		}
+	}
+
 	return &out
+}
+
+// objectsAt reads an array-of-objects field, skipping anything of another shape.
+func objectsAt(raw map[string]any, key string) []map[string]any {
+	items, ok := raw[key].([]any)
+	if !ok {
+		return nil
+	}
+
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if m, ok := item.(map[string]any); ok {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // toFloat accepts both JSON number shapes an any-typed map can hold.

@@ -141,6 +141,9 @@ func buildPlanReviewSchema() *genai.Schema {
 			"approved":   {Type: genai.TypeBoolean},
 			"score":      {Type: genai.TypeInteger},
 			"confidence": {Type: genai.TypeNumber},
+			// Must-fix only. Notes exists so praise has somewhere to go that is
+			// not a "fix", which would pass validation while telling the
+			// generator nothing to do.
 			"feedback": {
 				Type: genai.TypeArray,
 				Items: &genai.Schema{
@@ -151,6 +154,24 @@ func buildPlanReviewSchema() *genai.Schema {
 						"fix":    {Type: genai.TypeString},
 					},
 					Required: []string{"area", "detail", "fix"},
+				},
+			},
+			"notes": {
+				Type:  genai.TypeArray,
+				Items: &genai.Schema{Type: genai.TypeString},
+			},
+			// One entry per item the previous round asked for. Evidence is
+			// required either way: "applied" without a location is a claim.
+			"previous_feedback": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"area":     {Type: genai.TypeString},
+						"applied":  {Type: genai.TypeBoolean},
+						"evidence": {Type: genai.TypeString},
+					},
+					Required: []string{"area", "applied", "evidence"},
 				},
 			},
 		},

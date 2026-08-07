@@ -45,9 +45,10 @@ type attemptFeedback struct {
 // planAttemptFunc produces one candidate plan; injected so retries need no LLM.
 type planAttemptFunc func(attempt int, fb *attemptFeedback) (*GeneratedPlan, error)
 
-// planReviewFunc scores a validated plan; injected so the loop tests without an LLM.
-// A nil func skips review entirely.
-type planReviewFunc func(round int, plan *GeneratedPlan, report ValidationReport) (*PlanReview, error)
+// planReviewFunc scores a validated plan; injected so the loop tests without an
+// LLM. prior is what the previous round asked for, so the reviewer can check
+// whether it landed. A nil func skips review entirely.
+type planReviewFunc func(round int, plan *GeneratedPlan, report ValidationReport, prior []ReviewNote) (*PlanReview, error)
 
 // runWithRetries drives generate → validate → review until a plan ships.
 //
@@ -67,6 +68,10 @@ func runWithRetries(
 	review planReviewFunc,
 ) (*PlanResult, error) {
 	var fb attemptFeedback
+
+	// What the last round asked the generator to change, so the next reviewer
+	// can check whether it landed instead of judging the plan in isolation.
+	var priorFeedback []ReviewNote
 
 	for n := 1; n <= maxGenerationAttempts; n++ {
 		if err := ctx.Err(); err != nil {
@@ -130,7 +135,7 @@ func runWithRetries(
 			return result, nil
 		}
 
-		verdict, err := review(n, clonePlan(outcome.Plan), report)
+		verdict, err := review(n, clonePlan(outcome.Plan), report, priorFeedback)
 		if err != nil {
 			// A reviewer that is down or incoherent must not block a plan that
 			// already passed every deterministic gate.
@@ -162,8 +167,10 @@ func runWithRetries(
 			return result, nil
 		}
 
-		// Gate 2 failed: reflect, carrying the plan being revised.
+		// Gate 2 failed: reflect, carrying the plan being revised. The asks are
+		// remembered so the next reviewer must account for each of them.
 		fb = attemptFeedback{PreviousPlan: outcome.Plan, Review: verdict}
+		priorFeedback = verdict.Feedback
 	}
 
 	return nil, ErrPlanGenerationFailed // unreachable: the final iteration always returns
@@ -208,7 +215,9 @@ func reviewPasses(v *PlanReview) bool {
 // validateReview rejects a verdict the loop cannot act on. Without this a
 // malformed review either sends the generator back with nothing to fix or, on
 // an out-of-range score, silently blocks every plan.
-func validateReview(v *PlanReview) error {
+//
+// prior is what the previous round asked for, empty on the first round.
+func validateReview(v *PlanReview, prior []ReviewNote) error {
 	if v == nil {
 		return fmt.Errorf("%w: no verdict returned", errReviewUnusable)
 	}
@@ -217,6 +226,10 @@ func validateReview(v *PlanReview) error {
 	}
 	if v.Confidence < 0 || v.Confidence > 1 {
 		return fmt.Errorf("%w: confidence %.2f outside 0..1", errReviewUnusable, v.Confidence)
+	}
+
+	if err := checkFeedbackCompliance(v, prior); err != nil {
+		return err
 	}
 
 	if reviewPasses(v) {
@@ -231,6 +244,42 @@ func validateReview(v *PlanReview) error {
 		if note.Fix == "" {
 			return fmt.Errorf("%w: feedback[%d] (%s) has no fix", errReviewUnusable, i, note.Area)
 		}
+	}
+
+	return nil
+}
+
+// checkFeedbackCompliance holds the reviewer to the previous round's asks.
+//
+// Observed live: round 1 told the generator to fix two things, the generator did
+// the easy one and skipped the hard one, and round 2 approved with a perfect
+// score — because nothing had told it what had been asked. Reporting an outcome
+// per item is therefore mandatory, and approving while an item is still
+// outstanding is refused outright.
+func checkFeedbackCompliance(v *PlanReview, prior []ReviewNote) error {
+	if len(prior) == 0 {
+		return nil
+	}
+
+	reported := make(map[string]bool, len(v.PreviousFeedback))
+	for i, outcome := range v.PreviousFeedback {
+		if outcome.Evidence == "" {
+			return fmt.Errorf("%w: previous_feedback[%d] (%s) has no evidence",
+				errReviewUnusable, i, outcome.Area)
+		}
+		reported[outcome.Area] = true
+	}
+
+	for _, note := range prior {
+		if !reported[note.Area] {
+			return fmt.Errorf("%w: previous round asked for %q and the verdict does not say whether it landed",
+				errReviewUnusable, note.Area)
+		}
+	}
+
+	if unapplied := v.unappliedAreas(); len(unapplied) > 0 && v.Approved {
+		return fmt.Errorf("%w: approved while %v from the previous round are still unapplied",
+			errReviewUnusable, unapplied)
 	}
 
 	return nil

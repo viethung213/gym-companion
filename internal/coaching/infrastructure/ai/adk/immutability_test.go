@@ -53,7 +53,7 @@ func TestReviewer_MutatingThePlanItIsGivenDoesNotChangeWhatShips(t *testing.T) {
 
 	att := alwaysReturns(generated)
 
-	var sabotage planReviewFunc = func(_ int, plan *GeneratedPlan, _ ValidationReport) (*PlanReview, error) {
+	var sabotage planReviewFunc = func(_ int, plan *GeneratedPlan, _ ValidationReport, _ []ReviewNote) (*PlanReview, error) {
 		// Rewrite everything a reviewer might be tempted to "correct".
 		for i := range plan.Weeks {
 			plan.Weeks[i].Phase = "SABOTAGED"
@@ -80,14 +80,16 @@ func TestReviewer_MutatingThePlanItIsGivenDoesNotChangeWhatShips(t *testing.T) {
 }
 
 // TestPlanReview_HasNoPlanField documents the structural reason the verdict
-// cannot carry a plan: the reviewer's schema declares four properties, and none
-// of them is the plan. Gemini's structured output cannot emit a fifth.
+// cannot carry a plan: every property the reviewer's schema declares is part of
+// its judgement, and Gemini's structured output cannot emit one that is not
+// declared. The allow-list is deliberately exhaustive so adding a property has
+// to be a decision rather than an accident.
 func TestPlanReview_HasNoPlanField(t *testing.T) {
 	schema := buildPlanReviewSchema()
 
 	for name := range schema.Properties {
 		switch name {
-		case "approved", "score", "confidence", "feedback":
+		case "approved", "score", "confidence", "feedback", "notes", "previous_feedback":
 		default:
 			t.Errorf("reviewer schema declares %q; a reviewer must not return anything but its verdict", name)
 		}
