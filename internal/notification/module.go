@@ -40,7 +40,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	outboxRepo := postgres.NewOutboxRepository(deps.DB)
 	outboxLogRepo := postgres.NewOutboxLogRepository(deps.DB)
 	txManager := postgres.NewTxManager(deps.DB)
-	fcmClient := fcm.NewClient(cfg)
+	fcmClient := fcm.NewClient(&cfg)
 
 	// 2. Command Handlers
 	registerDeviceHandler := command.NewRegisterDeviceTokenHandler(deviceRepo)
