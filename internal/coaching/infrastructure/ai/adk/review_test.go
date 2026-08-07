@@ -9,15 +9,17 @@ import (
 
 // recordingReview hands back canned verdicts and records what it was asked about.
 type recordingReview struct {
-	verdicts []*PlanReview
-	errs     []error
-	calls    int
-	seen     []ValidationReport
+	verdicts  []*PlanReview
+	errs      []error
+	calls     int
+	seen      []ValidationReport
+	seenPrior [][]ReviewNote
 }
 
-func (r *recordingReview) fn(round int, _ *GeneratedPlan, report ValidationReport) (*PlanReview, error) {
+func (r *recordingReview) fn(round int, _ *GeneratedPlan, report ValidationReport, prior []ReviewNote) (*PlanReview, error) {
 	r.calls++
 	r.seen = append(r.seen, report)
+	r.seenPrior = append(r.seenPrior, prior)
 
 	i := round - 1
 	if i < len(r.errs) && r.errs[i] != nil {
@@ -221,7 +223,7 @@ func TestValidateReview(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateReview(tt.give)
+			err := validateReview(tt.give, nil)
 
 			if got := err == nil; got != tt.want {
 				t.Errorf("usable = %t, want %t (err: %v)", got, tt.want, err)
