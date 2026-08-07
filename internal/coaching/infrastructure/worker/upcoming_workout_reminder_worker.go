@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultWorkoutReminderWindowMin = 45 * time.Minute
+	defaultWorkoutReminderWindow = 45 * time.Minute
 	defaultWorkoutReminderWindowMax = 75 * time.Minute
 	remindBeforeWorkoutMinutes     = 60
 )
@@ -90,7 +90,7 @@ func (w *UpcomingWorkoutReminderWorker) runCheck(ctx context.Context) {
 		timeDiff := workoutTime.Sub(now)
 
 		// Check if session falls into the 60m reminder window (45m to 75m before workout)
-		if timeDiff >= defaultWorkoutReminderWindowMin && timeDiff <= defaultWorkoutReminderWindowMax {
+		if timeDiff >= defaultWorkoutReminderWindow && timeDiff <= defaultWorkoutReminderWindowMax {
 			reminderKey := fmt.Sprintf("%s:%s", session.SessionPlanID, workoutTime.Format("2006-01-02_15:04"))
 
 			w.mu.Lock()
@@ -127,13 +127,13 @@ func (w *UpcomingWorkoutReminderWorker) runCheck(ctx context.Context) {
 
 func parseWorkoutTime(scheduledDate time.Time, slotTime string) time.Time {
 	year, month, day := scheduledDate.Date()
-	hour, min := 9, 0 // Default 09:00 if slotTime is empty
+	hour, minute := 9, 0 // Default 09:00 if slotTime is empty
 
 	if slotTime != "" {
-		_, _ = fmt.Sscanf(slotTime, "%d:%d", &hour, &min)
+		_, _ = fmt.Sscanf(slotTime, "%d:%d", &hour, &minute)
 	}
 
-	return time.Date(year, month, day, hour, min, 0, 0, scheduledDate.Location())
+	return time.Date(year, month, day, hour, minute, 0, 0, scheduledDate.Location())
 }
 
 func getWorkoutNameFromPrescription(p roadmap.WorkoutPrescription) string {

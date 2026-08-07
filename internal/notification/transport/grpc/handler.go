@@ -17,6 +17,7 @@ import (
 
 var _ notificationv1service.NotificationServiceServer = (*GRPCHandler)(nil)
 
+//nolint:revive // GRPCHandler name is consistent across bounded contexts
 type GRPCHandler struct {
 	notificationv1service.UnimplementedNotificationServiceServer
 	sendPushHandler       *command.SendPushNotificationHandler

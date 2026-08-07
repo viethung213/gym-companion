@@ -11,17 +11,18 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	coachingEvent "github.com/viethung213/gym-companion/internal/coaching/infrastructure/event"
 	coachingKafka "github.com/viethung213/gym-companion/internal/coaching/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/worker"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service/coachingv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 // ModuleDeps contains dependencies for coaching module initialization.
