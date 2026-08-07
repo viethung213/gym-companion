@@ -5,15 +5,14 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	notificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/message"
 	notificationv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service/notificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var _ notificationv1service.NotificationServiceServer = (*GRPCHandler)(nil)

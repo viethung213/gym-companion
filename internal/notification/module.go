@@ -34,13 +34,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	cfg := config.LoadConfig()
 
 	// 1. Repositories & Adapters
-	deviceRepo := postgres.NewPostgresDeviceRepository(deps.DB)
-	settingRepo := postgres.NewPostgresSettingRepository(deps.DB)
-	notificationRepo := postgres.NewPostgresNotificationRepository(deps.DB)
-	outboxRepo := postgres.NewPostgresOutboxRepository(deps.DB)
-	outboxLogRepo := postgres.NewPostgresOutboxLogRepository(deps.DB)
+	deviceRepo := postgres.NewDeviceRepository(deps.DB)
+	settingRepo := postgres.NewSettingRepository(deps.DB)
+	notificationRepo := postgres.NewNotificationRepository(deps.DB)
+	outboxRepo := postgres.NewOutboxRepository(deps.DB)
+	outboxLogRepo := postgres.NewOutboxLogRepository(deps.DB)
 	txManager := postgres.NewTxManager(deps.DB)
-	fcmClient := fcm.NewFCMClient(cfg)
+	fcmClient := fcm.NewClient(cfg)
 
 	// 2. Command Handlers
 	registerDeviceHandler := command.NewRegisterDeviceTokenHandler(deviceRepo)

@@ -13,6 +13,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
@@ -25,8 +28,6 @@ import (
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 func main() {

@@ -12,9 +12,9 @@ import (
 	"google.golang.org/api/option"
 )
 
-var _ port.PushProvider = (*FCMClient)(nil)
+var _ port.PushProvider = (*Client)(nil)
 
-type FCMClient struct {
+type Client struct {
 	messagingClient *messaging.Client
 }
 
@@ -27,7 +27,7 @@ func findServiceAccountFile(specifiedPath string) string {
 	return ""
 }
 
-func NewFCMClient(cfg config.Config) *FCMClient {
+func NewClient(cfg config.Config) *Client {
 	ctx := context.Background()
 
 	var opts []option.ClientOption
@@ -45,28 +45,28 @@ func NewFCMClient(cfg config.Config) *FCMClient {
 
 	if len(opts) == 0 && cfg.FCMProjectID == "" {
 		log.Println("⚠️ Warning: FCMProjectID and FCMServiceAccountFile are empty. FCM Push SDK disabled.")
-		return &FCMClient{messagingClient: nil}
+		return &Client{messagingClient: nil}
 	}
 
 	app, err := firebase.NewApp(ctx, fbCfg, opts...)
 	if err != nil {
 		log.Printf("❌ Warning: failed to initialize Firebase App: %v", err)
-		return &FCMClient{messagingClient: nil}
+		return &Client{messagingClient: nil}
 	}
 
 	msgClient, err := app.Messaging(ctx)
 	if err != nil {
 		log.Printf("❌ Warning: failed to initialize Firebase Messaging client: %v", err)
-		return &FCMClient{messagingClient: nil}
+		return &Client{messagingClient: nil}
 	}
 
 	log.Printf("✅ FCM Firebase Real App & Messaging Client initialized successfully (Project: %s)", cfg.FCMProjectID)
-	return &FCMClient{
+	return &Client{
 		messagingClient: msgClient,
 	}
 }
 
-func (c *FCMClient) SendPush(ctx context.Context, tokens []string, title, body string, data map[string]string) (*port.PushResponse, error) {
+func (c *Client) SendPush(ctx context.Context, tokens []string, title, body string, data map[string]string) (*port.PushResponse, error) {
 	if len(tokens) == 0 {
 		return &port.PushResponse{SuccessCount: 0, FailureCount: 0}, nil
 	}

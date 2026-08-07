@@ -66,7 +66,7 @@ func TestPostgresDeviceRepository(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := postgres.NewPostgresDeviceRepository(db)
+	repo := postgres.NewDeviceRepository(db)
 	ctx := context.Background()
 
 	dev, err := aggregate.NewDevice("dev-1", "usr-1", "fcm-token-1", vo.DeviceTypeAndroid)
@@ -109,7 +109,7 @@ func TestPostgresSettingRepository(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := postgres.NewPostgresSettingRepository(db)
+	repo := postgres.NewSettingRepository(db)
 	ctx := context.Background()
 
 	// 1. Get non-existing returns ErrSettingNotFound
@@ -145,7 +145,7 @@ func TestPostgresNotificationRepository(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := postgres.NewPostgresNotificationRepository(db)
+	repo := postgres.NewNotificationRepository(db)
 	ctx := context.Background()
 
 	item, err := aggregate.NewInAppNotification("notif-1", "usr-notif-1", "Test Title", "Test Body", map[string]string{"foo": "bar"})
@@ -186,8 +186,8 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	outboxRepo := postgres.NewPostgresOutboxRepository(db)
-	outboxLogRepo := postgres.NewPostgresOutboxLogRepository(db)
+	outboxRepo := postgres.NewOutboxRepository(db)
+	outboxLogRepo := postgres.NewOutboxLogRepository(db)
 	ctx := context.Background()
 
 	// 1. Test Outbox Save & FetchUnpublished

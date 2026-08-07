@@ -11,17 +11,17 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 )
 
-var _ repository.SettingRepository = (*PostgresSettingRepository)(nil)
+var _ repository.SettingRepository = (*SettingRepository)(nil)
 
-type PostgresSettingRepository struct {
+type SettingRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresSettingRepository(db *sql.DB) *PostgresSettingRepository {
-	return &PostgresSettingRepository{db: db}
+func NewSettingRepository(db *sql.DB) *SettingRepository {
+	return &SettingRepository{db: db}
 }
 
-func (r *PostgresSettingRepository) GetByUserID(ctx context.Context, userID string) (*aggregate.Setting, error) {
+func (r *SettingRepository) GetByUserID(ctx context.Context, userID string) (*aggregate.Setting, error) {
 	query := `
 		SELECT user_id, enable_push, enable_email, enable_sms, quiet_hours_start, quiet_hours_end, created_at, updated_at
 		FROM notification.user_settings
@@ -48,7 +48,7 @@ func (r *PostgresSettingRepository) GetByUserID(ctx context.Context, userID stri
 	return m.ToDomain(), nil
 }
 
-func (r *PostgresSettingRepository) Save(ctx context.Context, setting *aggregate.Setting) error {
+func (r *SettingRepository) Save(ctx context.Context, setting *aggregate.Setting) error {
 	query := `
 		INSERT INTO notification.user_settings (
 			user_id, enable_push, enable_email, enable_sms, quiet_hours_start, quiet_hours_end, created_at, updated_at

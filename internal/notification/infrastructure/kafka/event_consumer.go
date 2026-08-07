@@ -36,41 +36,43 @@ type eventPushConfig struct {
 	DefaultBody  string
 }
 
-// pushAllowedEventRules maps allowed CloudEvent types to their default Push title and body formatting rules.
+// getPushAllowedEventRules maps allowed CloudEvent types to their default Push title and body formatting rules.
 // STRICT RULE: Only the 3 explicit Core Events (Workout PR, Nutrition Meal Reminder -30m, Coaching Workout Reminder -1h)
 // and Notification Standard Event (NotificationRequested) are listened and dispatched for Push Notifications.
-var pushAllowedEventRules = map[string]eventPushConfig{
-	// =========================================================================
-	// 1. STANDARD NOTIFICATION CONTRACT EVENT (Dành cho TẤT CẢ các module khác)
-	// =========================================================================
-	"contracts.generic.notification.v1.event.NotificationRequested": {
-		DefaultTitle: "Gym Companion Thông Báo",
-		DefaultBody:  "Bạn có thông báo mới từ ứng dụng.",
-	},
+func getPushAllowedEventRules() map[string]eventPushConfig {
+	return map[string]eventPushConfig{
+		// =========================================================================
+		// 1. STANDARD NOTIFICATION CONTRACT EVENT (Dành cho TẤT CẢ các module khác)
+		// =========================================================================
+		"contracts.generic.notification.v1.event.NotificationRequested": {
+			DefaultTitle: "Gym Companion Thông Báo",
+			DefaultBody:  "Bạn có thông báo mới từ ứng dụng.",
+		},
 
-	// =========================================================================
-	// 2. CORE MODULE: WORKOUT EXECUTION (Lập Kỷ kỷ lục cá nhân mới - PR)
-	// =========================================================================
-	"contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved": {
-		DefaultTitle: "Kỷ kỷ lục cá nhân mới! 🏆",
-		DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ kỷ lục cá nhân (PR) mới!",
-	},
+		// =========================================================================
+		// 2. CORE MODULE: WORKOUT EXECUTION (Lập Kỷ kỷ lục cá nhân mới - PR)
+		// =========================================================================
+		"contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved": {
+			DefaultTitle: "Kỷ kỷ lục cá nhân mới! 🏆",
+			DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ kỷ lục cá nhân (PR) mới!",
+		},
 
-	// =========================================================================
-	// 3. CORE MODULE: NUTRITION (Sắp đến bữa ăn - Trước 30 phút)
-	// =========================================================================
-	"contracts.core.nutrition.v1.event.UpcomingMealReminder": {
-		DefaultTitle: "Nhắc nhở bữa ăn 🥗",
-		DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
-	},
+		// =========================================================================
+		// 3. CORE MODULE: NUTRITION (Sắp đến bữa ăn - Trước 30 phút)
+		// =========================================================================
+		"contracts.core.nutrition.v1.event.UpcomingMealReminder": {
+			DefaultTitle: "Nhắc nhở bữa ăn 🥗",
+			DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
+		},
 
-	// =========================================================================
-	// 4. CORE MODULE: COACHING (Sắp đến giờ tập - Trước 1 tiếng)
-	// =========================================================================
-	"contracts.core.coaching.v1.event.UpcomingWorkoutReminder": {
-		DefaultTitle: "Nhắc nhở buổi tập ⏰",
-		DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
-	},
+		// =========================================================================
+		// 4. CORE MODULE: COACHING (Sắp đến giờ tập - Trước 1 tiếng)
+		// =========================================================================
+		"contracts.core.coaching.v1.event.UpcomingWorkoutReminder": {
+			DefaultTitle: "Nhắc nhở buổi tập ⏰",
+			DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
+		},
+	}
 }
 
 func NewNotificationEventConsumer(
@@ -120,7 +122,7 @@ func (c *NotificationEventConsumer) ProcessMessage(ctx context.Context, msgValue
 	}
 
 	// 1. FILTER RULE: Check if event type is one of the allowed core events or generic notification event
-	rule, isAllowed := pushAllowedEventRules[env.Type]
+	rule, isAllowed := getPushAllowedEventRules()[env.Type]
 	if !isAllowed {
 		// All other events are strictly ignored
 		return nil

@@ -10,24 +10,24 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 )
 
-var _ port.OutboxLogRepository = (*PostgresOutboxLogRepository)(nil)
+var _ port.OutboxLogRepository = (*OutboxLogRepository)(nil)
 
-type PostgresOutboxLogRepository struct {
+type OutboxLogRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresOutboxLogRepository(db *sql.DB) *PostgresOutboxLogRepository {
-	return &PostgresOutboxLogRepository{db: db}
+func NewOutboxLogRepository(db *sql.DB) *OutboxLogRepository {
+	return &OutboxLogRepository{db: db}
 }
 
-func (r *PostgresOutboxLogRepository) getExecutor(ctx context.Context) DBExecutor {
+func (r *OutboxLogRepository) getExecutor(ctx context.Context) DBExecutor {
 	if tx := GetTx(ctx); tx != nil {
 		return tx
 	}
 	return r.db
 }
 
-func (r *PostgresOutboxLogRepository) LogProcessed(
+func (r *OutboxLogRepository) LogProcessed(
 	ctx context.Context,
 	eventID, eventType, partitionKey string,
 	payload []byte,
@@ -74,7 +74,7 @@ func (r *PostgresOutboxLogRepository) LogProcessed(
 	return rows > 0, nil
 }
 
-func (r *PostgresOutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {
+func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {
 	if record == nil {
 		return nil
 	}
@@ -122,7 +122,7 @@ func (r *PostgresOutboxLogRepository) SaveLog(ctx context.Context, record *port.
 	return nil
 }
 
-func (r *PostgresOutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([]*port.OutboxLogRecord, error) {
+func (r *OutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([]*port.OutboxLogRecord, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -165,7 +165,7 @@ func (r *PostgresOutboxLogRepository) FetchFailedLogs(ctx context.Context, limit
 	return records, nil
 }
 
-func (r *PostgresOutboxLogRepository) UpdateLogStatus(ctx context.Context, id, status, errMsg string) error {
+func (r *OutboxLogRepository) UpdateLogStatus(ctx context.Context, id, status, errMsg string) error {
 	query := `
 		UPDATE notification.outbox_log
 		SET status = $1, error_message = $2, processed_at = $3

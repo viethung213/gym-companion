@@ -10,17 +10,17 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 )
 
-var _ repository.DeviceRepository = (*PostgresDeviceRepository)(nil)
+var _ repository.DeviceRepository = (*DeviceRepository)(nil)
 
-type PostgresDeviceRepository struct {
+type DeviceRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresDeviceRepository(db *sql.DB) *PostgresDeviceRepository {
-	return &PostgresDeviceRepository{db: db}
+func NewDeviceRepository(db *sql.DB) *DeviceRepository {
+	return &DeviceRepository{db: db}
 }
 
-func (r *PostgresDeviceRepository) Save(ctx context.Context, device *aggregate.Device) error {
+func (r *DeviceRepository) Save(ctx context.Context, device *aggregate.Device) error {
 	query := `
 		INSERT INTO notification.user_devices (
 			id, user_id, device_token, device_type, is_active, created_at, updated_at, last_used_at
@@ -49,7 +49,7 @@ func (r *PostgresDeviceRepository) Save(ctx context.Context, device *aggregate.D
 	return nil
 }
 
-func (r *PostgresDeviceRepository) GetActiveDevicesByUserID(ctx context.Context, userID string) ([]*aggregate.Device, error) {
+func (r *DeviceRepository) GetActiveDevicesByUserID(ctx context.Context, userID string) ([]*aggregate.Device, error) {
 	query := `
 		SELECT id, user_id, device_token, device_type, is_active, created_at, updated_at, last_used_at
 		FROM notification.user_devices
@@ -90,7 +90,7 @@ func (r *PostgresDeviceRepository) GetActiveDevicesByUserID(ctx context.Context,
 	return devices, nil
 }
 
-func (r *PostgresDeviceRepository) DeactivateTokens(ctx context.Context, tokens []string) error {
+func (r *DeviceRepository) DeactivateTokens(ctx context.Context, tokens []string) error {
 	if len(tokens) == 0 {
 		return nil
 	}

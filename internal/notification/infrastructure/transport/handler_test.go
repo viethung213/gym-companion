@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-
 	notificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/message"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"

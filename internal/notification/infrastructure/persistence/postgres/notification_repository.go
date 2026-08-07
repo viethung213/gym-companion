@@ -10,24 +10,24 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 )
 
-var _ repository.NotificationRepository = (*PostgresNotificationRepository)(nil)
+var _ repository.NotificationRepository = (*NotificationRepository)(nil)
 
-type PostgresNotificationRepository struct {
+type NotificationRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresNotificationRepository(db *sql.DB) *PostgresNotificationRepository {
-	return &PostgresNotificationRepository{db: db}
+func NewNotificationRepository(db *sql.DB) *NotificationRepository {
+	return &NotificationRepository{db: db}
 }
 
-func (r *PostgresNotificationRepository) getExecutor(ctx context.Context) DBExecutor {
+func (r *NotificationRepository) getExecutor(ctx context.Context) DBExecutor {
 	if tx := GetTx(ctx); tx != nil {
 		return tx
 	}
 	return r.db
 }
 
-func (r *PostgresNotificationRepository) Save(ctx context.Context, item *aggregate.InAppNotification) error {
+func (r *NotificationRepository) Save(ctx context.Context, item *aggregate.InAppNotification) error {
 	dataBytes, err := json.Marshal(item.Data())
 	if err != nil {
 		return fmt.Errorf("marshal notification data JSON: %w", err)
@@ -56,7 +56,7 @@ func (r *PostgresNotificationRepository) Save(ctx context.Context, item *aggrega
 	return nil
 }
 
-func (r *PostgresNotificationRepository) ListByUserID(ctx context.Context, userID string, limit, offset int32) ([]*aggregate.InAppNotification, int32, error) {
+func (r *NotificationRepository) ListByUserID(ctx context.Context, userID string, limit, offset int32) ([]*aggregate.InAppNotification, int32, error) {
 	executor := r.getExecutor(ctx)
 	countQuery := `
 		SELECT COUNT(*)
@@ -108,7 +108,7 @@ func (r *PostgresNotificationRepository) ListByUserID(ctx context.Context, userI
 	return items, total, nil
 }
 
-func (r *PostgresNotificationRepository) MarkAsRead(ctx context.Context, userID, notificationID string) error {
+func (r *NotificationRepository) MarkAsRead(ctx context.Context, userID, notificationID string) error {
 	query := `
 		UPDATE notification.in_app_notifications
 		SET is_read = TRUE
@@ -122,7 +122,7 @@ func (r *PostgresNotificationRepository) MarkAsRead(ctx context.Context, userID,
 	return nil
 }
 
-func (r *PostgresNotificationRepository) MarkAllAsRead(ctx context.Context, userID string) error {
+func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID string) error {
 	query := `
 		UPDATE notification.in_app_notifications
 		SET is_read = TRUE

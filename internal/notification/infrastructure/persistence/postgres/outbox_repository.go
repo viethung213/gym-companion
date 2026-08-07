@@ -12,17 +12,17 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 )
 
-var _ port.OutboxRepository = (*PostgresOutboxRepository)(nil)
+var _ port.OutboxRepository = (*OutboxRepository)(nil)
 
-type PostgresOutboxRepository struct {
+type OutboxRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresOutboxRepository(db *sql.DB) *PostgresOutboxRepository {
-	return &PostgresOutboxRepository{db: db}
+func NewOutboxRepository(db *sql.DB) *OutboxRepository {
+	return &OutboxRepository{db: db}
 }
 
-func (r *PostgresOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
+func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
 	if record == nil {
 		return errors.New("nil outbox record")
 	}
@@ -66,14 +66,14 @@ func (r *PostgresOutboxRepository) Save(ctx context.Context, record *port.Outbox
 	return nil
 }
 
-func (r *PostgresOutboxRepository) getExecutor(ctx context.Context) DBExecutor {
+func (r *OutboxRepository) getExecutor(ctx context.Context) DBExecutor {
 	if tx := GetTx(ctx); tx != nil {
 		return tx
 	}
 	return r.db
 }
 
-func (r *PostgresOutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*port.OutboxRecord, error) {
+func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*port.OutboxRecord, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -119,7 +119,7 @@ func (r *PostgresOutboxRepository) FetchUnpublished(ctx context.Context, limit i
 	return records, nil
 }
 
-func (r *PostgresOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*port.OutboxRecord, error) {
+func (r *OutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*port.OutboxRecord, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -211,7 +211,7 @@ func (r *PostgresOutboxRepository) ClaimBatch(ctx context.Context, limit int, lo
 	return records, nil
 }
 
-func (r *PostgresOutboxRepository) MarkPublished(ctx context.Context, ids []string) error {
+func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -236,7 +236,7 @@ func (r *PostgresOutboxRepository) MarkPublished(ctx context.Context, ids []stri
 	return nil
 }
 
-func (r *PostgresOutboxRepository) ProcessBatch(
+func (r *OutboxRepository) ProcessBatch(
 	ctx context.Context,
 	limit int,
 	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
