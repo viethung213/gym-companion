@@ -287,7 +287,7 @@ func loadEnvFile() {
 }
 
 func maskKey(k string) string {
-	if len(k) == 0 {
+	if k == "" {
 		return "<EMPTY>"
 	}
 	if len(k) <= 8 {

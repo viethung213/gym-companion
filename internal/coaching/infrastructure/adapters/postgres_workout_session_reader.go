@@ -130,7 +130,7 @@ func (r *PostgresWorkoutSessionReader) GetRecentSessions(ctx context.Context, us
 
 // GetSetLogs fetches recent set logs for a user and exerciseID.
 // If set logs are not found, it checks personal_records. If still not found, returns an empty slice []port.SetLog{}.
-func (r *PostgresWorkoutSessionReader) GetSetLogs(ctx context.Context, userID string, exerciseID string, limit int) ([]port.SetLog, error) {
+func (r *PostgresWorkoutSessionReader) GetSetLogs(ctx context.Context, userID, exerciseID string, limit int) ([]port.SetLog, error) {
 	if r.db == nil {
 		log.Printf("[PostgresWorkoutSessionReader] DB pool is nil for userID=%s exerciseID=%s, returning empty set logs", userID, exerciseID)
 		return []port.SetLog{}, nil
