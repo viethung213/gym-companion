@@ -113,7 +113,7 @@ WITH inserted_ex AS (
     WHERE NOT EXISTS (
         SELECT 1 FROM exercise.exercises e WHERE e.name = v.name
     )
-    RETURNING id, name
+    RETURNING id, name, body_part_id, equipment_id, target_muscle_id, instructions, thumbnail_url, media_url, video_url, difficulty, default_rest_seconds, status, has_ai_supported
 ),
 sec_muscles AS (
     INSERT INTO exercise.exercise_secondary_muscles (exercise_id, muscle_id)
@@ -166,6 +166,38 @@ ex_tags AS (
         ('Russian Twist', 'tag_category_waist')
     ) AS t(name, tag_id) ON i.name = t.name
     ON CONFLICT (exercise_id, tag_id) DO NOTHING
+),
+ex_outbox AS (
+    INSERT INTO exercise.outbox (
+        id, event_id, event_type, payload, partition_key, created_at, published, status
+    )
+    SELECT
+        gen_random_uuid(),
+        gen_random_uuid(),
+        'contracts.supporting.exercise.v1.exerciseCreated',
+        jsonb_build_object(
+            'exerciseId', i.id,
+            'exercise', jsonb_build_object(
+                'id', i.id,
+                'name', i.name,
+                'bodyPartId', i.body_part_id,
+                'equipmentId', i.equipment_id,
+                'targetMuscleId', i.target_muscle_id,
+                'instructions', i.instructions,
+                'thumbnailUrl', i.thumbnail_url,
+                'mediaUrl', i.media_url,
+                'videoUrl', i.video_url,
+                'difficulty', i.difficulty,
+                'defaultRestSeconds', i.default_rest_seconds,
+                'status', i.status,
+                'hasAiSupported', i.has_ai_supported
+            )
+        ),
+        i.id,
+        NOW(),
+        FALSE,
+        'PENDING'
+    FROM inserted_ex i
 )
 INSERT INTO exercise.motion_specifications (exercise_id, min_rom_percent, calibration_distance_min, calibration_distance_max, calibration_angle)
 SELECT i.id, 70, 1.5, 2.0, 0.0
