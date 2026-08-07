@@ -60,7 +60,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 		cfg := profileConfig.LoadConfig()
 		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
-		writer, wErr := deps.KafkaRegistry.GetWriter("profile-events", brokers)
+		writer, wErr := deps.KafkaRegistry.GetWriter("profile.events", brokers)
 		if wErr == nil && writer != nil {
 			kafkaPub = profileKafka.NewPublisher(writer)
 		}

@@ -103,17 +103,17 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 		cfg := nutritionConfig.LoadConfig()
 		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
-		writer, wErr := kafkaRegistry.GetWriter("nutrition-events", brokers)
+		writer, wErr := kafkaRegistry.GetWriter("nutrition.events", brokers)
 		if wErr == nil && writer != nil {
 			kafkaPub = nutritionKafka.NewPublisher(writer)
 		}
 
-		reader, rErr := kafkaRegistry.GetReader("workout.session.completed", "nutrition-consumer-group", brokers)
+		reader, rErr := kafkaRegistry.GetReader("nutrition-workout-completed-group", "workout_execution.events", brokers)
 		if rErr == nil && reader != nil {
 			kafkaConsumer = nutritionKafka.NewConsumer(reader, recalPlanHdlr)
 		}
 
-		profileEventReader, pErr := kafkaRegistry.GetReader("profile-events", "nutrition-profile-updated-group", brokers)
+		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events", brokers)
 		if pErr == nil && profileEventReader != nil {
 			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, genPlanHdlr)
 		}
