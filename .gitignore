@@ -58,6 +58,7 @@ logs/
 .gemini/
 .antigravity/
 antigravity*/
+outputs/
 
 # Prompt dumps from COACH_PROMPT_DUMP_DIR (may contain user profile data)
 /tmp/
