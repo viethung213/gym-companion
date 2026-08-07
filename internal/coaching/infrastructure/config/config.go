@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"log"
+	"os"
+)
 
 // Config holds all environmental parameters dedicated to the Coaching module.
 type Config struct {
@@ -28,11 +32,21 @@ func LoadConfig() Config {
 		kafkaBrokers = "localhost:9092"
 	}
 
+	apiKey := os.Getenv("GOOGLE_API_KEY_COACHING")
+	masked := "<EMPTY>"
+	if len(apiKey) > 8 {
+		masked = fmt.Sprintf("%s...%s (len=%d)", apiKey[:6], apiKey[len(apiKey)-4:], len(apiKey))
+	} else if len(apiKey) > 0 {
+		masked = fmt.Sprintf("%s... (len=%d)", apiKey[:2], len(apiKey))
+	}
+
+	log.Printf("[Coaching Config] Loaded Gemini Model: %s, API Key Status: %s", geminiModel, masked)
+
 	return Config{
 		GeminiModel:          geminiModel,
 		GeminiFallbackModels: fallbackModels,
 		KafkaBrokers:         kafkaBrokers,
 		CoachPromptDumpDir:   os.Getenv("COACH_PROMPT_DUMP_DIR"),
-		GoogleAPIKey:         os.Getenv("GOOGLE_API_KEY_COACHING"),
+		GoogleAPIKey:         apiKey,
 	}
 }
