@@ -2,6 +2,7 @@ package adk
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -129,7 +130,7 @@ func runWithRetries(
 			return result, nil
 		}
 
-		verdict, err := review(n, outcome.Plan, report)
+		verdict, err := review(n, clonePlan(outcome.Plan), report)
 		if err != nil {
 			// A reviewer that is down or incoherent must not block a plan that
 			// already passed every deterministic gate.
@@ -166,6 +167,35 @@ func runWithRetries(
 	}
 
 	return nil, ErrPlanGenerationFailed // unreachable: the final iteration always returns
+}
+
+// clonePlan returns a deep copy, so a reviewer handed the plan cannot reach
+// what ships. Its verdict type carries no plan and nothing reassigns
+// result.Plan, and this closes the one remaining path: a write through the
+// pointer it was given.
+//
+// A JSON round-trip rather than a hand-written copy: GeneratedPlan is already
+// defined by its JSON shape, so this cannot silently miss a slice field added
+// later — which is the exact bug it exists to prevent. Marshalling a struct of
+// scalars and slices cannot fail, so the error path is unreachable; it returns
+// the original rather than nil so a hypothetical failure degrades to today's
+// behaviour instead of a panic.
+func clonePlan(p *GeneratedPlan) *GeneratedPlan {
+	if p == nil {
+		return nil
+	}
+
+	encoded, err := json.Marshal(p)
+	if err != nil {
+		return p
+	}
+
+	var out GeneratedPlan
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		return p
+	}
+
+	return &out
 }
 
 // reviewPasses reports whether a verdict clears both gates. Approval and score
