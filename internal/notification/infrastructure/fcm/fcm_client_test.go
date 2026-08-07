@@ -15,7 +15,7 @@ func TestFCMClientMock(t *testing.T) {
 		FCMServerKey: "", // empty key triggers Mock push mode
 	}
 
-	client := fcm.NewClient(cfg)
+	client := fcm.NewClient(&cfg)
 
 	t.Run("empty tokens", func(t *testing.T) {
 		t.Parallel()

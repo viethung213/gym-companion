@@ -33,8 +33,8 @@ type serviceAccountJSON struct {
 	UniverseDomain          string `json:"universe_domain,omitempty"`
 }
 
-func buildServiceAccountJSON(cfg config.Config) ([]byte, error) {
-	if cfg.FCMClientEmail == "" || cfg.FCMPrivateKey == "" {
+func buildServiceAccountJSON(cfg *config.Config) ([]byte, error) {
+	if cfg == nil || cfg.FCMClientEmail == "" || cfg.FCMPrivateKey == "" {
 		return nil, errors.New("missing FCM client email or private key")
 	}
 
@@ -56,8 +56,13 @@ func buildServiceAccountJSON(cfg config.Config) ([]byte, error) {
 	return json.Marshal(sa)
 }
 
-func NewClient(cfg config.Config) *Client {
+func NewClient(cfg *config.Config) *Client {
 	ctx := context.Background()
+
+	if cfg == nil {
+		log.Println("⚠️ Warning: config is nil. FCM Push SDK disabled.")
+		return &Client{messagingClient: nil}
+	}
 
 	var opts []option.ClientOption
 	if saJSON, err := buildServiceAccountJSON(cfg); err == nil {
