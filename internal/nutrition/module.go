@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	nutritionAdk "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/ai/adk"
+	nutritionConfig "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
 	nutritionEvent "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/event"
 	nutritionKafka "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
@@ -100,11 +100,8 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 	var profileEventConsumer *nutritionConsumer.ProfileEventConsumer
 
 	if kafkaRegistry != nil {
-		brokersStr := os.Getenv("KAFKA_BROKERS")
-		if brokersStr == "" {
-			brokersStr = "localhost:9092"
-		}
-		brokers := strings.Split(brokersStr, ",")
+		cfg := nutritionConfig.LoadConfig()
+		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
 		writer, wErr := kafkaRegistry.GetWriter("nutrition-events", brokers)
 		if wErr == nil && writer != nil {

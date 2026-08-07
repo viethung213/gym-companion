@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
+	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/config"
 )
 
 // S3StorageConfig holds configuration for AWS S3 / Supabase Cloud Storage.
@@ -44,49 +44,27 @@ type S3StorageProvider struct {
 
 var _ port.ObjectStorageProvider = (*S3StorageProvider)(nil)
 
-// NewS3StorageProviderFromEnv constructs S3StorageProvider reading environment variables.
+// NewS3StorageProviderFromEnv constructs S3StorageProvider reading environment variables via module config.
 
 func NewS3StorageProviderFromEnv() *S3StorageProvider {
 
-	bucket := os.Getenv("AWS_S3_BUCKET")
+	appCfg := config.LoadConfig()
 
-	if bucket == "" {
-
-		bucket = "gym-companion-assets"
-
-	}
-
-	region := os.Getenv("AWS_REGION")
-
-	// Supabase S3 storage gateway requires 'us-east-1' for SigV4 signature calculations
-
-	if region == "" || strings.Contains(os.Getenv("AWS_S3_ENDPOINT"), "supabase.co") {
-
-		region = "us-east-1"
-
-	}
-
-	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-
-	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-
-	endpoint := os.Getenv("AWS_S3_ENDPOINT")
-
-	cdn := deriveCDNDomain(endpoint, bucket)
+	cdn := deriveCDNDomain(appCfg.S3Endpoint, appCfg.S3BucketName)
 
 	cfg := S3StorageConfig{
 
-		BucketName: bucket,
+		BucketName: appCfg.S3BucketName,
 
-		Region: region,
+		Region: appCfg.S3Region,
 
-		AccessKey: accessKey,
+		AccessKey: appCfg.S3AccessKey,
 
-		SecretKey: secretKey,
+		SecretKey: appCfg.S3SecretKey,
 
 		CDNDomain: cdn,
 
-		Endpoint: endpoint,
+		Endpoint: appCfg.S3Endpoint,
 	}
 
 	return NewS3StorageProvider(cfg)

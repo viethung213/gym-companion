@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
+	profileConfig "github.com/viethung213/gym-companion/internal/profile/infrastructure/config"
 	profileEvent "github.com/viethung213/gym-companion/internal/profile/infrastructure/event"
 	profileKafka "github.com/viethung213/gym-companion/internal/profile/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/persistence"
@@ -57,11 +57,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 
 	var kafkaPub *profileKafka.Publisher
 	if deps.KafkaRegistry != nil {
-		brokersStr := os.Getenv("KAFKA_BROKERS")
-		if brokersStr == "" {
-			brokersStr = "localhost:9092"
-		}
-		brokers := strings.Split(brokersStr, ",")
+		cfg := profileConfig.LoadConfig()
+		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
 		writer, wErr := deps.KafkaRegistry.GetWriter("profile-events", brokers)
 		if wErr == nil && writer != nil {

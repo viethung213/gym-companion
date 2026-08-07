@@ -8,7 +8,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
-	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/workflow"
 	"google.golang.org/genai"
@@ -184,9 +183,9 @@ func (c *CoachingContextAgent) build(ctx context.Context) error {
 	// Pinned rather than an alias: "gemini-flash-latest" silently moved to
 	// gemini-3.6-flash, and a model change that nobody chose is a model change
 	// nobody measured.
-	geminiModel, err := gemini.NewModel(ctx, coachModel, nil) // returns model.LLM
+	geminiModel, err := NewFallbackLLMFromEnv(ctx)
 	if err != nil {
-		return fmt.Errorf("new gemini model: %w", err)
+		return fmt.Errorf("new fallback gemini model: %w", err)
 	}
 
 	deps, err := buildADKDeps(ctx, c.catalog, c.sessionReader)
