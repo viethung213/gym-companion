@@ -52,7 +52,7 @@ func TestRunWithRetries_MiscountIsRetried(t *testing.T) {
 		planOf(sessionOf("2026-08-03", "bench-press"), sessionOf("2026-08-05", "bench-press")),
 	}}
 
-	got, err := runWithRetries(context.Background(), v, att.fn)
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}

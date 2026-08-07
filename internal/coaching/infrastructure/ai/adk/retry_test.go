@@ -13,12 +13,16 @@ type recordingAttempt struct {
 	plans      []*GeneratedPlan
 	errs       []error
 	calls      int
-	seenIssues [][]string
+	seenIssues  [][]string
+	seenPlans   []*GeneratedPlan
+	seenReviews []*PlanReview
 }
 
-func (r *recordingAttempt) fn(attempt int, priorIssues []string) (*GeneratedPlan, error) {
+func (r *recordingAttempt) fn(attempt int, fb *attemptFeedback) (*GeneratedPlan, error) {
 	r.calls++
-	r.seenIssues = append(r.seenIssues, priorIssues)
+	r.seenIssues = append(r.seenIssues, fb.Issues)
+	r.seenPlans = append(r.seenPlans, fb.PreviousPlan)
+	r.seenReviews = append(r.seenReviews, fb.Review)
 
 	i := attempt - 1
 	if i < len(r.errs) && r.errs[i] != nil {
@@ -42,7 +46,7 @@ func TestRunWithRetries_SucceedsFirstAttempt(t *testing.T) {
 	v := newPlanValidator(newFakeCatalog("bench-press"))
 	att := alwaysReturns(planOf(sessionOf("2026-08-03", "bench-press")))
 
-	got, err := runWithRetries(context.Background(), v, att.fn)
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}
@@ -62,7 +66,7 @@ func TestRunWithRetries_SucceedsOnSecondAttempt(t *testing.T) {
 		planOf(sessionOf("2026-08-03", "bench-press")),
 	}}
 
-	got, err := runWithRetries(context.Background(), v, att.fn)
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}
@@ -85,7 +89,7 @@ func TestRunWithRetries_FeedsIssuesForward(t *testing.T) {
 		planOf(sessionOf("2026-08-03", "bench-press")),
 	}}
 
-	if _, err := runWithRetries(context.Background(), v, att.fn); err != nil {
+	if _, err := runWithRetries(context.Background(), v, att.fn, nil); err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}
 
@@ -106,7 +110,7 @@ func TestRunWithRetries_ThirdAttemptDropsInvalid(t *testing.T) {
 	v := newPlanValidator(newFakeCatalog("bench-press", "squat"))
 	att := alwaysReturns(planOf(sessionOf("2026-08-03", "bench-press", "made-up", "squat")))
 
-	got, err := runWithRetries(context.Background(), v, att.fn)
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}
@@ -136,7 +140,7 @@ func TestRunWithRetries_AllInvalidReturnsError(t *testing.T) {
 	v := newPlanValidator(newFakeCatalog("bench-press"))
 	att := alwaysReturns(planOf(sessionOf("2026-08-03", "fake-a", "fake-b")))
 
-	got, err := runWithRetries(context.Background(), v, att.fn)
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err == nil {
 		t.Fatal("got nil error, want ErrPlanGenerationFailed")
 	}
@@ -158,7 +162,7 @@ func TestRunWithRetries_ParseErrorIsRetried(t *testing.T) {
 		plans: []*GeneratedPlan{nil, planOf(sessionOf("2026-08-03", "bench-press"))},
 	}
 
-	got, err := runWithRetries(context.Background(), v, att.fn)
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}
@@ -184,7 +188,7 @@ func TestRunWithRetries_CatalogOutageAbortsImmediately(t *testing.T) {
 	v := newPlanValidator(cat)
 	att := alwaysReturns(planOf(sessionOf("2026-08-03", "bench-press")))
 
-	_, err := runWithRetries(context.Background(), v, att.fn)
+	_, err := runWithRetries(context.Background(), v, att.fn, nil)
 	if err == nil {
 		t.Fatal("got nil error, want the transport failure")
 	}
@@ -205,7 +209,7 @@ func TestRunWithRetries_StopsAtMaxAttempts(t *testing.T) {
 		errors.New("boom 1"), errors.New("boom 2"), errors.New("boom 3"),
 	}}
 
-	if _, err := runWithRetries(context.Background(), v, att.fn); err == nil {
+	if _, err := runWithRetries(context.Background(), v, att.fn, nil); err == nil {
 		t.Fatal("got nil error, want failure after exhausting attempts")
 	}
 
@@ -221,7 +225,7 @@ func TestRunWithRetries_HonoursCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := runWithRetries(ctx, v, att.fn)
+	_, err := runWithRetries(ctx, v, att.fn, nil)
 	if err == nil {
 		t.Fatal("got nil error, want context cancellation")
 	}

@@ -34,7 +34,7 @@ var _ port.CoachAgent = (*CoachingContextAgent)(nil)
 
 type CoachingContextAgent struct {
 	generatorNode *workflow.AgentNode
-	evaluatorNode *workflow.AgentNode
+	reviewerNode  *workflow.AgentNode
 	fetchNode     workflow.Node
 	pendingNode   workflow.Node
 	parseNode     workflow.Node

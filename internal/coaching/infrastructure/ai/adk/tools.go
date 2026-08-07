@@ -1,13 +1,35 @@
 package adk
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
 )
+
+// errNoUserInState means the workflow reached a tool without publishing the
+// user it is acting for, which is a wiring bug rather than a model mistake.
+var errNoUserInState = errors.New("user id missing from workflow state")
+
+// stateUserID reads the user the current attempt is for. generateValidatedPlan
+// republishes it before every generator call.
+func stateUserID(ctx agent.Context) (string, error) {
+	val, err := ctx.State().Get("user_id")
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errNoUserInState, err)
+	}
+
+	userID, ok := val.(string)
+	if !ok || strings.TrimSpace(userID) == "" {
+		return "", errNoUserInState
+	}
+
+	return userID, nil
+}
 
 // SearchArgs defines parameter schema for search_exercises tool.
 type SearchArgs struct {
@@ -107,13 +129,26 @@ type PRResults struct {
 }
 
 // makeGetExercisePRTool creates an ADK function tool wrapping WorkoutSessionReader logs.
-func makeGetExercisePRTool(sessionReader port.WorkoutSessionReader, userID string) (tool.Tool, error) {
+//
+// The user is read from state per call, not captured at construction: tools are
+// built once at startup, when no user exists yet. A captured id would be the
+// empty string forever, and every lookup would silently fall back to the
+// no-history defaults below — plausible numbers belonging to nobody.
+func makeGetExercisePRTool(sessionReader port.WorkoutSessionReader) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "get_exercise_pr",
 			Description: "Get user's personal record and recent weight history for multiple exercise IDs in a single batch call.",
 		},
 		func(ctx agent.Context, args PRArgs) (PRResults, error) {
+			userID, err := stateUserID(ctx)
+			if err != nil {
+				// Surfaced to the model rather than defaulted: silently answering
+				// with another user's baseline, or with invented constants, is
+				// worse than telling it the lookup is unavailable.
+				return PRResults{}, err
+			}
+
 			ids := args.ExerciseIDs
 			if len(ids) == 0 && args.ExerciseID != "" {
 				ids = []string{args.ExerciseID}

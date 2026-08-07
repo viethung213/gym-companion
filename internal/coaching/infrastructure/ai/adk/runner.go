@@ -2,6 +2,7 @@ package adk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -12,14 +13,21 @@ import (
 )
 
 // generateValidatedPlan adapts runWithRetries, keeping ADK inside the closure.
+// withReview is false for flows that ship a single session, where a second LLM
+// call costs more than the judgement is worth.
 func (c *CoachingContextAgent) generateValidatedPlan(
 	nodeCtx agent.Context,
 	coachInput *CoachInput,
+	withReview bool,
 ) (*PlanResult, error) {
-	attempt := func(n int, priorIssues []string) (*GeneratedPlan, error) {
+	attempt := func(n int, fb *attemptFeedback) (*GeneratedPlan, error) {
 		input := *coachInput
 		input.AttemptNumber = n
-		input.PriorAttemptIssues = priorIssues
+		if fb != nil {
+			input.PriorAttemptIssues = fb.Issues
+			input.PreviousPlan = fb.PreviousPlan
+			input.ReviewFeedback = fb.Review
+		}
 
 		// Republish each attempt: the safety callbacks read coach_input from state.
 		if err := nodeCtx.State().Set("coach_input", input); err != nil {
@@ -29,7 +37,9 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 			return nil, fmt.Errorf("record user id: %w", err)
 		}
 
-		planText, err := workflow.RunNode[string](nodeCtx, c.generatorNode, input)
+		planText, err := retryTransient(nodeCtx, "generator", func() (string, error) {
+			return workflow.RunNode[string](nodeCtx, c.generatorNode, input)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("generator: %w", err)
 		}
@@ -41,12 +51,113 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 		return plan, nil
 	}
 
+	var review planReviewFunc
+	if withReview {
+		review = c.reviewPlan(nodeCtx, coachInput)
+	}
+
 	v := c.validator
 	if n := len(coachInput.SessionsToRevise); n > 0 {
 		v = v.expecting(n)
 	}
 
-	return runWithRetries(nodeCtx, v, attempt)
+	return runWithRetries(nodeCtx, v, attempt, review)
+}
+
+// reviewPlan returns a planReviewFunc backed by the reviewer agent. The
+// reviewer's own output is validated before the loop is allowed to act on it.
+func (c *CoachingContextAgent) reviewPlan(
+	nodeCtx agent.Context,
+	coachInput *CoachInput,
+) planReviewFunc {
+	return func(round int, plan *GeneratedPlan, report ValidationReport) (*PlanReview, error) {
+		if c.reviewerNode == nil {
+			return nil, fmt.Errorf("%w: no reviewer configured", errReviewUnusable)
+		}
+
+		request := ReviewRequest{
+			OriginalTask:     coachInput.Flow,
+			UserContext:      coachInput.Profile,
+			RecentSessions:   coachInput.RecentSessions,
+			GeneratorOutput:  plan,
+			ValidationResult: report,
+			ReviewRound:      round,
+		}
+
+		raw, err := retryTransient(nodeCtx, "reviewer", func() (map[string]any, error) {
+			return workflow.RunNode[map[string]any](nodeCtx, c.reviewerNode, request)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("reviewer: %w", err)
+		}
+
+		verdict := decodePlanReview(raw)
+		if err := validateReview(verdict); err != nil {
+			return nil, err
+		}
+		return verdict, nil
+	}
+}
+
+// decodePlanReview reads the reviewer's schema-constrained map. Absent or
+// wrongly-typed fields fall to zero values, which validateReview then rejects
+// rather than letting a half-parsed verdict steer the loop.
+func decodePlanReview(raw map[string]any) *PlanReview {
+	if raw == nil {
+		return nil
+	}
+
+	var out PlanReview
+	if v, ok := raw["approved"].(bool); ok {
+		out.Approved = v
+	}
+	if v, ok := toFloat(raw["score"]); ok {
+		out.Score = int(v)
+	}
+	if v, ok := toFloat(raw["confidence"]); ok {
+		out.Confidence = v
+	}
+
+	rawNotes, ok := raw["feedback"].([]any)
+	if !ok {
+		return &out
+	}
+	for _, item := range rawNotes {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		note := ReviewNote{}
+		if s, ok := m["area"].(string); ok {
+			note.Area = s
+		}
+		if s, ok := m["detail"].(string); ok {
+			note.Detail = s
+		}
+		if s, ok := m["fix"].(string); ok {
+			note.Fix = s
+		}
+		out.Feedback = append(out.Feedback, note)
+	}
+
+	return &out
+}
+
+// toFloat accepts both JSON number shapes an any-typed map can hold.
+func toFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func (c *CoachingContextAgent) putResult(sessionID string, res *PlanResult) {

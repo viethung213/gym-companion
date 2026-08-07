@@ -14,6 +14,9 @@ import (
 	"google.golang.org/genai"
 )
 
+// coachModel is the Gemini model both the generator and the reviewer run on.
+const coachModel = "gemini-3.5-flash-lite"
+
 type adkDeps struct {
 	searchTool  tool.Tool
 	prTool      tool.Tool
@@ -30,7 +33,7 @@ func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessi
 		return nil, fmt.Errorf("make search tool: %w", err)
 	}
 
-	prTool, err := makeGetExercisePRTool(sessionReader, "")
+	prTool, err := makeGetExercisePRTool(sessionReader)
 	if err != nil {
 		return nil, fmt.Errorf("make pr tool: %w", err)
 	}
@@ -71,20 +74,6 @@ func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessi
 	}, nil
 }
 
-func buildEvaluationResultSchema() *genai.Schema {
-	return &genai.Schema{
-		Type: genai.TypeObject,
-		Properties: map[string]*genai.Schema{
-			"is_valid": {Type: genai.TypeBoolean},
-			"issues": {
-				Type:  genai.TypeArray,
-				Items: &genai.Schema{Type: genai.TypeString},
-			},
-		},
-		Required: []string{"is_valid"},
-	}
-}
-
 func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM, deps *adkDeps) error {
 	generatorInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/generator.txt")
 	if err != nil {
@@ -111,36 +100,68 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		return fmt.Errorf("new generator node: %w", err)
 	}
 
-	evaluatorInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/evaluator.txt")
+	reviewerInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/evaluator.txt")
 	if err != nil {
-		return fmt.Errorf("read evaluator prompt: %w", err)
+		return fmt.Errorf("read reviewer prompt: %w", err)
 	}
 
-	evaluatorAgent, err := llmagent.New(llmagent.Config{
-		Name:                 "CoachEvaluatorAgent",
-		Description:          "Final quality reviewer ensuring plan complies with phase limits.",
+	// No tools: a reviewer that could call search_exercises would start
+	// proposing replacements, which is the generator's job.
+	reviewerAgent, err := llmagent.New(llmagent.Config{
+		Name:                 "CoachReviewerAgent",
+		Description:          "Scores a validated plan against the athlete's context and returns actionable feedback.",
 		Model:                geminiModel,
-		Instruction:          string(evaluatorInstruction),
-		OutputSchema:         buildEvaluationResultSchema(),
-		BeforeModelCallbacks: beforeModelCallbacks("CoachEvaluatorAgent"),
+		Instruction:          string(reviewerInstruction),
+		OutputSchema:         buildPlanReviewSchema(),
+		BeforeModelCallbacks: beforeModelCallbacks("CoachReviewerAgent"),
 	})
 	if err != nil {
-		return fmt.Errorf("new evaluator agent: %w", err)
+		return fmt.Errorf("new reviewer agent: %w", err)
 	}
 
-	evaluatorNode, err := workflow.NewAgentNode(evaluatorAgent, workflow.NodeConfig{})
+	reviewerNode, err := workflow.NewAgentNode(reviewerAgent, workflow.NodeConfig{})
 	if err != nil {
-		return fmt.Errorf("new evaluator node: %w", err)
+		return fmt.Errorf("new reviewer node: %w", err)
 	}
 
 	c.generatorNode = generatorNode
-	c.evaluatorNode = evaluatorNode
+	c.reviewerNode = reviewerNode
 	return nil
+}
+
+// buildPlanReviewSchema mirrors PlanReview. There is deliberately no plan
+// field: the schema is what makes "review only, never rewrite" structural
+// rather than a request the model may ignore.
+func buildPlanReviewSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"approved":   {Type: genai.TypeBoolean},
+			"score":      {Type: genai.TypeInteger},
+			"confidence": {Type: genai.TypeNumber},
+			"feedback": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"area":   {Type: genai.TypeString},
+						"detail": {Type: genai.TypeString},
+						"fix":    {Type: genai.TypeString},
+					},
+					Required: []string{"area", "detail", "fix"},
+				},
+			},
+		},
+		Required: []string{"approved", "score", "confidence"},
+	}
 }
 
 // It creates the gemini model, all tools, LLM nodes, shared nodes, and workflow agents.
 func (c *CoachingContextAgent) build(ctx context.Context) error {
-	geminiModel, err := gemini.NewModel(ctx, "gemini-flash-latest", nil) // returns model.LLM
+	// Pinned rather than an alias: "gemini-flash-latest" silently moved to
+	// gemini-3.6-flash, and a model change that nobody chose is a model change
+	// nobody measured.
+	geminiModel, err := gemini.NewModel(ctx, coachModel, nil) // returns model.LLM
 	if err != nil {
 		return fmt.Errorf("new gemini model: %w", err)
 	}
