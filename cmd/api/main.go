@@ -15,7 +15,6 @@ import (
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/notification"
@@ -174,9 +173,6 @@ func run() error {
 	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
 		DB:            coachingDB,
 		KafkaRegistry: kafkaRegistry,
-		ProfileReader: &adapters.MockUserProfileReader{},
-		SessionReader: &adapters.MockWorkoutSessionReader{},
-		CatalogReader: &adapters.MockExerciseCatalogReader{},
 		IDGenerator:   coachingpersistence.UUIDGenerator{},
 	})
 	if err != nil {
@@ -291,7 +287,7 @@ func loadEnvFile() {
 }
 
 func maskKey(k string) string {
-	if len(k) == 0 {
+	if k == "" {
 		return "<EMPTY>"
 	}
 	if len(k) <= 8 {

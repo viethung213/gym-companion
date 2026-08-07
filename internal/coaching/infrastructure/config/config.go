@@ -36,7 +36,7 @@ func LoadConfig() Config {
 	masked := "<EMPTY>"
 	if len(apiKey) > 8 {
 		masked = fmt.Sprintf("%s...%s (len=%d)", apiKey[:6], apiKey[len(apiKey)-4:], len(apiKey))
-	} else if len(apiKey) > 0 {
+	} else if apiKey != "" {
 		masked = fmt.Sprintf("%s... (len=%d)", apiKey[:2], len(apiKey))
 	}
 
