@@ -204,6 +204,9 @@ func (r *testRepo) ListByUser(ctx context.Context, uid string, status roadmap.St
 func (r *testRepo) FindSessionByID(ctx context.Context, sid string) (*roadmap.Roadmap, error) {
 	return nil, nil
 }
+func (r *testRepo) FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error) {
+	return nil, nil
+}
 
 type testTx struct{}
 

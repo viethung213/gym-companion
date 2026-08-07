@@ -158,7 +158,13 @@ func run() error {
 	defer shutdownNotification()
 
 	// Initialize Coaching Module.
+	coachingDB, err := dbRegistry.GetPool("coaching")
+	if err != nil {
+		log.Println("Warning: coaching database pool not found, falling back to auth pool.")
+		coachingDB = db
+	}
 	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
+		DB:            coachingDB,
 		KafkaRegistry: kafkaRegistry,
 		ProfileReader: &adapters.MockUserProfileReader{},
 		SessionReader: &adapters.MockWorkoutSessionReader{},
