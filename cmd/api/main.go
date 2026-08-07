@@ -18,6 +18,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise"
+	"github.com/viethung213/gym-companion/internal/notification"
 	"github.com/viethung213/gym-companion/internal/nutrition"
 	"github.com/viethung213/gym-companion/internal/profile"
 	"github.com/viethung213/gym-companion/internal/shared/database"
@@ -141,6 +142,21 @@ func run() error {
 	}
 	defer shutdownProfile()
 
+	// Initialize Notification Module
+	notificationDB, err := dbRegistry.GetPool("notification")
+	if err != nil {
+		log.Println("Warning: notification database pool not found, falling back to auth pool.")
+		notificationDB = db
+	}
+	notificationGRPCHandler, shutdownNotification, err := notification.Initialize(ctx, notification.ModuleDeps{
+		DB:            notificationDB,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize notification module: %w", err)
+	}
+	defer shutdownNotification()
+
 	// Initialize Coaching Module.
 	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
 		KafkaRegistry: kafkaRegistry,
@@ -171,6 +187,7 @@ func run() error {
 	workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)
 	nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors)
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
+	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 
 	// Register Coaching REST HTTP Handler
 	coachingHandler := coaching.NewCoachingHandler(coachAgent)
@@ -248,8 +265,13 @@ func loadEnvFile() {
 			continue
 		}
 		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 && os.Getenv(parts[0]) == "" {
-			os.Setenv(parts[0], parts[1])
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, `"'`)
+			if key != "" && os.Getenv(key) == "" {
+				os.Setenv(key, val)
+			}
 		}
 	}
 }

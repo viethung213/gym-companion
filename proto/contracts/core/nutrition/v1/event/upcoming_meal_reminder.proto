@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package contracts.core.nutrition.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
+
+// UpcomingMealReminder được phát ra trước giờ ăn 30 phút theo lịch dinh dưỡng
+message UpcomingMealReminder {
+  string user_id = 1;
+  string meal_name = 2;
+  string meal_type = 3;
+  string scheduled_time = 4;
+  int32 remind_before_minutes = 5;
+}
