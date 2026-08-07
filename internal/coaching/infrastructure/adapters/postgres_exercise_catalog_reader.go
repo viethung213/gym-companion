@@ -95,8 +95,8 @@ func (r *PostgresExerciseCatalogReader) SearchByFilter(ctx context.Context, filt
 	}
 
 	result := make([]port.Exercise, 0, len(records))
-	for _, rec := range records {
-		result = append(result, mapDBRecordToExercise(rec))
+	for i := range records {
+		result = append(result, mapDBRecordToExercise(&records[i]))
 	}
 
 	return result, nil
@@ -123,10 +123,10 @@ func (r *PostgresExerciseCatalogReader) GetByID(ctx context.Context, exerciseID 
 		return port.Exercise{}, fmt.Errorf("get exercise by ID from DB: %w", err)
 	}
 
-	return mapDBRecordToExercise(rec), nil
+	return mapDBRecordToExercise(&rec), nil
 }
 
-func mapDBRecordToExercise(rec exerciseDBModel) port.Exercise {
+func mapDBRecordToExercise(rec *exerciseDBModel) port.Exercise {
 	muscleGroup := rec.TargetMuscleID
 	if muscleGroup == "" {
 		muscleGroup = rec.BodyPartID
