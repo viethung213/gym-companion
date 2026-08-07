@@ -35,6 +35,18 @@ func (m *mockPlanRepo) FindActiveUserIDs(_ context.Context, _ int) ([]string, er
 	return nil, nil
 }
 
+func (m *mockPlanRepo) FindPlansForDate(_ context.Context, _ time.Time) ([]*aggregate.NutritionPlan, error) {
+	return nil, nil
+}
+
+func (m *mockPlanRepo) GetUserMealSchedules(_ context.Context, _ string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (m *mockPlanRepo) SaveUserMealSchedules(_ context.Context, _ string, _ map[string]string) error {
+	return nil
+}
+
 type mockHistoryRepo struct{}
 
 func (m *mockHistoryRepo) FindByUserID(ctx context.Context, userID string) (*aggregate.MealHistory, error) {

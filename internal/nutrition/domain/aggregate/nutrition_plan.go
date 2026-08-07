@@ -90,20 +90,51 @@ func (m *MealOption) CookingSteps() []string {
 }
 
 type DailyMeal struct {
-	mealType string
-	options  []MealOption
+	mealType      string
+	options       []MealOption
+	scheduledTime string
+}
+
+func DefaultScheduledTime(mealType string) string {
+	switch mealType {
+	case "BREAKFAST":
+		return "07:00"
+	case "LUNCH":
+		return "12:00"
+	case "SNACK":
+		return "15:30"
+	case "DINNER":
+		return "19:00"
+	default:
+		return "12:00"
+	}
 }
 
 func NewDailyMeal(mealType string, options []MealOption) DailyMeal {
+	return NewDailyMealWithSchedule(mealType, options, DefaultScheduledTime(mealType))
+}
+
+func NewDailyMealWithSchedule(mealType string, options []MealOption, scheduledTime string) DailyMeal {
 	optCopy := make([]MealOption, len(options))
 	copy(optCopy, options)
+	if scheduledTime == "" {
+		scheduledTime = DefaultScheduledTime(mealType)
+	}
 	return DailyMeal{
-		mealType: mealType,
-		options:  optCopy,
+		mealType:      mealType,
+		options:       optCopy,
+		scheduledTime: scheduledTime,
 	}
 }
 
 func (d DailyMeal) MealType() string { return d.mealType }
+func (d DailyMeal) ScheduledTime() string {
+	if d.scheduledTime == "" {
+		return DefaultScheduledTime(d.mealType)
+	}
+	return d.scheduledTime
+}
+
 func (d DailyMeal) Options() []MealOption {
 	copied := make([]MealOption, len(d.options))
 	copy(copied, d.options)
@@ -189,6 +220,15 @@ func (p *NutritionPlan) UpdateRemainingUnconsumedMeals(updatedMeals []DailyMeal,
 					break
 				}
 			}
+		}
+	}
+	p.updatedAt = time.Now()
+}
+
+func (p *NutritionPlan) UpdateMealSchedule(schedules map[string]string) {
+	for i, meal := range p.dailyMeals {
+		if newTime, ok := schedules[meal.mealType]; ok && newTime != "" {
+			p.dailyMeals[i].scheduledTime = newTime
 		}
 	}
 	p.updatedAt = time.Now()

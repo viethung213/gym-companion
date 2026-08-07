@@ -90,3 +90,15 @@ CREATE TABLE IF NOT EXISTS nutrition.lockout_registries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_lockout_user ON nutrition.lockout_registries(user_id, unlocked_at);
+
+-- 7. Table: nutrition.user_meal_schedules (User Preferred Meal Times)
+CREATE TABLE IF NOT EXISTS nutrition.user_meal_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    meal_type VARCHAR(50) NOT NULL, -- BREAKFAST, LUNCH, DINNER, SNACK
+    scheduled_time VARCHAR(10) NOT NULL, -- "08:00", "12:30", etc.
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_meal_type UNIQUE(user_id, meal_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_meal_schedules_user ON nutrition.user_meal_schedules(user_id);

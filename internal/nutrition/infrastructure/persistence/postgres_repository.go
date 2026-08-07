@@ -228,6 +228,87 @@ func (r *PostgresNutritionPlanRepository) FindActiveUserIDs(ctx context.Context,
 	return userIDs, nil
 }
 
+func (r *PostgresNutritionPlanRepository) FindPlansForDate(ctx context.Context, targetDate time.Time) ([]*aggregate.NutritionPlan, error) {
+	var gormPlans []GormNutritionPlan
+	dateStr := targetDate.Format("2006-01-02")
+	db := getDB(ctx, r.db)
+	if err := db.Where("DATE(plan_date) = ?", dateStr).Find(&gormPlans).Error; err != nil {
+		return nil, fmt.Errorf("postgres nutrition plan repo find plans for date: %w", err)
+	}
+
+	result := make([]*aggregate.NutritionPlan, 0, len(gormPlans))
+	for _, gormPlan := range gormPlans {
+		alloc, _ := vo.NewCalorieAllocation(gormPlan.TargetCalories, gormPlan.TargetProtein, gormPlan.TargetCarbs, gormPlan.TargetFat)
+		var meals []aggregate.DailyMeal
+		if len(gormPlan.MealsJSON) > 0 {
+			_ = json.Unmarshal(gormPlan.MealsJSON, &meals)
+		}
+		result = append(result, aggregate.NewNutritionPlan(gormPlan.ID, gormPlan.UserID, gormPlan.PlanDate, alloc, meals))
+	}
+	return result, nil
+}
+
+func (r *PostgresNutritionPlanRepository) GetUserMealSchedules(ctx context.Context, userID string) (map[string]string, error) {
+	var records []GormUserMealSchedule
+	db := getDB(ctx, r.db)
+	if err := db.Where("user_id = ?", userID).Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("postgres nutrition plan repo get user meal schedules: %w", err)
+	}
+
+	// Tự động khởi tạo dữ liệu mặc định trong bảng user_meal_schedules bằng SQL khi người dùng mới chưa có bản ghi
+	if len(records) == 0 && userID != "" {
+		defaultSchedules := map[string]string{
+			"BREAKFAST": "07:00",
+			"LUNCH":     "12:00",
+			"SNACK":     "15:30",
+			"DINNER":    "19:00",
+		}
+		if saveErr := r.SaveUserMealSchedules(ctx, userID, defaultSchedules); saveErr == nil {
+			_ = db.Where("user_id = ?", userID).Find(&records).Error
+		}
+	}
+
+	result := make(map[string]string)
+	for _, rec := range records {
+		result[rec.MealType] = rec.ScheduledTime
+	}
+	return result, nil
+}
+
+func (r *PostgresNutritionPlanRepository) SaveUserMealSchedules(ctx context.Context, userID string, schedules map[string]string) error {
+	db := getDB(ctx, r.db)
+	now := time.Now()
+
+	for mealType, scheduledTime := range schedules {
+		if mealType == "" || scheduledTime == "" {
+			continue
+		}
+		var record GormUserMealSchedule
+		err := db.Where("user_id = ? AND meal_type = ?", userID, mealType).First(&record).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			newRecord := GormUserMealSchedule{
+				ID:            fmt.Sprintf("ums_%s_%s", userID, mealType),
+				UserID:        userID,
+				MealType:      mealType,
+				ScheduledTime: scheduledTime,
+				UpdatedAt:     now,
+			}
+			if saveErr := db.Create(&newRecord).Error; saveErr != nil {
+				return fmt.Errorf("postgres nutrition plan repo create user meal schedule: %w", saveErr)
+			}
+		} else if err == nil {
+			record.ScheduledTime = scheduledTime
+			record.UpdatedAt = now
+			if saveErr := db.Save(&record).Error; saveErr != nil {
+				return fmt.Errorf("postgres nutrition plan repo update user meal schedule: %w", saveErr)
+			}
+		} else {
+			return fmt.Errorf("postgres nutrition plan repo check user meal schedule: %w", err)
+		}
+	}
+	return nil
+}
+
 type PostgresMealHistoryRepository struct {
 	db *gorm.DB
 }
