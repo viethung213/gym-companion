@@ -99,7 +99,7 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		Tools:                []tool.Tool{deps.searchTool, deps.prTool, deps.clarifyTool, deps.replaceTool, deps.scaleTool, deps.shiftTool},
 		Toolsets:             []tool.Toolset{deps.injurySkill},
 		OutputKey:            "generated_plan_text",
-		BeforeModelCallbacks: []llmagent.BeforeModelCallback{validateInputSafety},
+		BeforeModelCallbacks: beforeModelCallbacks("CoachGeneratorAgent", validateInputSafety),
 		BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
 	})
 	if err != nil {
@@ -117,11 +117,12 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 	}
 
 	evaluatorAgent, err := llmagent.New(llmagent.Config{
-		Name:         "CoachEvaluatorAgent",
-		Description:  "Final quality reviewer ensuring plan complies with phase limits.",
-		Model:        geminiModel,
-		Instruction:  string(evaluatorInstruction),
-		OutputSchema: buildEvaluationResultSchema(),
+		Name:                 "CoachEvaluatorAgent",
+		Description:          "Final quality reviewer ensuring plan complies with phase limits.",
+		Model:                geminiModel,
+		Instruction:          string(evaluatorInstruction),
+		OutputSchema:         buildEvaluationResultSchema(),
+		BeforeModelCallbacks: beforeModelCallbacks("CoachEvaluatorAgent"),
 	})
 	if err != nil {
 		return fmt.Errorf("new evaluator agent: %w", err)
