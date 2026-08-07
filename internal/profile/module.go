@@ -12,9 +12,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
@@ -24,6 +21,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/worker"
 	profileGRPC "github.com/viethung213/gym-companion/internal/profile/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {

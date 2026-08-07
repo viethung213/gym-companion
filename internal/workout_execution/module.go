@@ -13,9 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
@@ -28,6 +25,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
 	workoutConsumer "github.com/viethung213/gym-companion/internal/workout_execution/transport/consumer"
 	workoutGRPC "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 // ModuleDeps contains external dependencies required to boot the Workout Execution module.
