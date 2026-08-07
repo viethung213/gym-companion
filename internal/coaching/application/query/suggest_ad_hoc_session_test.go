@@ -35,6 +35,10 @@ func (m *memRepo) FindSessionByID(context.Context, string) (*roadmap.Roadmap, er
 	return nil, roadmap.ErrSessionNotFound
 }
 
+func (m *memRepo) FindPendingSessionsByDate(context.Context, time.Time) ([]*roadmap.SessionPlanInfo, error) {
+	return nil, nil
+}
+
 type fakeCoachAgent struct{}
 
 func (f *fakeCoachAgent) GenerateRoadmap(_ context.Context, _ string) (*roadmap.Roadmap, error) {

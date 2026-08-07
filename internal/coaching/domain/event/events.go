@@ -51,3 +51,20 @@ type SessionPlanExecuted struct {
 func (e *SessionPlanExecuted) EventName() string {
 	return "contracts.core.coaching.v1.event.SessionPlanExecuted"
 }
+
+// UpcomingWorkoutReminder is published 60 minutes before a scheduled workout session.
+type UpcomingWorkoutReminder struct {
+	EventID             string `json:"eventId,omitempty"`
+	UserID              string `json:"userId"`
+	WorkoutName         string `json:"workoutName"`
+	ScheduledTime       string `json:"scheduledTime"`
+	RemindBeforeMinutes int32  `json:"remindBeforeMinutes"`
+	Title               string `json:"title,omitempty"`
+	Body                string `json:"body,omitempty"`
+}
+
+// EventName returns the CloudEvent type identifier.
+func (e *UpcomingWorkoutReminder) EventName() string {
+	return "contracts.core.coaching.v1.event.UpcomingWorkoutReminder"
+}
+
