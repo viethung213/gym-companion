@@ -165,6 +165,11 @@ type ReviewRequest struct {
 	GeneratorOutput  *GeneratedPlan   `json:"generator_output"`
 	ValidationResult ValidationReport `json:"validation_result"`
 	ReviewRound      int              `json:"review_round"`
+
+	// PreviousFeedback is what the last round asked the generator to change.
+	// Without it a reviewer judges each plan as if no round had happened, so a
+	// fix the generator quietly skipped reads as a clean plan and gets approved.
+	PreviousFeedback []ReviewNote `json:"previous_feedback,omitempty"`
 }
 
 // ReviewNote is one actionable defect. Area locates it, Fix says what to do;
@@ -175,13 +180,48 @@ type ReviewNote struct {
 	Fix    string `json:"fix"`
 }
 
+// FeedbackOutcome reports what became of one item the previous round asked for.
+// Evidence is required either way: "applied" without a location is a claim, not
+// a check.
+type FeedbackOutcome struct {
+	Area     string `json:"area"`
+	Applied  bool   `json:"applied"`
+	Evidence string `json:"evidence"`
+}
+
 // PlanReview is the reviewer's verdict. It deliberately carries no plan field:
 // the reviewer may judge, score and advise, but never rewrite. A corrected
 // plan can only come from the generator, which is the only path that then goes
 // back through domain validation.
 type PlanReview struct {
-	Approved   bool         `json:"approved"`
-	Score      int          `json:"score"`      // 0..100
-	Confidence float64      `json:"confidence"` // 0..1
-	Feedback   []ReviewNote `json:"feedback,omitempty"`
+	Approved   bool    `json:"approved"`
+	Score      int     `json:"score"`      // 0..100
+	Confidence float64 `json:"confidence"` // 0..1
+
+	// Feedback is strictly must-fix. Anything the reviewer merely likes or
+	// wonders about belongs in Notes: mixing the two turns Fix into praise
+	// ("keep doing this"), which passes validation while telling the generator
+	// nothing to do.
+	Feedback []ReviewNote `json:"feedback,omitempty"`
+	Notes    []string     `json:"notes,omitempty"`
+
+	// PreviousFeedback answers, item by item, whether the last round's fixes
+	// actually landed.
+	PreviousFeedback []FeedbackOutcome `json:"previous_feedback,omitempty"`
+}
+
+// unappliedAreas lists the previous round's items the reviewer reports as still
+// not done.
+func (v *PlanReview) unappliedAreas() []string {
+	if v == nil {
+		return nil
+	}
+
+	var out []string
+	for _, o := range v.PreviousFeedback {
+		if !o.Applied {
+			out = append(out, o.Area)
+		}
+	}
+	return out
 }

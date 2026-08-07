@@ -81,11 +81,14 @@ Lượt thứ 3 chuyển sang **salvage**: thay vì báo lỗi thì loại phầ
   "recent_sessions":   [...],
   "generator_output":  { "weeks": [...] },
   "validation_result": { "passed": true, "degraded": false, "issues": [] },
-  "review_round":      1
+  "review_round":      1,
+  "previous_feedback": []
 }
 ```
 
-`validation_result` có mặt để Reviewer **không xử lại** những gì code đã chốt. Prompt nói thẳng: đừng báo lại lỗi catalog, đừng chấm giới hạn buổi/tuần.
+`validation_result` có mặt để Reviewer **không xử lại** những gì code đã chốt. Prompt nói thẳng: đừng báo lại lỗi catalog, đừng chấm giới hạn buổi/tuần, đừng chấm `BR-AC-10`/`BR-AC-11`.
+
+`previous_feedback` là **những gì vòng trước đã yêu cầu**, có từ vòng 2. Không có nó thì Reviewer chấm mỗi plan như thể chưa từng có vòng nào — và một fix bị Generator lặng lẽ bỏ qua sẽ đọc thành plan sạch rồi được duyệt. Đo được thật: vòng 1 yêu cầu 2 thứ, Generator làm cái dễ bỏ cái khó, vòng 2 cho 100 điểm.
 
 ### Chấm gì — chỉ những thứ code không quyết được
 
@@ -97,22 +100,39 @@ Lượt thứ 3 chuyển sang **salvage**: thay vì báo lỗi thì loại phầ
 | `schedule_fit` | Ngày tập có khớp `available_slots`, có đủ hồi phục giữa các buổi cùng nhóm cơ? |
 | `progression_coherence` | 4 tuần có nối tiếp nhau, `reasoning` có khớp với thứ được kê? |
 
+### Cách chấm điểm
+
+**Bắt đầu ở 60**, không phải 100. Cộng tối đa +10 cho mỗi hạng mục làm tốt, nhưng **phải nêu bằng chứng trong `notes`**; trừ 10 cho mỗi khuyết điểm, và **phải nêu tên trong `feedback`**.
+
+Điểm không phải ý kiến giữ riêng — nó là tổng của những thứ chỉ ra được. Trước khi có rubric này, Reviewer trả `score: 100, feedback: []` ở **ba lần chạy liên tiếp**; với rubric, cùng cấu hình đó cho 60 kèm hai khuyết điểm có thật.
+
 ### Output
 
 ```json
 {
   "approved":   false,
-  "score":      55,
+  "score":      60,
   "confidence": 0.9,
+  "previous_feedback": [
+    { "area": "goal_fit", "applied": true,
+      "evidence": "Cả 12 buổi giờ có 3 bài chính, trước là 2" },
+    { "area": "warmup_specificity", "applied": false,
+      "evidence": "Buổi back tuần 1 vẫn warm-up bằng pull-up, không đổi" }
+  ],
   "feedback": [
-    { "area":   "injury_safety",
-      "detail": "Tuần 2, buổi 2026-08-11 kê bench-press khi active_injuries có shoulder MODERATE",
-      "fix":    "Thay bằng bài neutral-grip và giảm main-exercise từ 4 xuống 2 set" }
+    { "area":   "warmup_specificity",
+      "detail": "Mọi buổi back dùng pull-up cho cả warm-up lẫn cool-down",
+      "fix":    "Cho mỗi buổi một warm-up nhắm đúng nhóm cơ nó tập" }
+  ],
+  "notes": [
+    "Khối lượng 21 → 25 → 28 → 14 set khớp mục tiêu hypertrophy"
   ]
 }
 ```
 
 **Không có field `plan`.** Đó là điều làm cho "chỉ review, không sửa" thành ràng buộc cấu trúc chứ không phải lời nhờ vả model.
+
+`feedback` là **phải sửa**, `notes` là mọi thứ khác. Tách hai cái vì khi gộp, `fix` biến thành lời khen (*"keep doing this"*) — vẫn qua validate mà không nói cho Generator điều gì cần làm.
 
 ### Output của Reviewer cũng bị validate
 
@@ -122,6 +142,14 @@ Lượt thứ 3 chuyển sang **salvage**: thay vì báo lỗi thì loại phầ
 - Từ chối mà **không có feedback** → Generator sẽ nhận "làm lại" mà không biết sửa gì
 - Có note mà **không có `fix`** → cùng vấn đề
 - `approved = true` nhưng `score < 70` → verdict tự mâu thuẫn, đọc theo hướng an toàn là chưa duyệt
+
+Và từ vòng 2, `checkFeedbackCompliance` bắt Reviewer chịu trách nhiệm với yêu cầu của vòng trước:
+
+- **Không báo cáo** một yêu cầu nào → loại verdict
+- Báo `applied` mà **không có `evidence`** → loại, vì đó là lời khẳng định chứ không phải kiểm tra
+- **Duyệt trong khi còn yêu cầu chưa được thi hành** → loại thẳng
+
+Điều cuối là phần có răng: Generator làm fix dễ rồi bỏ fix khó thì không được thưởng.
 
 Verdict không dùng được, hoặc Reviewer gọi không tới (429, timeout): **giao plan kèm `Degraded`**, không chặn. Plan đã qua hết cửa tất định rồi, không được mất nó vì một tầng tham khảo hỏng.
 
