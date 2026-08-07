@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
@@ -23,6 +24,16 @@ import (
 
 // telemetryFlushTimeout bounds the final span export on the way out.
 const telemetryFlushTimeout = 10 * time.Second
+
+// isLauncherInvocation reports whether args are meant for the ADK launcher.
+//
+// The launcher is addressed by subcommand ("console", "web", ...) and rejects
+// any flag it does not define, so it cannot be handed this tool's own -user.
+// Dispatching on "first argument is a subcommand, not a flag" keeps new
+// launcher subcommands working without touching this list.
+func isLauncherInvocation(args []string) bool {
+	return len(args) > 0 && !strings.HasPrefix(args[0], "-")
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -78,16 +89,24 @@ func run() error {
 		AgentLoader: loader,
 	}
 
-	l := full.NewLauncher()
-	if len(os.Args) > 1 {
-		if execErr := l.Execute(ctx, &cfg, os.Args[1:]); execErr != nil {
+	args := os.Args[1:]
+
+	if isLauncherInvocation(args) {
+		l := full.NewLauncher()
+		if execErr := l.Execute(ctx, &cfg, args); execErr != nil {
 			return fmt.Errorf("run launcher: %w\n\n%s", execErr, l.CommandLineSyntax())
 		}
 		return nil
 	}
 
-	userID := flag.String("user", "test-user-123", "User ID to generate roadmap for")
-	flag.Parse()
+	// A dedicated FlagSet, not the global one: the launcher parses os.Args with
+	// its own flags on the other branch, and ContinueOnError keeps a bad flag
+	// from calling os.Exit past the deferred span flush.
+	fs := flag.NewFlagSet("test-coaching", flag.ContinueOnError)
+	userID := fs.String("user", "test-user-123", "User ID to generate roadmap for")
+	if parseErr := fs.Parse(args); parseErr != nil {
+		return fmt.Errorf("parse flags: %w", parseErr)
+	}
 
 	log.Printf("Generating roadmap for user: %s\n", *userID)
 	roadmap, err := coachAgent.GenerateRoadmap(ctx, *userID)
