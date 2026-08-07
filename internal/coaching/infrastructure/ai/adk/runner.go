@@ -100,95 +100,35 @@ func (c *CoachingContextAgent) reviewPlan(
 	}
 }
 
-// decodePlanReview reads the reviewer's schema-constrained map. Absent or
-// wrongly-typed fields fall to zero values, which validateReview then rejects
-// rather than letting a half-parsed verdict steer the loop.
+// decodePlanReview reads the reviewer's schema-constrained output.
+//
+// A JSON round-trip rather than field-by-field assertions, matching clonePlan:
+// PlanReview is defined by its JSON shape, so this cannot silently drop a field
+// added later. The manual version needed an edit in three places per new field,
+// and missing one lost data with no error — which is how notes and
+// previous_feedback nearly arrived empty.
+//
+// The trade is a coarser message on a type mismatch: a nil verdict, which
+// validateReview reports as "no verdict returned", rather than one zero-valued
+// field named precisely. Gemini constrains these types through OutputSchema, so
+// a mismatch means something is wrong upstream, not that a field needs
+// salvaging.
 func decodePlanReview(raw map[string]any) *PlanReview {
 	if raw == nil {
 		return nil
 	}
 
-	var out PlanReview
-	if v, ok := raw["approved"].(bool); ok {
-		out.Approved = v
-	}
-	if v, ok := toFloat(raw["score"]); ok {
-		out.Score = int(v)
-	}
-	if v, ok := toFloat(raw["confidence"]); ok {
-		out.Confidence = v
-	}
-
-	for _, item := range objectsAt(raw, "feedback") {
-		note := ReviewNote{}
-		if s, ok := item["area"].(string); ok {
-			note.Area = s
-		}
-		if s, ok := item["detail"].(string); ok {
-			note.Detail = s
-		}
-		if s, ok := item["fix"].(string); ok {
-			note.Fix = s
-		}
-		out.Feedback = append(out.Feedback, note)
-	}
-
-	for _, item := range objectsAt(raw, "previous_feedback") {
-		outcome := FeedbackOutcome{}
-		if s, ok := item["area"].(string); ok {
-			outcome.Area = s
-		}
-		if b, ok := item["applied"].(bool); ok {
-			outcome.Applied = b
-		}
-		if s, ok := item["evidence"].(string); ok {
-			outcome.Evidence = s
-		}
-		out.PreviousFeedback = append(out.PreviousFeedback, outcome)
-	}
-
-	if rawStrings, ok := raw["notes"].([]any); ok {
-		for _, item := range rawStrings {
-			if s, ok := item.(string); ok {
-				out.Notes = append(out.Notes, s)
-			}
-		}
-	}
-
-	return &out
-}
-
-// objectsAt reads an array-of-objects field, skipping anything of another shape.
-func objectsAt(raw map[string]any, key string) []map[string]any {
-	items, ok := raw[key].([]any)
-	if !ok {
+	encoded, err := json.Marshal(raw)
+	if err != nil {
 		return nil
 	}
 
-	out := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		if m, ok := item.(map[string]any); ok {
-			out = append(out, m)
-		}
+	var out PlanReview
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		return nil
 	}
-	return out
-}
 
-// toFloat accepts both JSON number shapes an any-typed map can hold.
-func toFloat(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		f, err := n.Float64()
-		return f, err == nil
-	default:
-		return 0, false
-	}
+	return &out
 }
 
 func (c *CoachingContextAgent) putResult(sessionID string, res *PlanResult) {
