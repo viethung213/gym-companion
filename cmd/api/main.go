@@ -38,6 +38,14 @@ func main() {
 func run() error {
 	loadEnvFile()
 
+	dir, _ := os.Getwd()
+	coachingKey := os.Getenv("GOOGLE_API_KEY_COACHING")
+	nutritionKey := os.Getenv("GOOGLE_API_KEY_NUTRITION")
+
+	log.Printf("📂 Working Directory: %s", dir)
+	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_COACHING: %s", maskKey(coachingKey))
+	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_NUTRITION: %s", maskKey(nutritionKey))
+
 	appPort := os.Getenv("APP_PORT")
 	if appPort == "" {
 		appPort = "8080"
@@ -280,4 +288,14 @@ func loadEnvFile() {
 			}
 		}
 	}
+}
+
+func maskKey(k string) string {
+	if len(k) == 0 {
+		return "<EMPTY>"
+	}
+	if len(k) <= 8 {
+		return k[:2] + "****"
+	}
+	return k[:6] + "..." + k[len(k)-4:] + fmt.Sprintf(" (len=%d)", len(k))
 }
