@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	coachingEvent "github.com/viethung213/gym-companion/internal/coaching/infrastructure/event"
@@ -51,6 +52,30 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 		gormDB, err = gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: deps.DB}), &gorm.Config{})
 		if err != nil {
 			log.Printf("[Coaching Module] Warning: Failed to wrap *sql.DB into GORM: %v", err)
+		}
+	}
+
+	if deps.ProfileReader == nil {
+		if gormDB != nil {
+			deps.ProfileReader = adapters.NewPostgresUserProfileReader(gormDB)
+		} else {
+			deps.ProfileReader = &adapters.MockUserProfileReader{}
+		}
+	}
+
+	if deps.SessionReader == nil {
+		if gormDB != nil {
+			deps.SessionReader = adapters.NewPostgresWorkoutSessionReader(gormDB)
+		} else {
+			deps.SessionReader = &adapters.MockWorkoutSessionReader{}
+		}
+	}
+
+	if deps.CatalogReader == nil {
+		if gormDB != nil {
+			deps.CatalogReader = adapters.NewPostgresExerciseCatalogReader(gormDB)
+		} else {
+			deps.CatalogReader = &adapters.MockExerciseCatalogReader{}
 		}
 	}
 

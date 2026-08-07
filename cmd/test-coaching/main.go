@@ -8,17 +8,20 @@ import (
 	"os"
 	"strings"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/cmd/launcher"
 	"google.golang.org/adk/v2/cmd/launcher/full"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
-// Uses the shared mocks from the adapters package. Declaring separate ones here
-// would validate exercise IDs against different data than cmd/api does.
+// Uses the shared mocks or Postgres readers depending on database availability.
 
 // isLauncherInvocation reports whether args are meant for the ADK launcher.
 //
@@ -42,11 +45,28 @@ func run() error {
 	ctx := context.Background()
 
 	log.Println("Initializing Coaching Agent...")
+
+	var profileReader port.UserProfileReader = &adapters.MockUserProfileReader{}
+	var sessionReader port.WorkoutSessionReader = &adapters.MockWorkoutSessionReader{}
+	var catalogReader port.ExerciseCatalogReader = &adapters.MockExerciseCatalogReader{}
+
+	dbRegistry := database.GetRegistry()
+	if db, dbErr := dbRegistry.GetPool("coaching"); dbErr == nil && db != nil {
+		if gormDB, gErr := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{}); gErr == nil {
+			log.Println("✅ Connected to Database for test-coaching. Using PostgreSQL Readers.")
+			profileReader = adapters.NewPostgresUserProfileReader(gormDB)
+			sessionReader = adapters.NewPostgresWorkoutSessionReader(gormDB)
+			catalogReader = adapters.NewPostgresExerciseCatalogReader(gormDB)
+		}
+	} else {
+		log.Println("⚠️ Database connection not available for test-coaching. Falling back to Mock Readers.")
+	}
+
 	coachAgent, err := adk.NewCoachingContextAgent(
 		ctx,
-		&adapters.MockUserProfileReader{},
-		&adapters.MockWorkoutSessionReader{},
-		&adapters.MockExerciseCatalogReader{},
+		profileReader,
+		sessionReader,
+		catalogReader,
 		nil, // no roadmap store: this tool only exercises fresh generation
 		persistence.UUIDGenerator{},
 	)
