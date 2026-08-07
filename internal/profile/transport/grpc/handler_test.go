@@ -88,7 +88,7 @@ func (m *mockEventPub) PublishEvents(ctx context.Context, events []any) error {
 	return nil
 }
 
-func setupGRPCHandler(repo *mockRepo) *transport.GRPCHandler {
+func setupGRPCHandler(repo *mockRepo) *grpc.GRPCHandler {
 	txManager := &mockTxManager{}
 	eventPub := &mockEventPub{}
 
