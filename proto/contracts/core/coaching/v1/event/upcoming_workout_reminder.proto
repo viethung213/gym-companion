@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package contracts.core.coaching.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event;coachingv1event";
+
+// UpcomingWorkoutReminder được phát ra trước giờ tập 1 tiếng theo lịch HLV
+message UpcomingWorkoutReminder {
+  string user_id = 1;
+  string workout_name = 2;
+  string scheduled_time = 3;
+  int32 remind_before_minutes = 4;
+}

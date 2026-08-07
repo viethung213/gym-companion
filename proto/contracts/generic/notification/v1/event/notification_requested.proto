@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package contracts.generic.notification.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
+
+// NotificationRequested là Chuẩn Event do Notification Module cung cấp.
+// Các module phụ khác (như Auth, Profile, Exercise, Workers...) khi muốn phát Push Notification
+// sẽ publish CloudEvent loại này sang Kafka (Event type: "contracts.generic.notification.v1.event.NotificationRequested").
+message NotificationRequested {
+  string user_id = 1;
+  string title = 2;
+  string body = 3;
+  map<string, string> data = 4;
+  string requested_at = 5;
+}
