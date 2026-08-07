@@ -237,7 +237,8 @@ func (r *PostgresNutritionPlanRepository) FindPlansForDate(ctx context.Context, 
 	}
 
 	result := make([]*aggregate.NutritionPlan, 0, len(gormPlans))
-	for _, gormPlan := range gormPlans {
+	for i := range gormPlans {
+		gormPlan := &gormPlans[i]
 		alloc, _ := vo.NewCalorieAllocation(gormPlan.TargetCalories, gormPlan.TargetProtein, gormPlan.TargetCarbs, gormPlan.TargetFat)
 		var meals []aggregate.DailyMeal
 		if len(gormPlan.MealsJSON) > 0 {
@@ -285,7 +286,8 @@ func (r *PostgresNutritionPlanRepository) SaveUserMealSchedules(ctx context.Cont
 		}
 		var record GormUserMealSchedule
 		err := db.Where("user_id = ? AND meal_type = ?", userID, mealType).First(&record).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
 			newRecord := GormUserMealSchedule{
 				ID:            fmt.Sprintf("ums_%s_%s", userID, mealType),
 				UserID:        userID,
@@ -296,13 +298,13 @@ func (r *PostgresNutritionPlanRepository) SaveUserMealSchedules(ctx context.Cont
 			if saveErr := db.Create(&newRecord).Error; saveErr != nil {
 				return fmt.Errorf("postgres nutrition plan repo create user meal schedule: %w", saveErr)
 			}
-		} else if err == nil {
+		case err == nil:
 			record.ScheduledTime = scheduledTime
 			record.UpdatedAt = now
 			if saveErr := db.Save(&record).Error; saveErr != nil {
 				return fmt.Errorf("postgres nutrition plan repo update user meal schedule: %w", saveErr)
 			}
-		} else {
+		default:
 			return fmt.Errorf("postgres nutrition plan repo check user meal schedule: %w", err)
 		}
 	}

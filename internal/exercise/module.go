@@ -12,16 +12,17 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
-	exerciseGRPC "github.com/viethung213/gym-companion/internal/exercise/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
+	exerciseGRPC "github.com/viethung213/gym-companion/internal/exercise/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {

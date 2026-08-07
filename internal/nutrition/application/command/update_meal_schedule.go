@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,7 +35,7 @@ func NewUpdateMealScheduleHandler(planRepo repository.NutritionPlanRepository) *
 
 func (h *UpdateMealScheduleHandler) Handle(ctx context.Context, cmd UpdateMealScheduleCommand) (*UpdateMealScheduleResult, error) {
 	if cmd.UserID == "" {
-		return nil, fmt.Errorf("update meal schedule: user_id is required")
+		return nil, errors.New("update meal schedule: user_id is required")
 	}
 
 	schedulesMap := make(map[string]string)

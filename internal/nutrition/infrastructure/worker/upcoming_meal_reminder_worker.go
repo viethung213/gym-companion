@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultMealReminderWindowMin = 20 * time.Minute
+	defaultMealReminderWindow = 20 * time.Minute
 	defaultMealReminderWindowMax = 40 * time.Minute
 	remindBeforeMealMinutes      = 30
 )
@@ -103,7 +103,7 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 			mealTime := parseMealTime(plan.PlanDate(), scheduledTimeStr)
 			timeDiff := mealTime.Sub(now)
 
-			if timeDiff >= defaultMealReminderWindowMin && timeDiff <= defaultMealReminderWindowMax {
+			if timeDiff >= defaultMealReminderWindow && timeDiff <= defaultMealReminderWindowMax {
 				reminderKey := fmt.Sprintf("%s:%s:%s:%s", plan.UserID(), plan.ID(), meal.MealType(), mealTime.Format("2006-01-02_15:04"))
 
 				w.mu.Lock()
@@ -118,8 +118,7 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 				}
 
 				mealName := getMealName(meal)
-
-				ev := event.NewUpcomingMealReminderEvent(
+				reminderEvent := event.NewUpcomingMealReminderEvent(
 					plan.UserID(),
 					mealName,
 					meal.MealType(),
@@ -127,10 +126,10 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 					remindBeforeMealMinutes,
 				)
 
-				if err := w.eventPublisher.PublishEvents(ctx, []any{ev}); err != nil {
-					log.Printf("[UpcomingMealReminderWorker] Error publishing meal reminder event for user %s (meal: %s): %v", plan.UserID(), meal.MealType(), err)
+				if err := w.eventPublisher.PublishEvents(ctx, []any{reminderEvent}); err != nil {
+					log.Printf("[UpcomingMealReminderWorker] Error publishing reminder for meal %s (user %s): %v", meal.MealType(), plan.UserID(), err)
 				} else {
-					log.Printf("[UpcomingMealReminderWorker] Enqueued meal reminder for user %s, mealType %s at %s", plan.UserID(), meal.MealType(), scheduledTimeStr)
+					log.Printf("[UpcomingMealReminderWorker] Published meal reminder for user %s, meal %s at %s", plan.UserID(), meal.MealType(), scheduledTimeStr)
 				}
 			}
 		}
@@ -139,11 +138,11 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 
 func parseMealTime(planDate time.Time, scheduledTimeStr string) time.Time {
 	year, month, day := planDate.Date()
-	hour, min := 12, 0 // Default 12:00 if invalid format
+	hour, minute := 12, 0 // Default 12:00 if invalid format
 	if scheduledTimeStr != "" {
-		_, _ = fmt.Sscanf(scheduledTimeStr, "%d:%d", &hour, &min)
+		_, _ = fmt.Sscanf(scheduledTimeStr, "%d:%d", &hour, &minute)
 	}
-	return time.Date(year, month, day, hour, min, 0, 0, planDate.Location())
+	return time.Date(year, month, day, hour, minute, 0, 0, planDate.Location())
 }
 
 func getMealName(meal aggregate.DailyMeal) string {

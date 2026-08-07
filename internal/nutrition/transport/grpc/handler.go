@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+//nolint:revive // GRPCHandler name is consistent across bounded contexts
 type GRPCHandler struct {
 	nutritionv1service.UnimplementedNutritionServiceServer
 	genPlanHdlr             *command.GenerateDailyPlanHandler
@@ -328,7 +329,9 @@ func (h *GRPCHandler) GetNutritionInsight(
 	}, nil
 }
 
-func (h *GRPCHandler) UpdateMealSchedule(ctx context.Context, req *nutritionv1msg.UpdateMealScheduleRequest) (*nutritionv1msg.UpdateMealScheduleResponse, error) {
+func (h *GRPCHandler) UpdateMealSchedule(
+	ctx context.Context, req *nutritionv1msg.UpdateMealScheduleRequest,
+) (*nutritionv1msg.UpdateMealScheduleResponse, error) {
 	if req.GetUserId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}

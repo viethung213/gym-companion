@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+//nolint:revive // GRPCHandler name is consistent across bounded contexts
 type GRPCHandler struct {
 	profilev1service.UnimplementedProfileServiceServer
 	saveHealthProfileHandler     *command.SaveHealthProfileHandler
