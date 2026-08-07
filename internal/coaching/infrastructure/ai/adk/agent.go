@@ -70,8 +70,6 @@ func NewCoachingContextAgent(
 		return nil, errors.New("id generator is required")
 	}
 
-	loadEnvFile()
-
 	cca := &CoachingContextAgent{
 		profileReader: profileReader,
 		sessionReader: sessionReader,

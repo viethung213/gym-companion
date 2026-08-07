@@ -45,7 +45,7 @@ func (m *mockOutboxWriter) Enqueue(ctx context.Context, partitionKey string, eve
 }
 
 func TestUpcomingWorkoutReminderWorker_RunCheck(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2026, 8, 7, 10, 0, 0, 0, time.Local)
 	// Slot time set 60 minutes in the future
 	futureTime := now.Add(60 * time.Minute)
 	slotTimeStr := futureTime.Format("15:04")
@@ -69,7 +69,7 @@ func TestUpcomingWorkoutReminderWorker_RunCheck(t *testing.T) {
 	writer := &mockOutboxWriter{}
 
 	worker := NewUpcomingWorkoutReminderWorker(repo, writer, 100*time.Millisecond)
-	worker.runCheck(context.Background())
+	worker.runCheckAt(context.Background(), now)
 
 	writer.mu.Lock()
 	count := len(writer.events)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
+	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/config"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
@@ -119,14 +119,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	)
 
 	// Start Background Worker for Outbox Pattern & Kafka
-	kafkaBrokersStr := os.Getenv("EXERCISE_KAFKA_BROKERS")
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = os.Getenv("KAFKA_BROKERS")
-	}
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = "localhost:9092"
-	}
-	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
+	cfg := config.LoadConfig()
+	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
 
 	writer, err := deps.KafkaRegistry.GetWriter("exercise.events", kafkaBrokers)
 	if err != nil {

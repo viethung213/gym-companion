@@ -8,19 +8,23 @@ import (
 	"log"
 	"strings"
 
-	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/genai"
 )
 
-// FallbackLLM bọc một danh sách các model.LLM và tự động fallback sang model dự phòng
-// khi model hiện tại trả về lỗi Rate Limit (429) hoặc Resource Exhausted / Quota Exceeded.
+// Compile-time interface check.
+var _ model.LLM = (*FallbackLLM)(nil)
+
+// FallbackLLM wraps a list of model.LLM instances and automatically falls back
+// to a secondary model when the current model returns a Rate Limit (429) or
+// Quota Exceeded error.
 type FallbackLLM struct {
 	models []model.LLM
 }
 
-// NewFallbackLLMFromEnv tạo FallbackLLM đọc danh sách model từ cấu hình module Nutrition.
+// NewFallbackLLMFromEnv creates a FallbackLLM reading model list and API Key from Coaching module config.
 func NewFallbackLLMFromEnv(ctx context.Context) (model.LLM, error) {
 	cfg := config.LoadConfig()
 	rawNames := append([]string{cfg.GeminiModel}, strings.Split(cfg.GeminiFallbackModels, ",")...)
@@ -38,7 +42,7 @@ func NewFallbackLLMFromEnv(ctx context.Context) (model.LLM, error) {
 	return NewFallbackLLM(ctx, modelNames, cfg.GoogleAPIKey)
 }
 
-// NewFallbackLLM khởi tạo FallbackLLM từ danh sách tên model và API Key.
+// NewFallbackLLM initializes a FallbackLLM from a slice of model names and an API key.
 func NewFallbackLLM(ctx context.Context, modelNames []string, apiKey string) (model.LLM, error) {
 	if len(modelNames) == 0 {
 		return nil, errors.New("fallback llm: modelNames list cannot be empty")
@@ -66,7 +70,7 @@ func NewFallbackLLM(ctx context.Context, modelNames []string, apiKey string) (mo
 	return &FallbackLLM{models: models}, nil
 }
 
-// Name trả về tên của model đầu tiên (primary model).
+// Name returns the name of the primary model.
 func (f *FallbackLLM) Name() string {
 	if len(f.models) == 0 {
 		return "fallback-llm-empty"
@@ -74,7 +78,7 @@ func (f *FallbackLLM) Name() string {
 	return f.models[0].Name()
 }
 
-// GenerateContent thực hiện gọi LLM với cơ chế tự động thử model dự phòng nếu bị 429 / Quota Exceeded.
+// GenerateContent executes LLM generation with automatic fallback if 429 / Quota Exceeded occurs.
 func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		for idx, m := range f.models {
@@ -93,16 +97,14 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 			}
 
 			if lastErr == nil {
-				return // Gọi thành công hoàn toàn
+				return
 			}
 
-			// Nếu đã nhận được 1 phần kết quả stream trước khi có lỗi, không thử fallback nữa để tránh trùng dữ liệu
 			if receivedAny {
 				yield(nil, lastErr)
 				return
 			}
 
-			// Kiểm tra nếu lỗi do Quota / Rate limit (429) và còn model dự phòng
 			if isQuotaOrRateLimitErr(lastErr) && idx < len(f.models)-1 {
 				nextModel := f.models[idx+1]
 				log.Printf("[FallbackLLM] Model %s hit quota/rate limit error (%v). Auto-falling back to %s...",
@@ -110,14 +112,13 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 				continue
 			}
 
-			// Nếu không phải lỗi 429 hoặc đã hết model dự phòng, trả về lỗi
 			yield(nil, fmt.Errorf("model %s error: %w", m.Name(), lastErr))
 			return
 		}
 	}
 }
 
-// isQuotaOrRateLimitErr kiểm tra xem lỗi có thuộc loại 429 / Quota Exceeded / Rate Limit hay không.
+// isQuotaOrRateLimitErr checks if err is a 429 / Quota Exceeded / Rate Limit error.
 func isQuotaOrRateLimitErr(err error) bool {
 	if err == nil {
 		return false

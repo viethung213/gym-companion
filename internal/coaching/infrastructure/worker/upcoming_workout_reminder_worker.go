@@ -72,7 +72,10 @@ func (w *UpcomingWorkoutReminderWorker) Start(ctx context.Context) error {
 
 // runCheck inspects pending sessions for today and enqueues reminder events.
 func (w *UpcomingWorkoutReminderWorker) runCheck(ctx context.Context) {
-	now := time.Now()
+	w.runCheckAt(ctx, time.Now())
+}
+
+func (w *UpcomingWorkoutReminderWorker) runCheckAt(ctx context.Context, now time.Time) {
 	w.cleanupOldReminders(now)
 
 	sessions, err := w.roadmapRepo.FindPendingSessionsByDate(ctx, now)
@@ -133,7 +136,11 @@ func parseWorkoutTime(scheduledDate time.Time, slotTime string) time.Time {
 		_, _ = fmt.Sscanf(slotTime, "%d:%d", &hour, &minute)
 	}
 
-	return time.Date(year, month, day, hour, minute, 0, 0, scheduledDate.Location())
+	wt := time.Date(year, month, day, hour, minute, 0, 0, scheduledDate.Location())
+	if wt.Before(scheduledDate) && scheduledDate.Sub(wt) > 12*time.Hour {
+		wt = wt.AddDate(0, 0, 1)
+	}
+	return wt
 }
 
 func getWorkoutNameFromPrescription(p roadmap.WorkoutPrescription) string {

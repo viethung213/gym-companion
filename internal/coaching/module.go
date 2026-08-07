@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	coachingEvent "github.com/viethung213/gym-companion/internal/coaching/infrastructure/event"
 	coachingKafka "github.com/viethung213/gym-companion/internal/coaching/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
@@ -93,11 +93,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 
 	var outboxWorker *worker.OutboxWorker
 	if outboxRepo != nil && deps.KafkaRegistry != nil {
-		brokersStr := os.Getenv("KAFKA_BROKERS")
-		if brokersStr == "" {
-			brokersStr = "localhost:9092"
-		}
-		brokers := strings.Split(brokersStr, ",")
+		cfg := config.LoadConfig()
+		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
 		writer, wErr := deps.KafkaRegistry.GetWriter("events.v1", brokers)
 		if wErr == nil && writer != nil {

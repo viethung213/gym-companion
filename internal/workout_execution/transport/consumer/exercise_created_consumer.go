@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
+	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/config"
 )
 
 // cloudEventEnvelope maps the outer CloudEvents 1.0 JSON payload structure.
@@ -121,9 +121,8 @@ func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exercis
 		return fmt.Errorf("exercise created consumer check existing: %w", err)
 	}
 
-	defaultDetectorURL := os.Getenv("DEFAULT_ONNX_DETECTOR_URL")
-	defaultSkeletonURL := os.Getenv("DEFAULT_ONNX_SKELETON_URL")
-	draft := aggregate.NewDraftMotionSpecification(exerciseID, defaultDetectorURL, defaultSkeletonURL)
+	cfg := config.LoadConfig()
+	draft := aggregate.NewDraftMotionSpecification(exerciseID, cfg.DefaultONNXDetectorURL, cfg.DefaultONNXSkeletonURL)
 	if err := c.motionRepo.Save(ctx, draft); err != nil {
 		return fmt.Errorf("exercise created consumer save draft: %w", err)
 	}

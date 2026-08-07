@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
+	workoutConfig "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/config"
 	workoutEvent "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/event"
 	workoutKafka "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
@@ -101,14 +101,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	)
 
 	// Kafka Setup
-	kafkaBrokersStr := os.Getenv("WORKOUT_EXECUTION_KAFKA_BROKERS")
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = os.Getenv("KAFKA_BROKERS")
-	}
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = "localhost:9092"
-	}
-	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
+	appCfg := workoutConfig.LoadConfig()
+	kafkaBrokers := strings.Split(appCfg.KafkaBrokers, ",")
 
 	var kafkaPub *workoutKafka.Publisher
 	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {

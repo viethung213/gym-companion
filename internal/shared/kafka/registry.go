@@ -203,16 +203,20 @@ func buildSecurityConfig() (*kafka.Dialer, *kafka.Transport, error) {
 		}
 	}
 
+	clientID := getFirstEnv("KAFKA_CLIENT_ID", "KAFKA_CLIENT_NAME")
+
 	dialer := &kafka.Dialer{
 		Timeout:       10 * time.Second,
 		DualStack:     true,
 		TLS:           tlsConfig,
 		SASLMechanism: saslMech,
+		ClientID:      clientID,
 	}
 
 	transport := &kafka.Transport{
-		TLS:  tlsConfig,
-		SASL: saslMech,
+		TLS:      tlsConfig,
+		SASL:     saslMech,
+		ClientID: clientID,
 	}
 
 	return dialer, transport, nil
