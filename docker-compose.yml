@@ -38,17 +38,6 @@ services:
       timeout: 10s
       retries: 10
 
-  # Local trace viewer. Each LLM call shows up as a `generate_content` span;
-  # read gen_ai.usage.input_tokens on it to see how large the prompt really is.
-  jaeger:
-    image: jaegertracing/all-in-one:1.62.0
-    container_name: fitai-jaeger
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686" # web UI
-      - "4318:4318" # OTLP/HTTP receiver
-
   app:
     build:
       context: .
@@ -66,15 +55,11 @@ services:
       OAUTH_STATE_SECRET: local-dev-state-secret-change-in-prod
       JWT_ISSUER: fitai-local
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      # Unset by default: tracing is opt-in, so nothing changes unless asked for.
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      jaeger:
-        condition: service_started
     networks:
       - default
 

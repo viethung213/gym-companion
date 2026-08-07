@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
@@ -25,14 +24,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
-	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
-
-// telemetryFlushTimeout bounds the final span export during shutdown.
-const telemetryFlushTimeout = 10 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -64,21 +59,6 @@ func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	shutdownTelemetry, traced, err := telemetry.Setup(ctx, "gym-companion-api")
-	if err != nil {
-		return fmt.Errorf("setup telemetry: %w", err)
-	}
-	defer func() {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), telemetryFlushTimeout)
-		defer shutdownCancel()
-		if shutdownErr := shutdownTelemetry(shutdownCtx); shutdownErr != nil {
-			log.Printf("telemetry shutdown: %v", shutdownErr)
-		}
-	}()
-	if traced {
-		log.Printf("Tracing enabled → %s", os.Getenv(telemetry.TracesEndpointEnv))
-	}
 
 	// Run embedded SQL migrations (idempotent CREATE TABLE IF NOT EXISTS / ON CONFLICT)
 	if migErr := database.RunAutoMigrations(ctx, db); migErr != nil {

@@ -19,9 +19,10 @@ import (
 // promptDumpDirEnv names a directory that receives one JSON file per model
 // call, capturing the exact Contents handed to Gemini. Unset disables it.
 //
-// Traces answer "how many tokens"; only this answers "which tokens". ADK's
-// generate_content span records usage counts and no prompt text, so an agent
-// whose history filter admits more than intended is invisible in Jaeger.
+// ADK never logs the prompt it sends, so without this an agent whose history
+// filter admits more than intended looks identical to one that behaves. The
+// file count also doubles as a per-run tally of model calls, which is what
+// bounds the free tier's daily quota.
 const promptDumpDirEnv = "COACH_PROMPT_DUMP_DIR"
 
 // promptDump is one captured model request.

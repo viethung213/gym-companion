@@ -208,18 +208,26 @@ Hai luồng vá **dùng chung một builder** (`buildRewriteAgent`): cùng một
 
 ## Debug
 
-| Muốn xem | Cách | Ghi chú |
-|---|---|---|
-| Token mỗi lần gọi LLM | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces` → Jaeger `:16686` | Span `generate_content` mang `gen_ai.usage.*`. **Không** mang nội dung prompt |
-| Nguyên văn prompt | `COACH_PROMPT_DUMP_DIR=tmp/prompts` | 1 file JSON mỗi lần gọi model |
-
-Cả hai đều opt-in. Không set biến môi trường thì callback không được tạo.
+Đặt `COACH_PROMPT_DUMP_DIR` để ghi ra **nguyên văn `Contents` gửi lên Gemini**, một file JSON mỗi lần gọi model:
 
 ```powershell
-$env:OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "http://localhost:4318/v1/traces"
 $env:COACH_PROMPT_DUMP_DIR = "tmp/prompts"
 go run ./cmd/test-coaching     # chạy từ gốc repo
 ```
+
+```
+tmp/prompts/
+  20260807T085934.037-CoachGeneratorAgent-01.json   ← xin search_exercises
+  20260807T085935.093-CoachGeneratorAgent-02.json   ← xin get_exercise_pr
+  20260807T085936.197-CoachGeneratorAgent-03.json   ← sinh plan
+  20260807T085947.473-CoachReviewerAgent-01.json    ← verdict
+```
+
+Tên file sắp theo thứ tự gọi, nên **số file cũng là số lần gọi model** — dùng để canh quota. Mỗi file có `branch`, `content_count`, `system_instruction`, `tool_names` và toàn bộ `contents`.
+
+Opt-in: không set biến thì callback không được tạo, đường chạy production không đổi (`prompt_dump.go`).
+
+> Đây là `BeforeModelCallback`, nên nó chỉ chụp **request**, không chụp response.
 
 ---
 

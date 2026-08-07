@@ -8,12 +8,10 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
-	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/cmd/launcher"
 	"google.golang.org/adk/v2/cmd/launcher/full"
@@ -21,9 +19,6 @@ import (
 
 // Uses the shared mocks from the adapters package. Declaring separate ones here
 // would validate exercise IDs against different data than cmd/api does.
-
-// telemetryFlushTimeout bounds the final span export on the way out.
-const telemetryFlushTimeout = 10 * time.Second
 
 // isLauncherInvocation reports whether args are meant for the ADK launcher.
 //
@@ -41,26 +36,10 @@ func main() {
 	}
 }
 
-// run owns the whole lifecycle so the telemetry shutdown actually runs; a
-// log.Fatal anywhere below would skip the deferred flush and drop the spans
-// of the very invocation being measured.
+// run keeps the body out of main so every failure path returns an error and
+// deferred cleanup still runs; log.Fatal mid-run would skip it.
 func run() error {
 	ctx := context.Background()
-
-	shutdownTelemetry, traced, err := telemetry.Setup(ctx, "gym-companion-coaching")
-	if err != nil {
-		return fmt.Errorf("setup telemetry: %w", err)
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryFlushTimeout)
-		defer cancel()
-		if shutdownErr := shutdownTelemetry(shutdownCtx); shutdownErr != nil {
-			log.Printf("telemetry shutdown: %v", shutdownErr)
-		}
-	}()
-	if traced {
-		log.Printf("Tracing enabled → %s", os.Getenv(telemetry.TracesEndpointEnv))
-	}
 
 	log.Println("Initializing Coaching Agent...")
 	coachAgent, err := adk.NewCoachingContextAgent(
