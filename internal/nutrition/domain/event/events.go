@@ -93,28 +93,3 @@ func (e *LockoutAppliedEvent) UserID() string        { return e.userID }
 func (e *LockoutAppliedEvent) ItemType() string      { return e.itemType }
 func (e *LockoutAppliedEvent) ItemName() string      { return e.itemName }
 func (e *LockoutAppliedEvent) UnlockedAt() time.Time { return e.unlockedAt }
-
-type UpcomingMealReminderEvent struct {
-	userID              string
-	mealName            string
-	mealType            string
-	scheduledTime       string
-	remindBeforeMinutes int32
-}
-
-func NewUpcomingMealReminderEvent(userID, mealName, mealType, scheduledTime string, remindBeforeMinutes int32) *UpcomingMealReminderEvent {
-	return &UpcomingMealReminderEvent{
-		userID:              userID,
-		mealName:            mealName,
-		mealType:            mealType,
-		scheduledTime:       scheduledTime,
-		remindBeforeMinutes: remindBeforeMinutes,
-	}
-}
-
-func (e *UpcomingMealReminderEvent) UserID() string              { return e.userID }
-func (e *UpcomingMealReminderEvent) MealName() string            { return e.mealName }
-func (e *UpcomingMealReminderEvent) MealType() string            { return e.mealType }
-func (e *UpcomingMealReminderEvent) ScheduledTime() string       { return e.scheduledTime }
-func (e *UpcomingMealReminderEvent) RemindBeforeMinutes() int32 { return e.remindBeforeMinutes }
-

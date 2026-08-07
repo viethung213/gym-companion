@@ -67,4 +67,3 @@ type UpcomingWorkoutReminder struct {
 func (e *UpcomingWorkoutReminder) EventName() string {
 	return "contracts.core.coaching.v1.event.UpcomingWorkoutReminder"
 }
-
