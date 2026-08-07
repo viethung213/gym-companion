@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	defaultWorkoutReminderWindow = 45 * time.Minute
+	defaultWorkoutReminderWindow    = 45 * time.Minute
 	defaultWorkoutReminderWindowMax = 75 * time.Minute
-	remindBeforeWorkoutMinutes     = 60
+	remindBeforeWorkoutMinutes      = 60
 )
 
 // UpcomingWorkoutReminderWorker scans pending workout sessions scheduled for today

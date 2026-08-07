@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultMealReminderWindow = 20 * time.Minute
+	defaultMealReminderWindow    = 20 * time.Minute
 	defaultMealReminderWindowMax = 40 * time.Minute
 	remindBeforeMealMinutes      = 30
 )

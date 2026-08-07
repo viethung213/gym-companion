@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	coachingv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
+	coachingv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/event"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
