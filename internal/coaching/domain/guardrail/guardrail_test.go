@@ -8,7 +8,22 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
+// validRPE is mid-band for each phase, so the baseline satisfies BR-AC-10.
+func validRPE() [4]float32 { return [4]float32{6.5, 7.5, 8.5, 5.5} }
+
+// validSets unloads the DELOAD week (6 sets against PEAK's 9), satisfying
+// BR-AC-11.
+func validSets() [4]int32 { return [4]int32{3, 3, 3, 2} }
+
 func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
+	t.Helper()
+
+	return buildRoadmap(t, validRPE(), validSets())
+}
+
+// buildRoadmap builds a 4-week roadmap with per-week main-work RPE and sets,
+// so a test can break one periodization rule without disturbing the others.
+func buildRoadmap(t *testing.T, weekRPE [4]float32, weekSets [4]int32) *roadmap.Roadmap {
 	t.Helper()
 
 	base := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC) // Monday
@@ -19,6 +34,10 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 		weekStart := base.AddDate(0, 0, w*7)
 
 		phase := []roadmap.Phase{roadmap.PhaseAccumulation, roadmap.PhaseOverload, roadmap.PhasePeak, roadmap.PhaseDeload}[w]
+
+		rpe := weekRPE[w]
+
+		sets := weekSets[w]
 
 		wp, err := roadmap.NewWeekPlan(&roadmap.WeekPlanInfo{
 			WeekPlanID: "wp-" + itoa(w+1),
@@ -54,7 +73,7 @@ func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 				TargetMuscleGroups: []string{"chest"},
 				Prescription: roadmap.WorkoutPrescription{
 					MainExercises: []roadmap.PrescribedExercise{
-						{ExerciseID: "ex-bench", ExerciseName: "Bench", TargetSets: 3, TargetReps: 8, TargetWeight: 60, TargetRPE: 7},
+						{ExerciseID: "ex-bench", ExerciseName: "Bench", TargetSets: sets, TargetReps: 8, TargetWeight: 60, TargetRPE: rpe},
 					},
 				},
 			}, time.Now())
@@ -187,4 +206,79 @@ func TestGuardrail_NilRoadmapRejected(t *testing.T) {
 	if got.Status != StatusRejected {
 		t.Errorf("nil roadmap should reject")
 	}
+}
+
+func TestGuardrail_PhaseRPEBand(t *testing.T) {
+	tests := []struct {
+		name string
+		give [4]float32
+		want string // violation code expected, empty means approved
+	}{
+		{name: "mid band every phase", give: validRPE()},
+		{name: "accumulation too hard", give: [4]float32{7.5, 7.5, 8.5, 5.5}, want: "BR-AC-10"},
+		{name: "peak too easy", give: [4]float32{6.5, 7.5, 7.0, 5.5}, want: "BR-AC-10"},
+		{name: "deload at peak intensity", give: [4]float32{6.5, 7.5, 8.5, 8.5}, want: "BR-AC-10"},
+		{name: "band edges are inclusive", give: [4]float32{6.0, 8.0, 8.0, 6.0}},
+		{name: "unset rpe is not this rule's defect", give: [4]float32{0, 0, 0, 0}},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()))
+
+			assertViolation(t, got, tt.want)
+		})
+	}
+}
+
+func TestGuardrail_DeloadVolume(t *testing.T) {
+	tests := []struct {
+		name string
+		give [4]int32
+		want string
+	}{
+		{name: "deload unloads", give: validSets()},
+		{name: "deload holds peak volume", give: [4]int32{3, 3, 3, 3}, want: "BR-AC-11"},
+		{name: "deload exceeds peak", give: [4]int32{3, 3, 2, 3}, want: "BR-AC-11"},
+		// 3 sessions a week, so PEAK totals 30 sets and allows exactly 21.
+		{name: "exactly at the ratio", give: [4]int32{3, 3, 10, 7}},
+		{name: "one set over the ratio", give: [4]int32{3, 3, 10, 8}, want: "BR-AC-11"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give))
+
+			assertViolation(t, got, tt.want)
+		})
+	}
+}
+
+// assertViolation asserts the review carries code, or approves when code is "".
+func assertViolation(t *testing.T, got ReviewResult, code string) {
+	t.Helper()
+
+	if code == "" {
+		if got.Status != StatusApproved {
+			t.Errorf("status = %s, want %s (violations: %+v)", got.Status, StatusApproved, got.Violations)
+		}
+
+		return
+	}
+
+	for _, v := range got.Violations {
+		if v.Code == code {
+			return
+		}
+	}
+
+	t.Errorf("violations = %+v, want one with code %s", got.Violations, code)
 }

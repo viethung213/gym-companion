@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"log"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
@@ -25,38 +24,21 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 			}
 			coachInput.Flow = FlowInitiate4Week
 
-			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput)
+			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, true)
 			if genErr != nil {
 				return nil, genErr
 			}
 
-			// Evaluate only the validated plan, never one about to be discarded.
+			// The review loop already ran inside generateValidatedPlan, so by
+			// here the plan either cleared the reviewer or exhausted its rounds
+			// and carries the objections in res.Issues.
 			evaluated := &EvaluationResult{
-				IsValid:  true,
+				IsValid:  !res.Degraded,
 				Plan:     *res.Plan,
 				Names:    res.Names,
 				Degraded: res.Degraded,
 				Issues:   res.Issues,
-			}
-
-			evaluatedMap, evalErr := workflow.RunNode[map[string]any](nodeCtx, c.evaluatorNode, res.Plan)
-			if evalErr != nil {
-				log.Printf("coaching: evaluator unavailable for user %s, continuing: %v",
-					coachInput.Profile.UserID, evalErr)
-			} else if evaluatedMap != nil {
-				if v, ok := evaluatedMap["is_valid"].(bool); ok {
-					evaluated.IsValid = v
-				}
-				if rawIssues, ok := evaluatedMap["issues"].([]any); ok {
-					for _, item := range rawIssues {
-						if s, ok := item.(string); ok {
-							evaluated.Issues = append(evaluated.Issues, s)
-						}
-					}
-				}
-				if !evaluated.IsValid {
-					evaluated.Degraded = true
-				}
+				Review:   res.Review,
 			}
 
 			if setErr := nodeCtx.State().Set("evaluation_result", evaluated); setErr != nil {

@@ -24,7 +24,7 @@ func TestValidationChain_HallucinatedIDNeverReachesDomain(t *testing.T) {
 			planOf(sessionOf("2026-08-03", real)),
 		}}
 
-		res, err := runWithRetries(context.Background(), c.validator, att.fn)
+		res, err := runWithRetries(context.Background(), c.validator, att.fn, nil)
 		if err != nil {
 			t.Fatalf("runWithRetries returned error: %v", err)
 		}
@@ -46,7 +46,7 @@ func TestValidationChain_HallucinatedIDNeverReachesDomain(t *testing.T) {
 		c := mapperFor(t, real)
 		att := alwaysReturns(planOf(sessionOf("2026-08-03", real, fake)))
 
-		res, err := runWithRetries(context.Background(), c.validator, att.fn)
+		res, err := runWithRetries(context.Background(), c.validator, att.fn, nil)
 		if err != nil {
 			t.Fatalf("runWithRetries returned error: %v", err)
 		}
@@ -65,7 +65,7 @@ func TestValidationChain_HallucinatedIDNeverReachesDomain(t *testing.T) {
 		c := mapperFor(t, real)
 		att := alwaysReturns(planOf(sessionOf("2026-08-03", fake)))
 
-		if _, err := runWithRetries(context.Background(), c.validator, att.fn); !errors.Is(err, ErrPlanGenerationFailed) {
+		if _, err := runWithRetries(context.Background(), c.validator, att.fn, nil); !errors.Is(err, ErrPlanGenerationFailed) {
 			t.Errorf("got error %v, want ErrPlanGenerationFailed", err)
 		}
 	})
@@ -77,7 +77,7 @@ func TestValidationChain_EveryExerciseCarriesACatalogName(t *testing.T) {
 	c := mapperFor(t, "bench-press", "squat")
 	plan := planOf(sessionOf("2026-08-03", "bench-press", "squat"))
 
-	res, err := runWithRetries(context.Background(), c.validator, alwaysReturns(plan).fn)
+	res, err := runWithRetries(context.Background(), c.validator, alwaysReturns(plan).fn, nil)
 	if err != nil {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}

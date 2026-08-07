@@ -20,7 +20,7 @@ func (c *CoachingContextAgent) buildSuggestAdHocAgent(_ context.Context) (agent.
 			}
 			coachInput.Flow = FlowSuggestAdHoc
 
-			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput)
+			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, false)
 			if genErr != nil {
 				return nil, genErr
 			}

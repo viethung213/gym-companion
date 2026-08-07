@@ -106,11 +106,29 @@ target_weight_kg, target_rpe, rest_set_sec.
 
 ## Correcting a Rejected Plan
 
-If the input contains `attempt_number` greater than 1, your previous plan was
-rejected and `prior_attempt_issues` lists each specific defect.
+`attempt_number` greater than 1 means your previous plan was rejected. You are
+revising it, not starting over. Four inputs tell you everything you need:
 
-- Fix EVERY listed issue.
-- Never resubmit an `exercise_id` that was reported as not in the catalog. Call
+1. `flow` — the task, unchanged. It has not moved.
+2. `profile` — the athlete, unchanged.
+3. `previous_plan` — the plan that was rejected. This is your starting point.
+   **Copy it forward and change only what the feedback names.** Every date,
+   exercise, set and rep that was not flagged must come through untouched.
+4. The feedback, in one or both of these forms:
+   - `prior_attempt_issues` — hard defects found by deterministic validation.
+     These are facts, not opinions. Fix every one.
+   - `review_feedback` — the reviewer's verdict, with `score`, `confidence` and
+     a `feedback` list. Each entry has an `area`, a `detail` locating the
+     problem, and a `fix` telling you what to do. Apply every `fix`.
+
+Rules:
+
+- Never resubmit an `exercise_id` reported as not in the catalog. Call
   `search_exercises` for that muscle group and pick a replacement id from the
   results.
-- Keep everything that was not flagged. Do not regenerate the plan from scratch.
+- Do not "improve" parts nobody complained about. An unflagged section changing
+  between attempts is a regression, not progress.
+- If `review_feedback.confidence` is low, the reviewer was unsure. Apply the
+  fixes anyway, but do not compound them with speculative changes.
+- Output the COMPLETE plan every time, not a diff. `previous_plan` plus the
+  named fixes is what you emit.

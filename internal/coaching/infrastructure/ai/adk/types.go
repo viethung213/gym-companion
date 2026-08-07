@@ -54,8 +54,20 @@ type CoachInput struct {
 
 	// 1-based; >1 means the previous plan was rejected. omitempty keeps a first
 	// attempt's payload identical to one with no retry support.
-	AttemptNumber      int      `json:"attempt_number,omitempty"`
+	AttemptNumber int `json:"attempt_number,omitempty"`
+
+	// PriorAttemptIssues are deterministic defects from domain validation.
 	PriorAttemptIssues []string `json:"prior_attempt_issues,omitempty"`
+
+	// PreviousPlan is the output being revised. Without it "keep what was not
+	// flagged" is unactionable: a node-wrapped agent gets no conversation
+	// history, so the model cannot see its own previous answer.
+	PreviousPlan *GeneratedPlan `json:"previous_plan,omitempty"`
+
+	// ReviewFeedback is the reviewer's verdict on PreviousPlan. Flow and
+	// Profile already carry the original task and user context, so neither is
+	// repeated here.
+	ReviewFeedback *PlanReview `json:"review_feedback,omitempty"`
 
 	SessionsToRevise []SessionToRevise `json:"sessions_to_revise,omitempty"`
 	AdaptationReason string            `json:"adaptation_reason,omitempty"`
@@ -117,6 +129,11 @@ type PlanResult struct {
 	Names    map[string]string `json:"-"` // exercise_id -> catalog display name
 	Degraded bool              `json:"degraded"`
 	Issues   []string          `json:"issues,omitempty"`
+
+	// Review is the last verdict the plan received, nil when the flow ships
+	// unreviewed. A shipped plan may carry a failing verdict: the loop ran out
+	// of rounds and the guardrail, not the reviewer, is the hard gate.
+	Review *PlanReview `json:"review,omitempty"`
 }
 
 // EvaluationResult represents the output of quality evaluation step.
@@ -126,4 +143,45 @@ type EvaluationResult struct {
 	Plan     GeneratedPlan     `json:"plan"`
 	Names    map[string]string `json:"-"` // exercise_id -> catalog display name
 	Degraded bool              `json:"degraded"`
+	Review   *PlanReview       `json:"review,omitempty"`
+}
+
+// ValidationReport is what domain validation concluded about a candidate plan.
+// The reviewer reads it so it does not re-litigate catalog membership or the
+// weekly caps, which are already settled deterministically.
+type ValidationReport struct {
+	Passed   bool     `json:"passed"`
+	Degraded bool     `json:"degraded"` // salvage mode dropped something
+	Issues   []string `json:"issues,omitempty"`
+}
+
+// ReviewRequest is the reviewer's complete input. All four parts are named
+// explicitly so the prompt can refer to them and the model cannot confuse the
+// plan it is judging with the context it is judging against.
+type ReviewRequest struct {
+	OriginalTask     string           `json:"original_task"`
+	UserContext      UserProfile      `json:"user_context"`
+	RecentSessions   []WorkoutSession `json:"recent_sessions,omitempty"`
+	GeneratorOutput  *GeneratedPlan   `json:"generator_output"`
+	ValidationResult ValidationReport `json:"validation_result"`
+	ReviewRound      int              `json:"review_round"`
+}
+
+// ReviewNote is one actionable defect. Area locates it, Fix says what to do;
+// a note without Fix sends the generator back with nothing to act on.
+type ReviewNote struct {
+	Area   string `json:"area"`
+	Detail string `json:"detail"`
+	Fix    string `json:"fix"`
+}
+
+// PlanReview is the reviewer's verdict. It deliberately carries no plan field:
+// the reviewer may judge, score and advise, but never rewrite. A corrected
+// plan can only come from the generator, which is the only path that then goes
+// back through domain validation.
+type PlanReview struct {
+	Approved   bool         `json:"approved"`
+	Score      int          `json:"score"`      // 0..100
+	Confidence float64      `json:"confidence"` // 0..1
+	Feedback   []ReviewNote `json:"feedback,omitempty"`
 }
