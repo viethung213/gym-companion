@@ -183,3 +183,89 @@ func TestRunWithRetries_PlanDefectStillRetries(t *testing.T) {
 		t.Errorf("generator calls = %d, want 2: a genuine defect still earns a retry", att.calls)
 	}
 }
+
+func TestClassify_TerminalErrorsAreNotRetried(t *testing.T) {
+	// Observed live: a key whose project is denied burned all three generation
+	// rounds in one second, because 403 is neither transient nor a plan defect.
+	denied := genai.APIError{
+		Code:    403,
+		Status:  "PERMISSION_DENIED",
+		Message: "Your project has been denied access. Please contact support.",
+	}
+
+	tests := []struct {
+		name string
+		give error
+		want errorClass
+	}{
+		{name: "quota exhausted waits", give: quotaError(), want: classTransient},
+		{name: "unavailable waits", give: genai.APIError{Code: 503}, want: classTransient},
+		{name: "permission denied is hopeless", give: denied, want: classTerminal},
+		{name: "unauthenticated is hopeless", give: genai.APIError{Code: 401}, want: classTerminal},
+		{name: "invalid argument is our bug", give: genai.APIError{Code: 400}, want: classTerminal},
+		{name: "unknown model is hopeless", give: genai.APIError{Code: 404}, want: classTerminal},
+		{name: "cancellation is hopeless", give: context.Canceled, want: classTerminal},
+		{name: "wrapped 403 still detected", give: fmt.Errorf("generator: %w", denied), want: classTerminal},
+		{
+			name: "status name survives a %v-formatted chain",
+			give: errors.New("dynamic child failed: Status: PERMISSION_DENIED"),
+			want: classTerminal,
+		},
+		{name: "bad json is the model's fault", give: errors.New("unmarshal plan: invalid character"), want: classPlanDefect},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := classify(tt.give); got != tt.want {
+				t.Errorf("classify = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunWithRetries_DeniedKeyDoesNotBurnRounds(t *testing.T) {
+	v := newPlanValidator(newFakeCatalog("bench-press"))
+
+	denied := genai.APIError{Code: 403, Status: "PERMISSION_DENIED"}
+	att := &recordingAttempt{errs: []error{
+		fmt.Errorf("generator: %w", denied),
+		fmt.Errorf("generator: %w", denied),
+		fmt.Errorf("generator: %w", denied),
+	}}
+
+	_, err := runWithRetries(context.Background(), v, att.fn, nil)
+
+	if !errors.Is(err, ErrPlanGenerationFailed) {
+		t.Fatalf("err = %v, want ErrPlanGenerationFailed", err)
+	}
+	if att.calls != 1 {
+		t.Errorf("generator calls = %d, want 1: a denied key must not be retried as a plan defect", att.calls)
+	}
+	if !strings.Contains(err.Error(), "infrastructure failure") {
+		t.Errorf("err = %v, want it reported as infrastructure", err)
+	}
+}
+
+func TestRetryTransient_TerminalErrorReturnsImmediately(t *testing.T) {
+	calls := 0
+	start := time.Now()
+
+	_, err := retryTransient(context.Background(), "generator", func() (string, error) {
+		calls++
+		return "", genai.APIError{Code: 403, Status: "PERMISSION_DENIED"}
+	})
+
+	if err == nil {
+		t.Fatal("err = nil, want the denial")
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want 1: a denial must not be waited out", calls)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("waited %s, want an immediate return", elapsed)
+	}
+}

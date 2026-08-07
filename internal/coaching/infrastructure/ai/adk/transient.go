@@ -20,54 +20,96 @@ const (
 	maxTransientDelay  = 30 * time.Second
 )
 
-// isRetryableStatus reports whether an HTTP status is worth waiting out. 429 is
-// the one that matters in practice: the free tier caps requests per day, and
-// the API tells us how long to wait.
-func isRetryableStatus(code int) bool {
+// errorClass says how the retry loop must treat a failed model call.
+//
+// Three classes, because two is not enough: an infrastructure failure can be
+// worth waiting out or hopeless, and conflating "hopeless" with "the model
+// wrote a bad plan" burns every generation round on an error no regeneration
+// can fix. A denied API key did exactly that.
+type errorClass int
+
+const (
+	// classPlanDefect: the model produced something unusable. Retrying with
+	// feedback is the whole point of the loop.
+	classPlanDefect errorClass = iota
+
+	// classTransient: the call may succeed later. Wait on a separate budget.
+	classTransient
+
+	// classTerminal: no retry helps — bad key, denied project, unknown model,
+	// malformed request, cancelled context.
+	classTerminal
+)
+
+// classifyStatus maps an HTTP status from the model API to a retry class.
+func classifyStatus(code int) errorClass {
 	switch code {
-	case 429, // RESOURCE_EXHAUSTED
+	case 429, // RESOURCE_EXHAUSTED — quota window reopens
 		500, // INTERNAL
 		502,
 		503, // UNAVAILABLE
 		504: // DEADLINE_EXCEEDED
-		return true
+		return classTransient
+
+	case 400, // INVALID_ARGUMENT — our request is wrong, not the plan
+		401, // UNAUTHENTICATED
+		403, // PERMISSION_DENIED — denied project or key
+		404: // NOT_FOUND — no such model
+		return classTerminal
+
 	default:
-		return false
+		// An unrecognised status is treated as the model's fault only because
+		// the loop already bounds that path; a wrong guess costs 2 extra calls,
+		// not an unbounded retry.
+		return classPlanDefect
 	}
 }
 
-// isTransient reports whether err is an infrastructure failure rather than a
-// defect in the generated plan.
+// classify decides how the loop must treat err.
 //
-// The distinction decides whether the loop may retry: regenerating after a 429
-// produces the identical 429, so treating one as "the model wrote a bad plan"
+// Regenerating after a 429 produces the identical 429; regenerating after a 403
+// produces the identical 403. Treating either as "the model wrote a bad plan"
 // burns every round in milliseconds and feeds the next prompt an API error dump
 // the model cannot act on.
-func isTransient(err error) bool {
+func classify(err error) errorClass {
 	if err == nil {
-		return false
+		return classPlanDefect
 	}
 
-	// A cancelled context is terminal, never transient, even though the
-	// underlying call may look like a timeout.
-	if errors.Is(err, context.Canceled) {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return false
+	// Cancellation is terminal even though the underlying call may look like a
+	// timeout: the caller has already given up.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return classTerminal
 	}
 
 	var apiErr genai.APIError
 	if errors.As(err, &apiErr) {
-		return isRetryableStatus(apiErr.Code)
+		return classifyStatus(apiErr.Code)
 	}
 
 	// Fallback for layers that formatted the cause with %v instead of %w, which
 	// breaks the errors.As chain. Matching on the gRPC status name rather than
 	// prose keeps this from firing on a plan whose text happens to say "429".
-	return strings.Contains(err.Error(), "RESOURCE_EXHAUSTED") ||
-		strings.Contains(err.Error(), "UNAVAILABLE")
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "RESOURCE_EXHAUSTED"),
+		strings.Contains(msg, "UNAVAILABLE"):
+		return classTransient
+	case strings.Contains(msg, "PERMISSION_DENIED"),
+		strings.Contains(msg, "UNAUTHENTICATED"),
+		strings.Contains(msg, "INVALID_ARGUMENT"):
+		return classTerminal
+	default:
+		return classPlanDefect
+	}
 }
+
+// isTransient reports whether err is worth waiting out.
+func isTransient(err error) bool { return classify(err) == classTransient }
+
+// isUnfixableByModel reports whether no amount of regeneration can help, so the
+// loop must surface err instead of spending a round on it.
+func isUnfixableByModel(err error) bool { return classify(err) != classPlanDefect }
 
 // transientDelay is how long to wait before retrying try (0-based).
 //

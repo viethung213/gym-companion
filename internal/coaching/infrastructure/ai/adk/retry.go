@@ -76,12 +76,12 @@ func runWithRetries(
 
 		plan, err := attempt(n, &fb)
 		if err != nil {
-			// An infrastructure failure that survived its own backoff budget is
-			// not something the model can fix. Regenerating reproduces it in
-			// milliseconds, and the next prompt would carry an API error dump
-			// dressed up as a plan defect.
-			if isTransient(err) {
-				return nil, fmt.Errorf("%w: attempt %d hit an unrecovered infrastructure failure: %w",
+			// Nothing the model can fix: a denied key, an unknown model, or a
+			// rate limit that survived its own backoff budget. Regenerating
+			// reproduces it in milliseconds, and the next prompt would carry an
+			// API error dump dressed up as a plan defect.
+			if isUnfixableByModel(err) {
+				return nil, fmt.Errorf("%w: attempt %d hit an infrastructure failure: %w",
 					ErrPlanGenerationFailed, n, err)
 			}
 
