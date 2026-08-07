@@ -4,7 +4,6 @@ go 1.26.5
 
 require (
 	connectrpc.com/connect v1.18.1
-	firebase.google.com/go/v4 v4.21.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -15,7 +14,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/time v0.15.0
 	google.golang.org/adk/v2 v2.1.0
-	google.golang.org/api v0.292.0
 	google.golang.org/genai v1.66.0
 	google.golang.org/genproto v0.0.0-20260706201446-f0a921348800
 	google.golang.org/genproto/googleapis/api v0.0.0-20260706201446-f0a921348800
@@ -36,6 +34,7 @@ require (
 	cloud.google.com/go/longrunning v1.1.0 // indirect
 	cloud.google.com/go/monitoring v1.29.0 // indirect
 	cloud.google.com/go/storage v1.62.1 // indirect
+	firebase.google.com/go/v4 v4.21.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.33.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.56.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.56.0 // indirect
@@ -88,6 +87,7 @@ require (
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
+	google.golang.org/api v0.292.0 // indirect
 	google.golang.org/appengine/v2 v2.0.6 // indirect
 	rsc.io/omap v1.2.0 // indirect
 	rsc.io/ordered v1.1.1 // indirect
