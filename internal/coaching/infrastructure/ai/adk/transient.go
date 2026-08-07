@@ -20,15 +20,20 @@ const (
 	maxTransientDelay  = 30 * time.Second
 )
 
-// retryableStatusCodes are the HTTP codes worth waiting out. 429 is the one
-// that matters in practice: the free tier caps requests per day, and the API
-// tells us how long to wait.
-var retryableStatusCodes = map[int]struct{}{
-	429: {}, // RESOURCE_EXHAUSTED
-	500: {}, // INTERNAL
-	502: {},
-	503: {}, // UNAVAILABLE
-	504: {}, // DEADLINE_EXCEEDED
+// isRetryableStatus reports whether an HTTP status is worth waiting out. 429 is
+// the one that matters in practice: the free tier caps requests per day, and
+// the API tells us how long to wait.
+func isRetryableStatus(code int) bool {
+	switch code {
+	case 429, // RESOURCE_EXHAUSTED
+		500, // INTERNAL
+		502,
+		503, // UNAVAILABLE
+		504: // DEADLINE_EXCEEDED
+		return true
+	default:
+		return false
+	}
 }
 
 // isTransient reports whether err is an infrastructure failure rather than a
@@ -54,8 +59,7 @@ func isTransient(err error) bool {
 
 	var apiErr genai.APIError
 	if errors.As(err, &apiErr) {
-		_, ok := retryableStatusCodes[apiErr.Code]
-		return ok
+		return isRetryableStatus(apiErr.Code)
 	}
 
 	// Fallback for layers that formatted the cause with %v instead of %w, which

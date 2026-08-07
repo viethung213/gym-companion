@@ -8,17 +8,17 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
-// validRPE is mid-band for each phase and validSets unloads the DELOAD week
-// (6 sets against PEAK's 9), so the baseline satisfies BR-AC-10 and BR-AC-11.
-var (
-	validRPE  = [4]float32{6.5, 7.5, 8.5, 5.5}
-	validSets = [4]int32{3, 3, 3, 2}
-)
+// validRPE is mid-band for each phase, so the baseline satisfies BR-AC-10.
+func validRPE() [4]float32 { return [4]float32{6.5, 7.5, 8.5, 5.5} }
+
+// validSets unloads the DELOAD week (6 sets against PEAK's 9), satisfying
+// BR-AC-11.
+func validSets() [4]int32 { return [4]int32{3, 3, 3, 2} }
 
 func buildValidRoadmap(t *testing.T) *roadmap.Roadmap {
 	t.Helper()
 
-	return buildRoadmap(t, validRPE, validSets)
+	return buildRoadmap(t, validRPE(), validSets())
 }
 
 // buildRoadmap builds a 4-week roadmap with per-week main-work RPE and sets,
@@ -214,7 +214,7 @@ func TestGuardrail_PhaseRPEBand(t *testing.T) {
 		give [4]float32
 		want string // violation code expected, empty means approved
 	}{
-		{name: "mid band every phase", give: validRPE},
+		{name: "mid band every phase", give: validRPE()},
 		{name: "accumulation too hard", give: [4]float32{7.5, 7.5, 8.5, 5.5}, want: "BR-AC-10"},
 		{name: "peak too easy", give: [4]float32{6.5, 7.5, 7.0, 5.5}, want: "BR-AC-10"},
 		{name: "deload at peak intensity", give: [4]float32{6.5, 7.5, 8.5, 8.5}, want: "BR-AC-10"},
@@ -228,7 +228,7 @@ func TestGuardrail_PhaseRPEBand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets))
+			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()))
 
 			assertViolation(t, got, tt.want)
 		})
@@ -241,7 +241,7 @@ func TestGuardrail_DeloadVolume(t *testing.T) {
 		give [4]int32
 		want string
 	}{
-		{name: "deload unloads", give: validSets},
+		{name: "deload unloads", give: validSets()},
 		{name: "deload holds peak volume", give: [4]int32{3, 3, 3, 3}, want: "BR-AC-11"},
 		{name: "deload exceeds peak", give: [4]int32{3, 3, 2, 3}, want: "BR-AC-11"},
 		// 3 sessions a week, so PEAK totals 30 sets and allows exactly 21.
@@ -255,7 +255,7 @@ func TestGuardrail_DeloadVolume(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, validRPE, tt.give))
+			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give))
 
 			assertViolation(t, got, tt.want)
 		})

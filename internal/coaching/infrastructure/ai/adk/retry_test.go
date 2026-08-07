@@ -10,9 +10,9 @@ import (
 // recordingAttempt wraps a sequence of canned responses and records what
 // feedback it was handed on each call.
 type recordingAttempt struct {
-	plans      []*GeneratedPlan
-	errs       []error
-	calls      int
+	plans       []*GeneratedPlan
+	errs        []error
+	calls       int
 	seenIssues  [][]string
 	seenPlans   []*GeneratedPlan
 	seenReviews []*PlanReview

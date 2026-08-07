@@ -65,7 +65,7 @@ func newPromptDumper(dir, agentName string) llmagent.BeforeModelCallback {
 			return nil, nil
 		}
 
-		dump := promptDump{
+		dump := &promptDump{
 			Agent:        agentName,
 			Model:        req.Model,
 			Branch:       ctx.Branch(),
@@ -87,7 +87,7 @@ func newPromptDumper(dir, agentName string) llmagent.BeforeModelCallback {
 }
 
 // writeDump names files so a lexical sort replays the call order.
-func writeDump(dir, agentName string, n int64, dump promptDump) error {
+func writeDump(dir, agentName string, n int64, dump *promptDump) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create dump dir: %w", err)
 	}
