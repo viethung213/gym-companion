@@ -1,5 +1,5 @@
 -- ==========================================
-ao -- SEED DATA: exercise schema (14 Exercises + Metadata)
+-- SEED DATA: exercise schema (14 Exercises + Metadata)
 -- Self-contained seed script. Safe to run multiple times.
 -- ==========================================
 
