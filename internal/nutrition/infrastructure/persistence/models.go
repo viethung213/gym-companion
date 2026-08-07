@@ -129,3 +129,15 @@ type GormOutboxLog struct {
 func (g *GormOutboxLog) TableName() string {
 	return "nutrition.outbox_log"
 }
+
+type GormUserMealSchedule struct {
+	ID            string    `gorm:"column:id;primaryKey"`
+	UserID        string    `gorm:"column:user_id;index"`
+	MealType      string    `gorm:"column:meal_type"`
+	ScheduledTime string    `gorm:"column:scheduled_time"`
+	UpdatedAt     time.Time `gorm:"column:updated_at"`
+}
+
+func (g *GormUserMealSchedule) TableName() string {
+	return "nutrition.user_meal_schedules"
+}

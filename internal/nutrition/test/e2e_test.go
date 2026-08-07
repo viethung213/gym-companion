@@ -19,15 +19,15 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
-	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
+	"github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
 // newE2EHandler tạo GRPCHandler đầy đủ stack với SQLite in-memory.
 // Trả về handler và repos để test có thể kiểm tra trạng thái DB trực tiếp.
-func newE2EHandler(t *testing.T) (*transport.GRPCHandler, *testutil.Repos) {
+func newE2EHandler(t *testing.T) (*grpc.GRPCHandler, *testutil.Repos) {
 	t.Helper()
 
 	db := testutil.NewTestDB(t, "")
@@ -38,12 +38,13 @@ func newE2EHandler(t *testing.T) (*transport.GRPCHandler, *testutil.Repos) {
 	matrix := service.NewCombinatorialMatrix()
 	menuGen := service.NewMenuGenerator(matrix, repos.RecipeCache, repos.FoodItem, ai)
 
-	h := transport.NewGRPCHandler(
+	h := grpc.NewGRPCHandler(
 		command.NewGenerateDailyPlanHandler(repos.NutritionPlan, repos.MealHistory, nil, tdeeCalc, menuGen),
 		command.NewRecalibratePlanWithPantryHandler(repos.NutritionPlan, repos.MealHistory, nil, menuGen),
 		command.NewLogMealHandler(repos.NutritionPlan, repos.MealHistory, nil, ai),
 		command.NewCreateFoodItemHandler(repos.FoodItem),
 		command.NewApproveFoodItemHandler(repos.FoodItem),
+		command.NewUpdateMealScheduleHandler(repos.NutritionPlan),
 		query.NewGetTodayMenuHandler(repos.NutritionPlan),
 		query.NewGetNutritionHistoryHandler(repos.MealHistory),
 		query.NewGetNutritionSummaryHandler(repos.NutritionPlan, repos.MealHistory),

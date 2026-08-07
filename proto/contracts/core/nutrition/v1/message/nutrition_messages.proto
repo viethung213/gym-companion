@@ -158,3 +158,19 @@ message GetNutritionInsightResponse {
   RecommendedAdjustmentsProto recommended_adjustments = 6;
 }
 
+message MealScheduleItem {
+  string meal_type = 1; // "BREAKFAST", "LUNCH", "DINNER", "SNACK"
+  string scheduled_time = 2; // e.g. "07:00", "12:00", "15:30", "19:00"
+}
+
+message UpdateMealScheduleRequest {
+  string user_id = 1;
+  repeated MealScheduleItem schedules = 2;
+}
+
+message UpdateMealScheduleResponse {
+  bool success = 1;
+  string message = 2;
+  repeated MealScheduleItem schedules = 3;
+}
+

@@ -21,7 +21,8 @@ import (
 	nutritionKafka "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/profileclient"
-	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/transport"
+	nutritionGRPC "github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
+	nutritionConsumer "github.com/viethung213/gym-companion/internal/nutrition/transport/consumer"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/worker"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/grpc"
@@ -38,12 +39,14 @@ type ModuleDeps struct {
 }
 
 type Module struct {
-	GRPCHandler   *transport.GRPCHandler
-	OutboxWorker  *worker.OutboxWorker
-	CronWorker    *worker.DailyMenuCronWorker
-	KafkaConsumer *nutritionKafka.Consumer
-	KafkaPub      *nutritionKafka.Publisher
-	TxManager     *persistence.SQLTransactionManager
+	GRPCHandler          *nutritionGRPC.GRPCHandler
+	OutboxWorker         *worker.OutboxWorker
+	CronWorker           *worker.DailyMenuCronWorker
+	MealReminderWorker   *worker.UpcomingMealReminderWorker
+	ProfileEventConsumer *nutritionConsumer.ProfileEventConsumer
+	KafkaConsumer        *nutritionKafka.Consumer
+	KafkaPub             *nutritionKafka.Publisher
+	TxManager            *persistence.SQLTransactionManager
 }
 
 func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry *sharedKafka.Registry, profileCli repository.ProfileClient) *Module {
@@ -72,18 +75,20 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 	logMealHdlr := command.NewLogMealHandler(planRepo, historyRepo, outboxWriter, aiAgent)
 	createFoodItemHdlr := command.NewCreateFoodItemHandler(foodRepo)
 	approveFoodItemHdlr := command.NewApproveFoodItemHandler(foodRepo)
+	updateMealScheduleHdlr := command.NewUpdateMealScheduleHandler(planRepo)
 
 	getTodayMenuHdlr := query.NewGetTodayMenuHandler(planRepo)
 	getNutritionHistHdlr := query.NewGetNutritionHistoryHandler(historyRepo)
 	getNutritionSummHdlr := query.NewGetNutritionSummaryHandler(planRepo, historyRepo)
 	getNutritionInsightHdlr := query.NewGetNutritionInsightHandler(planRepo, historyRepo, aiAgent)
 
-	grpcHdlr := transport.NewGRPCHandler(
+	grpcHdlr := nutritionGRPC.NewGRPCHandler(
 		genPlanHdlr,
 		recalPlanHdlr,
 		logMealHdlr,
 		createFoodItemHdlr,
 		approveFoodItemHdlr,
+		updateMealScheduleHdlr,
 		getTodayMenuHdlr,
 		getNutritionHistHdlr,
 		getNutritionSummHdlr,
@@ -92,6 +97,7 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 
 	var kafkaPub *nutritionKafka.Publisher
 	var kafkaConsumer *nutritionKafka.Consumer
+	var profileEventConsumer *nutritionConsumer.ProfileEventConsumer
 
 	if kafkaRegistry != nil {
 		brokersStr := os.Getenv("KAFKA_BROKERS")
@@ -109,22 +115,30 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 		if rErr == nil && reader != nil {
 			kafkaConsumer = nutritionKafka.NewConsumer(reader, recalPlanHdlr)
 		}
+
+		profileEventReader, pErr := kafkaRegistry.GetReader("profile-events", "nutrition-profile-updated-group", brokers)
+		if pErr == nil && profileEventReader != nil {
+			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, genPlanHdlr)
+		}
 	}
 
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
 	cronWorker := worker.NewDailyMenuCronWorker(genPlanHdlr, planRepo, profileCli)
+	mealReminderWorker := worker.NewUpcomingMealReminderWorker(planRepo, outboxWriter, 5*time.Minute)
 
 	return &Module{
-		GRPCHandler:   grpcHdlr,
-		OutboxWorker:  outboxWorker,
-		CronWorker:    cronWorker,
-		KafkaConsumer: kafkaConsumer,
-		KafkaPub:      kafkaPub,
-		TxManager:     txManager,
+		GRPCHandler:          grpcHdlr,
+		OutboxWorker:         outboxWorker,
+		CronWorker:           cronWorker,
+		MealReminderWorker:   mealReminderWorker,
+		ProfileEventConsumer: profileEventConsumer,
+		KafkaConsumer:        kafkaConsumer,
+		KafkaPub:             kafkaPub,
+		TxManager:            txManager,
 	}
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandler, func(), error) {
 	var gormDB *gorm.DB
 	if deps.DB != nil {
 		gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: deps.DB}), &gorm.Config{})
@@ -147,6 +161,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	shutdown := func() {
 		cancel()
 		mod.CronWorker.Stop()
+		if mod.MealReminderWorker != nil {
+			mod.MealReminderWorker.Stop()
+		}
 		if mod.KafkaPub != nil {
 			_ = mod.KafkaPub.Close()
 		}
@@ -159,10 +176,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 // RegisterConnectHandler mounts the ConnectRPC handler for the Nutrition module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcHandler *transport.GRPCHandler,
+	grpcHandler *nutritionGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
 ) {
-	connectHandler := transport.NewConnectNutritionHandler(grpcHandler)
+	connectHandler := nutritionGRPC.NewConnectNutritionHandler(grpcHandler)
 	path, handler := nutritionv1serviceconnect.NewNutritionServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }
@@ -174,6 +191,16 @@ func (m *Module) StartWorkers(ctx context.Context) {
 	go func() {
 		_ = m.CronWorker.Start(ctx)
 	}()
+	if m.MealReminderWorker != nil {
+		go func() {
+			_ = m.MealReminderWorker.Start(ctx)
+		}()
+	}
+	if m.ProfileEventConsumer != nil {
+		go func() {
+			_ = m.ProfileEventConsumer.Start(ctx)
+		}()
+	}
 	if m.KafkaConsumer != nil {
 		go func() {
 			_ = m.KafkaConsumer.Start(ctx)

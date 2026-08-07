@@ -88,6 +88,20 @@ func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 		}
 		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.LockoutApplied", e.UserID(), payloadBytes)
 
+	case *domainEvent.UpcomingMealReminderEvent:
+		payloadProto := &nutritionv1event.UpcomingMealReminder{
+			UserId:              e.UserID(),
+			MealName:            e.MealName(),
+			MealType:            e.MealType(),
+			ScheduledTime:       e.ScheduledTime(),
+			RemindBeforeMinutes: e.RemindBeforeMinutes(),
+		}
+		payloadBytes, err := protojson.Marshal(payloadProto)
+		if err != nil {
+			return fmt.Errorf("marshal UpcomingMealReminder proto payload: %w", err)
+		}
+		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.UpcomingMealReminder", e.UserID(), payloadBytes)
+
 	default:
 		return fmt.Errorf("unsupported nutrition domain event: %T", ev)
 	}
