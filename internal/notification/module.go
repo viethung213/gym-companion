@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service/notificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
@@ -16,9 +17,9 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence/postgres"
-	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
-	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
+	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
+	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 

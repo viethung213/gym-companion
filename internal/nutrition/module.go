@@ -11,6 +11,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
@@ -21,13 +25,10 @@ import (
 	nutritionKafka "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/profileclient"
-	nutritionGRPC "github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
-	nutritionConsumer "github.com/viethung213/gym-companion/internal/nutrition/transport/consumer"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/worker"
+	nutritionConsumer "github.com/viethung213/gym-companion/internal/nutrition/transport/consumer"
+	nutritionGRPC "github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	"google.golang.org/grpc"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
