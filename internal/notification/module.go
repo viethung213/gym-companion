@@ -16,7 +16,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence/postgres"
-	"github.com/viethung213/gym-companion/internal/notification/infrastructure/transport"
+	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
+	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
@@ -26,7 +27,7 @@ type ModuleDeps struct {
 	KafkaRegistry *sharedKafka.Registry
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHandler, func(), error) {
 	if deps.DB == nil {
 		return nil, nil, errors.New("deps.DB is required")
 	}
@@ -53,7 +54,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	listNotifsHandler := query.NewListNotificationsHandler(notificationRepo)
 
 	// 4. gRPC Transport Handler
-	grpcHandler := transport.NewGRPCHandler(
+	grpcHandler := notificationGRPC.NewGRPCHandler(
 		sendPushHandler,
 		registerDeviceHandler,
 		updateSettingsHandler,
@@ -85,7 +86,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 		// Inbound Event Consumer
 		reader, rErr := deps.KafkaRegistry.GetReader("notification-group", "events.v1", brokers)
 		if rErr == nil && reader != nil {
-			consumer := notificationKafka.NewNotificationEventConsumer(reader, sendPushHandler, outboxLogRepo)
+			consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, outboxLogRepo)
 			go consumer.Start(ctxWorkers)
 		} else {
 			log.Printf("Warning: failed to get kafka reader for notification events: %v", rErr)
@@ -115,10 +116,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 // RegisterConnectHandler mounts the ConnectRPC handler for the Notification module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcHandler *transport.GRPCHandler,
+	grpcHandler *notificationGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
 ) {
-	connectHandler := transport.NewConnectNotificationHandler(grpcHandler)
+	connectHandler := notificationGRPC.NewConnectNotificationHandler(grpcHandler)
 	path, handler := notificationv1serviceconnect.NewNotificationServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }
