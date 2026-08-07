@@ -36,6 +36,7 @@ type RoadmapRepository interface {
 	FindActiveByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error)
 	ListByUser(ctx context.Context, userID string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error)
 	FindSessionByID(ctx context.Context, sessionPlanID string) (*roadmap.Roadmap, error)
+	FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error)
 }
 
 // OutboxRecord mirrors coaching.outbox row structure.

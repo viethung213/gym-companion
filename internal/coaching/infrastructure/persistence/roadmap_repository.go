@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -179,6 +180,30 @@ func (r *RoadmapRepository) FindSessionByID(ctx context.Context, sessionPlanID s
 	}
 
 	return r.FindByID(ctx, srec.RoadmapID)
+}
+
+// FindPendingSessionsByDate queries session plans scheduled for targetDate that are PENDING.
+func (r *RoadmapRepository) FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error) {
+	db := r.getDB(ctx)
+
+	var sRecs []sessionPlanRecord
+	dateStr := targetDate.Format("2006-01-02")
+
+	if err := db.Where("DATE(scheduled_date) = ? AND status = ?", dateStr, string(roadmap.SessionPlanStatusPending)).Find(&sRecs).Error; err != nil {
+		return nil, fmt.Errorf("find pending sessions by date: %w", err)
+	}
+
+	out := make([]*roadmap.SessionPlanInfo, 0, len(sRecs))
+	for i := range sRecs {
+		sp, err := fromSessionPlanRecord(&sRecs[i])
+		if err != nil {
+			continue
+		}
+		info := sp.Info()
+		out = append(out, &info)
+	}
+
+	return out, nil
 }
 
 // loadTree loads all descendants of the given roadmap record.
