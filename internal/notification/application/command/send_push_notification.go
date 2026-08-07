@@ -153,7 +153,7 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 				}, nil
 			}
 
-			if setting.IsInQuietHours(time.Now().UTC()) {
+			if setting.IsInQuietHours(time.Now()) {
 				log.Printf("[Push Suppressed] User %s is currently in quiet hours (%s - %s)",
 					cmd.UserID, setting.QuietHoursStart(), setting.QuietHoursEnd())
 				return &SendPushNotificationResponse{

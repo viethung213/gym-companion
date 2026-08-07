@@ -16,8 +16,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
-	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
+	exerciseGRPC "github.com/viethung213/gym-companion/internal/exercise/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	gormPostgres "gorm.io/driver/postgres"
@@ -29,7 +29,7 @@ type ModuleDeps struct {
 	KafkaRegistry *sharedKafka.Registry
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (*transport.ExerciseServer, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseServer, func(), error) {
 
 	// Initialize GORM DB wrapper over sql.DB
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
@@ -87,7 +87,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.ExerciseServer
 	listTagsHandler := query.NewListTagsHandler(repo)
 
 	// Initialize gRPC Handler and Register Service
-	grpcHandler := transport.NewExerciseServer(
+	grpcHandler := exerciseGRPC.NewExerciseServer(
 		createHandler,
 		updateHandler,
 		submitForApprovalHandler,
@@ -169,10 +169,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.ExerciseServer
 // RegisterConnectHandler mounts the ConnectRPC handler for the Exercise module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcServer *transport.ExerciseServer,
+	grpcServer *exerciseGRPC.ExerciseServer,
 	opts ...connect.HandlerOption,
 ) {
-	connectHandler := transport.NewConnectExerciseHandler(grpcServer)
+	connectHandler := exerciseGRPC.NewConnectExerciseHandler(grpcServer)
 	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }

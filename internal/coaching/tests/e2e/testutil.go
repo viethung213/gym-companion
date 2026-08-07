@@ -88,6 +88,10 @@ func (m *memRepo) FindSessionByID(_ context.Context, sid string) (*roadmap.Roadm
 	return nil, roadmap.ErrSessionNotFound
 }
 
+func (m *memRepo) FindPendingSessionsByDate(_ context.Context, _ time.Time) ([]*roadmap.SessionPlanInfo, error) {
+	return nil, nil
+}
+
 type captureOutbox struct {
 	events []event.Event
 }

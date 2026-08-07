@@ -23,8 +23,8 @@ import (
 	authKafka "github.com/viethung213/gym-companion/internal/auth/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/oauth"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
-	"github.com/viethung213/gym-companion/internal/auth/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/worker"
+	authGRPC "github.com/viethung213/gym-companion/internal/auth/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
@@ -40,7 +40,7 @@ type ModuleDeps struct {
 }
 
 // Initialize bootstraps all layers of the Auth Bounded Context.
-func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, func(), error) {
 	if deps.DB == nil {
 		return nil, nil, errors.New("deps.DB is required")
 	}
@@ -85,7 +85,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 
 	tokenServ := jwt.NewJWTSigner(keyRepo, cfg.JWTIssuer, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	if deps.AssignKeyProvider != nil {
-		deps.AssignKeyProvider(&transport.AuthKeyProvider{KeyRepo: keyRepo})
+		deps.AssignKeyProvider(&authGRPC.AuthKeyProvider{KeyRepo: keyRepo})
 	}
 	keyGen := crypto.NewRSAKeyGenerator()
 	txManager := postgres.NewSQLTransactionManager(gormDB)
@@ -207,7 +207,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	refreshTokenHandler := command.NewRefreshTokenHandler(userRepo, keyRepo, sessRepo, tokenServ)
 
 	// 9. Register AuthService Server to gRPC Server
-	grpcHandler := transport.NewGRPCHandler(
+	grpcHandler := authGRPC.NewGRPCHandler(
 		oauthLoginHandler,
 		logoutHandler,
 		rotateKeysHandler,
@@ -223,10 +223,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 // RegisterConnectHandler mounts the ConnectRPC handler for the Auth module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcHandler *transport.GRPCHandler,
+	grpcHandler *authGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
 ) {
-	connectHandler := transport.NewConnectAuthHandler(grpcHandler)
+	connectHandler := authGRPC.NewConnectAuthHandler(grpcHandler)
 	path, handler := authv1serviceconnect.NewAuthServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }

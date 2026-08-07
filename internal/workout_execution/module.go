@@ -22,8 +22,9 @@ import (
 	workoutKafka "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
-	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
+	workoutConsumer "github.com/viethung213/gym-companion/internal/workout_execution/transport/consumer"
+	workoutGRPC "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -35,7 +36,7 @@ type ModuleDeps struct {
 }
 
 // Initialize wires dependencies, registers gRPC services, and starts background workers.
-func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler, func(), error) {
 
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
@@ -81,7 +82,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	getPresignedUploadURLQuery := query.NewGetPresignedUploadURLQueryHandler(storageProvider)
 
 	// Initialize gRPC Transport
-	grpcHandler := transport.NewGRPCHandler(
+	grpcHandler := workoutGRPC.NewGRPCHandler(
 		startSessionHandler,
 		startScheduledSessionHandler,
 		logSetHandler,
@@ -121,9 +122,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
 	timeoutWorker := worker.NewSessionTimeoutWorker(sessionRepo, outboxWriter, txManager, 5*time.Minute)
 	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, outboxWriter, txManager, 1*time.Minute, 5*time.Minute)
-	exerciseCreatedConsumer := worker.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)
+	exerciseCreatedConsumer := workoutConsumer.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)
 
-	prConsumer := worker.NewPREventConsumer(prProcessHandler)
+	prConsumer := workoutConsumer.NewPREventConsumer(prProcessHandler)
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -260,10 +261,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 // RegisterConnectHandler mounts the ConnectRPC handlers for the Workout Execution module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcHandler *transport.GRPCHandler,
+	grpcHandler *workoutGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
 ) {
-	connectHandler := transport.NewConnectWorkoutExecutionHandler(grpcHandler)
+	connectHandler := workoutGRPC.NewConnectWorkoutExecutionHandler(grpcHandler)
 	path, handler := workoutexecutionv1serviceconnect.NewWorkoutExecutionServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 

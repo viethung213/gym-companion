@@ -94,6 +94,14 @@ service NutritionService {
       description: "Phân tích lịch sử dinh dưỡng và đưa ra hướng cải thiện từ AI"
     };
   }
+
+  // Cập nhật lịch trình/thời gian các bữa ăn theo tùy chỉnh cá nhân
+  rpc UpdateMealSchedule (contracts.core.nutrition.v1.message.UpdateMealScheduleRequest) returns (contracts.core.nutrition.v1.message.UpdateMealScheduleResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/users/{user_id}/nutrition/meal-schedule"
+      body: "*"
+    };
+  }
 }
 
 // Service dành riêng cho Admin quản lý danh mục thực phẩm

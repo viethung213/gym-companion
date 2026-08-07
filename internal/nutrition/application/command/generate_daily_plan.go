@@ -84,6 +84,11 @@ func (h *GenerateDailyPlanHandler) Handle(ctx context.Context, cmd GenerateDaily
 		return nil, fmt.Errorf("generate daily plan: %w", genErr)
 	}
 
+	savedSchedules, _ := h.planRepo.GetUserMealSchedules(ctx, cmd.UserID)
+	if len(savedSchedules) > 0 {
+		plan.UpdateMealSchedule(savedSchedules)
+	}
+
 	if saveErr := h.planRepo.Save(ctx, plan); saveErr != nil {
 		return nil, fmt.Errorf("generate daily plan save: %w", saveErr)
 	}

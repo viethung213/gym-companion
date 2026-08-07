@@ -18,8 +18,8 @@ import (
 	profileEvent "github.com/viethung213/gym-companion/internal/profile/infrastructure/event"
 	profileKafka "github.com/viethung213/gym-companion/internal/profile/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/persistence"
-	"github.com/viethung213/gym-companion/internal/profile/infrastructure/transport"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/worker"
+	profileGRPC "github.com/viethung213/gym-companion/internal/profile/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -30,7 +30,7 @@ type ModuleDeps struct {
 	KafkaRegistry *sharedKafka.Registry
 }
 
-func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler, func(), error) {
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
 	}), &gorm.Config{
@@ -91,7 +91,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 		log.Println("Profile Bounded Context background workers stopped.")
 	}
 
-	grpcHandler := transport.NewGRPCHandler(
+	grpcHandler := profileGRPC.NewGRPCHandler(
 		saveHealthProfileHandler,
 		updateProfileHandler,
 		logPeriodicMetricsHandler,
@@ -108,10 +108,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*transport.GRPCHandler, f
 // RegisterConnectHandler mounts the ConnectRPC handler for the Profile module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcHandler *transport.GRPCHandler,
+	grpcHandler *profileGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
 ) {
-	connectHandler := transport.NewConnectProfileHandler(grpcHandler)
+	connectHandler := profileGRPC.NewConnectProfileHandler(grpcHandler)
 	path, handler := profilev1serviceconnect.NewProfileServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 }

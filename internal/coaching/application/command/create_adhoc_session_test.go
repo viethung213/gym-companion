@@ -246,6 +246,10 @@ func (m *roadmapRepositoryMock) FindSessionByID(ctx context.Context, sid string)
 	return nil, nil
 }
 
+func (m *roadmapRepositoryMock) FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error) {
+	return nil, nil
+}
+
 type transactionManagerMock struct {
 	fn func(context.Context, func(context.Context) error) error
 }
