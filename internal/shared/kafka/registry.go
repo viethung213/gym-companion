@@ -69,10 +69,13 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 
 	w = &kafka.Writer{
 		Addr:                   kafka.TCP(brokers...),
+		Topic:                  module,
 		Balancer:               &kafka.Hash{},
 		AllowAutoTopicCreation: true,
 		RequiredAcks:           kafka.RequireAll,
-		Transport:              transport,
+	}
+	if transport != nil {
+		w.Transport = transport
 	}
 
 	r.writers[module] = w
