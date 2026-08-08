@@ -1,6 +1,7 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"embed"
@@ -36,6 +37,9 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("read embedded migration file %s: %w", file, err)
 		}
+
+		// Strip UTF-8 Byte Order Mark (BOM) if present to avoid syntax errors in PostgreSQL parser
+		content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
 
 		if _, err := db.ExecContext(ctx, string(content)); err != nil {
 			return fmt.Errorf("execute embedded migration %s: %w", file, err)
