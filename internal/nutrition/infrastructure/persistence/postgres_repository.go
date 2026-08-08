@@ -151,8 +151,9 @@ func NewPostgresNutritionPlanRepository(db *gorm.DB) *PostgresNutritionPlanRepos
 func (r *PostgresNutritionPlanRepository) FindByUserIDAndDate(ctx context.Context, userID string, date time.Time) (*aggregate.NutritionPlan, error) {
 	var gormPlan GormNutritionPlan
 	dateStr := date.Format("2006-01-02")
+	utcDateStr := date.UTC().Format("2006-01-02")
 	db := getDB(ctx, r.db)
-	if err := db.First(&gormPlan, "user_id = ? AND DATE(plan_date) = ?", userID, dateStr).Error; err != nil {
+	if err := db.First(&gormPlan, "user_id = ? AND (DATE(plan_date) = ? OR DATE(plan_date) = ?)", userID, dateStr, utcDateStr).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -357,13 +358,29 @@ func (r *PostgresMealHistoryRepository) FindByUserID(ctx context.Context, userID
 func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggregate.MealHistory) error {
 	db := getDB(ctx, r.db)
 	return db.Transaction(func(tx *gorm.DB) error {
-		gormHist := &GormMealHistory{
-			ID:        history.ID(),
-			UserID:    history.UserID(),
-			UpdatedAt: time.Now(),
-		}
-		if err := tx.Save(gormHist).Error; err != nil {
-			return err
+		var existing GormMealHistory
+		err := tx.Where("user_id = ?", history.UserID()).First(&existing).Error
+		historyID := history.ID()
+
+		switch {
+		case err == nil:
+			historyID = existing.ID
+			existing.UpdatedAt = time.Now()
+			if saveErr := tx.Save(&existing).Error; saveErr != nil {
+				return fmt.Errorf("postgres meal history repo update parent: %w", saveErr)
+			}
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			gormHist := &GormMealHistory{
+				ID:        historyID,
+				UserID:    history.UserID(),
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+			if createErr := tx.Create(gormHist).Error; createErr != nil {
+				return fmt.Errorf("postgres meal history repo create parent: %w", createErr)
+			}
+		default:
+			return fmt.Errorf("postgres meal history repo find parent: %w", err)
 		}
 
 		logs := history.MealLogs()
@@ -371,7 +388,7 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 			logItem := &logs[i]
 			gormLog := &GormMealLog{
 				ID:        logItem.ID(),
-				HistoryID: history.ID(),
+				HistoryID: historyID,
 				UserID:    logItem.UserID(),
 				MealType:  logItem.MealType(),
 				MealName:  logItem.MealName(),
@@ -382,14 +399,17 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 				Fat:       logItem.Fat(),
 				LoggedAt:  logItem.LoggedAt(),
 			}
-			if err := tx.Save(gormLog).Error; err != nil {
-				return err
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"meal_type", "meal_name", "portion", "calories", "protein", "carbs", "fat", "logged_at"}),
+			}).Create(gormLog).Error; err != nil {
+				return fmt.Errorf("postgres meal history repo save log: %w", err)
 			}
 		}
 
 		for _, item := range history.LockoutRegistry().Items() {
 			gormLock := &GormLockoutRegistry{
-				ID:         fmt.Sprintf("%s-%s", history.UserID(), item.ItemName()),
+				ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte("lockout_"+history.UserID()+"_"+item.ItemName())).String(),
 				UserID:     history.UserID(),
 				ItemType:   item.ItemType(),
 				ItemName:   item.ItemName(),
@@ -397,7 +417,7 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 				CreatedAt:  time.Now(),
 			}
 			if err := tx.Save(gormLock).Error; err != nil {
-				return err
+				return fmt.Errorf("postgres meal history repo save lockout: %w", err)
 			}
 		}
 

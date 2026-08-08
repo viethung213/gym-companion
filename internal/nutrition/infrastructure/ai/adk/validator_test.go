@@ -50,10 +50,16 @@ func TestPlanValidator_Validate(t *testing.T) {
 				CarbFoodID:      "f-carb-invalid", // Not in DB
 				CarbFoodName:    "Khoai lang",
 			},
+			{
+				ProteinFoodID:   "f-fish",
+				ProteinFoodName: "Cá hồi",
+				CarbFoodID:      "f-rice",
+				CarbFoodName:    "Cơm lứt",
+			},
 		},
 	}
 
-	outcome, err := validator.validate(context.Background(), plan, []string{"Poultry"}, false)
+	outcome, err := validator.validate(context.Background(), plan, nil, []string{"Poultry"}, false)
 	if err != nil {
 		t.Fatalf("unexpected error validating: %v", err)
 	}
@@ -67,7 +73,11 @@ func TestPlanValidator_AutoHealing(t *testing.T) {
 	t.Parallel()
 
 	foodChicken := aggregate.NewFoodItem("real-uuid-chicken", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false)
-	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"real-uuid-chicken": foodChicken}}
+	foodFish := aggregate.NewFoodItem("real-uuid-fish", "Cá hồi", "PROTEIN", 200, 20, 0, 12, nil, "FISH", "", false)
+	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{
+		"real-uuid-chicken": foodChicken,
+		"real-uuid-fish":    foodFish,
+	}}
 	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
 
 	plan := &GeneratedMealPlan{
@@ -76,10 +86,14 @@ func TestPlanValidator_AutoHealing(t *testing.T) {
 				ProteinFoodID:   "PRO_01", // Dummy hallucinated ID
 				ProteinFoodName: "Ức gà tươi",
 			},
+			{
+				ProteinFoodID:   "real-uuid-fish",
+				ProteinFoodName: "Cá hồi",
+			},
 		},
 	}
 
-	outcome, err := validator.validate(context.Background(), plan, nil, false)
+	outcome, err := validator.validate(context.Background(), plan, nil, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error validating: %v", err)
 	}
@@ -90,5 +104,62 @@ func TestPlanValidator_AutoHealing(t *testing.T) {
 
 	if plan.Options[0].ProteinFoodID != "real-uuid-chicken" {
 		t.Fatalf("expected ProteinFoodID to be healed to 'real-uuid-chicken', got '%s'", plan.Options[0].ProteinFoodID)
+	}
+}
+
+func TestPlanValidator_PantryAndNewFoodCatalogItems(t *testing.T) {
+	t.Parallel()
+
+	repo := &mockFoodRepoForValidator{items: make(map[string]*aggregate.FoodItem)}
+	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+
+	availablePantry := []FoodNutrientDTO{
+		{
+			ID:              "pantry-bitter-melon-uuid",
+			Name:            "Trái khổ qua",
+			Category:        "VEGGIE",
+			CaloriesPer100g: 17,
+			ProteinPer100g:  1,
+			CarbsPer100g:    3.7,
+			FatPer100g:      0.2,
+		},
+	}
+
+	plan := &GeneratedMealPlan{
+		Options: []GeneratedMealOption{
+			{
+				ProteinFoodID:   "new-chicken-id",
+				ProteinFoodName: "Ức gà sốt bơ",
+				CarbFoodID:      "",
+				CarbFoodName:    "Cơm gạo lứt",
+				VeggieFoodID:    "pantry-bitter-melon-uuid",
+				VeggieFoodName:  "Trái khổ qua",
+			},
+			{
+				ProteinFoodID:   "new-chicken-id",
+				ProteinFoodName: "Ức gà sốt bơ",
+				CarbFoodID:      "",
+				CarbFoodName:    "Cơm gạo lứt",
+				VeggieFoodID:    "pantry-bitter-melon-uuid",
+				VeggieFoodName:  "Trái khổ qua",
+			},
+		},
+		NewFoodCatalogItems: []NewFoodItemSpec{
+			{Name: "Ức gà sốt bơ", Category: "PROTEIN", CaloriesPer100g: 180, ProteinPer100g: 28},
+			{Name: "Cơm gạo lứt", Category: "CARB", CaloriesPer100g: 110, CarbsPer100g: 23},
+		},
+	}
+
+	outcome, err := validator.validate(context.Background(), plan, availablePantry, nil, false)
+	if err != nil {
+		t.Fatalf("unexpected error validating: %v", err)
+	}
+
+	if len(outcome.Issues) > 0 {
+		t.Fatalf("expected 0 validation issues for pantry and new food items, got: %v", outcome.Issues)
+	}
+
+	if plan.Options[0].VeggieFoodID != "pantry-bitter-melon-uuid" {
+		t.Fatalf("expected VeggieFoodID to match pantry UUID, got '%s'", plan.Options[0].VeggieFoodID)
 	}
 }

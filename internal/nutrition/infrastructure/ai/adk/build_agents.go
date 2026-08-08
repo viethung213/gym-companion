@@ -151,20 +151,7 @@ func (a *NutritionAgent) buildADKTools() ([]tool.Tool, error) {
 		return nil, fmt.Errorf("make macro gram tool: %w", err)
 	}
 
-	nutiFoodTool, err := functiontool.New(
-		functiontool.Config{
-			Name:        "suggest_nutifood_supplement",
-			Description: "Gợi ý các sản phẩm NutiFood bổ sung phù hợp với thực đơn hiện tại.",
-		},
-		func(ctx agent.Context, _ struct{}) (interface{}, error) {
-			return a.tools.SuggestNutiFoodSupplement(ctx)
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("make nutifood tool: %w", err)
-	}
-
-	return []tool.Tool{fetchTool, macroTool, nutiFoodTool}, nil
+	return []tool.Tool{fetchTool, macroTool}, nil
 }
 
 // buildWorkflowAgents tạo 4 workflow agents cho 4 luồng dinh dưỡng.

@@ -112,7 +112,7 @@ func NewTestDB(t *testing.T, dsn string) *gorm.DB {
 	t.Helper()
 
 	if dsn == "" {
-		dsn = "file::memory:?cache=shared&_loc=UTC"
+		dsn = "file:" + t.Name() + "?mode=memory&cache=shared&_loc=UTC"
 	}
 
 	rawDB, err := sql.Open("sqlite", dsn)
