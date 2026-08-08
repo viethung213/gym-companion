@@ -70,7 +70,7 @@ func (c *ProfileCompletedConsumer) Start(ctx context.Context) {
 				continue
 			}
 
-			if processErr := c.processWithRetry(ctx, msg); processErr != nil {
+			if processErr := c.processWithRetry(ctx, &msg); processErr != nil {
 				log.Printf("[Coaching] Exhausted retries processing ProfileCompleted event: %v", processErr)
 			}
 		}
@@ -79,13 +79,14 @@ func (c *ProfileCompletedConsumer) Start(ctx context.Context) {
 
 // processWithRetry attempts to handle the message up to maxRetries times with
 // incremental backoff (100ms per attempt number).
-func (c *ProfileCompletedConsumer) processWithRetry(ctx context.Context, msg segmentio.Message) error {
+func (c *ProfileCompletedConsumer) processWithRetry(ctx context.Context, msg *segmentio.Message) error {
 	const maxRetries = 3
 
 	var lastErr error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		lastErr = c.HandleMessage(ctx, msg.Value)
+
 		if lastErr == nil {
 			return nil
 		}
