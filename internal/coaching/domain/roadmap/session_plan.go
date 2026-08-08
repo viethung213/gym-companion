@@ -34,9 +34,10 @@ type SessionPlanInfo struct {
 	WeekPlanID         string
 	RoadmapID          string
 	UserID             string
-	ScheduledDate      time.Time
-	SlotTime           string
-	Status             SessionPlanStatus
+	ScheduledDate            time.Time
+	SlotTime                 string
+	EstimatedDurationMinutes int32
+	Status                   SessionPlanStatus
 	Source             SessionPlanSource
 	TargetMuscleGroups []string
 	Prescription       WorkoutPrescription

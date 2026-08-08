@@ -37,12 +37,19 @@ func (c *CoachingContextAgent) buildNodes() {
 			}
 
 			slots := make([]WorkoutSlot, len(profile.AvailableSlots))
+			preferredTimes := make(map[string][]string)
 			for i, s := range profile.AvailableSlots {
 				slots[i] = WorkoutSlot{
 					DayOfWeek: int(s.DayOfWeek),
 					StartTime: s.StartTime,
 					EndTime:   s.EndTime,
 				}
+				dayKey := weekdayToCode(s.DayOfWeek)
+				timeSlotStr := s.StartTime
+				if s.EndTime != "" {
+					timeSlotStr += "-" + s.EndTime
+				}
+				preferredTimes[dayKey] = append(preferredTimes[dayKey], timeSlotStr)
 			}
 
 			injuries := make([]InjuryStatus, len(profile.ActiveInjuries))
@@ -75,6 +82,7 @@ func (c *CoachingContextAgent) buildNodes() {
 					PrimaryGoal:           profile.PrimaryGoal,
 					AvailableEquipment:    profile.AvailableEquipment,
 					PreferredMuscleGroups: profile.PreferredMuscleGroups,
+					PreferredWorkoutTimes: preferredTimes,
 					AvailableSlots:        slots,
 					ActiveInjuries:        injuries,
 				},
@@ -109,10 +117,12 @@ func (c *CoachingContextAgent) buildNodes() {
 			for _, s := range pending {
 				info := s.Info()
 				in.SessionsToRevise = append(in.SessionsToRevise, SessionToRevise{
-					ScheduledDate:       info.ScheduledDate.Format(scheduledDateISO),
-					TargetMuscleGroups:  info.TargetMuscleGroups,
-					CurrentPrescription: prescriptionToDTO(info.Prescription),
-					CurrentReasoning:    info.Reasoning,
+					ScheduledDate:            info.ScheduledDate.Format(scheduledDateISO),
+					SlotTime:                 info.SlotTime,
+					EstimatedDurationMinutes: info.EstimatedDurationMinutes,
+					TargetMuscleGroups:       info.TargetMuscleGroups,
+					CurrentPrescription:      prescriptionToDTO(info.Prescription),
+					CurrentReasoning:         info.Reasoning,
 				})
 			}
 
@@ -137,4 +147,25 @@ func (c *CoachingContextAgent) buildNodes() {
 		},
 		workflow.NodeConfig{},
 	)
+}
+
+func weekdayToCode(w time.Weekday) string {
+	switch w {
+	case time.Monday:
+		return "mon"
+	case time.Tuesday:
+		return "tue"
+	case time.Wednesday:
+		return "wed"
+	case time.Thursday:
+		return "thu"
+	case time.Friday:
+		return "fri"
+	case time.Saturday:
+		return "sat"
+	case time.Sunday:
+		return "sun"
+	default:
+		return "mon"
+	}
 }
