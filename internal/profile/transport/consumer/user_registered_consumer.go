@@ -139,6 +139,7 @@ func (c *UserRegisteredConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 					if createErr != nil {
 						return fmt.Errorf("create blank profile: %w", createErr)
 					}
+					blankProfile.SetIdentity(data.GetFullName(), data.GetAvatarUrl())
 					if saveErr := c.userRepo.Save(txCtx, blankProfile); saveErr != nil {
 						return fmt.Errorf("save blank profile: %w", saveErr)
 					}

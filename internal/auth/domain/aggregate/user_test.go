@@ -15,7 +15,7 @@ func TestRegisterUser_Success(t *testing.T) {
 	fullName := "John Doe"
 	roleStr := "user"
 
-	user, err := RegisterUser(userID, emailStr, fullName, roleStr)
+	user, err := RegisterUser(userID, emailStr, fullName, "https://example.com/avatar.jpg", roleStr)
 	if err != nil {
 		t.Fatalf("unexpected registration failure: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestRegisterUser_InvalidID(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := RegisterUser(tc.id, "test@example.com", "John", "user")
+			_, err := RegisterUser(tc.id, "test@example.com", "John", "", "user")
 			if err == nil {
 				t.Error("expected error due to invalid user id format")
 			}
@@ -82,21 +82,21 @@ func TestRegisterUser_InvalidID(t *testing.T) {
 }
 
 func TestRegisterUser_InvalidEmail(t *testing.T) {
-	_, err := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "invalid-email", "John", "user")
+	_, err := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "invalid-email", "John", "", "user")
 	if err == nil {
 		t.Error("expected error due to invalid email format")
 	}
 }
 
 func TestRegisterUser_InvalidRole(t *testing.T) {
-	_, err := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "invalid-role")
+	_, err := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "", "invalid-role")
 	if err == nil {
 		t.Error("expected error due to invalid role")
 	}
 }
 
 func TestUser_LinkGoogle(t *testing.T) {
-	user, _ := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "user")
+	user, _ := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "", "user")
 	originalUpdatedAt := user.UpdatedAt()
 
 	// Wait slightly to ensure time advances for UpdatedAt check
@@ -114,7 +114,7 @@ func TestUser_LinkGoogle(t *testing.T) {
 }
 
 func TestUser_LinkFacebook(t *testing.T) {
-	user, _ := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "user")
+	user, _ := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "", "user")
 	originalUpdatedAt := user.UpdatedAt()
 
 	// Wait slightly to ensure time advances for UpdatedAt check

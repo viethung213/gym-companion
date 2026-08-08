@@ -7,6 +7,8 @@ import (
 
 type UserProfileModel struct {
 	UserID                string     `gorm:"primaryKey;column:user_id"`
+	FullName              string     `gorm:"column:full_name"`
+	AvatarURL             string     `gorm:"column:avatar_url"`
 	DateOfBirth           *time.Time `gorm:"column:date_of_birth"`
 	Gender                string     `gorm:"column:gender"`
 	ExperienceLevel       string     `gorm:"column:experience_level"`

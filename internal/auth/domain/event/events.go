@@ -13,6 +13,7 @@ type UserRegisteredEvent struct {
 	UserID       string
 	Email        string
 	FullName     string
+	AvatarURL    string
 	RegisteredAt time.Time
 }
 

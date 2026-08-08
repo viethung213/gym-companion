@@ -59,7 +59,7 @@ func TestUserRepository_Integration(t *testing.T) {
 	userID, _ := vo.NewUserID(uuid.New().String())
 	email, _ := vo.NewEmail("integration-test@example.com")
 	role, _ := vo.NewRole("user")
-	user, err := aggregate.RegisterUser(userID.Value(), email.Value(), "John Doe", role.Value())
+	user, err := aggregate.RegisterUser(userID.Value(), email.Value(), "John Doe", "", role.Value())
 	if err != nil {
 		t.Fatalf("Failed to register user: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestSessionRepository_Integration(t *testing.T) {
 	userID := uuid.New().String()
 	email, _ := vo.NewEmail("session-test@example.com")
 	role, _ := vo.NewRole("user")
-	user, err := aggregate.RegisterUser(userID, email.Value(), "John Doe", role.Value())
+	user, err := aggregate.RegisterUser(userID, email.Value(), "John Doe", "", role.Value())
 	if err != nil {
 		t.Fatalf("Failed to register user: %v", err)
 	}
@@ -521,7 +521,7 @@ func TestSQLTransactionManager_Integration(t *testing.T) {
 
 	// 1. Rollback case: error inside transaction
 	err := txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, _ := aggregate.RegisterUser(userID, email, "Test User", role)
+		user, _ := aggregate.RegisterUser(userID, email, "Test User", "", role)
 		if err := userRepo.Create(txCtx, user); err != nil {
 			return err
 		}
@@ -541,7 +541,7 @@ func TestSQLTransactionManager_Integration(t *testing.T) {
 
 	// 2. Commit case: success inside transaction
 	err = txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, _ := aggregate.RegisterUser(userID, email, "Test User", role)
+		user, _ := aggregate.RegisterUser(userID, email, "Test User", "", role)
 		if err := userRepo.Create(txCtx, user); err != nil {
 			return err
 		}

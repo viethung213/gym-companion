@@ -283,7 +283,7 @@ func (mockUnverifiedOAuthService) ExchangeCodeForProfile(ctx context.Context, pr
 func TestOAuthLoginHandler_UnverifiedEmail_LinkRejected(t *testing.T) {
 	ctx := context.Background()
 
-	existingUser, _ := aggregate.RegisterUser("11111111-1111-1111-1111-111111111111", "existing@example.com", "Existing User", "user")
+	existingUser, _ := aggregate.RegisterUser("11111111-1111-1111-1111-111111111111", "existing@example.com", "Existing User", "", "user")
 	userRepo := &mockUserRepo{
 		users: map[string]*aggregate.User{
 			existingUser.ID(): existingUser,

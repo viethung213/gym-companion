@@ -7,6 +7,8 @@ CREATE SCHEMA IF NOT EXISTS profile;
 -- 1. Bảng Thông tin cơ bản người dùng
 CREATE TABLE IF NOT EXISTS profile.users (
     user_id UUID PRIMARY KEY,
+    full_name VARCHAR(255) DEFAULT '',
+    avatar_url TEXT DEFAULT '',
     date_of_birth DATE,
     gender VARCHAR(20),
     experience_level VARCHAR(50) DEFAULT 'BEGINNER',

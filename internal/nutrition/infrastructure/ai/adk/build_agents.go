@@ -9,6 +9,7 @@ import (
 	"iter"
 	"log"
 	"path/filepath"
+	"strings"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
@@ -195,8 +196,15 @@ func (a *NutritionAgent) buildWorkflowAgents(ctx context.Context) error {
 
 // parseMealPlanFromNode parse JSON output từ generator node thành GeneratedMealPlan.
 func parseMealPlanFromNode(planJSON string) (*GeneratedMealPlan, error) {
+	cleanedJSON := strings.TrimSpace(planJSON)
+	cleanedJSON = strings.TrimPrefix(cleanedJSON, "```json")
+	cleanedJSON = strings.TrimPrefix(cleanedJSON, "```JSON")
+	cleanedJSON = strings.TrimPrefix(cleanedJSON, "```")
+	cleanedJSON = strings.TrimSuffix(cleanedJSON, "```")
+	cleanedJSON = strings.TrimSpace(cleanedJSON)
+
 	var plan GeneratedMealPlan
-	if err := json.Unmarshal([]byte(planJSON), &plan); err != nil {
+	if err := json.Unmarshal([]byte(cleanedJSON), &plan); err != nil {
 		return nil, fmt.Errorf("parse meal plan json: %w", err)
 	}
 	if len(plan.Options) == 0 {
