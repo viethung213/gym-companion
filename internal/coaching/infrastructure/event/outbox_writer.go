@@ -84,13 +84,7 @@ func (w *OutboxWriter) enqueueOne(ctx context.Context, partitionKey string, ev d
 func (w *OutboxWriter) marshalPayload(ev domainevent.Event) ([]byte, error) {
 	switch e := ev.(type) {
 	case *domainevent.UpcomingWorkoutReminder:
-		protoEv := &coachingv1event.UpcomingWorkoutReminder{
-			UserId:              e.UserID,
-			WorkoutName:         e.WorkoutName,
-			ScheduledTime:       e.ScheduledTime,
-			RemindBeforeMinutes: e.RemindBeforeMinutes,
-		}
-		return protojson.Marshal(protoEv)
+		return json.Marshal(e)
 
 	case *domainevent.RoadmapInitiated:
 		protoEv := &coachingv1event.RoadmapInitiated{

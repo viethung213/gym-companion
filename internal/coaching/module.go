@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/application/query"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
@@ -48,7 +49,7 @@ type ModuleDeps struct {
 }
 
 // Initialize sets up the coaching module (coaching context agent, gRPC services, etc).
-func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(), error) {
+func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, port.CoachAgent, func(), error) {
 	log.Println("Initializing Coaching Module...")
 
 	if deps.IDGenerator == nil {
@@ -111,30 +112,69 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 		deps.IDGenerator,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("initialize coaching context agent: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize coaching context agent: %w", err)
 	}
 
-	// Wire InitiateRoadmapHandler for event-driven auto-initiation.
+	var txMgr port.TransactionManager
+	if gormDB != nil {
+		txMgr = persistence.NewSQLTransactionManager(gormDB)
+	}
+
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
+	clock := realClock{}
+
+	// Wire gRPC Command & Query Handlers
 	var initiateHandler *command.InitiateRoadmapHandler
-	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil {
-		var txMgr port.TransactionManager
-		if gormDB != nil {
-			txMgr = persistence.NewSQLTransactionManager(gormDB)
-		}
-
-		guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
-
-		if txMgr != nil {
-			initiateHandler = command.NewInitiateRoadmapHandler(
-				txMgr,
-				deps.RoadmapRepo,
-				coachAgent,
-				guard,
-				deps.OutboxWriter,
-				realClock{},
-			)
-		}
+	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil && txMgr != nil {
+		initiateHandler = command.NewInitiateRoadmapHandler(
+			txMgr,
+			deps.RoadmapRepo,
+			coachAgent,
+			guard,
+			deps.OutboxWriter,
+			clock,
+		)
 	}
+
+	var regenerateHandler *command.RegenerateScheduleHandler
+	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil && txMgr != nil {
+		regenerateHandler = command.NewRegenerateScheduleHandler(
+			txMgr,
+			deps.RoadmapRepo,
+			coachAgent,
+			guard,
+			deps.OutboxWriter,
+			clock,
+		)
+	}
+
+	var createAdhocHandler *command.CreateAdhocSessionHandler
+	if deps.RoadmapRepo != nil && deps.CatalogReader != nil && txMgr != nil {
+		createAdhocHandler = command.NewCreateAdhocSessionHandler(
+			txMgr,
+			deps.RoadmapRepo,
+			deps.CatalogReader,
+			deps.IDGenerator,
+			clock,
+		)
+	}
+
+	var queriesHandler *query.Handlers
+	if deps.RoadmapRepo != nil {
+		queriesHandler = query.NewHandlers(deps.RoadmapRepo)
+	}
+
+	var suggestAdHocHandler *query.SuggestAdHocSessionHandler
+	if deps.RoadmapRepo != nil {
+		suggestAdHocHandler = query.NewSuggestAdHocSessionHandler(deps.RoadmapRepo, coachAgent, clock)
+	}
+
+	coachingServer := coachingGrpc.NewServer(
+		initiateHandler,
+		regenerateHandler,
+		createAdhocHandler,
+		queriesHandler,
+	).WithSuggestAdHoc(suggestAdHocHandler)
 
 	var reminderWorker *worker.UpcomingWorkoutReminderWorker
 	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil {
@@ -196,7 +236,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 		}
 	}
 
-	return coachAgent, shutdown, nil
+	return coachingServer, coachAgent, shutdown, nil
 }
 
 // RegisterConnectHandler mounts the ConnectRPC handler for Coaching module on an http.ServeMux.

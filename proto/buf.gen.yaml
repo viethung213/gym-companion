@@ -41,7 +41,6 @@ plugins:
       - merge_file_name=unified_api
       - output_format=yaml
       - use_allof_for_refs=true
-      - omit_array_item_type_when_ref_sibling=true
 
 
 
