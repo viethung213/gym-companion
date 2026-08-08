@@ -170,7 +170,7 @@ func run() error {
 		log.Println("Warning: coaching database pool not found, falling back to auth pool.")
 		coachingDB = db
 	}
-	coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
+	coachGRPCHandler, coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
 		DB:            coachingDB,
 		KafkaRegistry: kafkaRegistry,
 		IDGenerator:   coachingpersistence.UUIDGenerator{},
@@ -198,6 +198,7 @@ func run() error {
 	nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors)
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
+	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 
 	// Register Coaching REST HTTP Handler
 	coachingHandler := coaching.NewCoachingHandler(coachAgent)
