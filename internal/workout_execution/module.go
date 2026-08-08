@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ import (
 	workoutGRPC "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // ModuleDeps contains external dependencies required to boot the Workout Execution module.
@@ -38,9 +40,20 @@ type ModuleDeps struct {
 // Initialize wires dependencies, registers gRPC services, and starts background workers.
 func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler, func(), error) {
 
+	gormLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  false,
+		},
+	)
+
 	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
 		Conn: deps.DB,
 	}), &gorm.Config{
+		Logger:                 gormLogger,
 		PrepareStmt:            false,
 		SkipDefaultTransaction: true,
 	})
