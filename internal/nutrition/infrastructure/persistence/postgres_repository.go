@@ -362,23 +362,24 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 		err := tx.Where("user_id = ?", history.UserID()).First(&existing).Error
 		historyID := history.ID()
 
-		if err == nil {
+		switch {
+		case err == nil:
 			historyID = existing.ID
 			existing.UpdatedAt = time.Now()
-			if err := tx.Save(&existing).Error; err != nil {
-				return fmt.Errorf("postgres meal history repo update parent: %w", err)
+			if saveErr := tx.Save(&existing).Error; saveErr != nil {
+				return fmt.Errorf("postgres meal history repo update parent: %w", saveErr)
 			}
-		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		case errors.Is(err, gorm.ErrRecordNotFound):
 			gormHist := &GormMealHistory{
 				ID:        historyID,
 				UserID:    history.UserID(),
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 			}
-			if err := tx.Create(gormHist).Error; err != nil {
-				return fmt.Errorf("postgres meal history repo create parent: %w", err)
+			if createErr := tx.Create(gormHist).Error; createErr != nil {
+				return fmt.Errorf("postgres meal history repo create parent: %w", createErr)
 			}
-		} else {
+		default:
 			return fmt.Errorf("postgres meal history repo find parent: %w", err)
 		}
 
