@@ -41,8 +41,8 @@ func (g *GormRecipe) TableName() string {
 
 type GormNutritionPlan struct {
 	ID             string    `gorm:"column:id;primaryKey"`
-	UserID         string    `gorm:"column:user_id"`
-	PlanDate       time.Time `gorm:"column:plan_date;type:date"`
+	UserID         string    `gorm:"column:user_id;uniqueIndex:unique_user_plan_date"`
+	PlanDate       time.Time `gorm:"column:plan_date;type:date;uniqueIndex:unique_user_plan_date"`
 	TargetCalories float64   `gorm:"column:target_calories"`
 	TargetProtein  float64   `gorm:"column:target_protein"`
 	TargetCarbs    float64   `gorm:"column:target_carbs"`
