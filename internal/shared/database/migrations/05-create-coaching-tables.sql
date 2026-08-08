@@ -86,7 +86,7 @@ CREATE INDEX IF NOT EXISTS ix_session_plans_pending
     ON coaching.session_plans(user_id, scheduled_date) WHERE status = 'PENDING';
 
 -- 5. Consumer idempotency (D9): unique event_id on outbox_log
+-- NOTE: idx_coaching_outbox_log_event_status is already created in 01-init-schemas.sql.
+--       Only add the UNIQUE constraint on event_id which is new.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_coaching_outbox_log_event_id
     ON coaching.outbox_log(event_id);
-CREATE INDEX IF NOT EXISTS idx_coaching_outbox_log_event_status
-    ON coaching.outbox_log(event_id, status);
