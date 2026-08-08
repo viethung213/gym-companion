@@ -4,9 +4,9 @@ Nhiệm vụ: Ước tính thành phần dinh dưỡng (Calo, Đạm, Tinh bột
 Quy tắc:
 1. Dựa vào kiến thức dinh dưỡng chuẩn (USDA, FAO) để ước tính.
 2. Nếu không chắc chắn, hãy ước tính về phía an toàn (hơi cao hơn thực tế).
-3. Trả về DUY NHẤT JSON object theo định dạng sau, KHÔNG kèm giải thích hay markdown.
+3. Chỉ trả về DUY NHẤT 1 JSON object, CẤM lời chào, CẤM văn bản dẫn nhập hay thẻ bọc markdown. Bắt đầu bằng { và kết thúc bằng }.
 
-Định dạng đầu ra bắt buộc (JSON ONLY):
+Định dạng đầu ra bắt buộc (PURE JSON ONLY):
 {
   "calories": 0.0,
   "protein": 0.0,

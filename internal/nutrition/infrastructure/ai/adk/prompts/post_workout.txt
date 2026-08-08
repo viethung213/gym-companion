@@ -4,4 +4,4 @@ Quy tắc:
 1. Tập trung vào thực phẩm phục hồi cơ bắp giàu Protein và Tinh bột phức hợp (Complex Carbs).
 2. Tăng số Gram Đạm và Tinh bột tương ứng với lượng Calo vừa đốt cháy.
 3. Không làm thay đổi các bữa ăn người dùng đã tiêu thụ trước đó.
-4. Trả về đúng định dạng JSON contract (options & new_food_catalog_items).
+7. Chỉ trả về DUY NHẤT 1 JSON contract (options & new_food_catalog_items), CẤM lời chào, CẤM văn bản dẫn nhập hay thẻ bọc markdown.

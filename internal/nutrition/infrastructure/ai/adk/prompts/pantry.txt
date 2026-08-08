@@ -4,4 +4,4 @@ Quy tắc:
 1. Ưu tiên tối đa các nguyên liệu có trong danh sách tủ lạnh được cung cấp.
 2. Tự động đề xuất thêm các gia vị / nguyên liệu phụ nhẹ nếu cần thiết và khai báo vào new_food_catalog_items.
 3. Đảm bảo tổng Calo và Gram đạt chuẩn TDEE chỉ tiêu.
-4. Trả về đúng định dạng JSON contract (options & new_food_catalog_items).
+4. Chỉ trả về DUY NHẤT 1 JSON contract (options & new_food_catalog_items), CẤM lời chào, CẤM văn bản dẫn nhập hay thẻ bọc markdown.
