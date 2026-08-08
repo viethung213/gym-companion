@@ -367,6 +367,69 @@ func (h *GRPCHandler) UpdateMealSchedule(
 	}, nil
 }
 
+func (h *GRPCHandler) RecalibratePlanWithPantry(
+	ctx context.Context,
+	req *nutritionv1msg.RecalibratePlanWithPantryRequest,
+) (*nutritionv1msg.RecalibratePlanWithPantryResponse, error) {
+	if req.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	now := time.Now()
+	plan, err := h.recalPlanHdlr.Handle(ctx, command.RecalibratePlanWithPantryCommand{
+		UserID:               req.GetUserId(),
+		PlanDate:             now,
+		AvailableIngredients: req.GetAvailableIngredients(),
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to recalibrate plan with pantry: %v", err)
+	}
+
+	breakfastOptions := make([]*nutritionv1msg.MealOption, 0)
+	lunchOptions := make([]*nutritionv1msg.MealOption, 0)
+	dinnerOptions := make([]*nutritionv1msg.MealOption, 0)
+	snackOptions := make([]*nutritionv1msg.MealOption, 0)
+
+	for _, m := range plan.DailyMeals() {
+		for _, opt := range m.Options() {
+			pbOpt := &nutritionv1msg.MealOption{
+				MealName: opt.MealName(),
+				Calories: float32(opt.Calories()),
+				Protein:  float32(opt.ProteinGrams()),
+				Carbs:    float32(opt.CarbGrams()),
+				Fat:      float32(opt.FatGrams()),
+			}
+			switch m.MealType() {
+			case "BREAKFAST":
+				breakfastOptions = append(breakfastOptions, pbOpt)
+			case "LUNCH":
+				lunchOptions = append(lunchOptions, pbOpt)
+			case "DINNER":
+				dinnerOptions = append(dinnerOptions, pbOpt)
+			default:
+				snackOptions = append(snackOptions, pbOpt)
+			}
+		}
+	}
+
+	alloc := plan.CalorieAllocation()
+	return &nutritionv1msg.RecalibratePlanWithPantryResponse{
+		TargetCalories: float32(alloc.TargetCalories()),
+		Macros: &nutritionv1msg.Macros{
+			ProteinGrams: float32(alloc.ProteinGrams()),
+			CarbGrams:    float32(alloc.CarbGrams()),
+			FatGrams:     float32(alloc.FatGrams()),
+		},
+		Meals: &nutritionv1msg.DailyMeals{
+			Breakfast: breakfastOptions,
+			Lunch:     lunchOptions,
+			Dinner:    dinnerOptions,
+			Snack:     snackOptions,
+		},
+		Message: "Recalibrated plan successfully with available pantry ingredients",
+	}, nil
+}
+
 // --- ConnectRPC Adapter ---
 
 type ConnectNutritionHandler struct {

@@ -60,7 +60,7 @@ func TestUpcomingMealReminderWorker_RunCheck(t *testing.T) {
 	mealOpt := aggregate.NewMealOption("opt_1", "Phở Bò", 500, 30, 60, 15, nil, nil, false)
 	dailyMeal := aggregate.NewDailyMealWithSchedule("BREAKFAST", []aggregate.MealOption{mealOpt}, scheduledTimeStr)
 
-	plan := aggregate.NewNutritionPlan("plan_001", "usr_100", now, alloc, []aggregate.DailyMeal{dailyMeal})
+	plan := aggregate.NewNutritionPlan("plan_001", "usr_100", futureMealTime, alloc, []aggregate.DailyMeal{dailyMeal})
 
 	repo := &mockNutritionPlanRepo{plans: []*aggregate.NutritionPlan{plan}}
 	publisher := &mockEventPublisher{}
