@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
@@ -18,12 +21,18 @@ import (
 	coachingKafka "github.com/viethung213/gym-companion/internal/coaching/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/worker"
+	"github.com/viethung213/gym-companion/internal/coaching/transport/consumer"
 	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service/coachingv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/kafka"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// realClock returns time.Now() for production use.
+type realClock struct{}
+
+func (realClock) Now() time.Time { return time.Now() }
 
 // ModuleDeps contains dependencies for coaching module initialization.
 type ModuleDeps struct {
@@ -105,6 +114,28 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 		return nil, nil, fmt.Errorf("initialize coaching context agent: %w", err)
 	}
 
+	// Wire InitiateRoadmapHandler for event-driven auto-initiation.
+	var initiateHandler *command.InitiateRoadmapHandler
+	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil {
+		var txMgr port.TransactionManager
+		if gormDB != nil {
+			txMgr = persistence.NewSQLTransactionManager(gormDB)
+		}
+
+		guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
+
+		if txMgr != nil {
+			initiateHandler = command.NewInitiateRoadmapHandler(
+				txMgr,
+				deps.RoadmapRepo,
+				coachAgent,
+				guard,
+				deps.OutboxWriter,
+				realClock{},
+			)
+		}
+	}
+
 	var reminderWorker *worker.UpcomingWorkoutReminderWorker
 	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil {
 		reminderWorker = worker.NewUpcomingWorkoutReminderWorker(deps.RoadmapRepo, deps.OutboxWriter, 5*time.Minute)
@@ -117,16 +148,39 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 	}
 
 	var outboxWorker *worker.OutboxWorker
-	if outboxRepo != nil && deps.KafkaRegistry != nil {
+	var profileConsumer *consumer.ProfileCompletedConsumer
+	var profileConsumerCancel context.CancelFunc
+
+	if deps.KafkaRegistry != nil {
 		cfg := config.LoadConfig()
 		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
-		writer, wErr := deps.KafkaRegistry.GetWriter("coaching.events", brokers)
-		if wErr == nil && writer != nil {
-			kafkaPub := coachingKafka.NewPublisher(writer)
-			outboxWorker = worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
-			go outboxWorker.Start(ctx)
-			log.Println("✅ Coaching OutboxWorker started")
+		if outboxRepo != nil {
+			writer, wErr := deps.KafkaRegistry.GetWriter("coaching.events", brokers)
+			if wErr == nil && writer != nil {
+				kafkaPub := coachingKafka.NewPublisher(writer)
+				outboxWorker = worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
+				go outboxWorker.Start(ctx)
+				log.Println("✅ Coaching OutboxWorker started")
+			}
+		}
+
+		// Subscribe to profile.events for auto-initiation of roadmaps.
+		if initiateHandler != nil && outboxRepo != nil {
+			reader, rErr := deps.KafkaRegistry.GetReader(
+				"coaching-profile-completed-group", "profile.events", brokers,
+			)
+			if rErr == nil && reader != nil {
+				profileConsumer = consumer.NewProfileCompletedConsumer(reader, initiateHandler, outboxRepo)
+				var consumerCtx context.Context
+				consumerCtx, profileConsumerCancel = context.WithCancel(ctx)
+				go profileConsumer.Start(consumerCtx)
+				log.Println("✅ Coaching ProfileCompletedConsumer started (profile.events)")
+			} else {
+				log.Printf("⚠️ Coaching ProfileCompletedConsumer not started: reader error=%v", rErr)
+			}
+		} else {
+			log.Println("⚠️ Coaching ProfileCompletedConsumer not started (missing InitiateRoadmapHandler or OutboxRepo)")
 		}
 	}
 
@@ -134,6 +188,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (port.CoachAgent, func(),
 
 	shutdown := func() {
 		log.Println("Shutting down Coaching Module...")
+		if profileConsumerCancel != nil {
+			profileConsumerCancel()
+		}
 		if reminderWorker != nil {
 			reminderWorker.Stop()
 		}
