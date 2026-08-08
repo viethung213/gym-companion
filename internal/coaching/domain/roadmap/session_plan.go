@@ -29,23 +29,23 @@ type WorkoutPrescription struct {
 
 // SessionPlanInfo is the value-object snapshot of a SessionPlan entity.
 type SessionPlanInfo struct {
-	SessionPlanID      string
-	DayPlanID          string
-	WeekPlanID         string
-	RoadmapID          string
-	UserID             string
+	SessionPlanID            string
+	DayPlanID                string
+	WeekPlanID               string
+	RoadmapID                string
+	UserID                   string
 	ScheduledDate            time.Time
 	SlotTime                 string
 	EstimatedDurationMinutes int32
 	Status                   SessionPlanStatus
-	Source             SessionPlanSource
-	TargetMuscleGroups []string
-	Prescription       WorkoutPrescription
-	Reasoning          string
-	GeneratedAt        time.Time
-	CompletedAt        *time.Time
-	SessionSCR         *float32
-	SessionDeltaRPE    *float32
+	Source                   SessionPlanSource
+	TargetMuscleGroups       []string
+	Prescription             WorkoutPrescription
+	Reasoning                string
+	GeneratedAt              time.Time
+	CompletedAt              *time.Time
+	SessionSCR               *float32
+	SessionDeltaRPE          *float32
 }
 
 // SessionPlan is an entity nested under DayPlan.
