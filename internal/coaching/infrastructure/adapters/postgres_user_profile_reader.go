@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -147,30 +148,7 @@ func (r *PostgresUserProfileReader) GetProfile(ctx context.Context, userID strin
 	}
 
 	if userRecord.PreferredWorkoutTimes != "" {
-		var rawSlots []rawSlot
-		if parseErr := json.Unmarshal([]byte(userRecord.PreferredWorkoutTimes), &rawSlots); parseErr == nil {
-			slots := make([]port.Slot, 0, len(rawSlots))
-			for _, s := range rawSlots {
-				day := s.DayOfWeek
-				if day == 0 && s.Day != 0 {
-					day = s.Day
-				}
-				startTime := s.StartTime
-				if startTime == "" {
-					startTime = s.Start
-				}
-				endTime := s.EndTime
-				if endTime == "" {
-					endTime = s.End
-				}
-				slots = append(slots, port.Slot{
-					DayOfWeek: time.Weekday(day),
-					StartTime: startTime,
-					EndTime:   endTime,
-				})
-			}
-			profile.AvailableSlots = slots
-		}
+		profile.AvailableSlots = parsePreferredWorkoutTimes(userRecord.PreferredWorkoutTimes)
 	}
 	if len(profile.AvailableSlots) == 0 {
 		profile.AvailableSlots = []port.Slot{
@@ -207,4 +185,107 @@ func (r *PostgresUserProfileReader) GetProfile(ctx context.Context, userID strin
 	}
 
 	return profile, nil
+}
+
+func parsePreferredWorkoutTimes(raw string) []port.Slot {
+	var slots []port.Slot
+
+	// 1. Try Map format: {"mon": ["06:00-07:30"], "wed": ["18:00-19:30"]}
+	var mapSlots map[string][]string
+	if err := json.Unmarshal([]byte(raw), &mapSlots); err == nil && len(mapSlots) > 0 {
+		for dayStr, slotStrs := range mapSlots {
+			wd, ok := dayCodeToWeekday(dayStr)
+			if !ok {
+				continue
+			}
+			for _, slotStr := range slotStrs {
+				start, end := splitSlotRange(slotStr)
+				slots = append(slots, port.Slot{
+					DayOfWeek: wd,
+					StartTime: start,
+					EndTime:   end,
+				})
+			}
+		}
+		if len(slots) > 0 {
+			return slots
+		}
+	}
+
+	// 2. Try rawSlot slice format: [{"day_of_week":1, "start_time":"06:00", "end_time":"07:30"}]
+	var rawSlots []rawSlot
+	if err := json.Unmarshal([]byte(raw), &rawSlots); err == nil && len(rawSlots) > 0 {
+		for _, s := range rawSlots {
+			day := s.DayOfWeek
+			if day == 0 && s.Day != 0 {
+				day = s.Day
+			}
+			startTime := s.StartTime
+			if startTime == "" {
+				startTime = s.Start
+			}
+			endTime := s.EndTime
+			if endTime == "" {
+				endTime = s.End
+			}
+			slots = append(slots, port.Slot{
+				DayOfWeek: time.Weekday(day),
+				StartTime: startTime,
+				EndTime:   endTime,
+			})
+		}
+		if len(slots) > 0 {
+			return slots
+		}
+	}
+
+	// 3. Try string slice format: ["mon: 06:00-07:30", "wed: 18:00-19:30"]
+	var strSlots []string
+	if err := json.Unmarshal([]byte(raw), &strSlots); err == nil && len(strSlots) > 0 {
+		for _, item := range strSlots {
+			parts := strings.SplitN(item, ":", 2)
+			if len(parts) == 2 {
+				wd, ok := dayCodeToWeekday(parts[0])
+				if ok {
+					start, end := splitSlotRange(strings.TrimSpace(parts[1]))
+					slots = append(slots, port.Slot{
+						DayOfWeek: wd,
+						StartTime: start,
+						EndTime:   end,
+					})
+				}
+			}
+		}
+	}
+
+	return slots
+}
+
+func dayCodeToWeekday(code string) (time.Weekday, bool) {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "mon", "monday", "1":
+		return time.Monday, true
+	case "tue", "tuesday", "2":
+		return time.Tuesday, true
+	case "wed", "wednesday", "3":
+		return time.Wednesday, true
+	case "thu", "thursday", "4":
+		return time.Thursday, true
+	case "fri", "friday", "5":
+		return time.Friday, true
+	case "sat", "saturday", "6":
+		return time.Saturday, true
+	case "sun", "sunday", "0", "7":
+		return time.Sunday, true
+	default:
+		return time.Sunday, false
+	}
+}
+
+func splitSlotRange(s string) (start, end string) {
+	parts := strings.Split(strings.TrimSpace(s), "-")
+	if len(parts) >= 2 {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	}
+	return strings.TrimSpace(s), ""
 }

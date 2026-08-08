@@ -49,22 +49,23 @@ func (dayPlanRecord) TableName() string { return "coaching.day_plans" }
 // sessionPlanRecord maps coaching.session_plans. Prescription and
 // TargetMuscleGroups are JSONB blobs.
 type sessionPlanRecord struct {
-	SessionPlanID      string          `gorm:"column:session_plan_id;primaryKey"`
-	DayPlanID          string          `gorm:"column:day_plan_id;not null"`
-	WeekPlanID         string          `gorm:"column:week_plan_id;not null"`
-	RoadmapID          string          `gorm:"column:roadmap_id;not null"`
-	UserID             string          `gorm:"column:user_id;not null"`
-	ScheduledDate      time.Time       `gorm:"column:scheduled_date;not null;type:date"`
-	SlotTime           string          `gorm:"column:slot_time"`
-	Status             string          `gorm:"column:status;not null"`
-	Source             string          `gorm:"column:source;not null"`
-	TargetMuscleGroups []byte          `gorm:"column:target_muscle_groups;type:jsonb"`
-	Prescription       []byte          `gorm:"column:prescription;type:jsonb"`
-	Reasoning          string          `gorm:"column:reasoning"`
-	GeneratedAt        time.Time       `gorm:"column:generated_at"`
-	CompletedAt        sql.NullTime    `gorm:"column:completed_at"`
-	SessionSCR         sql.NullFloat64 `gorm:"column:session_scr"`
-	SessionDeltaRPE    sql.NullFloat64 `gorm:"column:session_delta_rpe"`
+	SessionPlanID            string          `gorm:"column:session_plan_id;primaryKey"`
+	DayPlanID                string          `gorm:"column:day_plan_id;not null"`
+	WeekPlanID               string          `gorm:"column:week_plan_id;not null"`
+	RoadmapID                string          `gorm:"column:roadmap_id;not null"`
+	UserID                   string          `gorm:"column:user_id;not null"`
+	ScheduledDate            time.Time       `gorm:"column:scheduled_date;not null;type:date"`
+	SlotTime                 string          `gorm:"column:slot_time"`
+	EstimatedDurationMinutes int32           `gorm:"column:estimated_duration_minutes"`
+	Status                   string          `gorm:"column:status;not null"`
+	Source                   string          `gorm:"column:source;not null"`
+	TargetMuscleGroups       []byte          `gorm:"column:target_muscle_groups;type:jsonb"`
+	Prescription             []byte          `gorm:"column:prescription;type:jsonb"`
+	Reasoning                string          `gorm:"column:reasoning"`
+	GeneratedAt              time.Time       `gorm:"column:generated_at"`
+	CompletedAt              sql.NullTime    `gorm:"column:completed_at"`
+	SessionSCR               sql.NullFloat64 `gorm:"column:session_scr"`
+	SessionDeltaRPE          sql.NullFloat64 `gorm:"column:session_delta_rpe"`
 }
 
 func (sessionPlanRecord) TableName() string { return "coaching.session_plans" }

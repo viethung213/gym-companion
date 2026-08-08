@@ -27,13 +27,14 @@ type WorkoutSession struct {
 
 // UserProfile aggregates user metrics, preferences, equipment and active injuries.
 type UserProfile struct {
-	UserID                string         `json:"user_id"`
-	WeightKg              float64        `json:"weight_kg"`
-	PrimaryGoal           string         `json:"primary_goal"`
-	AvailableEquipment    []string       `json:"available_equipment"`
-	PreferredMuscleGroups []string       `json:"preferred_muscle_groups"`
-	AvailableSlots        []WorkoutSlot  `json:"available_slots"`
-	ActiveInjuries        []InjuryStatus `json:"active_injuries"`
+	UserID                string              `json:"user_id"`
+	WeightKg              float64             `json:"weight_kg"`
+	PrimaryGoal           string              `json:"primary_goal"`
+	AvailableEquipment    []string            `json:"available_equipment"`
+	PreferredMuscleGroups []string            `json:"preferred_muscle_groups"`
+	PreferredWorkoutTimes map[string][]string `json:"preferred_workout_times"`
+	AvailableSlots        []WorkoutSlot       `json:"available_slots"`
+	ActiveInjuries        []InjuryStatus      `json:"active_injuries"`
 }
 
 // RoadmapSnapshot represents the active roadmap snapshot.
@@ -75,10 +76,12 @@ type CoachInput struct {
 
 // SessionToRevise carries no id; results are matched back by position.
 type SessionToRevise struct {
-	ScheduledDate       string              `json:"scheduled_date"` // YYYY-MM-DD
-	TargetMuscleGroups  []string            `json:"target_muscle_groups"`
-	CurrentPrescription WorkoutPrescription `json:"current_prescription"`
-	CurrentReasoning    string              `json:"current_reasoning,omitempty"`
+	ScheduledDate            string              `json:"scheduled_date"` // YYYY-MM-DD
+	SlotTime                 string              `json:"slot_time"`
+	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
+	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
+	CurrentPrescription      WorkoutPrescription `json:"current_prescription"`
+	CurrentReasoning         string              `json:"current_reasoning,omitempty"`
 }
 
 // PrescribedExercise instructs one exercise. No exercise_name: a hallucinated
@@ -102,10 +105,12 @@ type WorkoutPrescription struct {
 // SessionPlan is one scheduled session. No session_plan_id: the backend mints
 // identifiers, so the model cannot collide with or point at another user's row.
 type SessionPlan struct {
-	ScheduledDate      string              `json:"scheduled_date"` // YYYY-MM-DD
-	TargetMuscleGroups []string            `json:"target_muscle_groups"`
-	Prescription       WorkoutPrescription `json:"prescription"`
-	Reasoning          string              `json:"reasoning"`
+	ScheduledDate            string              `json:"scheduled_date"` // YYYY-MM-DD
+	SlotTime                 string              `json:"slot_time"`      // "HH:MM" or "06:00-07:30"
+	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
+	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
+	Prescription             WorkoutPrescription `json:"prescription"`
+	Reasoning                string              `json:"reasoning"`
 }
 
 // WeekPlan defines a single week inside the 4-week block.

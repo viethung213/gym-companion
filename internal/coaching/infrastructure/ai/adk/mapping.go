@@ -82,19 +82,30 @@ func (c *CoachingContextAgent) mapToDomainRoadmap(
 
 			for i := range bucket.sessions {
 				sp := &bucket.sessions[i]
+				dur := sp.EstimatedDurationMinutes
+				if dur <= 0 {
+					dur = 45
+				}
+				slotTime := sp.SlotTime
+				if slotTime == "" {
+					slotTime = "07:00"
+				}
+
 				s, err := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
-					SessionPlanID:      c.idgen.NewID(),
-					DayPlanID:          dayPlanID,
-					WeekPlanID:         weekPlanID,
-					RoadmapID:          roadmapID,
-					UserID:             userID,
-					ScheduledDate:      bucket.date,
-					Status:             roadmap.SessionPlanStatusPending,
-					Source:             roadmap.SessionPlanSourceScheduled,
-					TargetMuscleGroups: sp.TargetMuscleGroups,
-					Prescription:       c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
-					Reasoning:          sp.Reasoning,
-					GeneratedAt:        now,
+					SessionPlanID:            c.idgen.NewID(),
+					DayPlanID:                dayPlanID,
+					WeekPlanID:               weekPlanID,
+					RoadmapID:                roadmapID,
+					UserID:                   userID,
+					ScheduledDate:            bucket.date,
+					SlotTime:                 slotTime,
+					EstimatedDurationMinutes: dur,
+					Status:                   roadmap.SessionPlanStatusPending,
+					Source:                   roadmap.SessionPlanSourceScheduled,
+					TargetMuscleGroups:       sp.TargetMuscleGroups,
+					Prescription:             c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
+					Reasoning:                sp.Reasoning,
+					GeneratedAt:              now,
 				}, now)
 				if err != nil {
 					return nil, fmt.Errorf("new session plan on %s: %w", key, err)
@@ -142,14 +153,25 @@ func (c *CoachingContextAgent) mapToRegeneratedSessions(
 				continue
 			}
 
+			dur := sp.EstimatedDurationMinutes
+			if dur <= 0 {
+				dur = 45
+			}
+			slotTime := sp.SlotTime
+			if slotTime == "" {
+				slotTime = "07:00"
+			}
+
 			infos = append(infos, &roadmap.SessionPlanInfo{
-				UserID:             userID,
-				ScheduledDate:      scheduledTime.UTC(),
-				Status:             roadmap.SessionPlanStatusPending,
-				TargetMuscleGroups: sp.TargetMuscleGroups,
-				Prescription:       c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
-				Reasoning:          sp.Reasoning,
-				GeneratedAt:        now,
+				UserID:                   userID,
+				ScheduledDate:            scheduledTime.UTC(),
+				SlotTime:                 slotTime,
+				EstimatedDurationMinutes: dur,
+				Status:                   roadmap.SessionPlanStatusPending,
+				TargetMuscleGroups:       sp.TargetMuscleGroups,
+				Prescription:             c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
+				Reasoning:                sp.Reasoning,
+				GeneratedAt:              now,
 			})
 		}
 	}

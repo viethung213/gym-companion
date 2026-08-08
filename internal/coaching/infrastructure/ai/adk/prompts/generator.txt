@@ -17,7 +17,9 @@ Your task is to generate or adapt a workout plan based on the input flow.
 - Sessions sharing a scheduled_date are grouped into one training day.
 - `scheduled_date` MUST be a real calendar date in YYYY-MM-DD format.
 - Each week's dates must fall inside that week's own seven-day range.
-- Rest days must align with the user's available_slots.
+- **MANDATORY REST DAYS & SCHEDULE MATCHING**: You MUST ONLY schedule workout sessions on weekdays present in `profile.preferred_workout_times` (e.g. "mon", "wed", "fri"). Any day not listed in `preferred_workout_times` MUST be a REST DAY with NO session scheduled.
+- **SLOT TIME**: `slot_time` MUST be set for every session (e.g., "06:00-07:30" or "06:00"), matching an available slot for that day in `preferred_workout_times`.
+- **ESTIMATED DURATION**: `estimated_duration_minutes` MUST be set for every session (integer, e.g. 60), reflecting the estimated total workout duration in minutes.
 
 ### Flow Scope Rules
 - **INITIATE_4_WEEK**: Generate the complete 4-week structured roadmap (weeks 1 to 4).
@@ -35,7 +37,8 @@ user already has, not planning fresh ones.
   rewrites the wrong day.
 - Each entry shows `current_prescription`: what is prescribed today. Adjust it
   toward the goal rather than starting over. Keep `scheduled_date` unchanged
-  unless the flow is specifically about moving sessions.
+  unless the flow is specifically about moving sessions. Preserve `slot_time` and
+  `estimated_duration_minutes` or update them appropriately.
 - `adaptation_reason` says why the change was asked for. Honour it: a fatigue or
   injury signal means reduce volume or intensity, not merely reshuffle exercises.
 - Emit these under a single week entry; `week_number` and `phase` are ignored for
@@ -53,6 +56,8 @@ user already has, not planning fresh ones.
       "sessions": [
         {
           "scheduled_date": "2026-08-03",
+          "slot_time": "06:00-07:30",
+          "estimated_duration_minutes": 60,
           "target_muscle_groups": ["chest", "back"],
           "prescription": {
             "warm_ups": [

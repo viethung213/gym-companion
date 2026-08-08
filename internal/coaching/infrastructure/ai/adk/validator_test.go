@@ -58,9 +58,11 @@ func sessionOf(date string, mainIDs ...string) SessionPlan {
 		mains = append(mains, ex(id))
 	}
 	return SessionPlan{
-		ScheduledDate:      date,
-		TargetMuscleGroups: []string{"chest"},
-		Prescription:       WorkoutPrescription{MainExercises: mains},
+		ScheduledDate:            date,
+		SlotTime:                 "06:00-07:30",
+		EstimatedDurationMinutes: 60,
+		TargetMuscleGroups:       []string{"chest"},
+		Prescription:             WorkoutPrescription{MainExercises: mains},
 	}
 }
 
@@ -318,7 +320,12 @@ func TestPlanValidator_ReportsEmptyMainExercises(t *testing.T) {
 	cat := newFakeCatalog("bench-press")
 	v := newPlanValidator(cat)
 
-	sp := SessionPlan{ScheduledDate: "2026-08-03", Prescription: WorkoutPrescription{}}
+	sp := SessionPlan{
+		ScheduledDate:            "2026-08-03",
+		SlotTime:                 "06:00-07:30",
+		EstimatedDurationMinutes: 45,
+		Prescription:             WorkoutPrescription{},
+	}
 
 	got, err := v.validate(context.Background(), planOf(sp), false)
 	if err != nil {

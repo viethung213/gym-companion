@@ -136,6 +136,7 @@ message SessionPlan {
   string reasoning = 11;
   google.protobuf.Timestamp generated_at = 12;
   SessionPlanSource source = 13;
+  int32 estimated_duration_minutes = 14;
 }
 
 message WorkoutPrescription {

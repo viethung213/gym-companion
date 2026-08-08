@@ -339,19 +339,20 @@ func toPBSession(s *roadmap.SessionPlan) *pbmsg.SessionPlan {
 	info := s.Info()
 
 	pb := &pbmsg.SessionPlan{
-		SessionPlanId:      info.SessionPlanID,
-		DayPlanId:          info.DayPlanID,
-		WeekPlanId:         info.WeekPlanID,
-		RoadmapId:          info.RoadmapID,
-		UserId:             info.UserID,
-		ScheduledDate:      dateToPB(info.ScheduledDate.Year(), int(info.ScheduledDate.Month()), info.ScheduledDate.Day()),
-		SlotTime:           info.SlotTime,
-		Status:             domainSessionStatusToPB(info.Status),
-		Source:             domainSourceToPB(info.Source),
-		TargetMuscleGroups: append([]string(nil), info.TargetMuscleGroups...),
-		Prescription:       toPBPrescription(info.Prescription),
-		Reasoning:          info.Reasoning,
-		GeneratedAt:        timestamppb.New(info.GeneratedAt),
+		SessionPlanId:            info.SessionPlanID,
+		DayPlanId:                info.DayPlanID,
+		WeekPlanId:               info.WeekPlanID,
+		RoadmapId:                info.RoadmapID,
+		UserId:                   info.UserID,
+		ScheduledDate:            dateToPB(info.ScheduledDate.Year(), int(info.ScheduledDate.Month()), info.ScheduledDate.Day()),
+		SlotTime:                 info.SlotTime,
+		EstimatedDurationMinutes: info.EstimatedDurationMinutes,
+		Status:                   domainSessionStatusToPB(info.Status),
+		Source:                   domainSourceToPB(info.Source),
+		TargetMuscleGroups:       append([]string(nil), info.TargetMuscleGroups...),
+		Prescription:             toPBPrescription(info.Prescription),
+		Reasoning:                info.Reasoning,
+		GeneratedAt:              timestamppb.New(info.GeneratedAt),
 	}
 
 	return pb

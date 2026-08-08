@@ -278,6 +278,14 @@ func (v *planValidator) validateSession(
 		})
 	}
 
+	if sp.EstimatedDurationMinutes <= 0 {
+		issues = append(issues, planIssue{
+			WeekNumber: weekNumber,
+			SessionIdx: idx,
+			Reason:     "estimated_duration_minutes is missing or invalid; must be a positive integer in minutes",
+		})
+	}
+
 	if !dropInvalid {
 		return issues, nil, nil
 	}

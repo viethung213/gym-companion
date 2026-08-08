@@ -147,6 +147,33 @@ func TestPostgresUserProfileReader(t *testing.T) {
 		assert.Len(t, profile.ActiveInjuries, 1)
 		assert.Equal(t, "shoulder", profile.ActiveInjuries[0].MuscleGroup)
 	})
+
+	t.Run("parses preferred_workout_times in key-value map format", func(t *testing.T) {
+		db := setupTestDB(t)
+		reader := NewPostgresUserProfileReader(db)
+
+		err := db.Exec(`
+			INSERT INTO profile.users (user_id, preferred_workout_times, updated_at)
+			VALUES ('user-kv-map', '{"mon":["06:00-07:30"],"wed":["18:00-19:30"]}', CURRENT_TIMESTAMP);
+		`).Error
+		require.NoError(t, err)
+
+		profile, err := reader.GetProfile(ctx, "user-kv-map")
+		require.NoError(t, err)
+
+		assert.Len(t, profile.AvailableSlots, 2)
+		dayMap := make(map[time.Weekday]port.Slot)
+		for _, s := range profile.AvailableSlots {
+			dayMap[s.DayOfWeek] = s
+		}
+		assert.Contains(t, dayMap, time.Monday)
+		assert.Equal(t, "06:00", dayMap[time.Monday].StartTime)
+		assert.Equal(t, "07:30", dayMap[time.Monday].EndTime)
+
+		assert.Contains(t, dayMap, time.Wednesday)
+		assert.Equal(t, "18:00", dayMap[time.Wednesday].StartTime)
+		assert.Equal(t, "19:30", dayMap[time.Wednesday].EndTime)
+	})
 }
 
 func TestPostgresWorkoutSessionReader(t *testing.T) {

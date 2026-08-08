@@ -167,6 +167,8 @@ func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
 
 		SlotTime: info.SlotTime,
 
+		EstimatedDurationMinutes: info.EstimatedDurationMinutes,
+
 		Status: string(info.Status),
 
 		Source: string(info.Source),
@@ -230,6 +232,8 @@ func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error)
 		ScheduledDate: rec.ScheduledDate,
 
 		SlotTime: rec.SlotTime,
+
+		EstimatedDurationMinutes: rec.EstimatedDurationMinutes,
 
 		Status: roadmap.SessionPlanStatus(rec.Status),
 

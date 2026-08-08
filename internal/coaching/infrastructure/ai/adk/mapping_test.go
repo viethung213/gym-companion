@@ -110,6 +110,12 @@ func TestMapToDomainRoadmap_SetsAllIdentityFields(t *testing.T) {
 	if info.Status != roadmap.SessionPlanStatusPending {
 		t.Errorf("got status %q, want PENDING", info.Status)
 	}
+	if info.SlotTime != "06:00-07:30" {
+		t.Errorf("got SlotTime %q, want 06:00-07:30", info.SlotTime)
+	}
+	if info.EstimatedDurationMinutes != 60 {
+		t.Errorf("got EstimatedDurationMinutes %d, want 60", info.EstimatedDurationMinutes)
+	}
 }
 
 func TestMapToDomainRoadmap_MintsIdsDeterministically(t *testing.T) {
