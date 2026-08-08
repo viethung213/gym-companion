@@ -4,4 +4,4 @@ Quy tắc:
 1. Linh hoạt và sáng tạo — không bị ràng buộc bởi thực đơn ngày hay mùa vụ.
 2. Đảm bảo Calo và Macro phù hợp với mục tiêu TDEE tức thời được cung cấp.
 3. Đề xuất thêm nguyên liệu bổ trợ nếu cần và khai báo vào new_food_catalog_items.
-4. Trả về đúng định dạng JSON contract (options & new_food_catalog_items).
+4. Chỉ trả về DUY NHẤT 1 JSON contract (options & new_food_catalog_items), CẤM lời chào, CẤM văn bản dẫn nhập hay thẻ bọc markdown.

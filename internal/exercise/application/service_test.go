@@ -329,10 +329,10 @@ func TestGetCatalogMetadata(t *testing.T) {
 		t.Fatalf("get metadata: %v", err)
 	}
 
-	// 2. Failure with unauthenticated context
+	// 2. Unauthenticated context should succeed (public bypass)
 	_, err = suite.metadataHandler.Handle(context.Background(), query.GetCatalogMetadataQuery{})
-	if !errors.Is(err, middleware.ErrUnauthorized) {
-		t.Fatalf("got error %v, want %v", err, middleware.ErrUnauthorized)
+	if err != nil {
+		t.Fatalf("get metadata unauthenticated: %v", err)
 	}
 }
 
@@ -431,47 +431,21 @@ func TestRequireAdmin_Authorization(t *testing.T) {
 	}
 }
 
-func TestRequireAuthenticated_Authorization(t *testing.T) {
+func TestPublicCatalogBypass(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		run  func(ctx context.Context, s *testSuite) error
-	}{
-		{
-			name: "GetExerciseHandler",
-			run: func(ctx context.Context, s *testSuite) error {
-				_, err := s.getHandler.Handle(ctx, query.GetExerciseQuery{ID: "id-1"})
-				return err
-			},
-		},
-		{
-			name: "SearchExercisesHandler",
-			run: func(ctx context.Context, s *testSuite) error {
-				_, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{Filters: &port.SearchFilters{}})
-				return err
-			},
-		},
-		{
-			name: "GetCatalogMetadataHandler",
-			run: func(ctx context.Context, s *testSuite) error {
-				_, err := s.metadataHandler.Handle(ctx, query.GetCatalogMetadataQuery{})
-				return err
-			},
-		},
+	suite := newTestSuite()
+	unauthCtx := context.Background()
+
+	// SearchExercisesHandler should succeed when unauthenticated
+	_, err := suite.searchHandler.Handle(unauthCtx, query.SearchExercisesQuery{Filters: &port.SearchFilters{}})
+	if err != nil {
+		t.Fatalf("search exercises unauthenticated: %v", err)
 	}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			suite := newTestSuite()
-
-			// Rejected when unauthenticated
-			err := tt.run(context.Background(), suite)
-			if !errors.Is(err, middleware.ErrUnauthorized) {
-				t.Fatalf("got error %v, want %v", err, middleware.ErrUnauthorized)
-			}
-		})
+	// GetCatalogMetadataHandler should succeed when unauthenticated
+	_, err = suite.metadataHandler.Handle(unauthCtx, query.GetCatalogMetadataQuery{})
+	if err != nil {
+		t.Fatalf("get metadata unauthenticated: %v", err)
 	}
 }

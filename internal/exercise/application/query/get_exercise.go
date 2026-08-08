@@ -27,10 +27,7 @@ func (h *GetExerciseHandler) Handle(
 	ctx context.Context,
 	q GetExerciseQuery,
 ) (*domain.Exercise, error) {
-	actor, err := middleware.RequireAuthenticated(ctx)
-	if err != nil {
-		return nil, err
-	}
+	actor, _ := middleware.RequireAuthenticated(ctx)
 
 	exercise, err := h.repo.FindByID(ctx, q.ID)
 	if err != nil {

@@ -4,4 +4,4 @@ Quy tắc:
 1. Đảm bảo phân bổ Calo chuẩn: Sáng (25%), Trưa (35%), Tối (30%), Phụ (10%).
 2. Kiểm tra dị ứng và nguyên liệu bị khóa lặp (7/5/3 ngày).
 3. Đề xuất sản phẩm NutiFood cho bữa phụ nếu có nhu cầu.
-4. Trả về đúng định dạng JSON contract (options & new_food_catalog_items).
+4. Chỉ trả về DUY NHẤT 1 JSON contract (options & new_food_catalog_items), CẤM lời chào, CẤM văn bản dẫn nhập hay thẻ bọc markdown.

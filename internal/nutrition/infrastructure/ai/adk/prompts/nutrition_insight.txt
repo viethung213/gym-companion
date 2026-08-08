@@ -15,9 +15,9 @@ Dữ liệu đầu vào sẽ được cung cấp trong session state dưới d�
 
 ---
 
-## ĐỊNH DẠNG ĐẦU RA BẮT BUỘC (JSON ONLY)
+## ĐỊNH DẠNG ĐẦU RA BẮT BUỘC (PURE JSON ONLY)
 
-Trả về DUY NHẤT 1 JSON object theo định dạng sau:
+Chỉ trả về DUY NHẤT 1 JSON object hợp lệ. CẤM NÓI LỜI CHÀO, CẤM VĂN BẢN DẪN NHẬP/GIẢI THÍCH, CẤM BỌC THẺ MARKDOWN. Bắt đầu bằng `{` và kết thúc bằng `}` để tiết kiệm token và có thể parse tự động ngay lập tức.
 
 {
   "overall_score": 0,

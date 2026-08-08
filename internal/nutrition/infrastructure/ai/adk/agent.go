@@ -100,7 +100,7 @@ func (a *NutritionAgent) EstimateNutrient(
 
 	var result repository.EstimatedNutrientResult
 	//nolint:musttag // LLM response struct does not require tags
-	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
+	if err := json.Unmarshal([]byte(cleanJSONResponse(rawJSON)), &result); err != nil {
 		return nil, fmt.Errorf("estimate nutrient parse json: %w", err)
 	}
 
@@ -131,7 +131,7 @@ func (a *NutritionAgent) GenerateNutritionInsight(
 	}
 
 	var insight insightLLMResponse
-	if err := json.Unmarshal([]byte(rawJSON), &insight); err != nil {
+	if err := json.Unmarshal([]byte(cleanJSONResponse(rawJSON)), &insight); err != nil {
 		return nil, fmt.Errorf("generate nutrition insight parse json: %w", err)
 	}
 
