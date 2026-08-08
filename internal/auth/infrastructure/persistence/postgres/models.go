@@ -13,8 +13,8 @@ import (
 type UserModel struct {
 	ID         string    `gorm:"primaryKey;column:id"`
 	Email      string    `gorm:"column:email;not null;uniqueIndex"`
-	GoogleID   string    `gorm:"column:google_id"`
-	FacebookID string    `gorm:"column:facebook_id"`
+	GoogleID   *string   `gorm:"column:google_id"`
+	FacebookID *string   `gorm:"column:facebook_id"`
 	FullName   string    `gorm:"column:full_name"`
 	Role       string    `gorm:"column:role;not null"`
 	CreatedAt  time.Time `gorm:"column:created_at"`
@@ -26,11 +26,20 @@ func (UserModel) TableName() string {
 }
 
 func toUserModel(u *aggregate.User) *UserModel {
+	var gID, fID *string
+	if u.GoogleID() != "" {
+		val := u.GoogleID()
+		gID = &val
+	}
+	if u.FacebookID() != "" {
+		val := u.FacebookID()
+		fID = &val
+	}
 	return &UserModel{
 		ID:         u.ID(),
 		Email:      u.Email(),
-		GoogleID:   u.GoogleID(),
-		FacebookID: u.FacebookID(),
+		GoogleID:   gID,
+		FacebookID: fID,
 		FullName:   u.FullName(),
 		Role:       u.Role(),
 		CreatedAt:  u.CreatedAt(),
@@ -51,11 +60,18 @@ func (m *UserModel) ToDomain() (*aggregate.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	var gID, fID string
+	if m.GoogleID != nil {
+		gID = *m.GoogleID
+	}
+	if m.FacebookID != nil {
+		fID = *m.FacebookID
+	}
 	return aggregate.NewUser(
 		userID,
 		email,
-		m.GoogleID,
-		m.FacebookID,
+		gID,
+		fID,
 		m.FullName,
 		role,
 		m.CreatedAt,
