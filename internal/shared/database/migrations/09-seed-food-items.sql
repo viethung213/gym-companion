@@ -27,7 +27,7 @@ VALUES
     ('Cá hồi phi lê tươi', 'PROTEIN', 208.0, 20.0, 0.0, 13.0, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
     ('Cá ngừ đại dương tươi', 'PROTEIN', 130.0, 28.0, 0.0, 1.0, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
     ('Cá ngừ ngâm nước khoáng (Hộp)', 'PROTEIN', 116.0, 26.0, 0.0, 1.0, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
-    ('Cá thu tươi', 'PROTEIN蛋白质', 205.0, 19.0, 0.0, 13.9, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
+    ('Cá thu tươi', 'PROTEIN', 205.0, 19.0, 0.0, 13.9, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
     ('Cá bass (Cá chẽm)', 'PROTEIN', 124.0, 23.0, 0.0, 3.0, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
     ('Cá lóc đồng', 'PROTEIN', 97.0, 18.2, 0.0, 2.7, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
     ('Cá chép tươi', 'PROTEIN', 127.0, 16.0, 0.0, 5.6, '["FISH"]'::jsonb, 'FISH', NULL, FALSE, 'Active'),
