@@ -6,6 +6,70 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
+type FoodNutrientDTO struct {
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Category          string   `json:"category"`
+	CaloriesPer100g   float64  `json:"calories_per_100g"`
+	ProteinPer100g    float64  `json:"protein_per_100g"`
+	CarbsPer100g      float64  `json:"carbs_per_100g"`
+	FatPer100g        float64  `json:"fat_per_100g"`
+	AllergenTags      []string `json:"allergen_tags"`
+	ProteinSource     string   `json:"protein_source,omitempty"`
+	CarbSource        string   `json:"carb_source,omitempty"`
+	IsNutiFoodProduct bool     `json:"is_nutifood_product"`
+}
+
+//nolint:gocritic // hugeParam: fn value object mapping
+func ToFoodNutrientDTO(fn vo.FoodNutrient) FoodNutrientDTO {
+	return FoodNutrientDTO{
+		ID:                fn.ID(),
+		Name:              fn.Name(),
+		Category:          fn.Category(),
+		CaloriesPer100g:   fn.CaloriesPer100g(),
+		ProteinPer100g:    fn.ProteinPer100g(),
+		CarbsPer100g:      fn.CarbsPer100g(),
+		FatPer100g:        fn.FatPer100g(),
+		AllergenTags:      fn.AllergenTags(),
+		ProteinSource:     fn.ProteinSource(),
+		CarbSource:        fn.CarbSource(),
+		IsNutiFoodProduct: fn.IsNutiFoodProduct(),
+	}
+}
+
+func ToFoodNutrientDTOs(fns []vo.FoodNutrient) []FoodNutrientDTO {
+	dtos := make([]FoodNutrientDTO, 0, len(fns))
+	for i := range fns {
+		dtos = append(dtos, ToFoodNutrientDTO(fns[i]))
+	}
+	return dtos
+}
+
+//nolint:gocritic // hugeParam: dto struct value object mapping
+func (dto FoodNutrientDTO) ToDomain() vo.FoodNutrient {
+	return vo.NewFoodNutrient(
+		dto.ID,
+		dto.Name,
+		dto.Category,
+		dto.CaloriesPer100g,
+		dto.ProteinPer100g,
+		dto.CarbsPer100g,
+		dto.FatPer100g,
+		dto.AllergenTags,
+		dto.ProteinSource,
+		dto.CarbSource,
+		dto.IsNutiFoodProduct,
+	)
+}
+
+func ToFoodNutrientDomains(dtos []FoodNutrientDTO) []vo.FoodNutrient {
+	domains := make([]vo.FoodNutrient, 0, len(dtos))
+	for i := range dtos {
+		domains = append(domains, dtos[i].ToDomain())
+	}
+	return domains
+}
+
 type NutritionPromptContext struct {
 	UserID               string            `json:"user_id"`
 	PlanDate             time.Time         `json:"plan_date"`
@@ -15,7 +79,7 @@ type NutritionPromptContext struct {
 	TargetCarbGrams      float64           `json:"target_carb_grams"`
 	TargetFatGrams       float64           `json:"target_fat_grams"`
 	UserRestrictions     []string          `json:"user_restrictions"`
-	AvailableIngredients []vo.FoodNutrient `json:"available_ingredients"`
+	AvailableIngredients []FoodNutrientDTO `json:"available_ingredients"`
 }
 
 type SupplementaryIngredientSpec struct {

@@ -41,7 +41,7 @@ func TestNutritionTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error fetching active catalog: %v", err)
 	}
-	if len(catalog) != 1 || catalog[0].Category() != "PROTEIN" {
+	if len(catalog) != 1 || catalog[0].Category != "PROTEIN" {
 		t.Fatalf("got catalog len %d, want 1 protein item", len(catalog))
 	}
 

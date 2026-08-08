@@ -15,8 +15,10 @@ func (a *NutritionAgent) ExecuteAdhocMealSuggestionWorkflow(
 	promptCtx NutritionPromptContext,
 	lockoutRegistry vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
-	availableFoods := lockoutRegistry.FilterAvailableIngredients(promptCtx.AvailableIngredients, promptCtx.PlanDate)
-	plan, err := a.runAdhocWorkflow(ctx, promptCtx.UserID, availableFoods)
+	domainFoods := ToFoodNutrientDomains(promptCtx.AvailableIngredients)
+	filteredFoods := lockoutRegistry.FilterAvailableIngredients(domainFoods, promptCtx.PlanDate)
+	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
+	plan, err := a.runAdhocWorkflow(ctx, promptCtx.UserID, availableDTOs)
 	if err != nil {
 		return nil, err
 	}
