@@ -20,6 +20,7 @@ type FoodNutrientDTO struct {
 	IsNutiFoodProduct bool     `json:"is_nutifood_product"`
 }
 
+//nolint:gocritic // hugeParam: fn value object mapping
 func ToFoodNutrientDTO(fn vo.FoodNutrient) FoodNutrientDTO {
 	return FoodNutrientDTO{
 		ID:                fn.ID(),
@@ -44,6 +45,7 @@ func ToFoodNutrientDTOs(fns []vo.FoodNutrient) []FoodNutrientDTO {
 	return dtos
 }
 
+//nolint:gocritic // hugeParam: dto struct value object mapping
 func (dto FoodNutrientDTO) ToDomain() vo.FoodNutrient {
 	return vo.NewFoodNutrient(
 		dto.ID,
