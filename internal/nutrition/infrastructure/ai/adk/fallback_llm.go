@@ -7,6 +7,7 @@ import (
 	"iter"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
 	"google.golang.org/adk/v2/model"
@@ -23,7 +24,10 @@ type FallbackLLM struct {
 // NewFallbackLLMFromEnv tạo FallbackLLM đọc danh sách model từ cấu hình module Nutrition.
 func NewFallbackLLMFromEnv(ctx context.Context) (model.LLM, error) {
 	cfg := config.LoadConfig()
+	defaultModels := []string{"gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"}
 	rawNames := append([]string{cfg.GeminiModel}, strings.Split(cfg.GeminiFallbackModels, ",")...)
+	rawNames = append(rawNames, defaultModels...)
+
 	modelNames := make([]string, 0, len(rawNames))
 	seen := make(map[string]bool)
 
@@ -103,11 +107,31 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 			}
 
 			// Kiểm tra nếu lỗi do Quota / Rate limit (429) và còn model dự phòng
-			if isQuotaOrRateLimitErr(lastErr) && idx < len(f.models)-1 {
-				nextModel := f.models[idx+1]
-				log.Printf("[FallbackLLM] Model %s hit quota/rate limit error (%v). Auto-falling back to %s...",
-					m.Name(), lastErr, nextModel.Name())
-				continue
+			if isQuotaOrRateLimitErr(lastErr) {
+				if idx < len(f.models)-1 {
+					nextModel := f.models[idx+1]
+					log.Printf("[FallbackLLM] Model %s hit quota/rate limit error (%v). Auto-falling back to %s after 1s...",
+						m.Name(), lastErr, nextModel.Name())
+					time.Sleep(1 * time.Second)
+					continue
+				}
+
+				// Nếu là model cuối cùng mà bị 429, chờ 2s rồi thử lại 1 lần cuối
+				log.Printf("[FallbackLLM] Model %s hit rate limit (429). Retrying after 2s cooldown...", m.Name())
+				time.Sleep(2 * time.Second)
+				var retryErr error
+				for resp, err := range m.GenerateContent(ctx, req, stream) {
+					if err != nil {
+						retryErr = err
+						break
+					}
+					if !yield(resp, nil) {
+						return
+					}
+				}
+				if retryErr == nil {
+					return
+				}
 			}
 
 			// Nếu không phải lỗi 429 hoặc đã hết model dự phòng, trả về lỗi
