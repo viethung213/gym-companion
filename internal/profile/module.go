@@ -19,6 +19,7 @@ import (
 	profileKafka "github.com/viethung213/gym-companion/internal/profile/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/worker"
+	profileConsumer "github.com/viethung213/gym-companion/internal/profile/transport/consumer"
 	profileGRPC "github.com/viethung213/gym-companion/internal/profile/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	gormPostgres "gorm.io/driver/postgres"
@@ -42,6 +43,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 
 	userRepo := persistence.NewPostgresUserProfileRepository(gormDB)
 	outboxRepo := persistence.NewGormOutboxRepository(gormDB)
+	outboxLogRepo := persistence.NewGormOutboxLogRepository(gormDB)
 	txManager := persistence.NewSQLTransactionManager(gormDB)
 	eventPub := profileEvent.NewOutboxWriter(outboxRepo)
 
@@ -56,6 +58,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 	getInjuryHistoryHandler := query.NewGetInjuryHistoryHandler(userRepo)
 
 	var kafkaPub *profileKafka.Publisher
+	var userRegisteredConsumer *profileConsumer.UserRegisteredConsumer
+
 	if deps.KafkaRegistry != nil {
 		cfg := profileConfig.LoadConfig()
 		brokers := strings.Split(cfg.KafkaBrokers, ",")
@@ -63,6 +67,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 		writer, wErr := deps.KafkaRegistry.GetWriter("profile.events", brokers)
 		if wErr == nil && writer != nil {
 			kafkaPub = profileKafka.NewPublisher(writer)
+		}
+
+		reader, rErr := deps.KafkaRegistry.GetReader("profile-user-registered-group", "auth.events", brokers)
+		if rErr == nil && reader != nil {
+			userRegisteredConsumer = profileConsumer.NewUserRegisteredConsumer(reader, userRepo, outboxLogRepo, txManager)
 		}
 	}
 
@@ -75,6 +84,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 		go func() {
 			defer wg.Done()
 			outboxWorker.Start(workerCtx)
+		}()
+	}
+
+	if userRegisteredConsumer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			userRegisteredConsumer.Start(workerCtx)
 		}()
 	}
 
