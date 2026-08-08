@@ -100,7 +100,7 @@ func (p *schemaTxPool) PrepareContext(ctx context.Context, query string) (*sql.S
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	const dsn = "file::memory:?cache=shared&_loc=UTC"
+	dsn := "file:" + t.Name() + "?mode=memory&cache=shared&_loc=UTC"
 
 	// Mở raw DB để tạo bảng
 	rawDB, err := sql.Open("sqlite", dsn)
