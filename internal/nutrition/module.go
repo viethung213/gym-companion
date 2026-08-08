@@ -115,7 +115,7 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 
 		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events", brokers)
 		if pErr == nil && profileEventReader != nil {
-			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, genPlanHdlr)
+			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, outboxLogRepo, genPlanHdlr)
 		}
 	}
 

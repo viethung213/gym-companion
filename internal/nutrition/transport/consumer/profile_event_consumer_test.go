@@ -46,7 +46,7 @@ func (m *mockPlanRepoForConsumer) FindPlansForDate(ctx context.Context, targetDa
 
 func TestProfileEventConsumer_UserRegistered(t *testing.T) {
 	repo := &mockPlanRepoForConsumer{}
-	consumer := NewProfileEventConsumer(nil, repo, nil)
+	consumer := NewProfileEventConsumer(nil, repo, nil, nil)
 
 	eventData := &authv1event.UserRegistered{
 		UserId: "usr_reg_100",
@@ -88,7 +88,7 @@ func TestProfileEventConsumer_UserRegistered(t *testing.T) {
 
 func TestProfileEventConsumer_ProfileUpdated_Above80Percent(t *testing.T) {
 	repo := &mockPlanRepoForConsumer{}
-	consumer := NewProfileEventConsumer(nil, repo, nil)
+	consumer := NewProfileEventConsumer(nil, repo, nil, nil)
 
 	eventData := &profilev1event.ProfileUpdated{
 		UserId:         "usr_prof_85",
@@ -130,7 +130,7 @@ func TestProfileEventConsumer_ProfileUpdated_Above80Percent(t *testing.T) {
 
 func TestProfileEventConsumer_ProfileUpdated_Below80Percent_Skipped(t *testing.T) {
 	repo := &mockPlanRepoForConsumer{}
-	consumer := NewProfileEventConsumer(nil, repo, nil)
+	consumer := NewProfileEventConsumer(nil, repo, nil, nil)
 
 	eventData := &profilev1event.ProfileUpdated{
 		UserId:         "usr_prof_40",
