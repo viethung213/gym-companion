@@ -27,11 +27,17 @@ func TestRunWithRetries_SuccessFirstAttempt(t *testing.T) {
 					CarbFoodID:      "f2",
 					CarbFoodName:    "Khoai lang",
 				},
+				{
+					ProteinFoodID:   "f2",
+					ProteinFoodName: "Khoai lang",
+					CarbFoodID:      "f1",
+					CarbFoodName:    "Ức gà",
+				},
 			},
 		}, nil
 	}
 
-	result, err := runWithRetries(context.Background(), validator, nil, attemptFn)
+	result, err := runWithRetries(context.Background(), validator, nil, nil, attemptFn)
 	if err != nil {
 		t.Fatalf("unexpected error running retries: %v", err)
 	}
@@ -53,9 +59,13 @@ func TestRunWithRetries_SalvageDegradedOnFinalAttempt(t *testing.T) {
 		if attempt < 3 {
 			return nil, errors.New("simulated AI failure")
 		}
-		// Attempt 3 returns valid option
+		// Attempt 3 returns valid options
 		return &GeneratedMealPlan{
 			Options: []GeneratedMealOption{
+				{
+					ProteinFoodID:   "f1",
+					ProteinFoodName: "Ức gà",
+				},
 				{
 					ProteinFoodID:   "f1",
 					ProteinFoodName: "Ức gà",
@@ -64,12 +74,12 @@ func TestRunWithRetries_SalvageDegradedOnFinalAttempt(t *testing.T) {
 		}, nil
 	}
 
-	result, err := runWithRetries(context.Background(), validator, nil, attemptFn)
+	result, err := runWithRetries(context.Background(), validator, nil, nil, attemptFn)
 	if err != nil {
-		t.Fatalf("unexpected error running retries salvage: %v", err)
+		t.Fatalf("unexpected error running retries: %v", err)
 	}
 
-	if result.Plan == nil || len(result.Plan.Options) != 1 {
-		t.Fatalf("expected salvaged plan with 1 option")
+	if result.Plan == nil || len(result.Plan.Options) < 2 {
+		t.Fatalf("expected salvaged plan with at least 2 options")
 	}
 }

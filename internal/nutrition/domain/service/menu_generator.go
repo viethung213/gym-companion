@@ -69,6 +69,7 @@ func (g *MenuGenerator) GenerateDailyPlan(
 	slots := getDailyMealSlots()
 	dailyMeals := make([]aggregate.DailyMeal, 0, len(slots))
 
+	currentLockout := lockoutRegistry
 	for _, slot := range slots {
 		targetMealCalo := allocation.TargetCalories() * slot.percentage
 
@@ -81,9 +82,16 @@ func (g *MenuGenerator) GenerateDailyPlan(
 			PlanDate:             planDate,
 		}
 
-		options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, targetMealCalo)
+		options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, currentLockout, targetMealCalo)
 		if optErr != nil {
 			return nil, fmt.Errorf("menu generator slot %s: %w", slot.name, optErr)
+		}
+
+		// Tự động khóa các nguyên liệu đã dùng ở các bữa trước đó trong ngày để các bữa sau (Sáng -> Trưa -> Tối -> Phụ) chọn các bộ nguyên liệu mới
+		for _, opt := range options {
+			for _, ing := range opt.Ingredients() {
+				currentLockout = currentLockout.ApplyLockout(vo.LockoutTypeProtein, ing.IngredientName(), 24*time.Hour, planDate)
+			}
 		}
 
 		dailyMeals = append(dailyMeals, aggregate.NewDailyMeal(slot.name, options))
@@ -112,12 +120,7 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
 	}
 
-	userNutrients := make([]vo.FoodNutrient, 0, len(userIngredients))
-	hasCategory := map[string]bool{
-		"PROTEIN": false,
-		"CARB":    false,
-		"VEGGIE":  false,
-	}
+	pantryCatalog := make([]vo.FoodNutrient, 0, len(userIngredients))
 
 	for _, ingName := range userIngredients {
 		trimmed := strings.TrimSpace(ingName)
@@ -125,10 +128,12 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 			continue
 		}
 
+		lower := strings.ToLower(trimmed)
 		var foundItem vo.FoodNutrient
 		var isFound bool
 		for i := range activeCatalog {
-			if strings.EqualFold(activeCatalog[i].Name(), trimmed) {
+			actLower := strings.ToLower(activeCatalog[i].Name())
+			if actLower == lower || strings.Contains(actLower, lower) || strings.Contains(lower, actLower) {
 				foundItem = activeCatalog[i]
 				isFound = true
 				break
@@ -136,6 +141,7 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		}
 
 		if !isFound {
+			// Nguyên liệu mới -> Tạo đối tượng gửi sang để AI tự nhận diện 100% nhóm thực phẩm (PROTEIN/CARB/VEGGIE) và khai báo new_food_catalog_items
 			foundItem = vo.NewFoodNutrient(
 				uuid.New().String(),
 				trimmed,
@@ -144,58 +150,43 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 				nil, "", "", false,
 			)
 		}
-		userNutrients = append(userNutrients, foundItem)
-
-		cat := strings.ToUpper(foundItem.Category())
-		if cat == "PROTEIN" || cat == "CARB" || cat == "VEGGIE" {
-			hasCategory[cat] = true
-		} else {
-			switch {
-			case foundItem.ProteinPer100g() > 12:
-				hasCategory["PROTEIN"] = true
-			case foundItem.CarbsPer100g() > 15:
-				hasCategory["CARB"] = true
-			default:
-				hasCategory["VEGGIE"] = true
-			}
-		}
+		pantryCatalog = append(pantryCatalog, foundItem)
 	}
 
-	pantryCatalog := make([]vo.FoodNutrient, 0, len(userNutrients))
-	pantryCatalog = append(pantryCatalog, userNutrients...)
+	// Gọi AI 1 lần duy nhất để sinh đúng 2 công thức món ăn từ tủ lạnh (tiết kiệm token và giảm thời gian chờ)
+	targetCalo := allocation.TargetCalories() * 0.35
+	promptCtx := repository.AIMenuPromptContext{
+		UserID:               userID,
+		MealType:             "PANTRY_RECIPE",
+		TargetMealCalories:   targetCalo,
+		AvailableIngredients: pantryCatalog,
+		UserRestrictions:     nil,
+		PlanDate:             planDate,
+	}
 
-	// Nếu thiếu nhóm nào, bổ sung thực phẩm nhóm đó từ DB activeCatalog
-	for cat, exists := range hasCategory {
-		if !exists {
-			for i := range activeCatalog {
-				if strings.EqualFold(activeCatalog[i].Category(), cat) {
-					pantryCatalog = append(pantryCatalog, activeCatalog[i])
-				}
-			}
-		}
+	options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, targetCalo)
+	if optErr != nil {
+		return nil, fmt.Errorf("menu generator pantry: %w", optErr)
+	}
+
+	// Giới hạn đúng 2 công thức món ăn duy nhất
+	if len(options) > 2 {
+		options = options[:2]
 	}
 
 	slots := getDailyMealSlots()
 	dailyMeals := make([]aggregate.DailyMeal, 0, len(slots))
 
-	for _, slot := range slots {
-		targetMealCalo := allocation.TargetCalories() * slot.percentage
-
-		promptCtx := repository.AIMenuPromptContext{
-			UserID:               userID,
-			MealType:             "PANTRY_RECIPE",
-			TargetMealCalories:   targetMealCalo,
-			AvailableIngredients: pantryCatalog,
-			UserRestrictions:     nil,
-			PlanDate:             planDate,
+	for i, slot := range slots {
+		slotOptions := options
+		if len(options) == 2 {
+			if i%2 == 0 {
+				slotOptions = []aggregate.MealOption{options[0]}
+			} else {
+				slotOptions = []aggregate.MealOption{options[1]}
+			}
 		}
-
-		options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, targetMealCalo)
-		if optErr != nil {
-			return nil, fmt.Errorf("menu generator pantry slot %s: %w", slot.name, optErr)
-		}
-
-		dailyMeals = append(dailyMeals, aggregate.NewDailyMeal(slot.name, options))
+		dailyMeals = append(dailyMeals, aggregate.NewDailyMeal(slot.name, slotOptions))
 	}
 
 	planID := uuid.New().String()

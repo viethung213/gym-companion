@@ -96,11 +96,12 @@ func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetT
 	for _, m := range plan.DailyMeals() {
 		for _, opt := range m.Options() {
 			pbOpt := &nutritionv1msg.MealOption{
-				MealName: opt.MealName(),
-				Calories: float32(opt.Calories()),
-				Protein:  float32(opt.ProteinGrams()),
-				Carbs:    float32(opt.CarbGrams()),
-				Fat:      float32(opt.FatGrams()),
+				MealName:    opt.MealName(),
+				Calories:    float32(opt.Calories()),
+				Protein:     float32(opt.ProteinGrams()),
+				Carbs:       float32(opt.CarbGrams()),
+				Fat:         float32(opt.FatGrams()),
+				RecipeSteps: opt.CookingSteps(),
 			}
 			switch m.MealType() {
 			case "BREAKFAST":
@@ -393,11 +394,12 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 	for _, m := range plan.DailyMeals() {
 		for _, opt := range m.Options() {
 			pbOpt := &nutritionv1msg.MealOption{
-				MealName: opt.MealName(),
-				Calories: float32(opt.Calories()),
-				Protein:  float32(opt.ProteinGrams()),
-				Carbs:    float32(opt.CarbGrams()),
-				Fat:      float32(opt.FatGrams()),
+				MealName:    opt.MealName(),
+				Calories:    float32(opt.Calories()),
+				Protein:     float32(opt.ProteinGrams()),
+				Carbs:       float32(opt.CarbGrams()),
+				Fat:         float32(opt.FatGrams()),
+				RecipeSteps: opt.CookingSteps(),
 			}
 			switch m.MealType() {
 			case "BREAKFAST":

@@ -19,6 +19,7 @@ type planAttemptFunc func(attempt int, priorIssues []string) (*GeneratedMealPlan
 func runWithRetries(
 	ctx context.Context,
 	v *planValidator,
+	availableIngredients []FoodNutrientDTO,
 	restrictions []string,
 	attempt planAttemptFunc,
 ) (*PlanResult, error) {
@@ -40,7 +41,7 @@ func runWithRetries(
 			continue
 		}
 
-		outcome, err := v.validate(ctx, plan, restrictions, finalAttempt)
+		outcome, err := v.validate(ctx, plan, availableIngredients, restrictions, finalAttempt)
 		if err != nil {
 			return nil, fmt.Errorf("validate nutrition plan: %w", err)
 		}

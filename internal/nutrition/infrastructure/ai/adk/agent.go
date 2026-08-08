@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -245,18 +246,19 @@ func (a *NutritionAgent) SelectCreativeMealOptions(
 		return plan, nil
 	}
 
-	result, err := runWithRetries(ctx, validator, internal.UserRestrictions, attemptFn)
+	result, err := runWithRetries(ctx, validator, availableDTOs, internal.UserRestrictions, attemptFn)
 	if err != nil {
 		return nil, fmt.Errorf("adk nutrition agent select options: %w", err)
 	}
 
-	return a.persistNewFoodItemsAndMap(ctx, result.Plan)
+	return a.persistNewFoodItemsAndMap(ctx, result.Plan, availableDTOs)
 }
 
-// persistNewFoodItemsAndMap lưu nguyên liệu mới do AI đề xuất vào CSDL, sau đó map sang GeneratedRecipeResult.
+// persistNewFoodItemsAndMap lưu nguyên liệu mới do AI đề xuất và các nguyên liệu tủ lạnh tạm thời vào CSDL, sau đó map sang GeneratedRecipeResult.
 func (a *NutritionAgent) persistNewFoodItemsAndMap(
 	ctx context.Context,
 	plan *GeneratedMealPlan,
+	availableDTOs []FoodNutrientDTO,
 ) ([]repository.GeneratedRecipeResult, error) {
 	newCatalogNutrients := make([]vo.FoodNutrient, 0, len(plan.NewFoodCatalogItems))
 	for _, newItem := range plan.NewFoodCatalogItems {
@@ -283,6 +285,64 @@ func (a *NutritionAgent) persistNewFoodItemsAndMap(
 				newItem.AllergenTags, "", "", false,
 			))
 		}
+	}
+
+	// Bổ sung logic lưu tự động bất kỳ nguyên liệu tủ lạnh tạm thời hoặc nguyên liệu mới được dùng trong options vào CSDL nếu chưa có.
+	ensurePersisted := func(foodID, foodName, defaultCategory string) {
+		if foodName == "" {
+			return
+		}
+		existing, _ := a.foodRepo.FindByName(ctx, foodName)
+		if existing != nil {
+			return
+		}
+		var matchDTO *FoodNutrientDTO
+		for i := range availableDTOs {
+			if strings.EqualFold(availableDTOs[i].Name, foodName) || (foodID != "" && availableDTOs[i].ID == foodID) {
+				matchDTO = &availableDTOs[i]
+				break
+			}
+		}
+
+		idToUse := foodID
+		if _, parseErr := uuid.Parse(idToUse); parseErr != nil {
+			idToUse = uuid.New().String()
+		}
+
+		var domainItem *aggregate.FoodItem
+		if matchDTO != nil {
+			domainItem = aggregate.NewFoodItem(
+				idToUse,
+				matchDTO.Name,
+				matchDTO.Category,
+				matchDTO.CaloriesPer100g,
+				matchDTO.ProteinPer100g,
+				matchDTO.CarbsPer100g,
+				matchDTO.FatPer100g,
+				matchDTO.AllergenTags,
+				matchDTO.ProteinSource,
+				matchDTO.CarbSource,
+				matchDTO.IsNutiFoodProduct,
+			)
+		} else {
+			domainItem = aggregate.NewFoodItem(
+				idToUse,
+				foodName,
+				defaultCategory,
+				100.0, 10.0, 10.0, 2.0,
+				nil, "", "", false,
+			)
+		}
+		if saveErr := a.foodRepo.Save(ctx, domainItem); saveErr != nil {
+			log.Printf("nutrition adk: failed to save used ingredient %q: %v", foodName, saveErr)
+		}
+	}
+
+	for i := range plan.Options {
+		opt := &plan.Options[i]
+		ensurePersisted(opt.ProteinFoodID, opt.ProteinFoodName, "PROTEIN")
+		ensurePersisted(opt.CarbFoodID, opt.CarbFoodName, "CARB")
+		ensurePersisted(opt.VeggieFoodID, opt.VeggieFoodName, "VEGGIE")
 	}
 
 	recipeResults := make([]repository.GeneratedRecipeResult, 0, len(plan.Options))

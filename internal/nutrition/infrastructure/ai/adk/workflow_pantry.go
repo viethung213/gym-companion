@@ -23,5 +23,5 @@ func (a *NutritionAgent) ExecutePantryRecipeWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	return a.persistNewFoodItemsAndMap(ctx, plan)
+	return a.persistNewFoodItemsAndMap(ctx, plan, availableDTOs)
 }
