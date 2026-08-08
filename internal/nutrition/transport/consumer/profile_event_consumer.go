@@ -251,6 +251,7 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 	return nil
 }
 
+//nolint:gocritic // env envelope value object is passed by value per helper design
 func (c *ProfileEventConsumer) saveLog(ctx context.Context, env CloudEventEnvelope, userID, status string, err error) {
 	if c.outboxLogRepo == nil || env.ID == "" {
 		return
@@ -272,4 +273,3 @@ func (c *ProfileEventConsumer) saveLog(ctx context.Context, env CloudEventEnvelo
 		log.Printf("[Nutrition ProfileEventConsumer] Warning: failed to save outbox log for event %s: %v", env.ID, saveErr)
 	}
 }
-
