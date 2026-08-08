@@ -52,18 +52,13 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd Recal
 		lockouts = history.LockoutRegistry()
 	}
 
-	userRestrictions := make([]string, 0)
-	if len(cmd.AvailableIngredients) > 0 {
-		userRestrictions = append(userRestrictions, cmd.AvailableIngredients...)
-	}
-
-	recalibratedPlan, genErr := h.menuGenerator.GenerateDailyPlan(
+	recalibratedPlan, genErr := h.menuGenerator.GeneratePlanWithPantry(
 		ctx,
 		cmd.UserID,
 		cmd.PlanDate,
 		plan.CalorieAllocation(),
 		lockouts,
-		userRestrictions,
+		cmd.AvailableIngredients,
 	)
 	if genErr != nil {
 		return nil, fmt.Errorf("recalibrate pantry generate: %w", genErr)

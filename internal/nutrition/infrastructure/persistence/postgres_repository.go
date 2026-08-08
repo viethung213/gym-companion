@@ -389,7 +389,7 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 
 		for _, item := range history.LockoutRegistry().Items() {
 			gormLock := &GormLockoutRegistry{
-				ID:         fmt.Sprintf("%s-%s", history.UserID(), item.ItemName()),
+				ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte("lockout_"+history.UserID()+"_"+item.ItemName())).String(),
 				UserID:     history.UserID(),
 				ItemType:   item.ItemType(),
 				ItemName:   item.ItemName(),
