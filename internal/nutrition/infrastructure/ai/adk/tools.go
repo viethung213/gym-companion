@@ -18,14 +18,14 @@ func NewNutritionTools(foodRepo repository.FoodItemRepository) *NutritionTools {
 	return &NutritionTools{foodRepo: foodRepo}
 }
 
-func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, category string) ([]vo.FoodNutrient, error) {
+func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, category string) ([]FoodNutrientDTO, error) {
 	catalog, err := t.foodRepo.FindActiveCatalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("tools fetch active catalog: %w", err)
 	}
 
 	if category == "" {
-		return catalog, nil
+		return ToFoodNutrientDTOs(catalog), nil
 	}
 
 	filtered := make([]vo.FoodNutrient, 0, len(catalog))
@@ -34,7 +34,7 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, category st
 			filtered = append(filtered, catalog[i])
 		}
 	}
-	return filtered, nil
+	return ToFoodNutrientDTOs(filtered), nil
 }
 
 func (t *NutritionTools) CheckLockoutRules(
@@ -65,10 +65,10 @@ func (t *NutritionTools) CalculateMacroGramRatio(
 	return proteinGrams, carbGrams, fatGrams
 }
 
-func (t *NutritionTools) SuggestNutiFoodSupplement(ctx context.Context) ([]vo.FoodNutrient, error) {
+func (t *NutritionTools) SuggestNutiFoodSupplement(ctx context.Context) ([]FoodNutrientDTO, error) {
 	products, err := t.foodRepo.FindNutiFoodProducts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("tools suggest nutifood products: %w", err)
 	}
-	return products, nil
+	return ToFoodNutrientDTOs(products), nil
 }

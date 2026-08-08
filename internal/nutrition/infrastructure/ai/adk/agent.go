@@ -203,13 +203,16 @@ func (a *NutritionAgent) SelectCreativeMealOptions(
 	promptCtx repository.AIMenuPromptContext,
 	lockoutRegistry vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
+	filteredFoods := lockoutRegistry.FilterAvailableIngredients(promptCtx.AvailableIngredients, promptCtx.PlanDate)
+	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
+
 	internal := NutritionPromptContext{
 		UserID:               promptCtx.UserID,
 		PlanDate:             promptCtx.PlanDate,
 		MealType:             promptCtx.MealType,
 		TargetMealCalories:   promptCtx.TargetMealCalories,
 		UserRestrictions:     promptCtx.UserRestrictions,
-		AvailableIngredients: promptCtx.AvailableIngredients,
+		AvailableIngredients: availableDTOs,
 	}
 
 	var (
@@ -233,10 +236,9 @@ func (a *NutritionAgent) SelectCreativeMealOptions(
 	}
 
 	validator := newPlanValidator(a.foodRepo, lockoutRegistry)
-	availableFoods := lockoutRegistry.FilterAvailableIngredients(internal.AvailableIngredients, internal.PlanDate)
 
 	attemptFn := func(_ int, _ []string) (*GeneratedMealPlan, error) {
-		plan, err := a.runWorkflow(ctx, wfAgent, internal.UserID, flow, availableFoods)
+		plan, err := a.runWorkflow(ctx, wfAgent, internal.UserID, flow, availableDTOs)
 		if err != nil {
 			return nil, err
 		}
