@@ -181,6 +181,8 @@ func (h *GRPCHandler) GetProfile(ctx context.Context, req *profilev1message.GetP
 		UpdatedAt:             profile.UpdatedAt().Format(time.RFC3339),
 		CompletionRate:        float32(profile.CompletionRate()),
 		BodyFatPercent:        latestBf,
+		FullName:              profile.FullName(),
+		AvatarUrl:             profile.AvatarURL(),
 	}, nil
 }
 

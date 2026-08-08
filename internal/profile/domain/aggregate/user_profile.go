@@ -14,6 +14,8 @@ import (
 
 type UserProfile struct {
 	userID                string
+	fullName              string
+	avatarURL             string
 	biologicalMetrics     vo.BiologicalMetrics
 	experienceLevel       string
 	goals                 []string
@@ -154,7 +156,17 @@ func ReconstituteUserProfile(
 	}
 }
 
-func (p *UserProfile) UserID() string                          { return p.userID }
+func (p *UserProfile) UserID() string    { return p.userID }
+func (p *UserProfile) FullName() string  { return p.fullName }
+func (p *UserProfile) AvatarURL() string { return p.avatarURL }
+func (p *UserProfile) SetIdentity(fullName, avatarURL string) {
+	if fullName != "" {
+		p.fullName = fullName
+	}
+	if avatarURL != "" {
+		p.avatarURL = avatarURL
+	}
+}
 func (p *UserProfile) BiologicalMetrics() vo.BiologicalMetrics { return p.biologicalMetrics }
 func (p *UserProfile) ExperienceLevel() string                 { return p.experienceLevel }
 func (p *UserProfile) Goals() []string                         { return copyStringSlice(p.goals) }

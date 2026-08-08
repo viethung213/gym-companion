@@ -11,4 +11,5 @@ message UserRegistered {
   string email = 2;
   string full_name = 3;
   google.protobuf.Timestamp registered_at = 4;
+  string avatar_url = 5;
 }

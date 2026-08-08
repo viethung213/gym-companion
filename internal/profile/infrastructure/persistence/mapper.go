@@ -40,6 +40,8 @@ func ToPersistenceModels(domain *aggregate.UserProfile) (*UserProfileModel, []*B
 
 	userModel := &UserProfileModel{
 		UserID:                domain.UserID(),
+		FullName:              domain.FullName(),
+		AvatarURL:             domain.AvatarURL(),
 		DateOfBirth:           dob,
 		Gender:                bio.Gender(),
 		ExperienceLevel:       domain.ExperienceLevel(),
@@ -165,7 +167,7 @@ func ToDomainAggregate(
 		injuries = append(injuries, inj)
 	}
 
-	return aggregate.ReconstituteUserProfile(
+	domainProfile := aggregate.ReconstituteUserProfile(
 		userModel.UserID,
 		bio,
 		userModel.ExperienceLevel,
@@ -182,5 +184,7 @@ func ToDomainAggregate(
 		userModel.AICoachActivated,
 		userModel.CreatedAt,
 		userModel.UpdatedAt,
-	), nil
+	)
+	domainProfile.SetIdentity(userModel.FullName, userModel.AvatarURL)
+	return domainProfile, nil
 }

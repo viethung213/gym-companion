@@ -120,6 +120,7 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 					newUserID,
 					profile.Email,
 					profile.FullName,
+					profile.AvatarURL,
 					"user", // default role
 				)
 				if regErr != nil {

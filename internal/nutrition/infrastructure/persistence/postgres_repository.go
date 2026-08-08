@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
@@ -289,7 +290,7 @@ func (r *PostgresNutritionPlanRepository) SaveUserMealSchedules(ctx context.Cont
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			newRecord := GormUserMealSchedule{
-				ID:            fmt.Sprintf("ums_%s_%s", userID, mealType),
+				ID:            uuid.NewSHA1(uuid.NameSpaceOID, []byte("ums_"+userID+"_"+mealType)).String(),
 				UserID:        userID,
 				MealType:      mealType,
 				ScheduledTime: scheduledTime,

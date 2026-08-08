@@ -170,6 +170,7 @@ func (p *OAuthProvider) exchangeGoogle(ctx context.Context, code string, redirec
 		VerifiedEmail bool   `json:"verified_email"`
 		EmailVerified bool   `json:"email_verified"`
 		Name          string `json:"name"`
+		Picture       string `json:"picture"`
 	}
 	if err := json.NewDecoder(respProf.Body).Decode(&profileResp); err != nil {
 		return nil, fmt.Errorf("decode profile response: %w", err)
@@ -181,6 +182,7 @@ func (p *OAuthProvider) exchangeGoogle(ctx context.Context, code string, redirec
 		ID:            profileResp.ID,
 		Email:         profileResp.Email,
 		FullName:      profileResp.Name,
+		AvatarURL:     profileResp.Picture,
 		EmailVerified: isVerified,
 	}, nil
 }
@@ -273,6 +275,7 @@ func (p *OAuthProvider) exchangeFacebook(ctx context.Context, code string, redir
 		ID:            profileResp.ID,
 		Email:         profileResp.Email,
 		FullName:      profileResp.Name,
+		AvatarURL:     profileResp.Picture.Data.URL,
 		EmailVerified: isVerified,
 	}, nil
 }

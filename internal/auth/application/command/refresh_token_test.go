@@ -19,7 +19,7 @@ func TestRefreshTokenHandler_Handle(t *testing.T) {
 
 	// Setup user
 	userID := "e3fa878c-02cf-4b72-9118-8f8319fbc74b"
-	user, err := aggregate.RegisterUser(userID, "test@example.com", "Test User", "user")
+	user, err := aggregate.RegisterUser(userID, "test@example.com", "Test User", "", "user")
 	if err != nil {
 		t.Fatalf("failed to register user: %v", err)
 	}

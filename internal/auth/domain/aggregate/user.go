@@ -48,6 +48,7 @@ func RegisterUser(
 	idVal string,
 	emailVal string,
 	fullName string,
+	avatarURL string,
 	roleVal string,
 ) (*User, error) {
 	id, err := vo.NewUserID(idVal)
@@ -79,6 +80,7 @@ func RegisterUser(
 		UserID:       id.Value(),
 		Email:        email.Value(),
 		FullName:     fullName,
+		AvatarURL:    avatarURL,
 		RegisteredAt: now,
 	})
 

@@ -77,6 +77,8 @@ message GetProfileResponse {
   float target_body_fat_percent = 17;
   float completion_rate = 18;
   float body_fat_percent = 19;
+  string full_name = 20;
+  string avatar_url = 21;
 }
 
 message UpdateProfileRequest {

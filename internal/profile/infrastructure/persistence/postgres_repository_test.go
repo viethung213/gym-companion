@@ -30,6 +30,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	err = db.Exec(`
 		CREATE TABLE profile.users (
 			user_id TEXT PRIMARY KEY,
+			full_name TEXT,
+			avatar_url TEXT,
 			date_of_birth DATETIME,
 			gender TEXT,
 			experience_level TEXT,
