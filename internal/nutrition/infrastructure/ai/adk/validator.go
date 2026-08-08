@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
@@ -42,40 +43,73 @@ func (v *planValidator) validate(ctx context.Context, plan *GeneratedMealPlan, r
 		opt := &plan.Options[idx]
 		optIssues := make([]string, 0)
 
-		// 1. Verify Protein Food in DB Catalog
+		// 1. Verify & Auto-Heal Protein Food
+		var proteinItem *aggregate.FoodItem
 		if opt.ProteinFoodID != "" {
 			item, err := v.foodRepo.FindByID(ctx, opt.ProteinFoodID)
-			if err != nil || item == nil {
-				optIssues = append(optIssues, fmt.Sprintf("option %d: protein_food_id '%s' not found in active catalog", idx+1, opt.ProteinFoodID))
-			} else {
-				for _, tag := range item.AllergenTags() {
-					if restrictionMap[strings.ToUpper(strings.TrimSpace(tag))] {
-						optIssues = append(optIssues, fmt.Sprintf("option %d: protein_food '%s' contains restricted allergen '%s'", idx+1, item.Name(), tag))
-					}
+			if err == nil && item != nil {
+				proteinItem = item
+			}
+		}
+		if proteinItem == nil && opt.ProteinFoodName != "" {
+			item, err := v.foodRepo.FindByName(ctx, opt.ProteinFoodName)
+			if err == nil && item != nil {
+				proteinItem = item
+				opt.ProteinFoodID = item.ID()
+			}
+		}
+		if proteinItem == nil && (opt.ProteinFoodID != "" || opt.ProteinFoodName != "") {
+			optIssues = append(optIssues, fmt.Sprintf("option %d: protein_food_id '%s' not found in active catalog", idx+1, opt.ProteinFoodID))
+		} else if proteinItem != nil {
+			for _, tag := range proteinItem.AllergenTags() {
+				if restrictionMap[strings.ToUpper(strings.TrimSpace(tag))] {
+					optIssues = append(optIssues, fmt.Sprintf("option %d: protein_food '%s' contains restricted allergen '%s'", idx+1, proteinItem.Name(), tag))
 				}
 			}
 		}
 
-		// 2. Verify Carb Food in DB Catalog
+		// 2. Verify & Auto-Heal Carb Food
+		var carbItem *aggregate.FoodItem
 		if opt.CarbFoodID != "" {
 			item, err := v.foodRepo.FindByID(ctx, opt.CarbFoodID)
-			if err != nil || item == nil {
-				optIssues = append(optIssues, fmt.Sprintf("option %d: carb_food_id '%s' not found in active catalog", idx+1, opt.CarbFoodID))
-			} else {
-				for _, tag := range item.AllergenTags() {
-					if restrictionMap[strings.ToUpper(strings.TrimSpace(tag))] {
-						optIssues = append(optIssues, fmt.Sprintf("option %d: carb_food '%s' contains restricted allergen '%s'", idx+1, item.Name(), tag))
-					}
+			if err == nil && item != nil {
+				carbItem = item
+			}
+		}
+		if carbItem == nil && opt.CarbFoodName != "" {
+			item, err := v.foodRepo.FindByName(ctx, opt.CarbFoodName)
+			if err == nil && item != nil {
+				carbItem = item
+				opt.CarbFoodID = item.ID()
+			}
+		}
+		if carbItem == nil && (opt.CarbFoodID != "" || opt.CarbFoodName != "") {
+			optIssues = append(optIssues, fmt.Sprintf("option %d: carb_food_id '%s' not found in active catalog", idx+1, opt.CarbFoodID))
+		} else if carbItem != nil {
+			for _, tag := range carbItem.AllergenTags() {
+				if restrictionMap[strings.ToUpper(strings.TrimSpace(tag))] {
+					optIssues = append(optIssues, fmt.Sprintf("option %d: carb_food '%s' contains restricted allergen '%s'", idx+1, carbItem.Name(), tag))
 				}
 			}
 		}
 
-		// 3. Verify Veggie Food in DB Catalog
+		// 3. Verify & Auto-Heal Veggie Food
+		var veggieItem *aggregate.FoodItem
 		if opt.VeggieFoodID != "" {
 			item, err := v.foodRepo.FindByID(ctx, opt.VeggieFoodID)
-			if err != nil || item == nil {
-				optIssues = append(optIssues, fmt.Sprintf("option %d: veggie_food_id '%s' not found in active catalog", idx+1, opt.VeggieFoodID))
+			if err == nil && item != nil {
+				veggieItem = item
 			}
+		}
+		if veggieItem == nil && opt.VeggieFoodName != "" {
+			item, err := v.foodRepo.FindByName(ctx, opt.VeggieFoodName)
+			if err == nil && item != nil {
+				veggieItem = item
+				opt.VeggieFoodID = item.ID()
+			}
+		}
+		if veggieItem == nil && (opt.VeggieFoodID != "" || opt.VeggieFoodName != "") {
+			optIssues = append(optIssues, fmt.Sprintf("option %d: veggie_food_id '%s' not found in active catalog", idx+1, opt.VeggieFoodID))
 		}
 
 		// 4. Verify Lockout Rules
