@@ -155,7 +155,8 @@ func createTestTables(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS nutrition_plans (
 			id TEXT PRIMARY KEY, user_id TEXT, plan_date DATETIME,
 			target_calories REAL, target_protein REAL, target_carbs REAL, target_fat REAL,
-			meals_json TEXT, created_at DATETIME, updated_at DATETIME
+			meals_json TEXT, created_at DATETIME, updated_at DATETIME,
+			UNIQUE(user_id, plan_date)
 		)`,
 		`CREATE TABLE IF NOT EXISTS meal_histories (
 			id TEXT PRIMARY KEY, user_id TEXT UNIQUE, created_at DATETIME, updated_at DATETIME

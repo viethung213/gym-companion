@@ -12,6 +12,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PostgresFoodItemRepository struct {
@@ -118,7 +119,7 @@ func (r *PostgresRecipeCacheRepository) FindByHash(ctx context.Context, hash str
 
 func (r *PostgresRecipeCacheRepository) Save(ctx context.Context, recipe *repository.CachedRecipe) error {
 	stepsJSON, _ := json.Marshal(recipe.CookingSteps)
-	ingsJSON, _ := json.Marshal(recipe.Ingredients)
+	ingsJSON, _ := MarshalIngredientsJSON(recipe.Ingredients)
 
 	gormModel := &GormRecipe{
 		ID:               recipe.ID,
@@ -159,16 +160,13 @@ func (r *PostgresNutritionPlanRepository) FindByUserIDAndDate(ctx context.Contex
 	}
 
 	alloc, _ := vo.NewCalorieAllocation(gormPlan.TargetCalories, gormPlan.TargetProtein, gormPlan.TargetCarbs, gormPlan.TargetFat)
-	var meals []aggregate.DailyMeal
-	if len(gormPlan.MealsJSON) > 0 {
-		_ = json.Unmarshal(gormPlan.MealsJSON, &meals)
-	}
+	meals, _ := UnmarshalDailyMealsJSON(gormPlan.MealsJSON)
 
 	return aggregate.NewNutritionPlan(gormPlan.ID, gormPlan.UserID, gormPlan.PlanDate, alloc, meals), nil
 }
 
 func (r *PostgresNutritionPlanRepository) Save(ctx context.Context, plan *aggregate.NutritionPlan) error {
-	mealsJSON, _ := json.Marshal(plan.DailyMeals())
+	mealsJSON, _ := MarshalDailyMealsJSON(plan.DailyMeals())
 	alloc := plan.CalorieAllocation()
 
 	gormModel := &GormNutritionPlan{
@@ -185,14 +183,17 @@ func (r *PostgresNutritionPlanRepository) Save(ctx context.Context, plan *aggreg
 	}
 
 	db := getDB(ctx, r.db)
-	if err := db.Create(gormModel).Error; err != nil {
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "plan_date"}},
+		DoUpdates: clause.AssignmentColumns([]string{"target_calories", "target_protein", "target_carbs", "target_fat", "meals_json", "updated_at"}),
+	}).Create(gormModel).Error; err != nil {
 		return fmt.Errorf("postgres nutrition plan repo save: %w", err)
 	}
 	return nil
 }
 
 func (r *PostgresNutritionPlanRepository) Update(ctx context.Context, plan *aggregate.NutritionPlan) error {
-	mealsJSON, _ := json.Marshal(plan.DailyMeals())
+	mealsJSON, _ := MarshalDailyMealsJSON(plan.DailyMeals())
 	alloc := plan.CalorieAllocation()
 
 	gormModel := &GormNutritionPlan{
@@ -241,10 +242,7 @@ func (r *PostgresNutritionPlanRepository) FindPlansForDate(ctx context.Context, 
 	for i := range gormPlans {
 		gormPlan := &gormPlans[i]
 		alloc, _ := vo.NewCalorieAllocation(gormPlan.TargetCalories, gormPlan.TargetProtein, gormPlan.TargetCarbs, gormPlan.TargetFat)
-		var meals []aggregate.DailyMeal
-		if len(gormPlan.MealsJSON) > 0 {
-			_ = json.Unmarshal(gormPlan.MealsJSON, &meals)
-		}
+		meals, _ := UnmarshalDailyMealsJSON(gormPlan.MealsJSON)
 		result = append(result, aggregate.NewNutritionPlan(gormPlan.ID, gormPlan.UserID, gormPlan.PlanDate, alloc, meals))
 	}
 	return result, nil

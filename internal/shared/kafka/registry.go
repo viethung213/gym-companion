@@ -67,6 +67,8 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 		return nil, fmt.Errorf("build security config for writer (%s): %w", module, err)
 	}
 
+	ensureTopicExists(brokers, module)
+
 	w = &kafka.Writer{
 		Addr:                   kafka.TCP(brokers...),
 		Topic:                  module,
@@ -104,6 +106,8 @@ func (r *Registry) GetReader(consumerGroup, topic string, brokers []string) (*ka
 	if exists {
 		return reader, nil
 	}
+
+	ensureTopicExists(brokers, topic)
 
 	dialer, _, err := buildSecurityConfig()
 	if err != nil {
@@ -236,4 +240,21 @@ func getFirstEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func ensureTopicExists(brokers []string, topic string) {
+	if len(brokers) == 0 || topic == "" {
+		return
+	}
+	conn, err := kafka.Dial("tcp", brokers[0])
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	_ = conn.CreateTopics(kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	})
 }

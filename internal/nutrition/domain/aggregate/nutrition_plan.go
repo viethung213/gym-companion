@@ -70,6 +70,32 @@ func NewMealOption(
 	}
 }
 
+func ReconstructMealOption(
+	optionID, mealName string,
+	calories, proteinGrams, carbGrams, fatGrams float64,
+	ingredients []IngredientGram,
+	cookingSteps []string,
+	isLogged, isNutiFoodProduct bool,
+) MealOption {
+	ingCopy := make([]IngredientGram, len(ingredients))
+	copy(ingCopy, ingredients)
+	stepCopy := make([]string, len(cookingSteps))
+	copy(stepCopy, cookingSteps)
+
+	return MealOption{
+		optionID:          optionID,
+		mealName:          mealName,
+		calories:          calories,
+		proteinGrams:      proteinGrams,
+		carbGrams:         carbGrams,
+		fatGrams:          fatGrams,
+		ingredients:       ingCopy,
+		cookingSteps:      stepCopy,
+		isLogged:          isLogged,
+		isNutiFoodProduct: isNutiFoodProduct,
+	}
+}
+
 func (m *MealOption) OptionID() string        { return m.optionID }
 func (m *MealOption) MealName() string        { return m.mealName }
 func (m *MealOption) Calories() float64       { return m.calories }
