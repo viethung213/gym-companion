@@ -127,9 +127,9 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 
 		var foundItem vo.FoodNutrient
 		var isFound bool
-		for _, catItem := range activeCatalog {
-			if strings.EqualFold(catItem.Name(), trimmed) {
-				foundItem = catItem
+		for i := range activeCatalog {
+			if strings.EqualFold(activeCatalog[i].Name(), trimmed) {
+				foundItem = activeCatalog[i]
 				isFound = true
 				break
 			}
@@ -150,11 +150,12 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		if cat == "PROTEIN" || cat == "CARB" || cat == "VEGGIE" {
 			hasCategory[cat] = true
 		} else {
-			if foundItem.ProteinPer100g() > 12 {
+			switch {
+			case foundItem.ProteinPer100g() > 12:
 				hasCategory["PROTEIN"] = true
-			} else if foundItem.CarbsPer100g() > 15 {
+			case foundItem.CarbsPer100g() > 15:
 				hasCategory["CARB"] = true
-			} else {
+			default:
 				hasCategory["VEGGIE"] = true
 			}
 		}
@@ -166,9 +167,9 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 	// Nếu thiếu nhóm nào, bổ sung thực phẩm nhóm đó từ DB activeCatalog
 	for cat, exists := range hasCategory {
 		if !exists {
-			for _, item := range activeCatalog {
-				if strings.EqualFold(item.Category(), cat) {
-					pantryCatalog = append(pantryCatalog, item)
+			for i := range activeCatalog {
+				if strings.EqualFold(activeCatalog[i].Category(), cat) {
+					pantryCatalog = append(pantryCatalog, activeCatalog[i])
 				}
 			}
 		}
