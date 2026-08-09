@@ -113,7 +113,7 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 		if err := protojson.Unmarshal(env.Data, &data); err != nil {
 			if errLegacy := json.Unmarshal(env.Data, &data); errLegacy != nil {
 				processErr = fmt.Errorf("unmarshal UserRegistered data payload: %w", err)
-				c.saveLog(ctx, env, "", "FAILED", processErr)
+				c.saveLog(ctx, msg.Value, env, "", "FAILED", processErr)
 				return processErr
 			}
 		}
@@ -125,18 +125,18 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 
 		if err := c.planRepo.SaveUserMealSchedules(ctx, userID, defaultSchedules); err != nil {
 			processErr = fmt.Errorf("save default user meal schedules: %w", err)
-			c.saveLog(ctx, env, userID, "FAILED", processErr)
+			c.saveLog(ctx, msg.Value, env, userID, "FAILED", processErr)
 			return processErr
 		}
 		log.Printf("[Nutrition ProfileEventConsumer] Seeded default meal schedule SQL records for new user: %s", userID)
-		c.saveLog(ctx, env, userID, "PROCESSED", nil)
+		c.saveLog(ctx, msg.Value, env, userID, "PROCESSED", nil)
 
 	case "contracts.supporting.profile.v1.event.ProfileUpdated", "ProfileUpdated":
 		var data profilev1event.ProfileUpdated
 		if err := protojson.Unmarshal(env.Data, &data); err != nil {
 			if errLegacy := json.Unmarshal(env.Data, &data); errLegacy != nil {
 				processErr = fmt.Errorf("unmarshal ProfileUpdated payload: %w", err)
-				c.saveLog(ctx, env, "", "FAILED", processErr)
+				c.saveLog(ctx, msg.Value, env, "", "FAILED", processErr)
 				return processErr
 			}
 		}
@@ -151,7 +151,7 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 		isAbove80 := (rate >= 80.0) || (rate >= 0.80 && rate <= 1.0)
 		if !isAbove80 {
 			log.Printf("[Nutrition ProfileEventConsumer] Profile completion rate %.1f for user %s is < 80%%, skipping auto plan generation.", rate, userID)
-			c.saveLog(ctx, env, userID, "SKIPPED", nil)
+			c.saveLog(ctx, msg.Value, env, userID, "SKIPPED", nil)
 			return nil
 		}
 
@@ -182,19 +182,19 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			})
 			if genErr != nil {
 				log.Printf("[Nutrition ProfileEventConsumer] GenerateDailyPlan error for user %s: %v", userID, genErr)
-				c.saveLog(ctx, env, userID, "FAILED", genErr)
+				c.saveLog(ctx, msg.Value, env, userID, "FAILED", genErr)
 				return genErr
 			}
 			log.Printf("[Nutrition ProfileEventConsumer] Successfully generated daily meals for user %s (profile completion >= 80%%)", userID)
 		}
-		c.saveLog(ctx, env, userID, "PROCESSED", nil)
+		c.saveLog(ctx, msg.Value, env, userID, "PROCESSED", nil)
 
 	case "contracts.supporting.profile.v1.event.ProfileCompleted", "ProfileCompleted":
 		var data profilev1event.ProfileCompleted
 		if err := protojson.Unmarshal(env.Data, &data); err != nil {
 			if errLegacy := json.Unmarshal(env.Data, &data); errLegacy != nil {
 				processErr = fmt.Errorf("unmarshal ProfileCompleted payload: %w", err)
-				c.saveLog(ctx, env, "", "FAILED", processErr)
+				c.saveLog(ctx, msg.Value, env, "", "FAILED", processErr)
 				return processErr
 			}
 		}
@@ -208,7 +208,6 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			log.Printf("[Nutrition ProfileEventConsumer] SaveUserMealSchedules warning: %v", err)
 		}
 
-		bio := data.GetBiologicalMetrics()
 		bioMetrics := service.BiologicalMetrics{
 			WeightKg:      70.0,
 			HeightCm:      170.0,
@@ -216,6 +215,8 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			Gender:        "MALE",
 			ActivityLevel: "MODERATELY_ACTIVE",
 		}
+
+		bio := data.GetBiologicalMetrics()
 		if bio != nil {
 			if bio.GetWeightKg() > 0 {
 				bioMetrics.WeightKg = float64(bio.GetWeightKg())
@@ -240,19 +241,19 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			})
 			if genErr != nil {
 				log.Printf("[Nutrition ProfileEventConsumer] GenerateDailyPlan error for user %s: %v", userID, genErr)
-				c.saveLog(ctx, env, userID, "FAILED", genErr)
+				c.saveLog(ctx, msg.Value, env, userID, "FAILED", genErr)
 				return genErr
 			}
 			log.Printf("[Nutrition ProfileEventConsumer] Successfully generated daily meals for user %s (ProfileCompleted 100%%)", userID)
 		}
-		c.saveLog(ctx, env, userID, "PROCESSED", nil)
+		c.saveLog(ctx, msg.Value, env, userID, "PROCESSED", nil)
 	}
 
 	return nil
 }
 
 //nolint:gocritic // env envelope value object is passed by value per helper design
-func (c *ProfileEventConsumer) saveLog(ctx context.Context, env CloudEventEnvelope, userID, status string, err error) {
+func (c *ProfileEventConsumer) saveLog(ctx context.Context, rawPayload []byte, env CloudEventEnvelope, userID, status string, err error) {
 	if c.outboxLogRepo == nil || env.ID == "" {
 		return
 	}
@@ -260,11 +261,15 @@ func (c *ProfileEventConsumer) saveLog(ctx context.Context, env CloudEventEnvelo
 	if err != nil {
 		errMsg = err.Error()
 	}
+	payload := rawPayload
+	if len(payload) == 0 {
+		payload = env.Data
+	}
 	logRecord := &port.OutboxLogRecord{
 		ID:           env.ID,
 		EventID:      env.ID,
 		EventType:    env.Type,
-		Payload:      env.Data,
+		Payload:      payload,
 		PartitionKey: userID,
 		Status:       status,
 		ErrorMessage: errMsg,

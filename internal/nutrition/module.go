@@ -110,7 +110,7 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 
 		reader, rErr := kafkaRegistry.GetReader("nutrition-workout-completed-group", "workout_execution.events", brokers)
 		if rErr == nil && reader != nil {
-			kafkaConsumer = nutritionKafka.NewConsumer(reader, recalPlanHdlr)
+			kafkaConsumer = nutritionKafka.NewConsumer(reader, recalPlanHdlr, outboxLogRepo)
 		}
 
 		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events", brokers)
