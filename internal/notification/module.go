@@ -83,13 +83,22 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 			log.Printf("Warning: failed to get kafka writer for notification outbox: %v", wErr)
 		}
 
-		// Inbound Event Consumer
-		reader, rErr := deps.KafkaRegistry.GetReader("notification-group", "notification.events", brokers)
-		if rErr == nil && reader != nil {
-			consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, outboxLogRepo)
-			go consumer.Start(ctxWorkers)
-		} else {
-			log.Printf("Warning: failed to get kafka reader for notification events: %v", rErr)
+		// Inbound Event Consumers for all module event topics
+		topics := []string{
+			"notification.events",
+			"coaching.events",
+			"nutrition.events",
+			"workout_execution.events",
+		}
+		for _, topic := range topics {
+			reader, rErr := deps.KafkaRegistry.GetReader("notification-group", topic, brokers)
+			if rErr == nil && reader != nil {
+				consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, outboxLogRepo)
+				go consumer.Start(ctxWorkers)
+				log.Printf("Notification consumer started on topic '%s'", topic)
+			} else {
+				log.Printf("Warning: failed to get kafka reader for notification topic %s: %v", topic, rErr)
+			}
 		}
 
 		// Inbound Event Failure Retry Worker
