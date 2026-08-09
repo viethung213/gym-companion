@@ -169,6 +169,24 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		suggestAdHocHandler = query.NewSuggestAdHocSessionHandler(deps.RoadmapRepo, coachAgent, clock)
 	}
 
+	var completeSessionHandler *command.CompleteSessionHandler
+	var abortSessionHandler *command.AbortSessionHandler
+	if deps.RoadmapRepo != nil && deps.OutboxWriter != nil && txMgr != nil {
+		completeSessionHandler = command.NewCompleteSessionHandler(
+			txMgr,
+			deps.RoadmapRepo,
+			service.NewSCRCalculator(),
+			deps.OutboxWriter,
+			clock,
+		)
+		abortSessionHandler = command.NewAbortSessionHandler(
+			txMgr,
+			deps.RoadmapRepo,
+			deps.OutboxWriter,
+			clock,
+		)
+	}
+
 	coachingServer := coachingGrpc.NewServer(
 		initiateHandler,
 		regenerateHandler,
@@ -190,6 +208,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	var outboxWorker *worker.OutboxWorker
 	var profileConsumer *consumer.ProfileCompletedConsumer
 	var profileConsumerCancel context.CancelFunc
+	var workoutConsumer *consumer.WorkoutExecutionConsumer
+	var workoutConsumerCancel context.CancelFunc
 
 	if deps.KafkaRegistry != nil {
 		cfg := config.LoadConfig()
@@ -205,13 +225,13 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 			}
 		}
 
-		// Subscribe to profile.events for auto-initiation of roadmaps.
+		// Subscribe to profile.events for auto-initiation / regeneration of roadmaps.
 		if initiateHandler != nil && outboxRepo != nil {
 			reader, rErr := deps.KafkaRegistry.GetReader(
 				"coaching-profile-completed-group", "profile.events", brokers,
 			)
 			if rErr == nil && reader != nil {
-				profileConsumer = consumer.NewProfileCompletedConsumer(reader, initiateHandler, outboxRepo)
+				profileConsumer = consumer.NewProfileCompletedConsumer(reader, initiateHandler, regenerateHandler, outboxRepo)
 				var consumerCtx context.Context
 				consumerCtx, profileConsumerCancel = context.WithCancel(ctx)
 				go profileConsumer.Start(consumerCtx)
@@ -222,6 +242,29 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		} else {
 			log.Println("⚠️ Coaching ProfileCompletedConsumer not started (missing InitiateRoadmapHandler or OutboxRepo)")
 		}
+
+		// Subscribe to workout_execution.events for session completion / abortion.
+		if completeSessionHandler != nil && abortSessionHandler != nil && outboxRepo != nil {
+			weReader, weErr := deps.KafkaRegistry.GetReader(
+				"coaching-workout-execution-group", "workout_execution.events", brokers,
+			)
+			if weErr == nil && weReader != nil {
+				workoutConsumer = consumer.NewWorkoutExecutionConsumer(
+					weReader,
+					completeSessionHandler,
+					abortSessionHandler,
+					outboxRepo,
+				)
+				var weCtx context.Context
+				weCtx, workoutConsumerCancel = context.WithCancel(ctx)
+				go workoutConsumer.Start(weCtx)
+				log.Println("✅ Coaching WorkoutExecutionConsumer started (workout_execution.events)")
+			} else {
+				log.Printf("⚠️ Coaching WorkoutExecutionConsumer not started: reader error=%v", weErr)
+			}
+		} else {
+			log.Println("⚠️ Coaching WorkoutExecutionConsumer not started (missing CompleteSessionHandler, AbortSessionHandler or OutboxRepo)")
+		}
 	}
 
 	log.Println("✅ Coaching Module initialized successfully")
@@ -230,6 +273,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		log.Println("Shutting down Coaching Module...")
 		if profileConsumerCancel != nil {
 			profileConsumerCancel()
+		}
+		if workoutConsumerCancel != nil {
+			workoutConsumerCancel()
 		}
 		if reminderWorker != nil {
 			reminderWorker.Stop()

@@ -52,13 +52,21 @@ func getPushAllowedEventRules() map[string]eventPushConfig {
 			DefaultTitle: "Gym Companion Thông Báo",
 			DefaultBody:  "Bạn có thông báo mới từ ứng dụng.",
 		},
+		"contracts.generic.notification.v1.notificationRequested": {
+			DefaultTitle: "Gym Companion Thông Báo",
+			DefaultBody:  "Bạn có thông báo mới từ ứng dụng.",
+		},
 
 		// =========================================================================
-		// 2. CORE MODULE: WORKOUT EXECUTION (Lập Kỷ kỷ lục cá nhân mới - PR)
+		// 2. CORE MODULE: WORKOUT EXECUTION (Lập Kỷ lục cá nhân mới - PR)
 		// =========================================================================
 		"contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved": {
-			DefaultTitle: "Kỷ kỷ lục cá nhân mới! 🏆",
-			DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ kỷ lục cá nhân (PR) mới!",
+			DefaultTitle: "Kỷ lục cá nhân mới! 🏆",
+			DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!",
+		},
+		"contracts.core.workout_execution.v1.newPersonalRecordAchieved": {
+			DefaultTitle: "Kỷ lục cá nhân mới! 🏆",
+			DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!",
 		},
 
 		// =========================================================================
@@ -68,11 +76,19 @@ func getPushAllowedEventRules() map[string]eventPushConfig {
 			DefaultTitle: "Nhắc nhở bữa ăn 🥗",
 			DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
 		},
+		"contracts.core.nutrition.v1.upcomingMealReminder": {
+			DefaultTitle: "Nhắc nhở bữa ăn 🥗",
+			DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
+		},
 
 		// =========================================================================
 		// 4. CORE MODULE: COACHING (Sắp đến giờ tập - Trước 1 tiếng)
 		// =========================================================================
 		"contracts.core.coaching.v1.event.UpcomingWorkoutReminder": {
+			DefaultTitle: "Nhắc nhở buổi tập ⏰",
+			DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
+		},
+		"contracts.core.coaching.v1.upcomingWorkoutReminder": {
 			DefaultTitle: "Nhắc nhở buổi tập ⏰",
 			DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
 		},

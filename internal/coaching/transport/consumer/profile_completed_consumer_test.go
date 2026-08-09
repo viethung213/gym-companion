@@ -11,23 +11,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
-// ---- stubs for InitiateRoadmapHandler dependencies ----
-
-// stubInitiateHandler is a lightweight stand-in for command.InitiateRoadmapHandler.
-// Since the handler struct fields are unexported, we cannot construct one
-// directly in an external test package. Instead, the consumer's HandleMessage
-// method is tested by providing a fully-wired handler through a thin wrapper
-// that lets us control outcomes.
-//
-// For the consumer-level tests we only care about:
-//   - CloudEvent envelope parsing + idempotency (tested with real stubOutbox)
-//   - Correct dispatch vs ignore for different event types
-//   - Graceful handling of ErrActiveRoadmapExists
-//
-// The actual handler logic is already covered by initiate_roadmap_test.go.
-
-// --- consumer-level unit tests ---
-
 func makeProfileCE(t *testing.T, id, typeStr string, dataObj any) []byte {
 	t.Helper()
 
@@ -54,9 +37,9 @@ func makeProfileCE(t *testing.T, id, typeStr string, dataObj any) []byte {
 
 func TestProfileCompletedConsumer_UnknownEventType_Ignored(t *testing.T) {
 	// Consumer should not error on unrelated event types on the same topic.
-	c := NewProfileCompletedConsumer(nil, nil, &stubOutbox{})
+	c := NewProfileCompletedConsumer(nil, nil, nil, &stubOutbox{})
 
-	raw := makeProfileCE(t, "evt-1", "contracts.supporting.profile.v1.event.ProfileUpdated",
+	raw := makeProfileCE(t, "evt-1", "some.unrelated.event",
 		map[string]string{"userId": "user-1"})
 
 	if err := c.HandleMessage(context.Background(), raw); err != nil {
@@ -65,10 +48,10 @@ func TestProfileCompletedConsumer_UnknownEventType_Ignored(t *testing.T) {
 }
 
 func TestProfileCompletedConsumer_MissingEventID(t *testing.T) {
-	c := NewProfileCompletedConsumer(nil, nil, &stubOutbox{})
+	c := NewProfileCompletedConsumer(nil, nil, nil, &stubOutbox{})
 
 	raw := makeProfileCE(t, "", profileCompletedEventType,
-		ProfileCompletedPayload{UserID: "user-1"})
+		ProfileEventPayload{UserID: "user-1"})
 
 	if err := c.HandleMessage(context.Background(), raw); err == nil {
 		t.Errorf("expected error for missing event id")
@@ -77,11 +60,11 @@ func TestProfileCompletedConsumer_MissingEventID(t *testing.T) {
 
 func TestProfileCompletedConsumer_DuplicateEvent_Skipped(t *testing.T) {
 	stub := &stubOutbox{}
-	c := NewProfileCompletedConsumer(nil, nil, stub)
+	c := NewProfileCompletedConsumer(nil, nil, nil, stub)
 
 	// Use empty userId so that even if handler were called, it would no-op.
 	raw := makeProfileCE(t, "evt-dup", profileCompletedEventType,
-		ProfileCompletedPayload{UserID: ""})
+		ProfileEventPayload{UserID: ""})
 
 	// First call: fresh — handler receives empty userId and ignores.
 	if err := c.HandleMessage(context.Background(), raw); err != nil {
@@ -95,18 +78,43 @@ func TestProfileCompletedConsumer_DuplicateEvent_Skipped(t *testing.T) {
 }
 
 func TestProfileCompletedConsumer_MissingUserID_Ignored(t *testing.T) {
-	c := NewProfileCompletedConsumer(nil, nil, &stubOutbox{})
+	c := NewProfileCompletedConsumer(nil, nil, nil, &stubOutbox{})
 
 	raw := makeProfileCE(t, "evt-no-uid", profileCompletedEventType,
-		ProfileCompletedPayload{UserID: ""})
+		ProfileEventPayload{UserID: ""})
 
 	if err := c.HandleMessage(context.Background(), raw); err != nil {
 		t.Errorf("expected nil for missing user_id, got %v", err)
 	}
 }
 
+func TestProfileCompletedConsumer_ProfileUpdatedAndInjuryEvents(t *testing.T) {
+	c := NewProfileCompletedConsumer(nil, nil, nil, &stubOutbox{})
+
+	// Test ProfileUpdated
+	rawUpd := makeProfileCE(t, "evt-upd", profileUpdatedEventType,
+		ProfileEventPayload{UserID: "usr-1"})
+	if err := c.HandleMessage(context.Background(), rawUpd); err != nil {
+		t.Errorf("expected nil for ProfileUpdated with nil handler, got %v", err)
+	}
+
+	// Test InjuryReported
+	rawInj := makeProfileCE(t, "evt-inj", injuryReportedEventType,
+		ProfileEventPayload{UserID: "usr-1", MuscleGroup: "Chest"})
+	if err := c.HandleMessage(context.Background(), rawInj); err != nil {
+		t.Errorf("expected nil for InjuryReported with nil handler, got %v", err)
+	}
+
+	// Test InjuryRecovered
+	rawRec := makeProfileCE(t, "evt-rec", injuryRecoveredEventType,
+		ProfileEventPayload{UserID: "usr-1"})
+	if err := c.HandleMessage(context.Background(), rawRec); err != nil {
+		t.Errorf("expected nil for InjuryRecovered with nil handler, got %v", err)
+	}
+}
+
 func TestProfileCompletedConsumer_InvalidJSON(t *testing.T) {
-	c := NewProfileCompletedConsumer(nil, nil, &stubOutbox{})
+	c := NewProfileCompletedConsumer(nil, nil, nil, &stubOutbox{})
 
 	if err := c.HandleMessage(context.Background(), []byte("not json")); err == nil {
 		t.Errorf("expected error for invalid json")
@@ -124,10 +132,10 @@ func (f *failOutbox) LogProcessed(context.Context, string, string, string, []byt
 }
 
 func TestProfileCompletedConsumer_OutboxError(t *testing.T) {
-	c := NewProfileCompletedConsumer(nil, nil, &failOutbox{})
+	c := NewProfileCompletedConsumer(nil, nil, nil, &failOutbox{})
 
 	raw := makeProfileCE(t, "evt-err", profileCompletedEventType,
-		ProfileCompletedPayload{UserID: "user-1"})
+		ProfileEventPayload{UserID: "user-1"})
 
 	err := c.HandleMessage(context.Background(), raw)
 	if err == nil {
@@ -144,8 +152,6 @@ func TestProfileCompletedConsumer_OutboxError(t *testing.T) {
 type alwaysExistsRepo struct{ port.RoadmapRepository }
 
 func (alwaysExistsRepo) FindActiveByUser(context.Context, string) (*roadmap.Roadmap, error) {
-	// Return a non-nil roadmap so InitiateRoadmapHandler returns
-	// ErrActiveRoadmapExists.
 	return &roadmap.Roadmap{}, nil
 }
 
