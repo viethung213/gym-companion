@@ -58,11 +58,7 @@ func makeSearchExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, err
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "search_exercises",
-			Description: "Batch search exercise catalog for muscle groups (e.g. 'chest', 'back', 'legs', 'shoulders', " +
-				"'abs', 'biceps', 'triceps') and equipment (e.g. 'barbell', 'dumbbell', 'cable', 'body weight'). " +
-				"Internally JOINs exercises with primary/secondary muscles, body parts, and equipment tables, " +
-				"filters matching active movements per requested muscle group, and returns aggregated real " +
-				"catalog IDs (UUIDs) and details.",
+			Description: "Batch search exercise catalog for muscle groups and equipment, returning matching catalog IDs and details.",
 		},
 		func(ctx agent.Context, args SearchArgs) (SearchResults, error) {
 			groups := args.MuscleGroups
