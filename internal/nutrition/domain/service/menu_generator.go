@@ -51,8 +51,7 @@ func getDailyMealSlots() []mealSlot {
 	}
 }
 
-// GenerateDailyPlan sinh thực đơn 4 bữa cho userID.
-// Luồng: check cache → hit: trả ngay | miss: gọi AI → lưu cache.
+// GenerateDailyPlan sinh thực đơn 4 bữa cho userID trong 1 lần gọi AI duy nhất (tiết kiệm thời gian và số lượng request).
 func (g *MenuGenerator) GenerateDailyPlan(
 	ctx context.Context,
 	userID string,
@@ -66,35 +65,70 @@ func (g *MenuGenerator) GenerateDailyPlan(
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
 	}
 
+	// Gọi AI 1 lần duy nhất để sinh toàn bộ các món ăn cho 4 bữa trong ngày (tiết kiệm 75% thời gian phản hồi)
+	promptCtx := repository.AIMenuPromptContext{
+		UserID:               userID,
+		MealType:             "DAILY_PLAN",
+		TargetMealCalories:   allocation.TargetCalories(),
+		AvailableIngredients: activeCatalog,
+		UserRestrictions:     userRestrictions,
+		PlanDate:             planDate,
+	}
+
+	allOptions, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, allocation.TargetCalories())
+	if optErr != nil {
+		return nil, fmt.Errorf("menu generator daily plan AI call: %w", optErr)
+	}
+
 	slots := getDailyMealSlots()
 	dailyMeals := make([]aggregate.DailyMeal, 0, len(slots))
 
-	currentLockout := lockoutRegistry
-	for _, slot := range slots {
+	// Phân bổ các món ăn (mỗi bữa 2 tổ hợp options) cho 4 bữa: Sáng, Trưa, Tối, Phụ
+	for i, slot := range slots {
 		targetMealCalo := allocation.TargetCalories() * slot.percentage
+		var slotOptions []aggregate.MealOption
 
-		promptCtx := repository.AIMenuPromptContext{
-			UserID:               userID,
-			MealType:             slot.name,
-			TargetMealCalories:   targetMealCalo,
-			AvailableIngredients: activeCatalog,
-			UserRestrictions:     userRestrictions,
-			PlanDate:             planDate,
-		}
+		startIdx := i * 2
+		if startIdx < len(allOptions) {
+			endIdx := startIdx + 2
+			if endIdx > len(allOptions) {
+				endIdx = len(allOptions)
+			}
+			rawSlotOptions := allOptions[startIdx:endIdx]
 
-		options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, currentLockout, targetMealCalo)
-		if optErr != nil {
-			return nil, fmt.Errorf("menu generator slot %s: %w", slot.name, optErr)
-		}
-
-		// Tự động khóa các nguyên liệu đã dùng ở các bữa trước đó trong ngày để các bữa sau (Sáng -> Trưa -> Tối -> Phụ) chọn các bộ nguyên liệu mới
-		for _, opt := range options {
-			for _, ing := range opt.Ingredients() {
-				currentLockout = currentLockout.ApplyLockout(vo.LockoutTypeProtein, ing.IngredientName(), 24*time.Hour, planDate)
+			slotOptions = make([]aggregate.MealOption, 0, len(rawSlotOptions))
+			for _, opt := range rawSlotOptions {
+				slotOptions = append(slotOptions, aggregate.NewMealOption(
+					uuid.New().String(),
+					opt.MealName(),
+					targetMealCalo,
+					opt.ProteinGrams(),
+					opt.CarbGrams(),
+					opt.FatGrams(),
+					opt.Ingredients(),
+					opt.CookingSteps(),
+					opt.IsLogged(),
+				))
 			}
 		}
 
-		dailyMeals = append(dailyMeals, aggregate.NewDailyMeal(slot.name, options))
+		// Fallback nếu AI trả về ít hơn 8 options
+		if len(slotOptions) == 0 && len(allOptions) > 0 {
+			fallbackOpt := allOptions[i%len(allOptions)]
+			slotOptions = []aggregate.MealOption{aggregate.NewMealOption(
+				uuid.New().String(),
+				fallbackOpt.MealName(),
+				targetMealCalo,
+				fallbackOpt.ProteinGrams(),
+				fallbackOpt.CarbGrams(),
+				fallbackOpt.FatGrams(),
+				fallbackOpt.Ingredients(),
+				fallbackOpt.CookingSteps(),
+				fallbackOpt.IsLogged(),
+			)}
+		}
+
+		dailyMeals = append(dailyMeals, aggregate.NewDailyMeal(slot.name, slotOptions))
 	}
 
 	planID := uuid.New().String()

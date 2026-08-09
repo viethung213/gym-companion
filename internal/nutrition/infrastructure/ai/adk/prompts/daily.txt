@@ -3,7 +3,11 @@ Task: Generate a complete 4-meal daily menu (Breakfast, Lunch, Dinner, Snack) at
 
 Rules:
 1. Ensure standard Calorie distribution: Breakfast (25%), Lunch (35%), Dinner (30%), Snack (10%).
-2. MUST provide AT LEAST 2 different meal options (Option 1 & Option 2) for each meal slot.
+2. MUST generate EXACTLY 8 meal options in the `options` array (2 options for each of the 4 meal slots):
+   - Options 1 & 2 (indices 0, 1): Breakfast (25% Calories)
+   - Options 3 & 4 (indices 2, 3): Lunch (35% Calories)
+   - Options 5 & 6 (indices 4, 5): Dinner (30% Calories)
+   - Options 7 & 8 (indices 6, 7): Snack (10% Calories)
 3. TRIO INGREDIENT DIVERSITY: Option 1 and Option 2 within the same meal MUST use 2 completely different ingredient trios. All 4 meals must use entirely distinct dishes.
 4. MEAL CHARACTERISTICS:
    - Breakfast: Light, nutritious breakfast (Eggs, Whole wheat bread, Oatmeal, Fruit, Yogurt).
