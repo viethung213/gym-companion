@@ -96,6 +96,33 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			difficulty TEXT,
 			status TEXT
 		);
+		CREATE TABLE IF NOT EXISTS exercise.muscles (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			body_part_id TEXT
+		);
+		CREATE TABLE IF NOT EXISTS exercise.body_parts (
+			id TEXT PRIMARY KEY,
+			name TEXT
+		);
+		CREATE TABLE IF NOT EXISTS exercise.equipments (
+			id TEXT PRIMARY KEY,
+			name TEXT
+		);
+		CREATE TABLE IF NOT EXISTS exercise.exercise_secondary_muscles (
+			exercise_id TEXT,
+			muscle_id TEXT,
+			PRIMARY KEY (exercise_id, muscle_id)
+		);
+		CREATE TABLE IF NOT EXISTS exercise.tags (
+			id TEXT PRIMARY KEY,
+			name TEXT
+		);
+		CREATE TABLE IF NOT EXISTS exercise.exercise_tags (
+			exercise_id TEXT,
+			tag_id TEXT,
+			PRIMARY KEY (exercise_id, tag_id)
+		);
 	`).Error
 	require.NoError(t, err)
 
@@ -264,13 +291,22 @@ func TestPostgresExerciseCatalogReader(t *testing.T) {
 		assert.Equal(t, "Barbell Incline Bench Press", ex.Name)
 	})
 
-	t.Run("returns mock catalog fallback when database table is unseeded", func(t *testing.T) {
+	t.Run("returns empty slice when no exercises match in database", func(t *testing.T) {
 		db := setupTestDB(t)
 		reader := NewPostgresExerciseCatalogReader(db)
 
 		// Database has empty exercise table
 		exs, err := reader.SearchByFilter(ctx, &port.ExerciseFilter{TargetMuscleID: "chest"})
 		require.NoError(t, err)
-		assert.NotEmpty(t, exs, "unseeded DB falls back to default catalog")
+		assert.Empty(t, exs, "unseeded DB returns empty slice without mock fallback")
+	})
+
+	t.Run("returns ErrExerciseNotFound for non-existent exercise ID", func(t *testing.T) {
+		db := setupTestDB(t)
+		reader := NewPostgresExerciseCatalogReader(db)
+
+		_, err := reader.GetByID(ctx, "pull-up")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, port.ErrExerciseNotFound)
 	})
 }

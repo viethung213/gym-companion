@@ -168,7 +168,7 @@ func SetupCoachingE2ESuite(t *testing.T) *TestSuite {
 	repo := newMemRepo()
 	outbox := &captureOutbox{}
 	mockAgent := &fakeCoachAgent{t: clock.t}
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil, nil)
 
 	initiateHandler := command.NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
 	regenerateHandler := command.NewRegenerateScheduleHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)

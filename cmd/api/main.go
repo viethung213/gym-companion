@@ -265,6 +265,9 @@ func (l *lazyKeyProvider) Set(kp middleware.KeyProvider) {
 }
 
 func loadEnvFile() {
+	if strings.EqualFold(os.Getenv("APP_ENV"), "production") {
+		return
+	}
 	data, err := os.ReadFile(".env")
 	if err != nil {
 		return

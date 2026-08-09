@@ -120,7 +120,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		txMgr = persistence.NewSQLTransactionManager(gormDB)
 	}
 
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, nil, nil)
 	clock := realClock{}
 
 	// Wire gRPC Command & Query Handlers

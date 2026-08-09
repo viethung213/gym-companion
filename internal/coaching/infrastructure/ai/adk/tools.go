@@ -58,7 +58,7 @@ func makeSearchExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, err
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "search_exercises",
-			Description: "Search exercise catalog for target muscle groups and available equipment in a single batch call.",
+			Description: "Batch search exercise catalog for muscle groups and equipment, returning matching catalog IDs and details.",
 		},
 		func(ctx agent.Context, args SearchArgs) (SearchResults, error) {
 			groups := args.MuscleGroups

@@ -42,6 +42,7 @@ func main() {
 // run keeps the body out of main so every failure path returns an error and
 // deferred cleanup still runs; log.Fatal mid-run would skip it.
 func run() error {
+	loadEnvFile()
 	ctx := context.Background()
 
 	log.Println("Initializing Coaching Agent...")
@@ -158,6 +159,32 @@ func printRoadmap(r *roadmap.Roadmap) {
 						ex.ExerciseID, ex.TargetSets, ex.TargetReps, ex.TargetWeight, ex.TargetRPE)
 				}
 				fmt.Println()
+			}
+		}
+	}
+}
+
+func loadEnvFile() {
+	if strings.EqualFold(os.Getenv("APP_ENV"), "production") {
+		return
+	}
+	data, err := os.ReadFile(".env")
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, `"'`)
+			if key != "" && os.Getenv(key) == "" {
+				os.Setenv(key, val)
 			}
 		}
 	}

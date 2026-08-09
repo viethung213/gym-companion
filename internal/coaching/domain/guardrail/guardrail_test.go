@@ -1,6 +1,7 @@
 package guardrail
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -103,7 +104,7 @@ func buildRoadmap(t *testing.T, weekRPE [4]float32, weekSets [4]int32) *roadmap.
 func TestGuardrail_Approved_Baseline(t *testing.T) {
 	r := buildValidRoadmap(t)
 
-	e := NewEngine(nil, func(id string) float64 {
+	e := NewEngine(nil, nil, func(id string) float64 {
 		if id == "ex-bench" {
 			return 60.0
 		}
@@ -123,7 +124,7 @@ func TestGuardrail_RejectsWeightOverBand(t *testing.T) {
 
 	// Baseline PR 40 → 60kg exceeds +30% (52kg cap).
 
-	e := NewEngine(nil, func(id string) float64 {
+	e := NewEngine(nil, nil, func(id string) float64 {
 		if id == "ex-bench" {
 			return 40.0
 		}
@@ -157,7 +158,7 @@ func TestGuardrail_RejectsInjuryTargeted(t *testing.T) {
 
 	// All sessions target "chest" — injury on chest should reject them all.
 
-	e := NewEngine(nil, nil, []port.InjuryStatus{
+	e := NewEngine(nil, nil, nil, []port.InjuryStatus{
 		{MuscleGroup: "chest"},
 	})
 
@@ -187,7 +188,7 @@ func TestGuardrail_RecoveredInjury_NotFlagged(t *testing.T) {
 
 	rec := time.Now()
 
-	e := NewEngine(nil, nil, []port.InjuryStatus{
+	e := NewEngine(nil, nil, nil, []port.InjuryStatus{
 		{MuscleGroup: "chest", RecoveredAt: &rec},
 	})
 
@@ -199,7 +200,7 @@ func TestGuardrail_RecoveredInjury_NotFlagged(t *testing.T) {
 }
 
 func TestGuardrail_NilRoadmapRejected(t *testing.T) {
-	e := NewEngine(nil, nil, nil)
+	e := NewEngine(nil, nil, nil, nil)
 
 	got := e.Check(nil)
 
@@ -228,7 +229,7 @@ func TestGuardrail_PhaseRPEBand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()))
+			got := NewEngine(nil, nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()))
 
 			assertViolation(t, got, tt.want)
 		})
@@ -255,7 +256,7 @@ func TestGuardrail_DeloadVolume(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give))
+			got := NewEngine(nil, nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give))
 
 			assertViolation(t, got, tt.want)
 		})
@@ -281,4 +282,33 @@ func assertViolation(t *testing.T, got ReviewResult, code string) {
 	}
 
 	t.Errorf("violations = %+v, want one with code %s", got.Violations, code)
+}
+
+type fakeCatalogReader struct {
+	validIDs map[string]bool
+}
+
+func (f *fakeCatalogReader) SearchByFilter(_ context.Context, _ *port.ExerciseFilter) ([]port.Exercise, error) {
+	return nil, nil
+}
+
+func (f *fakeCatalogReader) GetByID(_ context.Context, id string) (port.Exercise, error) {
+	if f.validIDs[id] {
+		return port.Exercise{ExerciseID: id, Name: "Name of " + id}, nil
+	}
+	return port.Exercise{}, port.ErrExerciseNotFound
+}
+
+func TestGuardrail_RejectsInvalidCatalogExerciseID(t *testing.T) {
+	r := buildValidRoadmap(t)
+	cat := &fakeCatalogReader{validIDs: map[string]bool{}} // "ex-bench" is NOT in validIDs
+
+	e := NewEngine(nil, cat, nil, nil)
+	got := e.Check(r)
+
+	if got.Status != StatusRejected {
+		t.Fatalf("expected status REJECTED for non-existent exercise ID")
+	}
+
+	assertViolation(t, got, "BR-AC-12")
 }

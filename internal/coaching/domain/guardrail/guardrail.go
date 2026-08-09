@@ -7,6 +7,9 @@
 package guardrail
 
 import (
+	"context"
+	"time"
+
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
@@ -61,12 +64,13 @@ type PRLookup func(exerciseID string) float64
 // Engine applies all guardrail checks against a Roadmap.
 type Engine struct {
 	overload *service.OverloadValidator
+	catalog  port.ExerciseCatalogReader
 	prs      PRLookup
 	injuries []port.InjuryStatus
 }
 
 // NewEngine builds a guardrail engine.
-func NewEngine(overload *service.OverloadValidator, prs PRLookup, injuries []port.InjuryStatus) *Engine {
+func NewEngine(overload *service.OverloadValidator, catalog port.ExerciseCatalogReader, prs PRLookup, injuries []port.InjuryStatus) *Engine {
 	if overload == nil {
 		overload = service.NewOverloadValidator()
 	}
@@ -75,7 +79,7 @@ func NewEngine(overload *service.OverloadValidator, prs PRLookup, injuries []por
 		prs = func(string) float64 { return 0 }
 	}
 
-	return &Engine{overload: overload, prs: prs, injuries: injuries}
+	return &Engine{overload: overload, catalog: catalog, prs: prs, injuries: injuries}
 }
 
 // Check runs every rule against the given roadmap.
@@ -100,11 +104,66 @@ func (e *Engine) Check(r *roadmap.Roadmap) ReviewResult {
 
 	vs = append(vs, e.checkDeloadVolume(r)...)
 
+	vs = append(vs, e.checkExerciseCatalogExistence(r)...)
+
 	if len(vs) > 0 {
 		return ReviewResult{Status: StatusRejected, Violations: vs}
 	}
 
 	return ReviewResult{Status: StatusApproved}
+}
+
+// checkExerciseCatalogExistence enforces BR-AC-12.
+func (e *Engine) checkExerciseCatalogExistence(r *roadmap.Roadmap) []Violation {
+	var vs []Violation
+
+	for _, w := range r.Weeks() {
+		for _, d := range w.Days() {
+			for _, s := range d.Sessions() {
+				presc := s.Info().Prescription
+				allExs := append([]roadmap.PrescribedExercise{}, presc.WarmUps...)
+				allExs = append(allExs, presc.MainExercises...)
+				allExs = append(allExs, presc.CoolDowns...)
+
+				for i, ex := range allExs {
+					path := "sessions." + s.ID() + "[" + itoa(i) + "]"
+					if ex.ExerciseID == "" {
+						vs = append(vs, Violation{
+							Code:        "BR-AC-12",
+							Description: "prescribed exercise missing exercise_id",
+							Path:        path,
+							Severity:    SeverityBlocker,
+						})
+						continue
+					}
+					if ex.ExerciseName == "" {
+						vs = append(vs, Violation{
+							Code:        "BR-AC-12",
+							Description: "exercise_id " + ex.ExerciseID + " has no catalog-resolved name",
+							Path:        path,
+							Severity:    SeverityBlocker,
+						})
+						continue
+					}
+					if e.catalog != nil {
+						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+						_, err := e.catalog.GetByID(ctx, ex.ExerciseID)
+						cancel()
+						if err != nil {
+							vs = append(vs, Violation{
+								Code:        "BR-AC-12",
+								Description: "exercise_id " + ex.ExerciseID + " does not exist in exercise catalog: " + err.Error(),
+								Path:        path,
+								Severity:    SeverityBlocker,
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return vs
 }
 
 // checkWeeklyCap enforces BR-AC-01.

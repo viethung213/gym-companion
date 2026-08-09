@@ -149,7 +149,7 @@ func buildHandler(t *testing.T) (*InitiateRoadmapHandler, *memRepo, *captureOutb
 
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
 	mockAgent := &fakeCoachAgent{t: clock.t}
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil, nil)
 	repo := newMemRepo()
 	outbox := &captureOutbox{}
 

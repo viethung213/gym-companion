@@ -78,6 +78,15 @@ func NewPostgresUserProfileReader(db *gorm.DB) *PostgresUserProfileReader {
 	return &PostgresUserProfileReader{db: db}
 }
 
+func isInvalidUUIDError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "invalid input syntax for type uuid") ||
+		strings.Contains(msg, "22p02")
+}
+
 // GetProfile fetches user profile details from profile.users, profile.body_metrics, and profile.injuries.
 func (r *PostgresUserProfileReader) GetProfile(ctx context.Context, userID string) (port.Profile, error) {
 	if r.db == nil {
@@ -89,8 +98,8 @@ func (r *PostgresUserProfileReader) GetProfile(ctx context.Context, userID strin
 	var userRecord userProfileDBModel
 	err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&userRecord).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("[PostgresUserProfileReader] User profile record not found for userID=%s, returning default safe profile", userID)
+		if errors.Is(err, gorm.ErrRecordNotFound) || isInvalidUUIDError(err) {
+			log.Printf("[PostgresUserProfileReader] User profile record not found or invalid UUID format for userID=%s, returning default safe profile", userID)
 			var mockReader MockUserProfileReader
 			return mockReader.GetProfile(ctx, userID)
 		}
