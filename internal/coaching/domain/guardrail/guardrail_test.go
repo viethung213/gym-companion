@@ -312,4 +312,3 @@ func TestGuardrail_RejectsInvalidCatalogExerciseID(t *testing.T) {
 
 	assertViolation(t, got, "BR-AC-12")
 }
-

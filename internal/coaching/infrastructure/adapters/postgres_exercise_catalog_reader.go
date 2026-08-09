@@ -153,7 +153,11 @@ func (r *PostgresExerciseCatalogReader) SearchByFilter(ctx context.Context, filt
 
 		if filter.Keyword != "" {
 			pattern := "%" + strings.TrimSpace(filter.Keyword) + "%"
-			query = query.Where("LOWER(e.name) LIKE LOWER(?) OR LOWER(e.id) LIKE LOWER(?) OR LOWER(m.name) LIKE LOWER(?) OR LOWER(bp.name) LIKE LOWER(?)", pattern, pattern, pattern, pattern)
+			kwCond := "LOWER(e.name) LIKE LOWER(?)" +
+				" OR LOWER(e.id) LIKE LOWER(?)" +
+				" OR LOWER(m.name) LIKE LOWER(?)" +
+				" OR LOWER(bp.name) LIKE LOWER(?)"
+			query = query.Where(kwCond, pattern, pattern, pattern, pattern)
 		}
 
 		if filter.Limit > 0 {
@@ -223,8 +227,13 @@ func mapFullRowToExercise(row *exerciseFullRow) port.Exercise {
 	}
 
 	eqLower := strings.ToLower(eqName)
-	isBodyweight := eqLower == "bodyweight" || eqLower == "body weight" || eqLower == "none" || eqLower == "" || eqLower == "pull-up-bar" || eqLower == "body_weight"
-	isMachineOrCable := strings.Contains(eqLower, "cable") || strings.Contains(eqLower, "machine") || strings.Contains(eqLower, "pulldown") || strings.Contains(eqLower, "lever")
+	isBodyweight := eqLower == "bodyweight" || eqLower == "body weight" ||
+		eqLower == "none" || eqLower == "" ||
+		eqLower == "pull-up-bar" || eqLower == "body_weight"
+	isMachineOrCable := strings.Contains(eqLower, "cable") ||
+		strings.Contains(eqLower, "machine") ||
+		strings.Contains(eqLower, "pulldown") ||
+		strings.Contains(eqLower, "lever")
 
 	return port.Exercise{
 		ExerciseID:       row.ID,
