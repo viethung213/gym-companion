@@ -9,6 +9,7 @@ import (
 
 	segmentio "github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
+	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
 )
 
 type cloudEventEnvelope struct {
@@ -30,12 +31,18 @@ type WorkoutSessionCompletedPayload struct {
 type Consumer struct {
 	reader             *segmentio.Reader
 	recalibrateHandler *command.RecalibratePlanWithPantryHandler
+	outboxLogRepo      port.OutboxLogRepository
 }
 
-func NewConsumer(reader *segmentio.Reader, recalibrateHandler *command.RecalibratePlanWithPantryHandler) *Consumer {
+func NewConsumer(
+	reader *segmentio.Reader,
+	recalibrateHandler *command.RecalibratePlanWithPantryHandler,
+	outboxLogRepo port.OutboxLogRepository,
+) *Consumer {
 	return &Consumer{
 		reader:             reader,
 		recalibrateHandler: recalibrateHandler,
+		outboxLogRepo:      outboxLogRepo,
 	}
 }
 
@@ -83,16 +90,29 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 		return
 	}
 
+	// 1. Check Outbox Log Idempotency: skip if already processed
+	if c.outboxLogRepo != nil && env.ID != "" {
+		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
+		if err != nil {
+			log.Printf("[Nutrition Kafka Consumer] Warning checking outbox log idempotency: %v", err)
+		} else if processed {
+			log.Printf("[Nutrition Kafka Consumer] Event %s already processed in outbox_log, skipping", env.ID)
+			return
+		}
+	}
+
 	var payload WorkoutSessionCompletedPayload
 	if len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, &payload); err != nil {
 			log.Printf("[Nutrition Kafka Consumer] Error unmarshaling event payload: %v", err)
+			c.saveLog(ctx, msg.Value, env, "", err)
 			return
 		}
 	} else {
 		// Fallback if payload is not wrapped in data
 		if err := json.Unmarshal(msg.Value, &payload); err != nil {
 			log.Printf("[Nutrition Kafka Consumer] Error unmarshaling raw payload: %v", err)
+			c.saveLog(ctx, msg.Value, env, "", err)
 			return
 		}
 	}
@@ -100,16 +120,47 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	log.Printf("[Nutrition Kafka Consumer] Received WorkoutSessionCompleted Event: UserID=%s, SessionID=%s, Volume=%.2f",
 		payload.UserID, payload.SessionID, payload.TotalVolume)
 
+	var processErr error
 	if c.recalibrateHandler != nil && payload.UserID != "" {
-		_, err := c.recalibrateHandler.Handle(ctx, command.RecalibratePlanWithPantryCommand{
+		_, processErr = c.recalibrateHandler.Handle(ctx, command.RecalibratePlanWithPantryCommand{
 			UserID:               payload.UserID,
 			PlanDate:             time.Now(),
 			AvailableIngredients: nil,
 		})
-		if err != nil {
-			log.Printf("[Nutrition Kafka Consumer] Failed to recalibrate plan on workout event: %v", err)
+		if processErr != nil {
+			log.Printf("[Nutrition Kafka Consumer] Failed to recalibrate plan on workout event: %v", processErr)
 		} else {
 			log.Printf("[Nutrition Kafka Consumer] Successfully rebalanced nutrition plan for user %s", payload.UserID)
 		}
+	}
+
+	c.saveLog(ctx, msg.Value, env, payload.UserID, processErr)
+}
+
+func (c *Consumer) saveLog(ctx context.Context, rawPayload []byte, env cloudEventEnvelope, userID string, err error) {
+	if c.outboxLogRepo == nil || env.ID == "" {
+		return
+	}
+	status := "PROCESSED"
+	errMsg := ""
+	if err != nil {
+		status = "FAILED"
+		errMsg = err.Error()
+	}
+	payload := rawPayload
+	if len(payload) == 0 {
+		payload = env.Data
+	}
+	logRecord := &port.OutboxLogRecord{
+		ID:           env.ID,
+		EventID:      env.ID,
+		EventType:    env.Type,
+		Payload:      payload,
+		PartitionKey: userID,
+		Status:       status,
+		ErrorMessage: errMsg,
+	}
+	if saveErr := c.outboxLogRepo.SaveLog(ctx, logRecord); saveErr != nil {
+		log.Printf("[Nutrition Kafka Consumer] Warning: failed to save outbox log for event %s: %v", env.ID, saveErr)
 	}
 }
