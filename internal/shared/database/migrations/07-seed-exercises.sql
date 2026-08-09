@@ -17469,3 +17469,90 @@ INSERT INTO exercise.outbox (id, event_id, event_type, payload, partition_key, s
     ('9c4e18ac-8afc-5771-aa7a-ca64f14f89fc', '9c4e18ac-8afc-5771-aa7a-ca64f14f89fc', 'contracts.supporting.exercise.v1.exerciseCreated', '{"data":{"data":{"exercise":{"body_part_id":"b11d5950-c05f-4cf4-a6e6-e4862bb4cf27","default_rest_seconds":45,"difficulty":"Beginner","equipment_id":"9d8f6dd0-73fa-46ac-a669-f81d0661e9f7","has_ai_supported":false,"id":"a18f42ee-a59c-43d0-977d-74c7cb884a54","instructions":"1. Extend your arms straight out in front of you.\n2. Make a fist with both hands.\n3. Rotate your wrists in a circular motion, keeping your arms still.\n4. Continue the wrist circles for the desired number of repetitions.","media_url":"https://static.exercisedb.dev/media/2zNKRUB.gif","name":"Wrist Circles","secondary_muscle_ids":["46789933-f383-4971-9cef-2c258215b5b3","27d3237d-34e7-493a-94f9-4bce69fcbb58"],"status":3,"tag_ids":["1e8ea3f6-0d11-4f4d-98b9-4e1643068fde","2ec97eec-2fc6-4463-a796-4b18e1b58713","32b56ab3-685e-44a4-997e-139fd0955209","dd9a23c0-defe-4014-aeb2-01a7543ffaca"],"target_muscle_id":"d9ad56cd-6973-4826-af0b-cfca92b410b2","thumbnail_url":"https://static.exercisedb.dev/media/2zNKRUB.gif","video_url":"https://www.youtube.com/watch?v=AzpNgSRmM0M"},"exerciseId":"a18f42ee-a59c-43d0-977d-74c7cb884a54"},"datacontenttype":"application/json","exerciseId":"9c4e18ac-8afc-5771-aa7a-ca64f14f89fc","id":"9c4e18ac-8afc-5771-aa7a-ca64f14f89fc","source":"services/exercise-service","specversion":"1.0","time":"2026-08-07T19:27:40Z","type":"contracts.supporting.exercise.v1.exerciseCreated"},"datacontenttype":"application/json","id":"9c4e18ac-8afc-5771-aa7a-ca64f14f89fc","source":"services/exercise-service","specversion":"1.0","time":"2026-08-07T19:29:00Z","type":"contracts.supporting.exercise.v1.exerciseCreated"}'::jsonb, 'a18f42ee-a59c-43d0-977d-74c7cb884a54', 'PENDING', FALSE),
     ('766c5361-f601-502c-9a0b-92a23b7ea437', '766c5361-f601-502c-9a0b-92a23b7ea437', 'contracts.supporting.exercise.v1.exerciseCreated', '{"data":{"data":{"exercise":{"body_part_id":"b11d5950-c05f-4cf4-a6e6-e4862bb4cf27","default_rest_seconds":45,"difficulty":"Beginner","equipment_id":"65cd5e1f-dc35-4cc7-94db-6b9aaa597953","has_ai_supported":false,"id":"87aa32aa-101a-4f16-b442-a0acd8358a13","instructions":"1. Attach a weight to one end of a rope or bar.\n2. Hold the other end of the rope or bar with both hands, palms facing down.\n3. Stand with your feet shoulder-width apart and your arms fully extended in front of you.\n4. Slowly roll the weight up towards your hands by flexing your wrists.\n5. Pause for a moment at the top, then slowly lower the weight back down to the starting position.\n6. Repeat for the desired number of repetitions.","media_url":"https://static.exercisedb.dev/media/bd5b860.gif","name":"Wrist Rollerer","secondary_muscle_ids":["ca8f6d13-0cd2-41d0-8a2d-cfeac5dda2c7","763d1c72-9460-4751-817a-20d93c6a521a"],"status":3,"tag_ids":["1e8ea3f6-0d11-4f4d-98b9-4e1643068fde","dd9a23c0-defe-4014-aeb2-01a7543ffaca"],"target_muscle_id":"d9ad56cd-6973-4826-af0b-cfca92b410b2","thumbnail_url":"https://static.exercisedb.dev/media/bd5b860.gif","video_url":"https://www.youtube.com/watch?v=AzpNgSRmM0M"},"exerciseId":"87aa32aa-101a-4f16-b442-a0acd8358a13"},"datacontenttype":"application/json","exerciseId":"766c5361-f601-502c-9a0b-92a23b7ea437","id":"766c5361-f601-502c-9a0b-92a23b7ea437","source":"services/exercise-service","specversion":"1.0","time":"2026-08-07T19:27:40Z","type":"contracts.supporting.exercise.v1.exerciseCreated"},"datacontenttype":"application/json","id":"766c5361-f601-502c-9a0b-92a23b7ea437","source":"services/exercise-service","specversion":"1.0","time":"2026-08-07T19:29:00Z","type":"contracts.supporting.exercise.v1.exerciseCreated"}'::jsonb, '87aa32aa-101a-4f16-b442-a0acd8358a13', 'PENDING', FALSE)
 ON CONFLICT (event_id) DO NOTHING;
+
+
+-- 6. Additional exercises with Vietnamese instructions, motion specs, secondary muscles, and tags
+WITH inserted_ex AS (
+    INSERT INTO exercise.exercises (
+        id, name, body_part_id, equipment_id, target_muscle_id, instructions, thumbnail_url, media_url, video_url, difficulty, default_rest_seconds, status, has_ai_supported
+    )
+    SELECT
+        gen_random_uuid()::text, v.name, v.body_part_id, v.equipment_id, v.target_muscle_id, v.instructions, v.thumbnail_url, v.media_url, v.video_url, v.difficulty, v.default_rest_seconds, v.status, v.has_ai_supported
+    FROM (VALUES
+        ('Bicep Curl', 'c78c3442-7d6f-46ac-a4d2-b29e86f6ebd7', '2ae71639-ec91-4b7a-a721-8335bfecb6e6', 'ca8f6d13-0cd2-41d0-8a2d-cfeac5dda2c7', 'Cùi chỏ cố định sát sườn, không vung/lắc. Cột sống thẳng, không ngửa ra sau. Gập khuỷu tay đưa tạ lên đến khi góc khuỷu ≤ 80°, sau đó từ từ hạ tạ về vị trí ban đầu.', 'https://static.exercisedb.dev/media/Yza7XrQ.gif', 'https://static.exercisedb.dev/media/Yza7XrQ.gif', 'https://www.youtube.com/watch?v=in7PaeYlhrM', 'Beginner', 60, 'ACTIVE', FALSE),
+        ('Lateral Raise', 'aa7f1380-3c0c-4021-ba9c-2e152dc9907b', '2ae71639-ec91-4b7a-a721-8335bfecb6e6', 'e01998e4-61a2-49a8-869f-63c0dbbfd6ce', 'Nâng tạ sang hai bên đến khi cánh tay song song với sàn (góc dang 80-90°). Khuỷu tay hơi gập nhẹ (160-170°). Thân người giữ thẳng đứng.', 'https://static.exercisedb.dev/media/aHDy5O5.gif', 'https://static.exercisedb.dev/media/aHDy5O5.gif', 'https://www.youtube.com/watch?v=3VcKaXpzqRo', 'Intermediate', 60, 'ACTIVE', FALSE),
+        ('Lunge', '35178200-c745-4dbb-b1fd-549fa4dca7ef', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', '34217ad2-f8d6-4373-807a-d7e6d627b007', 'Bước một chân về phía trước và hạ thấp hông cho đến khi cả hai đầu gối đều gập góc khoảng 90 độ. Chân sau giữ gối gần chạm sàn, giữ thân người thẳng đứng.', 'https://static.exercisedb.dev/media/qBcKorM.gif', 'https://static.exercisedb.dev/media/qBcKorM.gif', 'https://www.youtube.com/watch?v=QOVaHwm-Q6U', 'Beginner', 60, 'ACTIVE', FALSE),
+        ('Plank', 'a8919202-3912-4dda-a4d4-28ee08783829', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', '2e1caf1d-02eb-460b-bf68-ae326903411b', 'Chống cẳng tay và mũi chân xuống sàn, giữ toàn thân tạo thành một đường thẳng từ đầu đến gót chân. Gồng chặt cơ bụng và hông, không võng lưng.', 'https://static.exercisedb.dev/media/0630.gif', 'https://static.exercisedb.dev/media/0630.gif', 'https://www.youtube.com/watch?v=pSHjTRCQxIw', 'Beginner', 60, 'ACTIVE', FALSE),
+        ('Pull-up', '86168d6c-ccfc-4225-89ae-45cce0219587', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', 'eb289150-e251-47a1-84a9-72312ec88f48', 'Treo người trên xà đơn với lòng bàn tay hướng về phía trước. Kéo người lên cho đến khi cằm vượt qua xà, sau đó hạ người xuống có kiểm soát.', 'https://static.exercisedb.dev/media/72BC5Za.gif', 'https://static.exercisedb.dev/media/72BC5Za.gif', 'https://www.youtube.com/watch?v=eGo4IYlbE5g', 'Intermediate', 90, 'ACTIVE', FALSE),
+        ('Push-up', 'cc06ea19-36a0-4836-a2a6-9318ce07a54b', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', 'ed3f5ad6-9225-42a6-92f7-666f22be2ed0', 'Nằm sấp chống hai tay rộng hơn vai, thân người thẳng. Hạ người xuống sao cho ngực gần chạm sàn (khuỷu tay mở ~45° so với thân), sau đó đẩy người lên.', 'https://static.exercisedb.dev/media/A9qxk2F.gif', 'https://static.exercisedb.dev/media/A9qxk2F.gif', 'https://www.youtube.com/watch?v=IODxDxX7oi4', 'Beginner', 60, 'ACTIVE', FALSE),
+        ('Shoulder Press', 'aa7f1380-3c0c-4021-ba9c-2e152dc9907b', '2ae71639-ec91-4b7a-a721-8335bfecb6e6', 'e01998e4-61a2-49a8-869f-63c0dbbfd6ce', 'Giữ tạ ngang tầm vai, đẩy tạ qua đầu cho đến khi hai tay duỗi thẳng. Hạ tạ xuống ngang cằm/vai có kiểm soát, giữ cột sống trung tính.', 'https://static.exercisedb.dev/media/0705.gif', 'https://static.exercisedb.dev/media/0705.gif', 'https://www.youtube.com/watch?v=qEwKCR5JCog', 'Intermediate', 90, 'ACTIVE', FALSE),
+        ('Sit-up', 'a8919202-3912-4dda-a4d4-28ee08783829', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', '2e1caf1d-02eb-460b-bf68-ae326903411b', 'Nằm ngửa trên sàn, co gối và chân đặt phẳng trên mặt đất. Gập cơ bụng nâng toàn bộ thân trên lên hướng về phía đùi, sau đó hạ người từ từ về vị trí ban đầu.', 'https://static.exercisedb.dev/media/2gPfomN.gif', 'https://static.exercisedb.dev/media/2gPfomN.gif', 'https://www.youtube.com/watch?v=jDwoBqPH0jk', 'Beginner', 60, 'ACTIVE', FALSE),
+        ('Squat', '35178200-c745-4dbb-b1fd-549fa4dca7ef', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', '34217ad2-f8d6-4373-807a-d7e6d627b007', 'Đứng rộng bằng vai, hạ hông xuống như ngồi ghế cho đến khi đùi song song với mặt sàn (góc gối ≤ 100°). Giữ lưng thẳng, đẩy qua gót chân để đứng dậy.', 'https://static.exercisedb.dev/media/W9pFVv1.gif', 'https://static.exercisedb.dev/media/W9pFVv1.gif', 'https://www.youtube.com/watch?v=ultWZbUMPL8', 'Beginner', 60, 'ACTIVE', FALSE),
+        ('Barbell Bench Press', 'cc06ea19-36a0-4836-a2a6-9318ce07a54b', '2ae71639-ec91-4b7a-a721-8335bfecb6e6', 'ed3f5ad6-9225-42a6-92f7-666f22be2ed0', 'Nằm ngửa trên ghế bành, nắm xà barbell rộng hơn vai. Hạ xà xuống chạm nhẹ giữa ngực rồi đẩy xà lên thẳng tay.', 'https://static.exercisedb.dev/media/EIeI8Vf.gif', 'https://static.exercisedb.dev/media/EIeI8Vf.gif', 'https://www.youtube.com/watch?v=rT7DgCr-3pg', 'Intermediate', 90, 'ACTIVE', FALSE),
+        ('Barbell Deadlift', '86168d6c-ccfc-4225-89ae-45cce0219587', '2ae71639-ec91-4b7a-a721-8335bfecb6e6', '89744243-d57b-47b3-8433-53df8c3de36d', 'Đứng trước xà barbell, cúi hông và gập nhẹ gối nắm xà. Giữ lưng thẳng, đẩy chân và duỗi hông để kéo tạ lên đứng thẳng người.', 'https://static.exercisedb.dev/media/0032.gif', 'https://static.exercisedb.dev/media/0032.gif', 'https://www.youtube.com/watch?v=op9kVnSso6Q', 'Advanced', 120, 'ACTIVE', FALSE),
+        ('Leg Press', '35178200-c745-4dbb-b1fd-549fa4dca7ef', '07b33677-0e08-44c2-9e09-4c25e151d9e5', '34217ad2-f8d6-4373-807a-d7e6d627b007', 'Nồi vào máy Leg Press, đặt hai bàn chân lên bàn đạp rộng bằng vai. Tháo khóa an toàn, hạ bàn đạp xuống đến khi gối gập 90 độ rồi đẩy mạnh lên.', 'https://static.exercisedb.dev/media/0540.gif', 'https://static.exercisedb.dev/media/0540.gif', 'https://www.youtube.com/watch?v=IZxyjW7MPJQ', 'Beginner', 90, 'ACTIVE', FALSE),
+        ('Triceps Dip', 'c78c3442-7d6f-46ac-a4d2-b29e86f6ebd7', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', '763d1c72-9460-4751-817a-20d93c6a521a', 'Nắm hai tay vào xà kép, nâng thân người lên thẳng tay. Hạ thân người xuống bằng cách gập khuỷu tay cho đến khi cánh tay tạo góc 90 độ rồi đẩy người lên.', 'https://static.exercisedb.dev/media/0810.gif', 'https://static.exercisedb.dev/media/0810.gif', 'https://www.youtube.com/watch?v=2z8JmcrW-As', 'Intermediate', 60, 'ACTIVE', FALSE),
+        ('Russian Twist', 'a8919202-3912-4dda-a4d4-28ee08783829', '9d8f6dd0-73fa-46ac-a669-f81d0661e9f7', '492dd4d0-5947-4124-9c23-c43ac6d2bb4f', 'Nồi trên sàn, nhấc hai chân lên nhẹ và hơi ngả lưng ra sau. Xoay thân trên sang trái rồi sang phải, gồng chặt cơ hông/bụng.', 'https://static.exercisedb.dev/media/r7cT9YD.gif', 'https://static.exercisedb.dev/media/r7cT9YD.gif', 'https://www.youtube.com/watch?v=wkD8rjkodUI', 'Beginner', 60, 'ACTIVE', FALSE)
+    ) AS v(name, body_part_id, equipment_id, target_muscle_id, instructions, thumbnail_url, media_url, video_url, difficulty, default_rest_seconds, status, has_ai_supported)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM exercise.exercises e WHERE e.name = v.name
+    )
+    RETURNING id, name
+),
+sec_muscles AS (
+    INSERT INTO exercise.exercise_secondary_muscles (exercise_id, muscle_id)
+    SELECT i.id, m.muscle_id
+    FROM inserted_ex i
+    JOIN (VALUES
+        ('Bicep Curl', 'd9ad56cd-6973-4826-af0b-cfca92b410b2'),
+        ('Lateral Raise', '240286fa-e517-4fdb-a40a-34da2e9ba6b4'),
+        ('Lateral Raise', 'f8b6fa58-36cc-4f2e-99fa-28eb62230afb'),
+        ('Lunge', '233c0184-b60e-4e31-b286-3158b3ba26d5'),
+        ('Lunge', 'df004305-f775-4ac9-b9be-2777c727d8db'),
+        ('Plank', '66d21677-c16a-4084-a864-86fc3e466255'),
+        ('Plank', '89744243-d57b-47b3-8433-53df8c3de36d'),
+        ('Pull-up', 'ca8f6d13-0cd2-41d0-8a2d-cfeac5dda2c7'),
+        ('Pull-up', '40c63e62-1ee5-4d2e-8562-10a94392a26a'),
+        ('Push-up', '763d1c72-9460-4751-817a-20d93c6a521a'),
+        ('Push-up', 'e01998e4-61a2-49a8-869f-63c0dbbfd6ce'),
+        ('Shoulder Press', '763d1c72-9460-4751-817a-20d93c6a521a'),
+        ('Sit-up', 'ebc63a4f-03be-4dbb-8a5a-43105d18995a'),
+        ('Squat', '233c0184-b60e-4e31-b286-3158b3ba26d5'),
+        ('Squat', 'df004305-f775-4ac9-b9be-2777c727d8db'),
+        ('Barbell Bench Press', '763d1c72-9460-4751-817a-20d93c6a521a'),
+        ('Barbell Bench Press', 'e01998e4-61a2-49a8-869f-63c0dbbfd6ce'),
+        ('Barbell Deadlift', '233c0184-b60e-4e31-b286-3158b3ba26d5'),
+        ('Barbell Deadlift', 'df004305-f775-4ac9-b9be-2777c727d8db'),
+        ('Leg Press', '233c0184-b60e-4e31-b286-3158b3ba26d5'),
+        ('Triceps Dip', 'ed3f5ad6-9225-42a6-92f7-666f22be2ed0'),
+        ('Russian Twist', '2e1caf1d-02eb-460b-bf68-ae326903411b')
+    ) AS m(name, muscle_id) ON i.name = m.name
+    ON CONFLICT (exercise_id, muscle_id) DO NOTHING
+),
+ex_tags AS (
+    INSERT INTO exercise.exercise_tags (exercise_id, tag_id)
+    SELECT i.id, t.tag_id
+    FROM inserted_ex i
+    JOIN (VALUES
+        ('Bicep Curl', 'c5d37909-0c2f-463b-8ad2-98c35852cea7'),
+        ('Lateral Raise', '5e0c3f03-4691-4391-a287-919ff3090b67'),
+        ('Lunge', 'ea5267f5-cb1e-4343-bdec-1eeb73924791'),
+        ('Plank', 'e8f493dc-a3a0-48c3-89ff-6064a59b24f5'),
+        ('Pull-up', 'c366f513-0e06-4553-a6e9-3d33a646d8d9'),
+        ('Push-up', 'fccce41f-a587-44a7-a753-ab67d0fe77cb'),
+        ('Shoulder Press', '5e0c3f03-4691-4391-a287-919ff3090b67'),
+        ('Sit-up', 'e8f493dc-a3a0-48c3-89ff-6064a59b24f5'),
+        ('Squat', 'ea5267f5-cb1e-4343-bdec-1eeb73924791'),
+        ('Barbell Bench Press', 'fccce41f-a587-44a7-a753-ab67d0fe77cb'),
+        ('Barbell Deadlift', 'c366f513-0e06-4553-a6e9-3d33a646d8d9'),
+        ('Leg Press', 'ea5267f5-cb1e-4343-bdec-1eeb73924791'),
+        ('Triceps Dip', 'c5d37909-0c2f-463b-8ad2-98c35852cea7'),
+        ('Russian Twist', 'e8f493dc-a3a0-48c3-89ff-6064a59b24f5')
+    ) AS t(name, tag_id) ON i.name = t.name
+    ON CONFLICT (exercise_id, tag_id) DO NOTHING
+)
+INSERT INTO exercise.motion_specifications (exercise_id, min_rom_percent, calibration_distance_min, calibration_distance_max, calibration_angle)
+SELECT i.id, 70, 1.5, 2.0, 0.0
+FROM inserted_ex i
+WHERE i.name IN ('Bicep Curl', 'Lateral Raise', 'Lunge', 'Plank', 'Pull-up', 'Push-up', 'Shoulder Press', 'Sit-up', 'Squat')
+ON CONFLICT (exercise_id) DO NOTHING;
