@@ -91,6 +91,9 @@ func (r *PostgresWorkoutSessionReader) GetRecentSessions(ctx context.Context, us
 
 	err := query.Order("ended_at DESC, started_at DESC").Find(&records).Error
 	if err != nil {
+		if isInvalidUUIDError(err) {
+			return []port.WorkoutSession{}, nil
+		}
 		return nil, fmt.Errorf("fetch recent workout sessions: %w", err)
 	}
 

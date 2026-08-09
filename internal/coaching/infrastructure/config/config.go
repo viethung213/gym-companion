@@ -33,6 +33,12 @@ func LoadConfig() Config {
 	}
 
 	apiKey := os.Getenv("GOOGLE_API_KEY_COACHING")
+	if apiKey == "" {
+		apiKey = os.Getenv("GOOGLE_API_KEY")
+	}
+	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
 	masked := "<EMPTY>"
 	if len(apiKey) > 8 {
 		masked = fmt.Sprintf("%s...%s (len=%d)", apiKey[:6], apiKey[len(apiKey)-4:], len(apiKey))
