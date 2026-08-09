@@ -137,6 +137,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	c.saveLog(ctx, msg.Value, env, payload.UserID, processErr)
 }
 
+//nolint:gocritic // env envelope value object is passed by value per helper design
 func (c *Consumer) saveLog(ctx context.Context, rawPayload []byte, env cloudEventEnvelope, userID string, err error) {
 	if c.outboxLogRepo == nil || env.ID == "" {
 		return
