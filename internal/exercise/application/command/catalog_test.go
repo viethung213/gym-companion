@@ -247,6 +247,10 @@ func (m *mockRepository) GetMetadata(ctx context.Context) (port.Metadata, error)
 	return port.Metadata{}, nil
 }
 
+func (m *mockRepository) SetAISupportedWithOutboxLog(ctx context.Context, exerciseID string, supported bool, logRecord *port.OutboxLogRecord) error {
+	return nil
+}
+
 // Test BodyPart Create
 func TestCreateBodyPart_Success(t *testing.T) {
 	t.Parallel()

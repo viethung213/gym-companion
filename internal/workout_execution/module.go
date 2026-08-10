@@ -92,6 +92,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	getErrorsQuery := query.NewGetWorkoutSessionErrorsQueryHandler(sessionRepo)
 	getHistoryQuery := query.NewGetWorkoutHistoryQueryHandler(sessionRepo)
 	listMotionSpecsQuery := query.NewListMotionSpecificationsQueryHandler(motionRepo)
+	searchMotionSpecsQuery := query.NewSearchMotionSpecificationsQueryHandler(motionRepo)
+	getMotionSpecStatsQuery := query.NewGetMotionSpecificationStatsQueryHandler(motionRepo)
 	getPresignedUploadURLQuery := query.NewGetPresignedUploadURLQueryHandler(storageProvider)
 
 	// Initialize gRPC Transport
@@ -109,6 +111,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		updateMotionSpecHandler,
 		deleteMotionSpecHandler,
 		listMotionSpecsQuery,
+		searchMotionSpecsQuery,
+		getMotionSpecStatsQuery,
 		getPresignedUploadURLQuery,
 		patchMotionSpecAssetHandler,
 	)

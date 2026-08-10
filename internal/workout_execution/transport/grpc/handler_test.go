@@ -136,6 +136,20 @@ func (m *mockMotionRepo) List(ctx context.Context, limit, offset int) ([]*aggreg
 	return nil, 0, nil
 }
 
+func (m *mockMotionRepo) Search(ctx context.Context, keyword string, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	return m.List(ctx, limit, offset)
+}
+
+func (m *mockMotionRepo) GetStats(ctx context.Context) (total int, activeRules int, activeVoice int, readySpecs int, err error) {
+	if m.err != nil {
+		return 0, 0, 0, 0, m.err
+	}
+	if m.spec != nil {
+		return 1, 1, 1, 1, nil
+	}
+	return 0, 0, 0, 0, nil
+}
+
 type mockTxManager struct {
 	err error
 }
@@ -172,6 +186,8 @@ func TestGRPCHandler(t *testing.T) {
 		command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
 		command.NewDeleteMotionSpecificationHandler(motionRepo),
 		query.NewListMotionSpecificationsQueryHandler(motionRepo),
+		query.NewSearchMotionSpecificationsQueryHandler(motionRepo),
+		query.NewGetMotionSpecificationStatsQueryHandler(motionRepo),
 		query.NewGetPresignedUploadURLQueryHandler(&mockStorageProvider{}),
 		command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
 	)
@@ -321,7 +337,7 @@ func TestGRPCHandler(t *testing.T) {
 			t.Fatal("got nil, want error")
 		}
 
-		motionRepo.spec = aggregate.RestoreMotionSpecification("ex1", "http://detector.onnx", "http://skeleton.onnx", "http://rules", "http://dialogue", "front", true, time.Now().UTC(), time.Now().UTC())
+		motionRepo.spec = aggregate.RestoreMotionSpecification("ex1", "Exercise 1", "http://detector.onnx", "http://skeleton.onnx", "http://rules", "http://dialogue", "front", true, time.Now().UTC(), time.Now().UTC())
 		res, err := grpcHandler.GetMotionSpecification(context.Background(), &workoutexecutionv1message.GetMotionSpecificationRequest{ExerciseId: "ex1"})
 
 		if err != nil {
@@ -525,6 +541,8 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 				command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
 				command.NewDeleteMotionSpecificationHandler(motionRepo),
 				query.NewListMotionSpecificationsQueryHandler(motionRepo),
+				query.NewSearchMotionSpecificationsQueryHandler(motionRepo),
+				query.NewGetMotionSpecificationStatsQueryHandler(motionRepo),
 				query.NewGetPresignedUploadURLQueryHandler(&mockStorageProvider{}),
 				command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
 			)

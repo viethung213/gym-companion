@@ -112,6 +112,7 @@ func (PersonalRecordModel) TableName() string {
 // MotionSpecificationModel maps to workout_execution.motion_specifications table.
 type MotionSpecificationModel struct {
 	ExerciseID             string    `gorm:"primaryKey;column:exercise_id"`
+	ExerciseName           string    `gorm:"column:exercise_name"`
 	OnnxDetectorURL        string    `gorm:"column:onnx_detector_url"`
 	OnnxSkeletonURL        string    `gorm:"column:onnx_skeleton_url"`
 	LocalRulesURL          string    `gorm:"column:local_rules_url"`

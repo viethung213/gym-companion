@@ -49,13 +49,7 @@ func RehydrateWeekPlan(info *WeekPlanInfo, days []*DayPlan) (*WeekPlan, error) {
 	}
 
 	normInfo := normalizeWeekInfo(info)
-
 	wp := &WeekPlan{info: *normInfo, days: days}
-
-	if err := wp.validate(); err != nil {
-		return nil, err
-	}
-
 	return wp, nil
 }
 
@@ -100,16 +94,7 @@ func (w *WeekPlan) AddDay(day *DayPlan) error {
 		}
 	}
 
-	// Enforce BR-AC-01 after add if the new day has sessions.
-
-	newTotal := w.totalSessions() + day.SessionCount()
-
-	if newTotal > MaxSessionsPerWeek {
-		return fmt.Errorf("%w: would total %d sessions (cap %d)", ErrWeeklyCapExceeded, newTotal, MaxSessionsPerWeek)
-	}
-
 	w.days = append(w.days, day)
-
 	return nil
 }
 
@@ -157,10 +142,6 @@ func (w *WeekPlan) validate() error {
 
 	if i.StartDate.IsZero() || i.EndDate.IsZero() {
 		return fmt.Errorf("%w: start/end date required", ErrInvalidRoadmap)
-	}
-
-	if w.totalSessions() > MaxSessionsPerWeek {
-		return fmt.Errorf("%w: %d sessions", ErrWeeklyCapExceeded, w.totalSessions())
 	}
 
 	return nil

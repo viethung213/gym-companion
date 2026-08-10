@@ -134,6 +134,7 @@ func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 			body_part_id VARCHAR(255) NOT NULL REFERENCES exercise.body_parts(id)
 		)`,
 		`CREATE TABLE exercise.tags (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL)`,
+		`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
 		`CREATE TABLE exercise.exercises (
 			id VARCHAR(255) PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
@@ -154,6 +155,7 @@ func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 				status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'ARCHIVED')
 			)
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm ON exercise.exercises USING gin (name gin_trgm_ops)`,
 		`CREATE TABLE exercise.exercise_secondary_muscles (
 			exercise_id VARCHAR(255) NOT NULL REFERENCES exercise.exercises(id) ON DELETE CASCADE,
 			muscle_id VARCHAR(255) NOT NULL REFERENCES exercise.muscles(id) ON DELETE CASCADE,

@@ -15,16 +15,55 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/config"
 )
 
-// cloudEventEnvelope maps the outer CloudEvents 1.0 JSON payload structure.
+// cloudEventEnvelope maps standard CloudEvents 1.0 JSON payload structure.
 type cloudEventEnvelope struct {
 	ID   string          `json:"id"`
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
 
-// exerciseCreatedPayload maps the inner payload for ExerciseCreated event.
-type exerciseCreatedPayload struct {
-	ExerciseID string `json:"exerciseId"`
+type exercisePayloadData struct {
+	ExerciseID      string `json:"exercise_id"`
+	ExerciseIDCamel string `json:"exerciseId"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Exercise        *struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"exercise"`
+}
+
+// parseExerciseEventPayload unwraps 1 single-layer CloudEvent data payload
+// extracting exerciseID and exerciseName cleanly in 1 pass.
+func parseExerciseEventPayload(raw json.RawMessage) (exerciseID string, exerciseName string) {
+	if len(raw) == 0 {
+		return "", ""
+	}
+
+	var data exercisePayloadData
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return "", ""
+	}
+
+	// Extract exerciseID: priority: exercise_id -> exerciseId -> exercise.id -> id
+	if data.ExerciseID != "" {
+		exerciseID = data.ExerciseID
+	} else if data.ExerciseIDCamel != "" {
+		exerciseID = data.ExerciseIDCamel
+	} else if data.Exercise != nil && data.Exercise.ID != "" {
+		exerciseID = data.Exercise.ID
+	} else if data.ID != "" {
+		exerciseID = data.ID
+	}
+
+	// Extract exerciseName: priority: name -> exercise.name
+	if data.Name != "" {
+		exerciseName = data.Name
+	} else if data.Exercise != nil && data.Exercise.Name != "" {
+		exerciseName = data.Exercise.Name
+	}
+
+	return exerciseID, exerciseName
 }
 
 // ExerciseCreatedConsumer listens for ExerciseCreated events from the Exercise domain
@@ -68,17 +107,18 @@ func (c *ExerciseCreatedConsumer) HandleMessage(ctx context.Context, rawPayload 
 		}
 	}
 
-	var data exerciseCreatedPayload
-	if err := json.Unmarshal(env.Data, &data); err != nil {
-		return fmt.Errorf("exercise created consumer: unmarshal data payload: %w", err)
-	}
-
-	if data.ExerciseID == "" {
+	exID, exName := parseExerciseEventPayload(env.Data)
+	if exID == "" {
 		return fmt.Errorf("exercise created consumer: empty exerciseId in event payload")
 	}
 
-	log.Printf("[WorkoutExecution] Received ExerciseCreated event for exercise_id: %s (event_type: %s)", data.ExerciseID, env.Type)
-	handleErr := c.OnExerciseCreated(ctx, data.ExerciseID)
+	// If name wasn't found in payload, fallback to exID
+	if exName == "" {
+		exName = exID
+	}
+
+	log.Printf("[WorkoutExecution] Received ExerciseCreated event for exercise_id: %s, name: %s (event_type: %s)", exID, exName, env.Type)
+	handleErr := c.OnExerciseCreated(ctx, exID, exName)
 
 	// Record processed/failed event in outbox_log for idempotency and auditing
 	if c.outboxLogRepo != nil && env.ID != "" {
@@ -94,7 +134,7 @@ func (c *ExerciseCreatedConsumer) HandleMessage(ctx context.Context, rawPayload 
 			EventID:      env.ID,
 			EventType:    env.Type,
 			Payload:      rawPayload,
-			PartitionKey: data.ExerciseID,
+			PartitionKey: exID,
 			Status:       status,
 			ErrorMessage: errMsg,
 		}
@@ -107,7 +147,7 @@ func (c *ExerciseCreatedConsumer) HandleMessage(ctx context.Context, rawPayload 
 }
 
 // OnExerciseCreated handles creating a draft MotionSpecification for a newly created exercise.
-func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exerciseID string) error {
+func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exerciseID string, exerciseName string) error {
 	if exerciseID == "" {
 		return fmt.Errorf("exercise created consumer: exercise_id is required")
 	}
@@ -122,11 +162,11 @@ func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exercis
 	}
 
 	cfg := config.LoadConfig()
-	draft := aggregate.NewDraftMotionSpecification(exerciseID, cfg.DefaultONNXDetectorURL, cfg.DefaultONNXSkeletonURL)
+	draft := aggregate.NewDraftMotionSpecification(exerciseID, exerciseName, cfg.DefaultONNXDetectorURL, cfg.DefaultONNXSkeletonURL)
 	if err := c.motionRepo.Save(ctx, draft); err != nil {
 		return fmt.Errorf("exercise created consumer save draft: %w", err)
 	}
 
-	log.Printf("[WorkoutExecution] Successfully created draft MotionSpecification for exercise_id: %s", exerciseID)
+	log.Printf("[WorkoutExecution] Successfully created draft MotionSpecification for exercise_id: %s (name: %s)", exerciseID, exerciseName)
 	return nil
 }

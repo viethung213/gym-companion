@@ -92,8 +92,10 @@ func ensureTablesExist(db *gorm.DB) {
 	);`)
 	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_user_exercise_pr ON workout_execution.personal_records(user_id, exercise_id);`)
 
+	db.Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 		exercise_id VARCHAR(255) PRIMARY KEY,
+		exercise_name VARCHAR(255) DEFAULT '',
 		onnx_detector_url VARCHAR(1024),
 		onnx_skeleton_url VARCHAR(1024),
 		local_rules_url VARCHAR(1024),
@@ -103,6 +105,7 @@ func ensureTablesExist(db *gorm.DB) {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_motion_specifications_name_trgm ON workout_execution.motion_specifications USING gin (exercise_name gin_trgm_ops);`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.outbox (
 		id VARCHAR(255) PRIMARY KEY,
@@ -325,7 +328,7 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	exID := "ex-deadlift"
-	spec := aggregate.RestoreMotionSpecification(exID, "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "side", true, time.Now().UTC(), time.Now().UTC())
+	spec := aggregate.RestoreMotionSpecification(exID, "Barbell Deadlift", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "side", true, time.Now().UTC(), time.Now().UTC())
 
 	if err := repo.Save(ctx, spec); err != nil {
 		t.Fatalf("Failed to save MotionSpec: %v", err)
@@ -342,6 +345,41 @@ func TestPostgresMotionSpecificationRepository_Integration(t *testing.T) {
 	missingSpec, err := repo.FindByExerciseID(ctx, "non-existent-ex")
 	if !errors.Is(err, derror.ErrMotionSpecNotFound) || missingSpec != nil {
 		t.Errorf("expected derror.ErrMotionSpecNotFound for missing MotionSpec, got %v, %v", missingSpec, err)
+	}
+
+	// Test Search partial substring match in exercise name
+	specWithChoice := aggregate.NewDraftMotionSpecification("ex-bench-press", "Barbell Bench Press", "http://detector.onnx", "http://skeleton.onnx")
+	if err := repo.Save(ctx, specWithChoice); err != nil {
+		t.Fatalf("Failed to save specWithChoice: %v", err)
+	}
+
+	// Search with lowercase partial substring "bench" (matches "Barbell Bench Press")
+	specs, total, err := repo.Search(ctx, "bench", 10, 0)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if total != 1 || len(specs) != 1 {
+		t.Errorf("got total=%d, specs count=%d; want 1", total, len(specs))
+	} else if specs[0].ExerciseID() != "ex-bench-press" {
+		t.Errorf("got exerciseID=%s, want ex-bench-press", specs[0].ExerciseID())
+	}
+
+	// Search with keyword matching ONLY an ID (e.g. "press" is in ID "ex-bench-press" but search for "ex-bench" which is only in ID)
+	idOnlySpecs, totalIDOnly, err := repo.Search(ctx, "ex-bench", 10, 0)
+	if err != nil {
+		t.Fatalf("Search for id-only keyword failed: %v", err)
+	}
+	if totalIDOnly != 0 || len(idOnlySpecs) != 0 {
+		t.Errorf("expected 0 results when searching by ID keyword 'ex-bench', got total=%d, count=%d", totalIDOnly, len(idOnlySpecs))
+	}
+
+	// Search with empty keyword returns all specifications
+	allSpecs, totalAll, err := repo.Search(ctx, "", 10, 0)
+	if err != nil {
+		t.Fatalf("Search with empty keyword failed: %v", err)
+	}
+	if totalAll != 2 || len(allSpecs) != 2 {
+		t.Errorf("got totalAll=%d, count=%d; want 2", totalAll, len(allSpecs))
 	}
 }
 
@@ -481,7 +519,7 @@ func TestPostgresRepository_CanceledContextAndLockConflict(t *testing.T) {
 		t.Error("expected error on canceled context FindByUserIDAndExerciseIDs")
 	}
 
-	motionSpec := aggregate.NewDraftMotionSpecification("ex1", "http://detector.onnx", "http://skeleton.onnx")
+	motionSpec := aggregate.NewDraftMotionSpecification("ex1", "Exercise 1", "http://detector.onnx", "http://skeleton.onnx")
 	if err := motionRepo.Save(ctxCancel, motionSpec); err == nil {
 		t.Error("expected error on canceled context Save MotionSpec")
 	}

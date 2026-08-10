@@ -98,8 +98,10 @@ func ensureTablesExist(db *gorm.DB) {
 	);`)
 	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_user_exercise_pr ON workout_execution.personal_records(user_id, exercise_id);`)
 
+	db.Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
 		exercise_id VARCHAR(255) PRIMARY KEY,
+		exercise_name VARCHAR(255) DEFAULT '',
 		onnx_detector_url VARCHAR(1024),
 		onnx_skeleton_url VARCHAR(1024),
 		local_rules_url VARCHAR(1024),
@@ -109,6 +111,7 @@ func ensureTablesExist(db *gorm.DB) {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_motion_specifications_name_trgm ON workout_execution.motion_specifications USING gin (exercise_name gin_trgm_ops);`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.outbox (
 		id VARCHAR(255) PRIMARY KEY,

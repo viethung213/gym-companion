@@ -42,6 +42,17 @@ func (m *mockExerciseRepo) Save(ctx context.Context, exercise *domain.Exercise, 
 	return nil
 }
 
+func (m *mockExerciseRepo) SetAISupportedWithOutboxLog(ctx context.Context, exerciseID string, supported bool, logRecord *port.OutboxLogRecord) error {
+	if m.err != nil {
+		return m.err
+	}
+	if m.exercise != nil {
+		_ = m.exercise.SetAISupported(supported, time.Now())
+		m.saved = m.exercise
+	}
+	return nil
+}
+
 func TestSetAISupportedHandler_Success(t *testing.T) {
 	now := time.Now()
 	ex, err := domain.NewExercise(domain.Info{
@@ -59,7 +70,7 @@ func TestSetAISupportedHandler_Success(t *testing.T) {
 	clock := mockClock{now: now}
 	handler := command.NewSetAISupportedHandler(repo, clock)
 
-	updated, err := handler.Handle(context.Background(), command.SetAISupportedCommand{
+	updated, err := handler.Handle(context.Background(), &command.SetAISupportedCommand{
 		ID:        "ex-1",
 		Supported: true,
 	})

@@ -39,6 +39,14 @@ func (m *mockExerciseRepo) Save(ctx context.Context, exercise *domain.Exercise, 
 	return nil
 }
 
+func (m *mockExerciseRepo) SetAISupportedWithOutboxLog(ctx context.Context, exerciseID string, supported bool, logRecord *port.OutboxLogRecord) error {
+	if m.exercise != nil {
+		_ = m.exercise.SetAISupported(supported, time.Now())
+		m.saved = m.exercise
+	}
+	return nil
+}
+
 func TestMotionSpecConsumer_ConsumeMotionSpecReady(t *testing.T) {
 	now := time.Now()
 	ex, err := domain.NewExercise(domain.Info{
@@ -59,7 +67,12 @@ func TestMotionSpecConsumer_ConsumeMotionSpecReady(t *testing.T) {
 	}{
 		{
 			name:    "valid payload",
-			payload: []byte(`{"exerciseId":"ex-100","isReady":true}`),
+			payload: []byte(`{"ExerciseID":"ex-100","IsReady":true}`),
+			wantErr: false,
+		},
+		{
+			name:    "valid cloudevent payload with PascalCase keys",
+			payload: []byte(`{"specversion":"1.0","type":"contracts.core.workout_execution.v1.motionSpecificationUpdated","data":{"ExerciseID":"ex-100","IsReady":true}}`),
 			wantErr: false,
 		},
 		{

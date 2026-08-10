@@ -98,6 +98,7 @@ CREATE INDEX IF NOT EXISTS idx_personal_records_user_exercise ON workout_executi
 -- 6. Table: motion_specifications
 CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
     exercise_id VARCHAR(255) PRIMARY KEY,
+    exercise_name VARCHAR(255) DEFAULT '',
     onnx_detector_url VARCHAR(1024),
     onnx_skeleton_url VARCHAR(1024),
     local_rules_url VARCHAR(1024),
@@ -108,5 +109,8 @@ CREATE TABLE IF NOT EXISTS workout_execution.motion_specifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE workout_execution.motion_specifications ADD COLUMN IF NOT EXISTS exercise_name VARCHAR(255) DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_motion_specifications_name_trgm ON workout_execution.motion_specifications USING gin (exercise_name gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_log_event_status ON workout_execution.outbox_log (event_id, status);

@@ -50,11 +50,12 @@ CREATE TABLE IF NOT EXISTS exercise.exercises (
     )
 );
 
--- Indexing for Exercises Foreign Keys
+-- Indexing for Exercises Foreign Keys & Name Search
 CREATE INDEX IF NOT EXISTS idx_exercises_body_part ON exercise.exercises(body_part_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercise.exercises(equipment_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_target_muscle ON exercise.exercises(target_muscle_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_status ON exercise.exercises(status);
+CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm ON exercise.exercises USING gin (name gin_trgm_ops);
 
 -- 6. Table: exercise_secondary_muscles (Many-to-Many)
 CREATE TABLE IF NOT EXISTS exercise.exercise_secondary_muscles (

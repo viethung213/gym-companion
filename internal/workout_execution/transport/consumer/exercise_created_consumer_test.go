@@ -49,6 +49,18 @@ func (m *mockMotionRepo) List(ctx context.Context, limit, offset int) ([]*aggreg
 	return res, len(res), nil
 }
 
+func (m *mockMotionRepo) Search(ctx context.Context, keyword string, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	var res []*aggregate.MotionSpecification
+	for _, s := range m.specs {
+		res = append(res, s)
+	}
+	return res, len(res), nil
+}
+
+func (m *mockMotionRepo) GetStats(ctx context.Context) (total int, activeRules int, activeVoice int, readySpecs int, err error) {
+	return len(m.specs), 0, 0, 0, nil
+}
+
 func TestExerciseCreatedConsumer_HandleMessage(t *testing.T) {
 	repo := newMockMotionRepo()
 	consumer := consumer.NewExerciseCreatedConsumer(repo, nil)
@@ -82,8 +94,41 @@ func TestExerciseCreatedConsumer_HandleMessage(t *testing.T) {
 		if spec.ExerciseID() != "ex-bench-press-101" {
 			t.Errorf("got ExerciseID = %s, want ex-bench-press-101", spec.ExerciseID())
 		}
+		if spec.ExerciseName() != "Barbell Bench Press" {
+			t.Errorf("got ExerciseName = %s, want Barbell Bench Press", spec.ExerciseName())
+		}
 		if spec.IsReady() {
 			t.Error("want new draft spec.IsReady() == false")
+		}
+	})
+
+	t.Run("standard single-layer CloudEvent payload extracts exercise_id and name", func(t *testing.T) {
+		payload := []byte(`{
+			"id": "008b4eed-df2f-5c2c-aa64-e8ab7314e442",
+			"type": "contracts.supporting.exercise.v1.exerciseCreated",
+			"source": "services/exercise-service",
+			"time": "2026-08-07T19:27:40Z",
+			"specversion": "1.0",
+			"datacontenttype": "application/json",
+			"data": {
+				"exercise_id": "0bcc5f48-c9dc-44c1-b343-c24a47889cd9",
+				"name": "Roller Seated Single Leg Shoulder Flexor Depresor Retractor",
+				"difficulty": "Beginner",
+				"body_part_id": "cc06ea19-36a0-4836-a2a6-9318ce07a54b"
+			}
+		}`)
+
+		err := consumer.HandleMessage(context.Background(), payload)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		spec, err := repo.FindByExerciseID(context.Background(), "0bcc5f48-c9dc-44c1-b343-c24a47889cd9")
+		if err != nil {
+			t.Fatalf("want spec with exercise_id 0bcc5f48-c9dc-44c1-b343-c24a47889cd9 to exist, got err: %v", err)
+		}
+		if spec.ExerciseName() != "Roller Seated Single Leg Shoulder Flexor Depresor Retractor" {
+			t.Errorf("got ExerciseName = %s, want Roller Seated Single Leg Shoulder Flexor Depresor Retractor", spec.ExerciseName())
 		}
 	})
 
@@ -109,7 +154,7 @@ func TestExerciseCreatedConsumer_HandleMessage(t *testing.T) {
 
 	t.Run("idempotency - consuming duplicate event does not error or overwrite", func(t *testing.T) {
 		now := time.Now().UTC()
-		existing := aggregate.RestoreMotionSpecification("ex-dup-1", "http://detector.onnx", "http://skeleton.onnx", "http://rules", "http://dialogue", "front", true, now, now)
+		existing := aggregate.RestoreMotionSpecification("ex-dup-1", "Duplicate Exercise", "http://detector.onnx", "http://skeleton.onnx", "http://rules", "http://dialogue", "front", true, now, now)
 		_ = repo.Save(context.Background(), existing)
 
 		payload := []byte(`{

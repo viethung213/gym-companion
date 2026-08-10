@@ -9,6 +9,7 @@ import (
 // MotionSpecification is the aggregate root holding AI model URLs, pose rules, and audio scripts for an exercise.
 type MotionSpecification struct {
 	exerciseID             string
+	exerciseName           string
 	onnxDetectorURL        string
 	onnxSkeletonURL        string
 	localRulesURL          string
@@ -21,10 +22,14 @@ type MotionSpecification struct {
 }
 
 // NewDraftMotionSpecification creates an initial draft (is_ready = false) with provided ONNX model URLs.
-func NewDraftMotionSpecification(exerciseID string, detectorURL, skeletonURL string) *MotionSpecification {
+func NewDraftMotionSpecification(exerciseID, exerciseName, detectorURL, skeletonURL string) *MotionSpecification {
 	now := time.Now().UTC()
+	if exerciseName == "" {
+		exerciseName = exerciseID
+	}
 	return &MotionSpecification{
 		exerciseID:      exerciseID,
+		exerciseName:    exerciseName,
 		onnxDetectorURL: detectorURL,
 		onnxSkeletonURL: skeletonURL,
 		isReady:         false,
@@ -35,13 +40,14 @@ func NewDraftMotionSpecification(exerciseID string, detectorURL, skeletonURL str
 
 // RestoreMotionSpecification restores a persisted MotionSpecification from its stored fields (used by repository).
 func RestoreMotionSpecification(
-	exerciseID, onnxDetectorURL, onnxSkeletonURL, localRulesURL, dialogueEngineURL string,
+	exerciseID, exerciseName, onnxDetectorURL, onnxSkeletonURL, localRulesURL, dialogueEngineURL string,
 	recommendedCameraAngle string,
 	isReady bool,
 	createdAt, updatedAt time.Time,
 ) *MotionSpecification {
 	return &MotionSpecification{
 		exerciseID:             exerciseID,
+		exerciseName:           exerciseName,
 		onnxDetectorURL:        onnxDetectorURL,
 		onnxSkeletonURL:        onnxSkeletonURL,
 		localRulesURL:          localRulesURL,
@@ -102,6 +108,14 @@ func (m *MotionSpecification) PopEvents() []interface{} {
 
 // ExerciseID returns the exercise ID.
 func (m *MotionSpecification) ExerciseID() string { return m.exerciseID }
+
+// ExerciseName returns the exercise name.
+func (m *MotionSpecification) ExerciseName() string {
+	if m.exerciseName != "" {
+		return m.exerciseName
+	}
+	return m.exerciseID
+}
 
 // OnnxDetectorURL returns the ONNX detector model URL.
 func (m *MotionSpecification) OnnxDetectorURL() string { return m.onnxDetectorURL }
