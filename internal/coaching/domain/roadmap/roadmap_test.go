@@ -149,14 +149,11 @@ func TestRoadmap_WeeklyCap_BR_AC_01(t *testing.T) {
 		}
 	}
 
-	// 7th day with a session should exceed the cap
-
+	// 7th day with a session should succeed (soft warning handled at UI layer)
 	day := newDay("wp-1-d6", base.AddDate(0, 0, 6), "wp-1", 1)
-
 	err = wp.AddDay(day)
-
-	if !errors.Is(err, ErrWeeklyCapExceeded) {
-		t.Errorf("expected ErrWeeklyCapExceeded, got %v", err)
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
 	}
 }
 

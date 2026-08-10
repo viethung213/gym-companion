@@ -240,6 +240,19 @@ func (r *fakeRepository) ListTags(_ context.Context, _, _ int) ([]port.Tag, int,
 func (r *fakeRepository) UpdateTag(_ context.Context, _ *port.Tag) error { return nil }
 func (r *fakeRepository) DeleteTag(_ context.Context, _ string) error    { return nil }
 
+func (r *fakeRepository) SetAISupportedWithOutboxLog(
+	_ context.Context,
+	exerciseID string,
+	supported bool,
+	_ *port.OutboxLogRecord,
+) error {
+	exercise, ok := r.exercises[exerciseID]
+	if !ok {
+		return domain.ErrExerciseNotFound
+	}
+	return exercise.SetAISupported(supported, time.Now().UTC())
+}
+
 type fakeClock struct {
 	now time.Time
 }

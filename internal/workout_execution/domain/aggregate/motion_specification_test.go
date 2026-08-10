@@ -11,11 +11,17 @@ func TestMotionSpecification(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	spec := aggregate.RestoreMotionSpecification("ex-1", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "side", true, now, now)
+	spec := aggregate.RestoreMotionSpecification("ex-1", "Exercise 1", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "side", true, now, now)
 
 	if got, want := spec.ExerciseID(), "ex-1"; got != want {
 
 		t.Errorf("got ExerciseID = %v, want %v", got, want)
+
+	}
+
+	if got, want := spec.ExerciseName(), "Exercise 1"; got != want {
+
+		t.Errorf("got ExerciseName = %v, want %v", got, want)
 
 	}
 
@@ -59,7 +65,7 @@ func TestMotionSpecification(t *testing.T) {
 
 func TestNewDraftMotionSpecification(t *testing.T) {
 
-	spec := aggregate.NewDraftMotionSpecification("ex-2", "", "")
+	spec := aggregate.NewDraftMotionSpecification("ex-2", "Exercise 2", "", "")
 
 	if spec.ExerciseID() != "ex-2" {
 
@@ -76,7 +82,7 @@ func TestNewDraftMotionSpecification(t *testing.T) {
 }
 
 func TestMotionSpecificationUpdateSpecAndEvents(t *testing.T) {
-	spec := aggregate.NewDraftMotionSpecification("ex-3", "http://detector.onnx", "http://skeleton.onnx")
+	spec := aggregate.NewDraftMotionSpecification("ex-3", "Exercise 3", "http://detector.onnx", "http://skeleton.onnx")
 
 	if spec.IsComplete() {
 		t.Error("want IsComplete = false when rules and dialogue are empty")
@@ -112,6 +118,7 @@ func TestMotionSpecificationUpdateSpecAndEvents(t *testing.T) {
 func TestMotionSpecification_UpdateSpec_PartialUpdates(t *testing.T) {
 	spec := aggregate.RestoreMotionSpecification(
 		"ex-4",
+		"Exercise 4",
 		"http://det1.onnx",
 		"http://skel1.onnx",
 		"http://rules1.json",
@@ -205,6 +212,7 @@ func TestMotionSpecification_IsComplete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spec := aggregate.RestoreMotionSpecification(
 				"ex-test",
+				"Exercise Test",
 				tt.detectorURL,
 				tt.skeletonURL,
 				tt.localRulesURL,
@@ -222,7 +230,7 @@ func TestMotionSpecification_IsComplete(t *testing.T) {
 }
 
 func TestMotionSpecification_PopEvents(t *testing.T) {
-	spec := aggregate.NewDraftMotionSpecification("ex-pop", "http://det.onnx", "http://skel.onnx")
+	spec := aggregate.NewDraftMotionSpecification("ex-pop", "Exercise Pop", "http://det.onnx", "http://skel.onnx")
 	spec.UpdateSpec("http://det2.onnx", "http://skel2.onnx", "http://rules.json", "http://dialogue.json", "front")
 
 	evs1 := spec.PopEvents()

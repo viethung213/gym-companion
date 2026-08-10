@@ -99,3 +99,18 @@ type outboxRecord struct {
 func (outboxRecord) TableName() string {
 	return "exercise.outbox"
 }
+
+type outboxLogRecord struct {
+	ID           string    `gorm:"column:id;primaryKey"`
+	EventID      string    `gorm:"column:event_id;not null"`
+	EventType    string    `gorm:"column:event_type;not null"`
+	Payload      []byte    `gorm:"column:payload;not null;type:jsonb"`
+	PartitionKey string    `gorm:"column:partition_key;not null"`
+	ProcessedAt  time.Time `gorm:"column:processed_at;autoCreateTime"`
+	Status       string    `gorm:"column:status;not null"`
+	ErrorMessage string    `gorm:"column:error_message"`
+}
+
+func (outboxLogRecord) TableName() string {
+	return "exercise.outbox_log"
+}

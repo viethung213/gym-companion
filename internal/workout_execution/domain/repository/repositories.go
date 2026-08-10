@@ -35,4 +35,6 @@ type MotionSpecificationRepository interface {
 	FindByExerciseID(ctx context.Context, exerciseID string) (*aggregate.MotionSpecification, error)
 	Delete(ctx context.Context, exerciseID string) error
 	List(ctx context.Context, limit, offset int) ([]*aggregate.MotionSpecification, int, error)
+	Search(ctx context.Context, keyword string, limit, offset int) ([]*aggregate.MotionSpecification, int, error)
+	GetStats(ctx context.Context) (total int, activeRules int, activeVoice int, readySpecs int, err error)
 }

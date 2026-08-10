@@ -3,6 +3,7 @@ package exercise
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
+	exerciseConsumer "github.com/viethung213/gym-companion/internal/exercise/transport/consumer"
 	exerciseGRPC "github.com/viethung213/gym-companion/internal/exercise/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -130,6 +132,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	kafkaPub := kafka.NewPublisher(writer)
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 1*time.Second)
 
+	// Initialize MotionSpec consumer for updating has_ai_supported
+	setAISupportedHandler := command.NewSetAISupportedHandler(repo, clock)
+	motionSpecConsumer := exerciseConsumer.NewMotionSpecConsumer(setAISupportedHandler)
+
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 
@@ -143,6 +149,50 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 		}()
 		outboxWorker.Start(workerCtx)
 	}()
+
+	// Start MotionSpec event consumer worker (listening to topic 'workout_execution.events')
+	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
+		motionSpecReader, err := deps.KafkaRegistry.GetReader("exercise_motion_spec_consumer", "workout_execution.events", kafkaBrokers)
+		if err == nil && motionSpecReader != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("PANIC RECOVERED in Exercise MotionSpec consumer worker: %v", r)
+					}
+					_ = motionSpecReader.Close()
+				}()
+
+				for {
+					select {
+					case <-workerCtx.Done():
+						return
+					default:
+						msg, err := motionSpecReader.ReadMessage(workerCtx)
+						if err != nil {
+							if errors.Is(err, context.Canceled) {
+								return
+							}
+							time.Sleep(1 * time.Second)
+							continue
+						}
+
+						func() {
+							defer func() {
+								if r := recover(); r != nil {
+									log.Printf("PANIC RECOVERED in Exercise MotionSpec event handling: %v", r)
+								}
+							}()
+							if err := motionSpecConsumer.ConsumeMotionSpecReady(workerCtx, msg.Value); err != nil {
+								log.Printf("Exercise failed to process MotionSpec event: %v", err)
+							}
+						}()
+					}
+				}
+			}()
+		}
+	}
 
 	// Shutdown callback function
 	shutdown := func() {

@@ -124,6 +124,10 @@ func (m *mockQueryRepository) DeleteTag(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *mockQueryRepository) SetAISupportedWithOutboxLog(ctx context.Context, exerciseID string, supported bool, logRecord *port.OutboxLogRecord) error {
+	return nil
+}
+
 // Test GetBodyPart
 func TestGetBodyPart_Success(t *testing.T) {
 	t.Parallel()

@@ -342,6 +342,7 @@ func (r *PostgresMotionSpecificationRepository) Save(ctx context.Context, spec *
 
 	model := &MotionSpecificationModel{
 		ExerciseID:             spec.ExerciseID(),
+		ExerciseName:           spec.ExerciseName(),
 		OnnxDetectorURL:        spec.OnnxDetectorURL(),
 		OnnxSkeletonURL:        spec.OnnxSkeletonURL(),
 		LocalRulesURL:          spec.LocalRulesURL(),
@@ -359,6 +360,14 @@ func (r *PostgresMotionSpecificationRepository) Save(ctx context.Context, spec *
 	return nil
 }
 
+func isUUIDString(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	_, err := uuid.Parse(s)
+	return err == nil
+}
+
 func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Context, exerciseID string) (*aggregate.MotionSpecification, error) {
 	db := getDB(ctx, r.db)
 	var model MotionSpecificationModel
@@ -371,7 +380,7 @@ func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Con
 	}
 
 	return aggregate.RestoreMotionSpecification(
-		model.ExerciseID, model.OnnxDetectorURL, model.OnnxSkeletonURL,
+		model.ExerciseID, model.ExerciseName, model.OnnxDetectorURL, model.OnnxSkeletonURL,
 		model.LocalRulesURL, model.DialogueEngineURL, model.RecommendedCameraAngle, model.IsReady,
 		model.CreatedAt, model.UpdatedAt,
 	), nil
@@ -414,13 +423,80 @@ func (r *PostgresMotionSpecificationRepository) List(ctx context.Context, limit,
 	specs := make([]*aggregate.MotionSpecification, len(models))
 	for i, m := range models {
 		specs[i] = aggregate.RestoreMotionSpecification(
-			m.ExerciseID, m.OnnxDetectorURL, m.OnnxSkeletonURL,
+			m.ExerciseID, m.ExerciseName, m.OnnxDetectorURL, m.OnnxSkeletonURL,
 			m.LocalRulesURL, m.DialogueEngineURL, m.RecommendedCameraAngle, m.IsReady,
 			m.CreatedAt, m.UpdatedAt,
 		)
 	}
 
 	return specs, int(total), nil
+}
+
+func (r *PostgresMotionSpecificationRepository) Search(ctx context.Context, keyword string, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	db := getDB(ctx, r.db)
+
+	query := db.Model(&MotionSpecificationModel{})
+
+	trimmedKW := strings.TrimSpace(keyword)
+	if trimmedKW != "" {
+		query = query.Where("exercise_name ILIKE '%' || ? || '%'", trimmedKW)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count search motion specifications: %w", err)
+	}
+
+	var models []MotionSpecificationModel
+	err := query.Limit(limit).Offset(offset).Order("exercise_id ASC").Find(&models).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search motion specifications: %w", err)
+	}
+
+	specs := make([]*aggregate.MotionSpecification, len(models))
+	for i, m := range models {
+		specs[i] = aggregate.RestoreMotionSpecification(
+			m.ExerciseID, m.ExerciseName, m.OnnxDetectorURL, m.OnnxSkeletonURL,
+			m.LocalRulesURL, m.DialogueEngineURL, m.RecommendedCameraAngle, m.IsReady,
+			m.CreatedAt, m.UpdatedAt,
+		)
+	}
+
+	return specs, int(total), nil
+}
+
+func (r *PostgresMotionSpecificationRepository) GetStats(ctx context.Context) (total int, activeRules int, activeVoice int, readySpecs int, err error) {
+	db := getDB(ctx, r.db)
+
+	var totalCount int64
+	if err := db.Model(&MotionSpecificationModel{}).Count(&totalCount).Error; err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("failed counting motion specs: %w", err)
+	}
+
+	var activeRulesCount int64
+	if err := db.Model(&MotionSpecificationModel{}).Where("local_rules_url IS NOT NULL AND local_rules_url != ''").Count(&activeRulesCount).Error; err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("failed counting active rules: %w", err)
+	}
+
+	var activeVoiceCount int64
+	if err := db.Model(&MotionSpecificationModel{}).Where("dialogue_engine_url IS NOT NULL AND dialogue_engine_url != ''").Count(&activeVoiceCount).Error; err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("failed counting active voice files: %w", err)
+	}
+
+	var readyCount int64
+	if err := db.Model(&MotionSpecificationModel{}).Where("is_ready = ?", true).Count(&readyCount).Error; err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("failed counting ready specs: %w", err)
+	}
+
+	return int(totalCount), int(activeRulesCount), int(activeVoiceCount), int(readyCount), nil
 }
 
 // PostgresOutboxRepository implements port.OutboxRepository.

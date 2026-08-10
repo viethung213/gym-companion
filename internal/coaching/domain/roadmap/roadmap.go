@@ -165,14 +165,6 @@ func (r *Roadmap) validate() error {
 		return fmt.Errorf("%w: end_date must be after start_date", ErrInvalidRoadmap)
 	}
 
-	// Enforce weekly cap per week (defense in depth; primary enforcement in WeekPlan.AddDay).
-
-	for _, w := range r.weeks {
-		if w.TotalSessions() > MaxSessionsPerWeek {
-			return fmt.Errorf("%w: week %d has %d sessions", ErrWeeklyCapExceeded, w.WeekNumber(), w.TotalSessions())
-		}
-	}
-
 	return nil
 }
 

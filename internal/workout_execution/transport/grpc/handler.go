@@ -38,6 +38,8 @@ type GRPCHandler struct {
 	updateMotionSpecHandler      *command.UpdateMotionSpecificationHandler
 	deleteMotionSpecHandler      *command.DeleteMotionSpecificationHandler
 	listMotionSpecsQuery         *query.ListMotionSpecificationsQueryHandler
+	searchMotionSpecsQuery       *query.SearchMotionSpecificationsQueryHandler
+	getMotionSpecStatsQuery      *query.GetMotionSpecificationStatsQueryHandler
 	getPresignedUploadURLQuery   *query.GetPresignedUploadURLQueryHandler
 	patchMotionSpecAssetHandler  *command.PatchMotionSpecificationAssetHandler
 }
@@ -60,6 +62,8 @@ func NewGRPCHandler(
 	updateMotionSpecHandler *command.UpdateMotionSpecificationHandler,
 	deleteMotionSpecHandler *command.DeleteMotionSpecificationHandler,
 	listMotionSpecsQuery *query.ListMotionSpecificationsQueryHandler,
+	searchMotionSpecsQuery *query.SearchMotionSpecificationsQueryHandler,
+	getMotionSpecStatsQuery *query.GetMotionSpecificationStatsQueryHandler,
 	getPresignedUploadURLQuery *query.GetPresignedUploadURLQueryHandler,
 	patchMotionSpecAssetHandler *command.PatchMotionSpecificationAssetHandler,
 ) *GRPCHandler {
@@ -77,6 +81,8 @@ func NewGRPCHandler(
 		updateMotionSpecHandler:      updateMotionSpecHandler,
 		deleteMotionSpecHandler:      deleteMotionSpecHandler,
 		listMotionSpecsQuery:         listMotionSpecsQuery,
+		searchMotionSpecsQuery:       searchMotionSpecsQuery,
+		getMotionSpecStatsQuery:      getMotionSpecStatsQuery,
 		getPresignedUploadURLQuery:   getPresignedUploadURLQuery,
 		patchMotionSpecAssetHandler:  patchMotionSpecAssetHandler,
 	}
@@ -281,6 +287,7 @@ func (h *GRPCHandler) GetMotionSpecification(ctx context.Context, req *workoutex
 
 	return &workoutexecutionv1message.GetMotionSpecificationResponse{
 		ExerciseId:             spec.ExerciseID,
+		ExerciseName:           spec.ExerciseName,
 		OnnxDetectorUrl:        spec.OnnxDetectorURL,
 		OnnxSkeletonUrl:        spec.OnnxSkeletonURL,
 		LocalRulesUrl:          spec.LocalRulesURL,
@@ -576,6 +583,7 @@ func (h *GRPCHandler) ListMotionSpecifications(ctx context.Context, req *workout
 	for i, s := range res.Items {
 		pbList[i] = &workoutexecutionv1message.GetMotionSpecificationResponse{
 			ExerciseId:             s.ExerciseID(),
+			ExerciseName:           s.ExerciseName(),
 			OnnxDetectorUrl:        s.OnnxDetectorURL(),
 			OnnxSkeletonUrl:        s.OnnxSkeletonURL(),
 			LocalRulesUrl:          s.LocalRulesURL(),
@@ -587,6 +595,56 @@ func (h *GRPCHandler) ListMotionSpecifications(ctx context.Context, req *workout
 	return &workoutexecutionv1message.ListMotionSpecificationsResponse{
 		MotionSpecifications: pbList,
 		TotalCount:           int32(res.TotalCount),
+	}, nil
+}
+
+// SearchMotionSpecifications searches MotionSpecifications by exercise name or ID.
+func (h *GRPCHandler) SearchMotionSpecifications(ctx context.Context, req *workoutexecutionv1message.SearchMotionSpecificationsRequest) (*workoutexecutionv1message.SearchMotionSpecificationsResponse, error) {
+	pageSize := req.GetPageSize()
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+
+	res, err := h.searchMotionSpecsQuery.Handle(ctx, query.SearchMotionSpecificationsQuery{
+		Keyword: req.GetKeyword(),
+		Limit:   int(pageSize),
+		Offset:  0,
+	})
+	if err != nil {
+		return nil, toGRPCError("SearchMotionSpecifications failed", err)
+	}
+
+	pbList := make([]*workoutexecutionv1message.GetMotionSpecificationResponse, len(res.Items))
+	for i, s := range res.Items {
+		pbList[i] = &workoutexecutionv1message.GetMotionSpecificationResponse{
+			ExerciseId:             s.ExerciseID(),
+			ExerciseName:           s.ExerciseName(),
+			OnnxDetectorUrl:        s.OnnxDetectorURL(),
+			OnnxSkeletonUrl:        s.OnnxSkeletonURL(),
+			LocalRulesUrl:          s.LocalRulesURL(),
+			DialogueEngineUrl:      s.DialogueEngineURL(),
+			RecommendedCameraAngle: s.RecommendedCameraAngle(),
+		}
+	}
+
+	return &workoutexecutionv1message.SearchMotionSpecificationsResponse{
+		MotionSpecifications: pbList,
+		TotalCount:           int32(res.TotalCount),
+	}, nil
+}
+
+// GetMotionSpecificationStats returns aggregate counts for motion specifications.
+func (h *GRPCHandler) GetMotionSpecificationStats(ctx context.Context, req *workoutexecutionv1message.GetMotionSpecificationStatsRequest) (*workoutexecutionv1message.GetMotionSpecificationStatsResponse, error) {
+	res, err := h.getMotionSpecStatsQuery.Handle(ctx)
+	if err != nil {
+		return nil, toGRPCError("GetMotionSpecificationStats failed", err)
+	}
+
+	return &workoutexecutionv1message.GetMotionSpecificationStatsResponse{
+		TotalExercises:   int32(res.TotalExercises),
+		ActivePoseRules:  int32(res.ActivePoseRules),
+		ActiveVoiceFiles: int32(res.ActiveVoiceFiles),
+		ReadyAiSpecs:     int32(res.ReadyAiSpecs),
 	}, nil
 }
 
@@ -807,6 +865,22 @@ func (c *ConnectWorkoutExecutionHandler) GetPresignedUploadURL(ctx context.Conte
 
 func (c *ConnectWorkoutExecutionHandler) PatchMotionSpecificationAsset(ctx context.Context, req *connect.Request[workoutexecutionv1message.PatchMotionSpecificationAssetRequest]) (*connect.Response[workoutexecutionv1message.PatchMotionSpecificationAssetResponse], error) {
 	res, err := c.grpcHandler.PatchMotionSpecificationAsset(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) SearchMotionSpecifications(ctx context.Context, req *connect.Request[workoutexecutionv1message.SearchMotionSpecificationsRequest]) (*connect.Response[workoutexecutionv1message.SearchMotionSpecificationsResponse], error) {
+	res, err := c.grpcHandler.SearchMotionSpecifications(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetMotionSpecificationStats(ctx context.Context, req *connect.Request[workoutexecutionv1message.GetMotionSpecificationStatsRequest]) (*connect.Response[workoutexecutionv1message.GetMotionSpecificationStatsResponse], error) {
+	res, err := c.grpcHandler.GetMotionSpecificationStats(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}

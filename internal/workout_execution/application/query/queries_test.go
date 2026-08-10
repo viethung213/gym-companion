@@ -62,6 +62,20 @@ func (m *mockMotionRepo) List(ctx context.Context, limit, offset int) ([]*aggreg
 
 }
 
+func (m *mockMotionRepo) Search(ctx context.Context, keyword string, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	return m.List(ctx, limit, offset)
+}
+
+func (m *mockMotionRepo) GetStats(ctx context.Context) (int, int, int, int, error) {
+	if m.err != nil {
+		return 0, 0, 0, 0, m.err
+	}
+	if m.spec != nil {
+		return 1, 1, 1, 1, nil
+	}
+	return 0, 0, 0, 0, nil
+}
+
 type mockPRRepo struct {
 	records []*aggregate.PersonalRecord
 
@@ -224,7 +238,7 @@ func TestGetMotionSpecificationQueryHandler(t *testing.T) {
 
 		now := time.Now().UTC()
 
-		spec := aggregate.RestoreMotionSpecification("ex-1", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "front", true, now, now)
+		spec := aggregate.RestoreMotionSpecification("ex-1", "Exercise 1", "http://detector.onnx", "http://skeleton.onnx", "http://rules.json", "http://dialogue.json", "front", true, now, now)
 
 		h := query.NewGetMotionSpecificationQueryHandler(&mockMotionRepo{spec: spec})
 

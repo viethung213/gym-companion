@@ -80,6 +80,9 @@ type Repository interface {
 	ListTags(ctx context.Context, limit, offset int) ([]Tag, int, error)
 	UpdateTag(ctx context.Context, t *Tag) error
 	DeleteTag(ctx context.Context, id string) error
+
+	// Consumer Outbox Log atomic update
+	SetAISupportedWithOutboxLog(ctx context.Context, exerciseID string, supported bool, logRecord *OutboxLogRecord) error
 }
 
 type Clock interface {
@@ -97,6 +100,17 @@ type OutboxRecord struct {
 	EventType    string
 	Payload      []byte
 	PartitionKey string
+}
+
+// OutboxLogRecord represents an incoming consumer idempotency log entry.
+type OutboxLogRecord struct {
+	ID           string
+	EventID      string
+	EventType    string
+	Payload      []byte
+	PartitionKey string
+	Status       string
+	ErrorMessage string
 }
 
 // OutboxRepository defines the persistence port for the outbox pattern.

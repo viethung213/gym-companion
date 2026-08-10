@@ -165,5 +165,19 @@ service AdminWorkoutExecutionService {
       get: "/api/v1/admin/execution/motion-specs"
     };
   }
+
+  // Admin lấy thông tin thống kê tổng quan về các MotionSpecification
+  rpc GetMotionSpecificationStats (contracts.core.workout_execution.v1.message.GetMotionSpecificationStatsRequest) returns (contracts.core.workout_execution.v1.message.GetMotionSpecificationStatsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/admin/execution/motion-specs/stats"
+    };
+  }
+
+  // Admin tìm kiếm danh sách các MotionSpecification theo tên bài tập
+  rpc SearchMotionSpecifications (contracts.core.workout_execution.v1.message.SearchMotionSpecificationsRequest) returns (contracts.core.workout_execution.v1.message.SearchMotionSpecificationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/admin/execution/motion-specs/search"
+    };
+  }
 }
 

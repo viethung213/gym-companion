@@ -130,6 +130,7 @@ func saveExercise(tx *gorm.DB, info *domain.Info) error {
 			"difficulty",
 			"default_rest_seconds",
 			"status",
+			"has_ai_supported",
 			"archived_at",
 			"updated_at",
 		}),
@@ -422,4 +423,61 @@ func (r *PostgresRepository) DeleteTag(ctx context.Context, id string) error {
 		return domain.ErrTagNotFound
 	}
 	return nil
+}
+
+func (r *PostgresRepository) SetAISupportedWithOutboxLog(
+	ctx context.Context,
+	exerciseID string,
+	supported bool,
+	logRecord *port.OutboxLogRecord,
+) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if logRecord != nil && logRecord.EventID != "" {
+			var count int64
+			if err := tx.Model(&outboxLogRecord{}).Where("event_id = ?", logRecord.EventID).Count(&count).Error; err == nil && count > 0 {
+				return nil
+			}
+		}
+
+		var exRecord exerciseRecord
+		if err := tx.Where("id = ?", exerciseID).First(&exRecord).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return domain.ErrExerciseNotFound
+			}
+			return fmt.Errorf("find exercise for ai_supported: %w", err)
+		}
+
+		if err := tx.Model(&exerciseRecord{}).
+			Where("id = ?", exerciseID).
+			Updates(map[string]interface{}{
+				"has_ai_supported": supported,
+			}).Error; err != nil {
+			return fmt.Errorf("update has_ai_supported: %w", err)
+		}
+
+		if logRecord != nil && logRecord.EventID != "" {
+			id := logRecord.ID
+			if id == "" {
+				id = logRecord.EventID
+			}
+			status := logRecord.Status
+			if status == "" {
+				status = "SUCCESS"
+			}
+			rec := outboxLogRecord{
+				ID:           id,
+				EventID:      logRecord.EventID,
+				EventType:    logRecord.EventType,
+				Payload:      logRecord.Payload,
+				PartitionKey: exerciseID,
+				Status:       status,
+				ErrorMessage: logRecord.ErrorMessage,
+			}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rec).Error; err != nil {
+				return fmt.Errorf("insert outbox_log: %w", err)
+			}
+		}
+
+		return nil
+	})
 }

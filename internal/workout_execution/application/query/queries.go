@@ -13,6 +13,7 @@ import (
 // MotionSpecificationDTO represents read-only motion specification data for query responses.
 type MotionSpecificationDTO struct {
 	ExerciseID             string    `json:"exerciseId"`
+	ExerciseName           string    `json:"exerciseName"`
 	OnnxDetectorURL        string    `json:"onnxDetectorUrl"`
 	OnnxSkeletonURL        string    `json:"onnxSkeletonUrl"`
 	LocalRulesURL          string    `json:"localRulesUrl"`
@@ -52,6 +53,7 @@ func (h *GetMotionSpecificationQueryHandler) Handle(ctx context.Context, exercis
 
 	return &MotionSpecificationDTO{
 		ExerciseID:             spec.ExerciseID(),
+		ExerciseName:           spec.ExerciseName(),
 		OnnxDetectorURL:        spec.OnnxDetectorURL(),
 		OnnxSkeletonURL:        spec.OnnxSkeletonURL(),
 		LocalRulesURL:          spec.LocalRulesURL(),

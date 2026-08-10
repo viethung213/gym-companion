@@ -55,6 +55,14 @@ func (m *mockMotionSpecRepo) List(ctx context.Context, limit, offset int) ([]*ag
 	return res, len(res), nil
 }
 
+func (m *mockMotionSpecRepo) Search(ctx context.Context, keyword string, limit, offset int) ([]*aggregate.MotionSpecification, int, error) {
+	return m.List(ctx, limit, offset)
+}
+
+func (m *mockMotionSpecRepo) GetStats(ctx context.Context) (total int, activeRules int, activeVoice int, readySpecs int, err error) {
+	return len(m.specs), 0, 0, 0, nil
+}
+
 // TestUpdateMotionSpecificationHandler covers the primary update flow (draft -> ready).
 func TestUpdateMotionSpecificationHandler(t *testing.T) {
 	now := time.Now().UTC()
@@ -74,7 +82,7 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 	})
 
 	t.Run("Update existing spec updates fields", func(t *testing.T) {
-		draft := aggregate.NewDraftMotionSpecification("ex-lunge", "", "")
+		draft := aggregate.NewDraftMotionSpecification("ex-lunge", "Lunge", "", "")
 		_ = repo.Save(context.Background(), draft)
 
 		cmd := command.UpdateMotionSpecificationCommand{
@@ -101,7 +109,7 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 	t.Run("Update existing spec preserves is_ready when both URLs present", func(t *testing.T) {
 		// Seed a pre-existing draft via RestoreMotionSpecification
 		existing := aggregate.RestoreMotionSpecification(
-			"ex-squat", "http://cdn/detector.onnx", "http://cdn/skeleton.onnx", "http://cdn/squat.json",
+			"ex-squat", "Squat", "http://cdn/detector.onnx", "http://cdn/skeleton.onnx", "http://cdn/squat.json",
 			"http://cdn/squat_dialogue.json", "side", false, now, now,
 		)
 		_ = repo.Save(context.Background(), existing)
@@ -128,7 +136,7 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 		outbox := &mockOutboxWriter{}
 		handlerWithOutbox := command.NewUpdateMotionSpecificationHandler(repo, outbox, nil)
 
-		draft := aggregate.NewDraftMotionSpecification("ex-deadlift", "", "")
+		draft := aggregate.NewDraftMotionSpecification("ex-deadlift", "Deadlift", "", "")
 		_ = repo.Save(context.Background(), draft)
 
 		cmd := command.UpdateMotionSpecificationCommand{
@@ -153,7 +161,7 @@ func TestUpdateMotionSpecificationHandler(t *testing.T) {
 func TestDeleteMotionSpecificationHandler(t *testing.T) {
 	now := time.Now().UTC()
 	repo := newMockMotionSpecRepo()
-	draft := aggregate.RestoreMotionSpecification("ex-to-del", "a", "b", "c", "d", "side", true, now, now)
+	draft := aggregate.RestoreMotionSpecification("ex-to-del", "To Del", "a", "b", "c", "d", "side", true, now, now)
 
 	_ = repo.Save(context.Background(), draft)
 	handler := command.NewDeleteMotionSpecificationHandler(repo)

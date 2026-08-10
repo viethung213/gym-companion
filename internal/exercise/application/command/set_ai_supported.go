@@ -11,6 +11,9 @@ import (
 type SetAISupportedCommand struct {
 	ID        string
 	Supported bool
+	EventID   string
+	EventType string
+	Payload   []byte
 }
 
 type SetAISupportedHandler struct {
@@ -30,8 +33,22 @@ func NewSetAISupportedHandler(
 
 func (h *SetAISupportedHandler) Handle(
 	ctx context.Context,
-	cmd SetAISupportedCommand,
+	cmd *SetAISupportedCommand,
 ) (*domain.Exercise, error) {
+	if cmd.EventID != "" {
+		logRec := &port.OutboxLogRecord{
+			ID:        cmd.EventID,
+			EventID:   cmd.EventID,
+			EventType: cmd.EventType,
+			Payload:   cmd.Payload,
+			Status:    "SUCCESS",
+		}
+		if err := h.repo.SetAISupportedWithOutboxLog(ctx, cmd.ID, cmd.Supported, logRec); err != nil {
+			return nil, fmt.Errorf("set ai supported with outbox log: %w", err)
+		}
+		return h.repo.FindByID(ctx, cmd.ID)
+	}
+
 	exercise, err := h.repo.FindByID(ctx, cmd.ID)
 	if err != nil {
 		return nil, fmt.Errorf("find exercise: %w", err)

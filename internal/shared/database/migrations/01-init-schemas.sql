@@ -5,6 +5,9 @@
 -- and Outbox Log tables (processed_at for incoming).
 -- ==========================================
 
+-- Enable pg_trgm extension for substring & trigram search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- ------------------------------------------
 -- 1. SCHEMA: auth
 -- ------------------------------------------
