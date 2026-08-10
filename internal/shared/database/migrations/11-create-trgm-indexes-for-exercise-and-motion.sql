@@ -2,8 +2,9 @@
 -- 11. Add pg_trgm extension and GIN trigram indexes for exercise & motion substring search
 -- ==========================================
 
--- Enable pg_trgm extension for substring/trigram matching
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Enable pg_trgm extension for substring/trigram matching in public schema
+CREATE SCHEMA IF NOT EXISTS public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
 
 -- Fast substring search (ILIKE '%keyword%') for exercises table
 CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm 
