@@ -91,7 +91,11 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 	now := time.Now().UTC()
 
 	for _, session := range sessions {
-		lastCriticalAt := findLastCriticalErrorTime(session)
+		persists, lastCriticalAt := hasCriticalErrorPersistence(session, w.inactivityThreshold, now)
+		if !persists {
+			continue
+		}
+
 		if err := session.MarkCriticalInactivity(now, lastCriticalAt); err != nil {
 			log.Printf("[WorkoutExecution] Could not mark session %q as critically inactive: %v",
 				session.ID(), err)
@@ -121,6 +125,53 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 	}
 
 	return nil
+}
+
+// hasCriticalErrorPersistence checks if a session has a single critical error code that persisted
+// or repeated continuously (at least 3 occurrences spanning at least 60% of threshold) in the recent window.
+func hasCriticalErrorPersistence(session *aggregate.WorkoutSession, threshold time.Duration, now time.Time) (bool, time.Time) {
+	windowStart := now.Add(-threshold)
+	minSpan := threshold * 6 / 10 // e.g. 3 minutes for a 5-minute threshold
+
+	// Group recent critical errors by ErrorCode
+	errorsByCode := make(map[string][]time.Time)
+	var latestOverallCritical time.Time
+
+	errs := session.Errors()
+	for i := range errs {
+		e := &errs[i]
+		if policy.IsCritical(e) {
+			if e.Timestamp.After(latestOverallCritical) {
+				latestOverallCritical = e.Timestamp
+			}
+			if !e.Timestamp.Before(windowStart) && !e.Timestamp.After(now) {
+				code := e.ErrorCode
+				if code == "" {
+					code = "CRITICAL_POSTURE_ERROR"
+				}
+				errorsByCode[code] = append(errorsByCode[code], e.Timestamp)
+			}
+		}
+	}
+
+	for _, timestamps := range errorsByCode {
+		if len(timestamps) >= 3 {
+			var first, last time.Time
+			for _, ts := range timestamps {
+				if first.IsZero() || ts.Before(first) {
+					first = ts
+				}
+				if last.IsZero() || ts.After(last) {
+					last = ts
+				}
+			}
+			if last.Sub(first) >= minSpan {
+				return true, last
+			}
+		}
+	}
+
+	return false, latestOverallCritical
 }
 
 // findLastCriticalErrorTime returns the timestamp of the most recent critical

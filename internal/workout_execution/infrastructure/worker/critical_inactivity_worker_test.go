@@ -66,10 +66,9 @@ func TestCriticalInactivityWorker(t *testing.T) {
 		w.Start(ctx)
 	})
 
-	t.Run("processCriticalInactiveSessions marks session ANOMALOUS", func(t *testing.T) {
+	t.Run("processCriticalInactiveSessions marks session ANOMALOUS on continuous errors in recent 5m", func(t *testing.T) {
 		now := time.Now().UTC()
 		started := now.Add(-10 * time.Minute)
-		criticalTimestamp := now.Add(-6 * time.Minute)
 
 		session := aggregate.ReconstituteWorkoutSession(
 			"sess-ci-worker-1", "user-1", "plan-1",
@@ -77,11 +76,25 @@ func TestCriticalInactivityWorker(t *testing.T) {
 			nil,
 			[]aggregate.SessionError{
 				{
-					ID:        "err-1",
+					ID:        "err-1a",
 					SessionID: "sess-ci-worker-1",
 					ErrorCode: "ERR_BAR_TRAPPED",
 					Severity:  "CRITICAL",
-					Timestamp: criticalTimestamp,
+					Timestamp: now.Add(-4 * time.Minute),
+				},
+				{
+					ID:        "err-1b",
+					SessionID: "sess-ci-worker-1",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-2 * time.Minute),
+				},
+				{
+					ID:        "err-1c",
+					SessionID: "sess-ci-worker-1",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-30 * time.Second),
 				},
 			},
 			nil, &started, nil,
@@ -109,7 +122,6 @@ func TestCriticalInactivityWorker(t *testing.T) {
 	t.Run("processCriticalInactiveSessions save transaction error logs and continues", func(t *testing.T) {
 		now := time.Now().UTC()
 		started := now.Add(-10 * time.Minute)
-		criticalTimestamp := now.Add(-6 * time.Minute)
 
 		session := aggregate.ReconstituteWorkoutSession(
 			"sess-ci-worker-2", "user-1", "plan-1",
@@ -117,11 +129,25 @@ func TestCriticalInactivityWorker(t *testing.T) {
 			nil,
 			[]aggregate.SessionError{
 				{
-					ID:        "err-2",
+					ID:        "err-2a",
 					SessionID: "sess-ci-worker-2",
 					ErrorCode: "ERR_FALL_DETECTED",
 					Severity:  "CRITICAL",
-					Timestamp: criticalTimestamp,
+					Timestamp: now.Add(-4 * time.Minute),
+				},
+				{
+					ID:        "err-2b",
+					SessionID: "sess-ci-worker-2",
+					ErrorCode: "ERR_FALL_DETECTED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-2 * time.Minute),
+				},
+				{
+					ID:        "err-2c",
+					SessionID: "sess-ci-worker-2",
+					ErrorCode: "ERR_FALL_DETECTED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-30 * time.Second),
 				},
 			},
 			nil, &started, nil,
@@ -145,7 +171,6 @@ func TestCriticalInactivityWorker(t *testing.T) {
 	t.Run("processCriticalInactiveSessions nil outbox skips event write", func(t *testing.T) {
 		now := time.Now().UTC()
 		started := now.Add(-10 * time.Minute)
-		criticalTimestamp := now.Add(-6 * time.Minute)
 
 		session := aggregate.ReconstituteWorkoutSession(
 			"sess-ci-worker-3", "user-1", "plan-1",
@@ -153,10 +178,25 @@ func TestCriticalInactivityWorker(t *testing.T) {
 			nil,
 			[]aggregate.SessionError{
 				{
-					ID:        "err-3",
+					ID:        "err-3a",
 					SessionID: "sess-ci-worker-3",
+					ErrorCode: "ERR_BAR_TRAPPED",
 					Severity:  "CRITICAL",
-					Timestamp: criticalTimestamp,
+					Timestamp: now.Add(-4 * time.Minute),
+				},
+				{
+					ID:        "err-3b",
+					SessionID: "sess-ci-worker-3",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-2 * time.Minute),
+				},
+				{
+					ID:        "err-3c",
+					SessionID: "sess-ci-worker-3",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-30 * time.Second),
 				},
 			},
 			nil, &started, nil,
@@ -194,18 +234,13 @@ func TestCriticalInactivityWorker(t *testing.T) {
 					SessionID: "sess-ci-worker-4",
 					ErrorCode: "ERR_ELBOW_FLARE",
 					Severity:  "WARNING",
-					Timestamp: now.Add(-6 * time.Minute),
+					Timestamp: now.Add(-3 * time.Minute),
 				},
 			},
 			nil, &started, nil,
 			started, started,
 		)
 
-		// findLastCriticalErrorTime returns zero time → MarkCriticalInactivity
-		// will still be called but session has no critical errors so zero time is passed.
-		// The session IS in IN_PROGRESS so it will still transition — this test
-		// documents that filtering is done at the repository query level (SQL WHERE clause).
-		// The worker trusts the repo to return only sessions with critical errors.
 		repo := &mockSessionRepo{session: session}
 		tx := &mockTxManager{}
 
@@ -217,5 +252,161 @@ func TestCriticalInactivityWorker(t *testing.T) {
 			cancel()
 		}()
 		w.Start(ctx)
+
+		if got, want := session.Status(), aggregate.StatusInProgress; got != want {
+			t.Errorf("got Status = %v, want %v (non-critical error session should remain in progress)", got, want)
+		}
+	})
+
+	t.Run("processCriticalInactiveSessions isolated errors 5m apart are NOT marked anomalous", func(t *testing.T) {
+		now := time.Now().UTC()
+		started := now.Add(-15 * time.Minute)
+		errorAt1h := now.Add(-6 * time.Minute)
+		errorAt1h5p := now.Add(-1 * time.Minute) // Only 2 isolated errors, not continuous
+
+		session := aggregate.ReconstituteWorkoutSession(
+			"sess-ci-worker-5-isolated", "user-1", "plan-1",
+			aggregate.StatusInProgress,
+			nil,
+			[]aggregate.SessionError{
+				{
+					ID:        "err-5-old",
+					SessionID: "sess-ci-worker-5-isolated",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: errorAt1h,
+				},
+				{
+					ID:        "err-5-recent",
+					SessionID: "sess-ci-worker-5-isolated",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: errorAt1h5p,
+				},
+			},
+			nil, &started, nil,
+			started, now,
+		)
+
+		repo := &mockSessionRepo{session: session}
+		tx := &mockTxManager{}
+
+		w := worker.NewCriticalInactivityWorker(repo, nil, tx, 10*time.Millisecond, 5*time.Minute)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+		}()
+		w.Start(ctx)
+
+		if got, want := session.Status(), aggregate.StatusInProgress; got != want {
+			t.Errorf("got Status = %v, want %v (isolated errors should NOT trigger anomaly)", got, want)
+		}
+	})
+
+	t.Run("processCriticalInactiveSessions repeated continuous critical errors in recent 5m marks ANOMALOUS", func(t *testing.T) {
+		now := time.Now().UTC()
+		started := now.Add(-10 * time.Minute)
+
+		session := aggregate.ReconstituteWorkoutSession(
+			"sess-ci-worker-5-continuous", "user-1", "plan-1",
+			aggregate.StatusInProgress,
+			nil,
+			[]aggregate.SessionError{
+				{
+					ID:        "err-5a",
+					SessionID: "sess-ci-worker-5-continuous",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-4 * time.Minute),
+				},
+				{
+					ID:        "err-5b",
+					SessionID: "sess-ci-worker-5-continuous",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-2 * time.Minute),
+				},
+				{
+					ID:        "err-5c",
+					SessionID: "sess-ci-worker-5-continuous",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-30 * time.Second),
+				},
+			},
+			nil, &started, nil,
+			started, now,
+		)
+
+		repo := &mockSessionRepo{session: session}
+		tx := &mockTxManager{}
+
+		w := worker.NewCriticalInactivityWorker(repo, nil, tx, 10*time.Millisecond, 5*time.Minute)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+		}()
+		w.Start(ctx)
+
+		if got, want := session.Status(), aggregate.StatusAnomalous; got != want {
+			t.Errorf("got Status = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("processCriticalInactiveSessions different critical errors in recent 5m are NOT marked anomalous", func(t *testing.T) {
+		now := time.Now().UTC()
+		started := now.Add(-10 * time.Minute)
+
+		// 3 different errors occurring in the 5-minute window (means user is actively moving/exercising, not stuck)
+		session := aggregate.ReconstituteWorkoutSession(
+			"sess-ci-worker-different-errors", "user-1", "plan-1",
+			aggregate.StatusInProgress,
+			nil,
+			[]aggregate.SessionError{
+				{
+					ID:        "err-diff-1",
+					SessionID: "sess-ci-worker-different-errors",
+					ErrorCode: "ERR_BAR_TRAPPED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-4 * time.Minute),
+				},
+				{
+					ID:        "err-diff-2",
+					SessionID: "sess-ci-worker-different-errors",
+					ErrorCode: "ERR_FALL_DETECTED",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-2 * time.Minute),
+				},
+				{
+					ID:        "err-diff-3",
+					SessionID: "sess-ci-worker-different-errors",
+					ErrorCode: "ERR_ANOTHER_CRITICAL",
+					Severity:  "CRITICAL",
+					Timestamp: now.Add(-30 * time.Second),
+				},
+			},
+			nil, &started, nil,
+			started, now,
+		)
+
+		repo := &mockSessionRepo{session: session}
+		tx := &mockTxManager{}
+
+		w := worker.NewCriticalInactivityWorker(repo, nil, tx, 10*time.Millisecond, 5*time.Minute)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+		}()
+		w.Start(ctx)
+
+		if got, want := session.Status(), aggregate.StatusInProgress; got != want {
+			t.Errorf("got Status = %v, want %v (different errors mean user is still active, should remain IN_PROGRESS)", got, want)
+		}
 	})
 }

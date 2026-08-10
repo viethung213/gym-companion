@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -150,7 +151,7 @@ func getMealName(meal aggregate.DailyMeal) string {
 	if len(opts) > 0 && opts[0].MealName() != "" {
 		return opts[0].MealName()
 	}
-	switch meal.MealType() {
+	switch strings.ToUpper(strings.TrimSpace(meal.MealType())) {
 	case "BREAKFAST":
 		return "Bữa Sáng"
 	case "LUNCH":

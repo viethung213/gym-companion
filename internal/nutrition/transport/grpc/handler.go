@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -103,7 +104,7 @@ func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetT
 				Fat:         float32(opt.FatGrams()),
 				RecipeSteps: opt.CookingSteps(),
 			}
-			switch m.MealType() {
+			switch strings.ToUpper(strings.TrimSpace(m.MealType())) {
 			case "BREAKFAST":
 				breakfastOptions = append(breakfastOptions, pbOpt)
 			case "LUNCH":
@@ -401,7 +402,7 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 				Fat:         float32(opt.FatGrams()),
 				RecipeSteps: opt.CookingSteps(),
 			}
-			switch m.MealType() {
+			switch strings.ToUpper(strings.TrimSpace(m.MealType())) {
 			case "BREAKFAST":
 				breakfastOptions = append(breakfastOptions, pbOpt)
 			case "LUNCH":
