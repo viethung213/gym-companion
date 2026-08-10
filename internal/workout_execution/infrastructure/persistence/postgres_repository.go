@@ -159,18 +159,23 @@ func (r *PostgresWorkoutSessionRepository) FindSessionsWithCriticalInactivity(
 	inactivityThreshold time.Duration,
 ) ([]*aggregate.WorkoutSession, error) {
 	db := getDB(ctx, r.db)
-	updatedBefore := time.Now().UTC().Add(-inactivityThreshold)
+	cutoff := time.Now().UTC().Add(-inactivityThreshold)
+	spanSeconds := int((inactivityThreshold * 6 / 10).Seconds())
 
 	var models []WorkoutSessionModel
-	err := db.Preload("Errors").
+	err := db.Preload("Sets").Preload("Errors").
 		Where(
-			`status = ? AND updated_at <= ? AND EXISTS (
+			`status = ? AND EXISTS (
 				SELECT 1 FROM workout_execution.session_errors se
 				WHERE se.session_id = workout_execution.workout_sessions.id
 				  AND (se.severity = 'CRITICAL'
 				       OR se.error_code IN ('ERR_BAR_TRAPPED', 'ERR_FALL_DETECTED'))
+				  AND se.timestamp >= ?
+				GROUP BY se.session_id, se.error_code
+				HAVING COUNT(*) >= 3
+				   AND (MAX(se.timestamp) - MIN(se.timestamp) >= ? * INTERVAL '1 second')
 			)`,
-			"IN_PROGRESS", updatedBefore,
+			"IN_PROGRESS", cutoff, spanSeconds,
 		).
 		Limit(100).
 		Find(&models).Error
