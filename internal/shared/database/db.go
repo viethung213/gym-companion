@@ -73,10 +73,17 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 		}
 
 		// Inject search_path parameter to enforce module schema isolation at query time
+		// while allowing fallback to public schema for shared extensions and functions
 		if strings.Contains(globalURL, "?") {
-			dbURL = fmt.Sprintf("%s&search_path=%s", globalURL, module)
+			dbURL = fmt.Sprintf("%s&search_path=%s,public", globalURL, module)
 		} else {
-			dbURL = fmt.Sprintf("%s?search_path=%s", globalURL, module)
+			dbURL = fmt.Sprintf("%s?search_path=%s,public", globalURL, module)
+		}
+	} else if !strings.Contains(dbURL, "search_path") {
+		if strings.Contains(dbURL, "?") {
+			dbURL = fmt.Sprintf("%s&search_path=%s,public", dbURL, module)
+		} else {
+			dbURL = fmt.Sprintf("%s?search_path=%s,public", dbURL, module)
 		}
 	}
 
