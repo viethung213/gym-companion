@@ -74,8 +74,15 @@ type InAppNotificationModel struct {
 func (m *InAppNotificationModel) ToDomain() (*aggregate.InAppNotification, error) {
 	dataMap := make(map[string]string)
 	if len(m.Data) > 0 {
-		if err := json.Unmarshal(m.Data, &dataMap); err != nil {
-			return nil, fmt.Errorf("unmarshal in-app notification data JSON: %w", err)
+		var rawMap map[string]any
+		if err := json.Unmarshal(m.Data, &rawMap); err != nil {
+			if errDirect := json.Unmarshal(m.Data, &dataMap); errDirect != nil {
+				return nil, fmt.Errorf("unmarshal in-app notification data JSON: %w", err)
+			}
+		} else {
+			for k, v := range rawMap {
+				dataMap[k] = fmt.Sprintf("%v", v)
+			}
 		}
 	}
 	return aggregate.ReconstituteInAppNotification(
