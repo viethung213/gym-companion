@@ -142,10 +142,11 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 func findOrFallbackDayPlan(rm *roadmap.Roadmap, date time.Time) *roadmap.DayPlan {
 	var lastDay *roadmap.DayPlan
 
+	targetDateStr := date.Format("2006-01-02")
 	for _, w := range rm.Weeks() {
 		for _, d := range w.Days() {
 			lastDay = d
-			if d.Info().ScheduledDate.Truncate(24*time.Hour) == date {
+			if d.Info().ScheduledDate.Format("2006-01-02") == targetDateStr {
 				return d
 			}
 		}
