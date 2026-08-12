@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -69,7 +70,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 
 	var kafkaPub *notificationKafka.Publisher
 	if deps.KafkaRegistry != nil && cfg.KafkaBrokers != "" {
-		brokers := []string{cfg.KafkaBrokers}
+		brokers := strings.Split(cfg.KafkaBrokers, ",")
 
 		// Outbound Outbox Worker Publisher
 		writer, wErr := deps.KafkaRegistry.GetWriter("notification.events", brokers)
