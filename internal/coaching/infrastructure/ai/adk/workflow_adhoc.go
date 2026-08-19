@@ -19,6 +19,15 @@ func (c *CoachingContextAgent) buildSuggestAdHocAgent(_ context.Context) (agent.
 				return nil, fetchErr
 			}
 			coachInput.Flow = FlowSuggestAdHoc
+			if hint := c.takeHint(nodeCtx.SessionID()); hint != nil {
+				coachInput.AdHocHint = &AdHocHintInput{
+					FreeText:           hint.FreeText,
+					MuscleGroups:       hint.MuscleGroups,
+					AvailableEquipment: hint.AvailableEquipment,
+					DurationMinutes:    hint.DurationMinutes,
+					IntensityHint:      hint.IntensityHint,
+				}
+			}
 
 			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, false)
 			if genErr != nil {

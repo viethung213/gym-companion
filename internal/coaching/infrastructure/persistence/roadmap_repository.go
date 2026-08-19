@@ -81,7 +81,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 				if err := db.Clauses(clause.OnConflict{
 					Columns: []clause.Column{{Name: "session_plan_id"}},
 					DoUpdates: clause.AssignmentColumns([]string{
-						"slot_time", "status", "target_muscle_groups", "prescription",
+						"slot_time", "estimated_duration_minutes", "status", "target_muscle_groups", "prescription",
 						"reasoning", "generated_at", "completed_at", "session_scr", "session_delta_rpe",
 					}),
 				}).Create(&sr).Error; err != nil {

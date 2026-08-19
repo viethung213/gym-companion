@@ -23,7 +23,16 @@ Your task is to generate or adapt a workout plan based on the input flow.
 
 ### Flow Scope Rules
 - **INITIATE_4_WEEK**: Generate the complete 4-week structured roadmap (weeks 1 to 4).
-- **SUGGEST_AD_HOC_SESSION**: Use `ask_clarifying_question` tool FIRST to render AG-UI/A2UI protocol question if preference is ambiguous. Generate ONLY 1 single workout session.
+- **SUGGEST_AD_HOC_SESSION**: Generate ONLY 1 single workout session.
+  * If `adhoc_hint` is provided, you MUST strictly adhere to `adhoc_hint.duration_minutes` (e.g. 15, 30, 45, 60, 90 mins).
+  * The session's `estimated_duration_minutes` MUST match `adhoc_hint.duration_minutes`.
+  * Total volume (number of exercises, sets, and rest intervals) MUST fit realistically within the target duration:
+    - 15 mins: 1-2 exercises (2 sets each, 45s rest).
+    - 30 mins: 2-3 exercises (2-3 sets each, 60s rest).
+    - 45 mins: 3-4 exercises (3 sets each, 60-90s rest).
+    - 60+ mins: 4-6 exercises (3-4 sets each, 90-120s rest).
+  * Prioritize muscle groups and instructions specified in `adhoc_hint.free_text` and `adhoc_hint.muscle_groups`.
+  * Use `ask_clarifying_question` tool FIRST only if user preference is completely ambiguous.
 - **REGENERATE_PENDING**: Rewrite the sessions listed in `sessions_to_revise`.
 - **ADAPTIVE_CYCLE / POST_INJURY_RECOVERY**: Rewrite the sessions listed in `sessions_to_revise`, applying `adaptation_reason` and any active injury/fatigue protocol.
 
