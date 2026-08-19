@@ -55,6 +55,7 @@ type CoachingContextAgent struct {
 	mu      sync.Mutex
 	results map[string]*PlanResult
 	reasons map[string]string
+	hints   map[string]*port.AdHocHint
 }
 
 // NewCoachingContextAgent initializes LLM agents, tools, skills, callbacks, and workflow nodes.
@@ -79,6 +80,7 @@ func NewCoachingContextAgent(
 		validator:     newPlanValidator(catalogReader),
 		results:       make(map[string]*PlanResult),
 		reasons:       make(map[string]string),
+		hints:         make(map[string]*port.AdHocHint),
 	}
 
 	if err := cca.build(ctx); err != nil {
@@ -145,8 +147,8 @@ func (c *CoachingContextAgent) Adapt(ctx context.Context, userID, decisionReason
 }
 
 // SuggestAdHocSession satisfies port.CoachAgent.
-func (c *CoachingContextAgent) SuggestAdHocSession(ctx context.Context, userID string, _ *port.AdHocHint) (port.SuggestedSession, error) {
-	res, err := c.runWorkflow(ctx, c.suggestAdHocAgent, userID, "")
+func (c *CoachingContextAgent) SuggestAdHocSession(ctx context.Context, userID string, hint *port.AdHocHint) (port.SuggestedSession, error) {
+	res, err := c.runAdHocWorkflow(ctx, userID, hint)
 	if err != nil {
 		return port.SuggestedSession{}, fmt.Errorf("run suggest adhoc workflow: %w", err)
 	}

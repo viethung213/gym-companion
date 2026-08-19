@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/runner"
 	"google.golang.org/adk/v2/workflow"
@@ -160,6 +161,23 @@ func (c *CoachingContextAgent) takeReason(sessionID string) string {
 	return reason
 }
 
+func (c *CoachingContextAgent) putHint(sessionID string, hint *port.AdHocHint) {
+	if hint == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.hints[sessionID] = hint
+}
+
+func (c *CoachingContextAgent) takeHint(sessionID string) *port.AdHocHint {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	hint := c.hints[sessionID]
+	delete(c.hints, sessionID)
+	return hint
+}
+
 // runWorkflow executes a workflow agent and collects the plan its node produced.
 func (c *CoachingContextAgent) runWorkflow(
 	ctx context.Context,
@@ -177,6 +195,42 @@ func (c *CoachingContextAgent) runWorkflow(
 
 	if reason != "" {
 		c.putReason(sessionID, reason)
+	}
+
+	prompt := &genai.Content{
+		Role:  "user",
+		Parts: []*genai.Part{{Text: userID}},
+	}
+
+	for _, runErr := range r.Run(ctx, userID, sessionID, prompt, agent.RunConfig{}) {
+		if runErr != nil {
+			return nil, fmt.Errorf("runner step error: %w", runErr)
+		}
+	}
+
+	res := c.takeResult(sessionID)
+	if res == nil || res.Plan == nil || len(res.Plan.Weeks) == 0 {
+		return nil, fmt.Errorf("%w: workflow produced no plan", ErrPlanGenerationFailed)
+	}
+	return res, nil
+}
+
+func (c *CoachingContextAgent) runAdHocWorkflow(
+	ctx context.Context,
+	userID string,
+	hint *port.AdHocHint,
+) (*PlanResult, error) {
+	r, err := runner.NewInMemory("coaching-app", c.suggestAdHocAgent)
+	if err != nil {
+		return nil, fmt.Errorf("new runner: %w", err)
+	}
+
+	sessionID := uuid.NewString()
+	defer c.takeResult(sessionID)
+	defer c.takeHint(sessionID)
+
+	if hint != nil {
+		c.putHint(sessionID, hint)
 	}
 
 	prompt := &genai.Content{

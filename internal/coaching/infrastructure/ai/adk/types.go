@@ -72,6 +72,16 @@ type CoachInput struct {
 
 	SessionsToRevise []SessionToRevise `json:"sessions_to_revise,omitempty"`
 	AdaptationReason string            `json:"adaptation_reason,omitempty"`
+	AdHocHint        *AdHocHintInput   `json:"adhoc_hint,omitempty"`
+}
+
+// AdHocHintInput defines custom user preferences for single ad-hoc session recommendations.
+type AdHocHintInput struct {
+	FreeText           string   `json:"free_text,omitempty"`
+	MuscleGroups       []string `json:"muscle_groups,omitempty"`
+	AvailableEquipment []string `json:"available_equipment,omitempty"`
+	DurationMinutes    int      `json:"duration_minutes,omitempty"`
+	IntensityHint      string   `json:"intensity_hint,omitempty"`
 }
 
 // SessionToRevise carries no id; results are matched back by position.
