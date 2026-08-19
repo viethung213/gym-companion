@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -571,9 +572,16 @@ func (h *GRPCHandler) ListMotionSpecifications(ctx context.Context, req *workout
 		pageSize = 20
 	}
 
+	offset := 0
+	if token := req.GetPageToken(); token != "" {
+		if pageNum, err := strconv.Atoi(token); err == nil && pageNum > 1 {
+			offset = (pageNum - 1) * int(pageSize)
+		}
+	}
+
 	res, err := h.listMotionSpecsQuery.Handle(ctx, query.ListMotionSpecificationsQuery{
 		Limit:  int(pageSize),
-		Offset: 0,
+		Offset: offset,
 	})
 	if err != nil {
 		return nil, toGRPCError("ListMotionSpecifications failed", err)
@@ -605,10 +613,17 @@ func (h *GRPCHandler) SearchMotionSpecifications(ctx context.Context, req *worko
 		pageSize = 20
 	}
 
+	offset := 0
+	if token := req.GetPageToken(); token != "" {
+		if pageNum, err := strconv.Atoi(token); err == nil && pageNum > 1 {
+			offset = (pageNum - 1) * int(pageSize)
+		}
+	}
+
 	res, err := h.searchMotionSpecsQuery.Handle(ctx, query.SearchMotionSpecificationsQuery{
 		Keyword: req.GetKeyword(),
 		Limit:   int(pageSize),
-		Offset:  0,
+		Offset:  offset,
 	})
 	if err != nil {
 		return nil, toGRPCError("SearchMotionSpecifications failed", err)
