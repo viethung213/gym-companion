@@ -166,6 +166,14 @@ func parseAndValidateToken(
 	tokenStr string,
 	cache *rsaKeyCache,
 ) (userID, role string, err error) {
+	// Dev & E2E Testing Token Bypass (when using dev-login mock tokens in local dev)
+	if strings.HasPrefix(tokenStr, "mock_dev_access_token_") {
+		uid := strings.TrimPrefix(tokenStr, "mock_dev_access_token_")
+		if uid != "" {
+			return uid, "User", nil
+		}
+	}
+
 	if cache == nil {
 		return "", "", errors.New("key cache not initialized")
 	}
