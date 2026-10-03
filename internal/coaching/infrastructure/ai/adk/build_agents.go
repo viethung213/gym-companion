@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/tool"
@@ -79,14 +80,27 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		return fmt.Errorf("read generator prompt: %w", err)
 	}
 
+	coachingCfg := config.LoadConfig()
+	maxGeneratorTokens := int32(coachingCfg.MaxOutputTokens)
+	if maxGeneratorTokens <= 0 {
+		maxGeneratorTokens = 8192
+	}
+	maxReviewerTokens := int32(4096)
+	if maxReviewerTokens > maxGeneratorTokens {
+		maxReviewerTokens = maxGeneratorTokens
+	}
+
 	generatorAgent, err := llmagent.New(llmagent.Config{
-		Name:                 "CoachGeneratorAgent",
-		Description:          "Fitness expert generator agent using exercise and history tools.",
-		Model:                geminiModel,
-		Instruction:          string(generatorInstruction),
-		Tools:                []tool.Tool{deps.searchTool, deps.prTool, deps.clarifyTool, deps.replaceTool, deps.scaleTool, deps.shiftTool},
-		Toolsets:             []tool.Toolset{deps.injurySkill},
-		OutputKey:            "generated_plan_text",
+		Name:        "CoachGeneratorAgent",
+		Description: "Fitness expert generator agent using exercise and history tools.",
+		Model:       geminiModel,
+		Instruction: string(generatorInstruction),
+		Tools:       []tool.Tool{deps.searchTool, deps.prTool, deps.clarifyTool, deps.replaceTool, deps.scaleTool, deps.shiftTool},
+		Toolsets:    []tool.Toolset{deps.injurySkill},
+		OutputKey:   "generated_plan_text",
+		GenerateContentConfig: &genai.GenerateContentConfig{
+			MaxOutputTokens: maxGeneratorTokens,
+		},
 		BeforeModelCallbacks: beforeModelCallbacks("CoachGeneratorAgent", validateInputSafety),
 		AfterModelCallbacks:  afterModelCallbacks("CoachGeneratorAgent"),
 		BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
@@ -108,11 +122,14 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 	// No tools: a reviewer that could call search_exercises would start
 	// proposing replacements, which is the generator's job.
 	reviewerAgent, err := llmagent.New(llmagent.Config{
-		Name:                 "CoachReviewerAgent",
-		Description:          "Scores a validated plan against the athlete's context and returns actionable feedback.",
-		Model:                geminiModel,
-		Instruction:          string(reviewerInstruction),
-		OutputSchema:         buildPlanReviewSchema(),
+		Name:         "CoachReviewerAgent",
+		Description:  "Scores a validated plan against the athlete's context and returns actionable feedback.",
+		Model:        geminiModel,
+		Instruction:  string(reviewerInstruction),
+		OutputSchema: buildPlanReviewSchema(),
+		GenerateContentConfig: &genai.GenerateContentConfig{
+			MaxOutputTokens: maxReviewerTokens,
+		},
 		BeforeModelCallbacks: beforeModelCallbacks("CoachReviewerAgent"),
 		AfterModelCallbacks:  afterModelCallbacks("CoachReviewerAgent"),
 	})

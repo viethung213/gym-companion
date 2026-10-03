@@ -38,10 +38,21 @@ func run() error {
 	loadEnvFile()
 
 	dir, _ := os.Getwd()
+	aiProvider := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
+	if aiProvider == "" {
+		aiProvider = "groq"
+	}
+	groqKey := os.Getenv("GROQ_API_KEY")
+	groqModel := os.Getenv("GROQ_MODEL")
+	if groqModel == "" {
+		groqModel = "openai/gpt-oss-120b"
+	}
 	coachingKey := os.Getenv("GOOGLE_API_KEY_COACHING")
 	nutritionKey := os.Getenv("GOOGLE_API_KEY_NUTRITION")
 
 	log.Printf("📂 Working Directory: %s", dir)
+	log.Printf("🤖 [AI Provider] Active: %s (Groq Model: %s)", aiProvider, groqModel)
+	log.Printf("🔑 [Env Check] GROQ_API_KEY: %s", maskKey(groqKey))
 	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_COACHING: %s", maskKey(coachingKey))
 	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_NUTRITION: %s", maskKey(nutritionKey))
 

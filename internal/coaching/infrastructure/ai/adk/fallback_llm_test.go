@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"os"
 	"strings"
 	"testing"
 
@@ -117,5 +118,32 @@ func TestFallbackLLM_AllModelsFail(t *testing.T) {
 	}
 	if !strings.Contains(errs[0].Error(), "gemini-2.5-flash") {
 		t.Fatalf("got err = %v, want error to contain final model name", errs[0])
+	}
+}
+
+func TestNewGroqFallbackLLM_EmptyModels(t *testing.T) {
+	ctx := context.Background()
+	baseURL := os.Getenv("GROQ_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.groq.com/openai/v1"
+	}
+	_, err := NewGroqFallbackLLM(ctx, []string{}, "dummy-key", baseURL)
+	if err == nil {
+		t.Fatal("expected error for empty modelNames list, got nil")
+	}
+}
+
+func TestNewGroqFallbackLLM_ValidModels(t *testing.T) {
+	ctx := context.Background()
+	baseURL := os.Getenv("GROQ_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.groq.com/openai/v1"
+	}
+	llm, err := NewGroqFallbackLLM(ctx, []string{"openai/gpt-oss-120b", "openai/gpt-oss-20b"}, "dummy-key", baseURL)
+	if err != nil {
+		t.Fatalf("unexpected error creating Groq fallback LLM: %v", err)
+	}
+	if llm.Name() != "openai/gpt-oss-120b" {
+		t.Fatalf("got primary model name %q, want %q", llm.Name(), "openai/gpt-oss-120b")
 	}
 }

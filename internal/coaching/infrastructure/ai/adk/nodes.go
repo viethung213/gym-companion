@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -139,14 +140,70 @@ func (c *CoachingContextAgent) buildNodes() {
 	c.parseNode = workflow.NewFunctionNode(
 		"parse_to_schema",
 		func(_ agent.Context, planText string) (*GeneratedPlan, error) {
+			cleaned := cleanJSONResponse(planText)
+			switch {
+			case cleaned == "":
+				log.Printf("[parse_to_schema] Received EMPTY planText (raw len=%d): %q", len(planText), planText)
+			case len(cleaned) < 500:
+				log.Printf("[parse_to_schema] Received planText (raw len=%d, cleaned len=%d): %s", len(planText), len(cleaned), cleaned)
+			default:
+				log.Printf("[parse_to_schema] Received planText (raw len=%d, cleaned len=%d), tail: %s", len(planText), len(cleaned), cleaned[len(cleaned)-200:])
+			}
 			var plan GeneratedPlan
-			if parseErr := json.Unmarshal([]byte(planText), &plan); parseErr != nil {
-				return nil, fmt.Errorf("unmarshal plan: %w", parseErr)
+			if parseErr := json.Unmarshal([]byte(cleaned), &plan); parseErr != nil {
+				return nil, fmt.Errorf("unmarshal plan: %w (cleaned tail: %s)", parseErr, cleaned[max(0, len(cleaned)-100):])
 			}
 			return &plan, nil
 		},
 		workflow.NodeConfig{},
 	)
+}
+
+// cleanJSONResponse strips markdown code fences and extraneous leading/trailing text.
+func cleanJSONResponse(raw string) string {
+	s := strings.TrimSpace(raw)
+
+	startObj := strings.Index(s, "{")
+	startArr := strings.Index(s, "[")
+	start := -1
+	switch {
+	case startObj != -1 && startArr != -1:
+		if startObj < startArr {
+			start = startObj
+		} else {
+			start = startArr
+		}
+	case startObj != -1:
+		start = startObj
+	case startArr != -1:
+		start = startArr
+	}
+
+	endObj := strings.LastIndex(s, "}")
+	endArr := strings.LastIndex(s, "]")
+	end := -1
+	switch {
+	case endObj != -1 && endArr != -1:
+		if endObj > endArr {
+			end = endObj
+		} else {
+			end = endArr
+		}
+	case endObj != -1:
+		end = endObj
+	case endArr != -1:
+		end = endArr
+	}
+
+	if start != -1 && end != -1 && end > start {
+		return s[start : end+1]
+	}
+
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```JSON")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	return strings.TrimSpace(s)
 }
 
 func weekdayToCode(w time.Weekday) string {
