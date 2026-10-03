@@ -5,12 +5,11 @@ import (
 	"errors"
 	"fmt"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // UserRepository implements repository.UserRepository port using GORM over PostgreSQL.

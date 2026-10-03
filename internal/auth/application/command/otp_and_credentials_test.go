@@ -172,7 +172,10 @@ func TestRegisterHandler(t *testing.T) {
 	if len(publisher.events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(publisher.events))
 	}
-	evPhone := publisher.events[0].(event.UserRegisteredEvent)
+	evPhone, ok := publisher.events[0].(event.UserRegisteredEvent)
+	if !ok {
+		t.Fatalf("expected UserRegisteredEvent, got %T", publisher.events[0])
+	}
 	if evPhone.IdentityType != "phone" || evPhone.Identifier != "+84912345678" {
 		t.Fatalf("expected phone identity +84912345678, got %+v", evPhone)
 	}

@@ -8,10 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/argon2"
-
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/infraerror"
+	"golang.org/x/crypto/argon2"
 )
 
 var (
@@ -29,22 +28,26 @@ type Argon2Params struct {
 	KeyLength   uint32
 }
 
-// DefaultArgon2Params defines production-grade secure parameters.
-var DefaultArgon2Params = Argon2Params{
-	Memory:      64 * 1024, // 64 MB
-	Iterations:  3,
-	Parallelism: 2,
-	SaltLength:  16,
-	KeyLength:   32,
+// DefaultArgon2Params returns production-grade secure parameters.
+func DefaultArgon2Params() Argon2Params {
+	return Argon2Params{
+		Memory:      64 * 1024, // 64 MB
+		Iterations:  3,
+		Parallelism: 2,
+		SaltLength:  16,
+		KeyLength:   32,
+	}
 }
 
-// TestArgon2Params defines lightweight parameters for rapid testing without compromising logic.
-var TestArgon2Params = Argon2Params{
-	Memory:      8 * 1024, // 8 MB
-	Iterations:  1,
-	Parallelism: 1,
-	SaltLength:  16,
-	KeyLength:   32,
+// TestArgon2Params returns lightweight parameters for rapid testing without compromising logic.
+func TestArgon2Params() Argon2Params {
+	return Argon2Params{
+		Memory:      8 * 1024, // 8 MB
+		Iterations:  1,
+		Parallelism: 1,
+		SaltLength:  16,
+		KeyLength:   32,
+	}
 }
 
 // Argon2Hasher implements the port.Hasher interface using the Argon2id key derivation function.
@@ -56,7 +59,7 @@ var _ port.Hasher = (*Argon2Hasher)(nil)
 
 // NewArgon2Hasher creates an Argon2Hasher with default production parameters.
 func NewArgon2Hasher() *Argon2Hasher {
-	return &Argon2Hasher{params: DefaultArgon2Params}
+	return &Argon2Hasher{params: DefaultArgon2Params()}
 }
 
 // NewCustomArgon2Hasher creates an Argon2Hasher with custom parameters.

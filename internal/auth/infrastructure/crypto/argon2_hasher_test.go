@@ -9,7 +9,7 @@ import (
 )
 
 func TestArgon2Hasher_HashAndCompare(t *testing.T) {
-	var hasher port.Hasher = crypto.NewCustomArgon2Hasher(crypto.TestArgon2Params)
+	var hasher port.Hasher = crypto.NewCustomArgon2Hasher(crypto.TestArgon2Params())
 
 	password := "SecretPassword!123"
 	hashed, err := hasher.Hash(password)
@@ -34,7 +34,7 @@ func TestArgon2Hasher_HashAndCompare(t *testing.T) {
 }
 
 func TestArgon2Hasher_InvalidHashFormat(t *testing.T) {
-	var hasher port.Hasher = crypto.NewCustomArgon2Hasher(crypto.TestArgon2Params)
+	var hasher port.Hasher = crypto.NewCustomArgon2Hasher(crypto.TestArgon2Params())
 
 	tests := []struct {
 		name    string

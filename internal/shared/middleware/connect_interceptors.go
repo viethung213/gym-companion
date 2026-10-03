@@ -34,7 +34,8 @@ func ToConnectError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if connectErr, ok := err.(*connect.Error); ok {
+	var connectErr *connect.Error
+	if errors.As(err, &connectErr) {
 		return connectErr
 	}
 	st, ok := status.FromError(err)
