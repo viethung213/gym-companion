@@ -175,12 +175,12 @@ func TestE2E_OAuthFlows_Google(t *testing.T) {
 	}
 
 	// Verify DB state
-	var user infraPostgres.UserModel
-	if err := db.First(&user, "id = ?", loginResp.UserID).Error; err != nil {
-		t.Fatalf("User record was not created: %v", err)
+	var identity infraPostgres.UserIdentityModel
+	if err := db.First(&identity, "user_id = ? AND identity_type = 'google'", loginResp.UserID).Error; err != nil {
+		t.Fatalf("User identity record was not created: %v", err)
 	}
-	if user.Email != "google-e2e-user@example.com" {
-		t.Errorf("Expected user email google-e2e-user@example.com, got %s", user.Email)
+	if identity.Identifier != "11223344556677889900" {
+		t.Errorf("Expected google identifier 11223344556677889900, got %s", identity.Identifier)
 	}
 
 	// 3. Perform RefreshToken
@@ -324,12 +324,12 @@ func TestE2E_OAuthFlows_Facebook(t *testing.T) {
 	}
 
 	// Verify DB state
-	var user infraPostgres.UserModel
-	if err := db.First(&user, "id = ?", loginResp.UserID).Error; err != nil {
-		t.Fatalf("User record was not created: %v", err)
+	var identity infraPostgres.UserIdentityModel
+	if err := db.First(&identity, "user_id = ? AND identity_type = 'facebook'", loginResp.UserID).Error; err != nil {
+		t.Fatalf("User identity record was not created: %v", err)
 	}
-	if user.Email != "facebook-e2e-user@example.com" {
-		t.Errorf("Expected user email facebook-e2e-user@example.com, got %s", user.Email)
+	if identity.Identifier != "22334455667788990011" {
+		t.Errorf("Expected facebook identifier 22334455667788990011, got %s", identity.Identifier)
 	}
 
 	// 3. Perform RefreshToken
@@ -498,4 +498,378 @@ func TestE2E_Logout_BOLA_Prevention(t *testing.T) {
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+// TestE2E_Register_And_CredentialsLogin verifies registration and password login with Email and Phone.
+func TestE2E_Register_And_CredentialsLogin(t *testing.T) {
+	baseURL, db, cleanup := startE2ETestServer(t)
+	defer cleanup()
+
+	// 1. Register with Email
+	regEmailReq := map[string]interface{}{
+		"identifier":  "newbie@example.com",
+		"password":    "StrongPassword123!",
+		"fullName":    "Newbie User",
+		"gender":      "MALE",
+		"dateOfBirth": "1995-10-20",
+	}
+	regEmailBody, _ := json.Marshal(regEmailReq)
+
+	respRegEmail, err := http.Post(baseURL+authServicePrefix+"Register", "application/json", bytes.NewBuffer(regEmailBody))
+	if err != nil {
+		t.Fatalf("Failed to execute Register request: %v", err)
+	}
+	defer respRegEmail.Body.Close()
+
+	if respRegEmail.StatusCode != http.StatusOK {
+		t.Fatalf("Register with email failed with status %d", respRegEmail.StatusCode)
+	}
+
+	// Verify DB state for registered email user
+	var identityEmail infraPostgres.UserIdentityModel
+	if err := db.First(&identityEmail, "identifier = ?", "newbie@example.com").Error; err != nil {
+		t.Fatalf("User identity was not saved to DB: %v", err)
+	}
+	if identityEmail.IdentityType != "email" {
+		t.Errorf("Expected identity_type email, got %s", identityEmail.IdentityType)
+	}
+
+	// 2. Register Duplicate Email (Expect Conflict / Non-200)
+	respDup, err := http.Post(baseURL+authServicePrefix+"Register", "application/json", bytes.NewBuffer(regEmailBody))
+	if err != nil {
+		t.Fatalf("Failed to execute duplicate Register request: %v", err)
+	}
+	defer respDup.Body.Close()
+	if respDup.StatusCode == http.StatusOK {
+		t.Fatalf("Expected duplicate registration to fail, but got HTTP 200")
+	}
+
+	// 3. Login with Email and Correct Password
+	loginEmailReq := map[string]interface{}{
+		"identifier": "newbie@example.com",
+		"password":   "StrongPassword123!",
+	}
+	loginEmailBody, _ := json.Marshal(loginEmailReq)
+
+	respLoginEmail, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(loginEmailBody))
+	if err != nil {
+		t.Fatalf("Failed to execute Login request: %v", err)
+	}
+	defer respLoginEmail.Body.Close()
+
+	if respLoginEmail.StatusCode != http.StatusOK {
+		t.Fatalf("Login with email failed with status %d", respLoginEmail.StatusCode)
+	}
+
+	var loginResp struct {
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
+		UserId       string `json:"userId"`
+	}
+	_ = json.NewDecoder(respLoginEmail.Body).Decode(&loginResp)
+	if loginResp.AccessToken == "" || loginResp.RefreshToken == "" || loginResp.UserId == "" {
+		t.Fatalf("Login response missing token or user id: %+v", loginResp)
+	}
+
+	// 4. Login with Wrong Password (Expect 401)
+	loginWrongReq := map[string]interface{}{
+		"identifier": "newbie@example.com",
+		"password":   "WrongPassword!",
+	}
+	loginWrongBody, _ := json.Marshal(loginWrongReq)
+
+	respLoginWrong, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(loginWrongBody))
+	if err != nil {
+		t.Fatalf("Failed to execute Login request: %v", err)
+	}
+	defer respLoginWrong.Body.Close()
+	if respLoginWrong.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected HTTP 401 for wrong password, got status %d", respLoginWrong.StatusCode)
+	}
+
+	// 5. Register with Phone (Local domestic format: 0912345678 -> normalized to +84912345678)
+	regPhoneReq := map[string]interface{}{
+		"identifier":  "0912345678",
+		"password":    "StrongPassword123!",
+		"fullName":    "Phone User",
+		"gender":      "FEMALE",
+		"dateOfBirth": "1998-05-15",
+	}
+	regPhoneBody, _ := json.Marshal(regPhoneReq)
+
+	respRegPhone, err := http.Post(baseURL+authServicePrefix+"Register", "application/json", bytes.NewBuffer(regPhoneBody))
+	if err != nil {
+		t.Fatalf("Failed to execute Register with phone request: %v", err)
+	}
+	defer respRegPhone.Body.Close()
+
+	if respRegPhone.StatusCode != http.StatusOK {
+		t.Fatalf("Register with phone failed with status %d", respRegPhone.StatusCode)
+	}
+
+	// Verify DB state for normalized phone
+	var identityPhone infraPostgres.UserIdentityModel
+	if err := db.First(&identityPhone, "identifier = ?", "+84912345678").Error; err != nil {
+		t.Fatalf("Phone user identity was not saved with normalized format +84912345678: %v", err)
+	}
+	if identityPhone.IdentityType != "phone" {
+		t.Errorf("Expected identity_type phone, got %s", identityPhone.IdentityType)
+	}
+
+	// 6. Login with Phone and Password
+	loginPhoneReq := map[string]interface{}{
+		"identifier": "0912345678",
+		"password":   "StrongPassword123!",
+	}
+	loginPhoneBody, _ := json.Marshal(loginPhoneReq)
+
+	respLoginPhone, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(loginPhoneBody))
+	if err != nil {
+		t.Fatalf("Failed to execute Login with phone request: %v", err)
+	}
+	defer respLoginPhone.Body.Close()
+
+	if respLoginPhone.StatusCode != http.StatusOK {
+		t.Fatalf("Login with phone failed with status %d", respLoginPhone.StatusCode)
+	}
+}
+
+// TestE2E_ChangePassword verifies changing password while authenticated.
+func TestE2E_ChangePassword(t *testing.T) {
+	baseURL, _, cleanup := startE2ETestServer(t)
+	defer cleanup()
+
+	// 1. Register user
+	regReq := map[string]interface{}{
+		"identifier":  "changepwd@example.com",
+		"password":    "InitialPass123!",
+		"fullName":    "Change Password User",
+		"gender":      "MALE",
+		"dateOfBirth": "1992-02-02",
+	}
+	regBody, _ := json.Marshal(regReq)
+	respReg, err := http.Post(baseURL+authServicePrefix+"Register", "application/json", bytes.NewBuffer(regBody))
+	if err != nil || respReg.StatusCode != http.StatusOK {
+		t.Fatalf("Failed to register test user: %v", err)
+	}
+	respReg.Body.Close()
+
+	// 2. Login to get user ID
+	loginReq := map[string]interface{}{
+		"identifier": "changepwd@example.com",
+		"password":   "InitialPass123!",
+	}
+	loginBody, _ := json.Marshal(loginReq)
+	respLogin, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil || respLogin.StatusCode != http.StatusOK {
+		t.Fatalf("Failed to login test user: %v", err)
+	}
+	var loginResp struct {
+		UserId string `json:"userId"`
+	}
+	_ = json.NewDecoder(respLogin.Body).Decode(&loginResp)
+	respLogin.Body.Close()
+
+	// 3. Change password with wrong old password (Expect 401)
+	wrongOldPwdReq := map[string]interface{}{
+		"oldPassword":     "WrongOldPass!",
+		"newPassword":     "BrandNewPass123!",
+		"confirmPassword": "BrandNewPass123!",
+	}
+	wrongOldPwdBody, _ := json.Marshal(wrongOldPwdReq)
+	reqWrong, _ := http.NewRequest("POST", baseURL+authServicePrefix+"ChangePassword", bytes.NewBuffer(wrongOldPwdBody))
+	reqWrong.Header.Set("Content-Type", "application/json")
+	reqWrong.Header.Set("X-User-Id", loginResp.UserId)
+
+	respWrong, err := http.DefaultClient.Do(reqWrong)
+	if err != nil {
+		t.Fatalf("Failed to call ChangePassword: %v", err)
+	}
+	defer respWrong.Body.Close()
+	if respWrong.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected HTTP 401 for wrong old password, got status %d", respWrong.StatusCode)
+	}
+
+	// 4. Change password with valid old password
+	validChangeReq := map[string]interface{}{
+		"oldPassword":     "InitialPass123!",
+		"newPassword":     "BrandNewPass123!",
+		"confirmPassword": "BrandNewPass123!",
+	}
+	validChangeBody, _ := json.Marshal(validChangeReq)
+	reqValid, _ := http.NewRequest("POST", baseURL+authServicePrefix+"ChangePassword", bytes.NewBuffer(validChangeBody))
+	reqValid.Header.Set("Content-Type", "application/json")
+	reqValid.Header.Set("X-User-Id", loginResp.UserId)
+
+	respValid, err := http.DefaultClient.Do(reqValid)
+	if err != nil {
+		t.Fatalf("Failed to call ChangePassword: %v", err)
+	}
+	defer respValid.Body.Close()
+	if respValid.StatusCode != http.StatusOK {
+		t.Fatalf("Expected HTTP 200 for valid ChangePassword, got status %d", respValid.StatusCode)
+	}
+
+	// 5. Verify old password no longer works
+	respOldLogin, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil {
+		t.Fatalf("Failed to test old password login: %v", err)
+	}
+	defer respOldLogin.Body.Close()
+	if respOldLogin.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Old password should no longer work, but got status %d", respOldLogin.StatusCode)
+	}
+
+	// 6. Verify new password works
+	newLoginReq := map[string]interface{}{
+		"identifier": "changepwd@example.com",
+		"password":   "BrandNewPass123!",
+	}
+	newLoginBody, _ := json.Marshal(newLoginReq)
+	respNewLogin, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(newLoginBody))
+	if err != nil {
+		t.Fatalf("Failed to test new password login: %v", err)
+	}
+	defer respNewLogin.Body.Close()
+	if respNewLogin.StatusCode != http.StatusOK {
+		t.Fatalf("New password login failed with status %d", respNewLogin.StatusCode)
+	}
+}
+
+// TestE2E_OTP_And_ResetPassword verifies SendOTP, VerifyOTP, and ResetPassword flows.
+func TestE2E_OTP_And_ResetPassword(t *testing.T) {
+	baseURL, db, cleanup := startE2ETestServer(t)
+	defer cleanup()
+
+	// 1. Register target user
+	regReq := map[string]interface{}{
+		"identifier":  "forgotuser@example.com",
+		"password":    "InitialPass123!",
+		"fullName":    "Forgot User",
+		"gender":      "MALE",
+		"dateOfBirth": "1994-04-04",
+	}
+	regBody, _ := json.Marshal(regReq)
+	respReg, err := http.Post(baseURL+authServicePrefix+"Register", "application/json", bytes.NewBuffer(regBody))
+	if err != nil || respReg.StatusCode != http.StatusOK {
+		t.Fatalf("Failed to register target user: %v", err)
+	}
+	respReg.Body.Close()
+
+	// 2. Request OTP for Password Reset
+	sendOTPReq := map[string]interface{}{
+		"identifier": "forgotuser@example.com",
+		"purpose":    "reset_password",
+	}
+	sendOTPBody, _ := json.Marshal(sendOTPReq)
+	respSendOTP, err := http.Post(baseURL+authServicePrefix+"SendOTP", "application/json", bytes.NewBuffer(sendOTPBody))
+	if err != nil {
+		t.Fatalf("Failed to call SendOTP: %v", err)
+	}
+	defer respSendOTP.Body.Close()
+
+	if respSendOTP.StatusCode != http.StatusOK {
+		t.Fatalf("SendOTP failed with status %d", respSendOTP.StatusCode)
+	}
+
+	var sendOTPResp struct {
+		Success  bool   `json:"success"`
+		OtpToken string `json:"otpToken"`
+	}
+	_ = json.NewDecoder(respSendOTP.Body).Decode(&sendOTPResp)
+	if !sendOTPResp.Success || sendOTPResp.OtpToken == "" {
+		t.Fatalf("SendOTP returned unsuccessful response: %+v", sendOTPResp)
+	}
+
+	// 3. Retrieve the generated plain code from outbox record payload
+	var outboxRecord infraPostgres.OutboxModel
+	if err := db.Where("event_type ILIKE ?", "%otpsent%").Order("created_at DESC").First(&outboxRecord).Error; err != nil {
+		t.Fatalf("Failed to find OTPSent event in outbox: %v", err)
+	}
+
+	var envelope struct {
+		Data struct {
+			Code string `json:"code"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(outboxRecord.Payload, &envelope); err != nil {
+		t.Fatalf("Failed to unmarshal outbox payload: %v", err)
+	}
+	plainOTPCode := envelope.Data.Code
+	if plainOTPCode == "" {
+		t.Fatalf("OTP code in outbox payload was empty")
+	}
+
+	// 4. Verify OTP with Wrong Code (Expect non-200)
+	wrongVerifyReq := map[string]interface{}{
+		"otpToken": sendOTPResp.OtpToken,
+		"code":     "000000",
+	}
+	wrongVerifyBody, _ := json.Marshal(wrongVerifyReq)
+	respWrongVerify, err := http.Post(baseURL+authServicePrefix+"VerifyOTP", "application/json", bytes.NewBuffer(wrongVerifyBody))
+	if err != nil {
+		t.Fatalf("Failed to call VerifyOTP with wrong code: %v", err)
+	}
+	defer respWrongVerify.Body.Close()
+	if respWrongVerify.StatusCode == http.StatusOK {
+		t.Fatalf("Expected VerifyOTP with wrong code to fail, got HTTP 200")
+	}
+
+	// 5. Verify OTP with Correct Code
+	validVerifyReq := map[string]interface{}{
+		"otpToken": sendOTPResp.OtpToken,
+		"code":     plainOTPCode,
+	}
+	validVerifyBody, _ := json.Marshal(validVerifyReq)
+	respValidVerify, err := http.Post(baseURL+authServicePrefix+"VerifyOTP", "application/json", bytes.NewBuffer(validVerifyBody))
+	if err != nil {
+		t.Fatalf("Failed to call VerifyOTP: %v", err)
+	}
+	defer respValidVerify.Body.Close()
+
+	if respValidVerify.StatusCode != http.StatusOK {
+		t.Fatalf("VerifyOTP failed with status %d", respValidVerify.StatusCode)
+	}
+
+	var verifyResp struct {
+		Valid      bool   `json:"valid"`
+		ResetToken string `json:"resetToken"`
+	}
+	_ = json.NewDecoder(respValidVerify.Body).Decode(&verifyResp)
+	if !verifyResp.Valid || verifyResp.ResetToken == "" {
+		t.Fatalf("VerifyOTP did not return valid resetToken: %+v", verifyResp)
+	}
+
+	// 6. Reset Password with reset_token
+	resetReq := map[string]interface{}{
+		"resetToken":      verifyResp.ResetToken,
+		"newPassword":     "BrandNewResetPass123!",
+		"confirmPassword": "BrandNewResetPass123!",
+	}
+	resetBody, _ := json.Marshal(resetReq)
+	respReset, err := http.Post(baseURL+authServicePrefix+"ResetPassword", "application/json", bytes.NewBuffer(resetBody))
+	if err != nil {
+		t.Fatalf("Failed to call ResetPassword: %v", err)
+	}
+	defer respReset.Body.Close()
+
+	if respReset.StatusCode != http.StatusOK {
+		t.Fatalf("ResetPassword failed with status %d", respReset.StatusCode)
+	}
+
+	// 7. Login with newly reset password
+	newLoginReq := map[string]interface{}{
+		"identifier": "forgotuser@example.com",
+		"password":   "BrandNewResetPass123!",
+	}
+	newLoginBody, _ := json.Marshal(newLoginReq)
+	respNewLogin, err := http.Post(baseURL+authServicePrefix+"Login", "application/json", bytes.NewBuffer(newLoginBody))
+	if err != nil {
+		t.Fatalf("Failed to login after reset password: %v", err)
+	}
+	defer respNewLogin.Body.Close()
+
+	if respNewLogin.StatusCode != http.StatusOK {
+		t.Fatalf("Login with reset password failed with status %d", respNewLogin.StatusCode)
+	}
 }

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
@@ -9,71 +10,114 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
 
+// RoleModel is the GORM model mapping to auth.roles table.
+type RoleModel struct {
+	ID          string    `gorm:"primaryKey;column:id"`
+	Name        string    `gorm:"column:name;not null"`
+	Description string    `gorm:"column:description"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
+}
+
+func (RoleModel) TableName() string {
+	return "auth.roles"
+}
+
 // UserModel is the GORM model mapping to auth.users table.
 type UserModel struct {
-	ID         string    `gorm:"primaryKey;column:id"`
-	Email      string    `gorm:"column:email;not null;uniqueIndex"`
-	GoogleID   *string   `gorm:"column:google_id"`
-	FacebookID *string   `gorm:"column:facebook_id"`
-	FullName   string    `gorm:"column:full_name"`
-	Role       string    `gorm:"column:role;not null"`
-	CreatedAt  time.Time `gorm:"column:created_at"`
-	UpdatedAt  time.Time `gorm:"column:updated_at"`
+	ID        string             `gorm:"primaryKey;column:id"`
+	FullName  string             `gorm:"column:full_name"`
+	RoleID    string             `gorm:"column:role_id;not null;index:idx_users_role_id"`
+	Status    string             `gorm:"column:status;not null;default:active"`
+	CreatedAt time.Time          `gorm:"column:created_at"`
+	UpdatedAt time.Time          `gorm:"column:updated_at"`
+	Identity  *UserIdentityModel `gorm:"foreignKey:UserID;references:ID"`
 }
 
 func (UserModel) TableName() string {
 	return "auth.users"
 }
 
+// UserIdentityModel is the GORM model mapping to auth.user_identities table.
+type UserIdentityModel struct {
+	ID             string    `gorm:"primaryKey;column:id"`
+	UserID         string    `gorm:"column:user_id;not null;uniqueIndex:idx_identities_user_id"`
+	IdentityType   string    `gorm:"column:identity_type;not null"`
+	Identifier     string    `gorm:"column:identifier;not null"`
+	CredentialData *string   `gorm:"column:credential_data"`
+	Metadata       []byte    `gorm:"column:metadata;type:jsonb"`
+	CreatedAt      time.Time `gorm:"column:created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at"`
+}
+
+func (UserIdentityModel) TableName() string {
+	return "auth.user_identities"
+}
+
 func toUserModel(u *aggregate.User) *UserModel {
-	var gID, fID *string
-	if u.GoogleID() != "" {
-		val := u.GoogleID()
-		gID = &val
+	var identModel *UserIdentityModel
+	if u.Identity().ID() != "" {
+		m := toUserIdentityModel(u.ID(), u.Identity())
+		identModel = &m
 	}
-	if u.FacebookID() != "" {
-		val := u.FacebookID()
-		fID = &val
-	}
+
 	return &UserModel{
-		ID:         u.ID(),
-		Email:      u.Email(),
-		GoogleID:   gID,
-		FacebookID: fID,
-		FullName:   u.FullName(),
-		Role:       u.Role(),
-		CreatedAt:  u.CreatedAt(),
-		UpdatedAt:  u.UpdatedAt(),
+		ID:        u.ID(),
+		FullName:  u.FullName(),
+		RoleID:    u.Role(),
+		Status:    u.Status(),
+		CreatedAt: u.CreatedAt(),
+		UpdatedAt: u.UpdatedAt(),
+		Identity:  identModel,
+	}
+}
+
+func toUserIdentityModel(userID string, i aggregate.Identity) UserIdentityModel {
+	var cred *string
+	if i.CredentialData() != "" {
+		c := i.CredentialData()
+		cred = &c
+	}
+	return UserIdentityModel{
+		ID:             i.ID(),
+		UserID:         userID,
+		IdentityType:   i.IdentityType(),
+		Identifier:     i.Identifier(),
+		CredentialData: cred,
+		Metadata:       i.Metadata(),
+		CreatedAt:      i.CreatedAt(),
+		UpdatedAt:      i.UpdatedAt(),
 	}
 }
 
 func (m *UserModel) ToDomain() (*aggregate.User, error) {
-	userID, err := vo.NewUserID(m.ID)
+	role, err := vo.NewRole(m.RoleID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid role in database: %w", err)
 	}
-	email, err := vo.NewEmail(m.Email)
-	if err != nil {
-		return nil, err
+
+	var identity aggregate.Identity
+	if m.Identity != nil && m.Identity.ID != "" {
+		var cred string
+		if m.Identity.CredentialData != nil {
+			cred = *m.Identity.CredentialData
+		}
+		identity = aggregate.NewIdentity(
+			m.Identity.ID,
+			m.Identity.IdentityType,
+			m.Identity.Identifier,
+			cred,
+			m.Identity.Metadata,
+			m.Identity.CreatedAt,
+			m.Identity.UpdatedAt,
+		)
 	}
-	role, err := vo.NewRole(m.Role)
-	if err != nil {
-		return nil, err
-	}
-	var gID, fID string
-	if m.GoogleID != nil {
-		gID = *m.GoogleID
-	}
-	if m.FacebookID != nil {
-		fID = *m.FacebookID
-	}
+
 	return aggregate.NewUser(
-		userID,
-		email,
-		gID,
-		fID,
+		m.ID,
 		m.FullName,
 		role,
+		m.Status,
+		identity,
 		m.CreatedAt,
 		m.UpdatedAt,
 	), nil
@@ -165,4 +209,35 @@ func (m *OutboxModel) ToRepositoryRecord() *port.OutboxRecord {
 		Payload:      m.Payload,
 		PartitionKey: m.PartitionKey,
 	}
+}
+
+// OTPModel is the GORM model mapping to auth.otps table.
+type OTPModel struct {
+	ID                string    `gorm:"primaryKey;column:id"` // otp_token
+	Identifier        string    `gorm:"column:identifier;not null"`
+	OTPHash           string    `gorm:"column:otp_hash;not null"`
+	Purpose           string    `gorm:"column:purpose;not null"`
+	Attempts          int       `gorm:"column:attempts;not null;default:0"`
+	MaxAttempts       int       `gorm:"column:max_attempts;not null;default:5"`
+	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
+	ResendAvailableAt time.Time `gorm:"column:resend_available_at;not null"`
+	IsUsed            bool      `gorm:"column:is_used;not null;default:false"`
+	CreatedAt         time.Time `gorm:"column:created_at;not null"`
+}
+
+func (OTPModel) TableName() string {
+	return "auth.otps"
+}
+
+// PasswordResetTokenModel is the GORM model mapping to auth.password_reset_tokens table.
+type PasswordResetTokenModel struct {
+	Token     string    `gorm:"primaryKey;column:token"`
+	UserID    string    `gorm:"column:user_id;not null;index:idx_password_reset_tokens_user_id"`
+	ExpiresAt time.Time `gorm:"column:expires_at;not null"`
+	IsUsed    bool      `gorm:"column:is_used;not null;default:false"`
+	CreatedAt time.Time `gorm:"column:created_at;not null"`
+}
+
+func (PasswordResetTokenModel) TableName() string {
+	return "auth.password_reset_tokens"
 }

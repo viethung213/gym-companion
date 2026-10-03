@@ -13,9 +13,11 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -45,6 +47,8 @@ func truncateTables(db *gorm.DB) {
 	db.Exec("TRUNCATE TABLE auth.jwk_keys CASCADE")
 	db.Exec("TRUNCATE TABLE auth.sessions CASCADE")
 	db.Exec("TRUNCATE TABLE auth.outbox CASCADE")
+	db.Exec("TRUNCATE TABLE auth.otps CASCADE")
+	db.Exec("TRUNCATE TABLE auth.password_reset_tokens CASCADE")
 }
 
 // startE2ETestServer spins up the full gRPC and HTTP Gateway servers on random ports.
@@ -93,7 +97,11 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 	}
 
 	mux := http.NewServeMux()
-	auth.RegisterConnectHandler(mux, grpcHandler)
+	auth.RegisterConnectHandler(
+		mux,
+		grpcHandler,
+		connect.WithInterceptors(middleware.NewConnectErrorMappingInterceptor()),
+	)
 	httpServer := &http.Server{Handler: mux}
 
 	// Run HTTP server in background
@@ -132,6 +140,7 @@ func (m *oauthMockTransport) RoundTrip(req *http.Request) (*http.Response, error
 		respBody := `{
 			"id": "11223344556677889900",
 			"email": "google-e2e-user@example.com",
+			"verified_email": true,
 			"name": "Google E2E User"
 		}`
 		return m.mockResponse(http.StatusOK, respBody)

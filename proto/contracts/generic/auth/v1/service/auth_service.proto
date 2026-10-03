@@ -101,4 +101,75 @@ service AuthService {
       security: {} // Public bypass
     };
   }
+
+  // Đăng ký tài khoản mới bằng Email hoặc Số điện thoại kèm Mật khẩu
+  rpc Register (contracts.generic.auth.v1.message.RegisterRequest) returns (contracts.generic.auth.v1.message.RegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/register"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+      security: {} // Public bypass
+    };
+  }
+
+  // Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu
+  rpc Login (contracts.generic.auth.v1.message.LoginRequest) returns (contracts.generic.auth.v1.message.LoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/login"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+      security: {} // Public bypass
+    };
+  }
+
+  // Yêu cầu gửi mã OTP qua Email hoặc SMS
+  rpc SendOTP (contracts.generic.auth.v1.message.SendOTPRequest) returns (contracts.generic.auth.v1.message.SendOTPResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/otp/send"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+      security: {} // Public bypass
+    };
+  }
+
+  // Xác thực mã OTP nhận được
+  rpc VerifyOTP (contracts.generic.auth.v1.message.VerifyOTPRequest) returns (contracts.generic.auth.v1.message.VerifyOTPResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/otp/verify"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+      security: {} // Public bypass
+    };
+  }
+
+  // Đổi mật khẩu cho người dùng đã đăng nhập (yêu cầu Bearer Token)
+  rpc ChangePassword (contracts.generic.auth.v1.message.ChangePasswordRequest) returns (contracts.generic.auth.v1.message.ChangePasswordResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/password/change"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+    };
+  }
+
+  // Đổi lại mật khẩu mới sau khi đã xác thực mã OTP
+  rpc ResetPassword (contracts.generic.auth.v1.message.ResetPasswordRequest) returns (contracts.generic.auth.v1.message.ResetPasswordResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/password/reset"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / User"
+      security: {} // Public bypass
+    };
+  }
 }

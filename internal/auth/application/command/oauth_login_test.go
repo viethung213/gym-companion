@@ -58,8 +58,8 @@ func TestOAuthLoginHandler_RegisterNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user not found: %v", err)
 	}
-	if got, want := createdUser.Email(), "oauth_user@example.com"; got != want {
-		t.Errorf("got email %s, want %s", got, want)
+	if got, want := createdUser.Identity().Identifier(), "9e0dc099-0df4-436f-b258-004ea10a6234"; got != want {
+		t.Errorf("got identifier %s, want %s", got, want)
 	}
 
 	// Verify session was saved
@@ -79,7 +79,7 @@ func TestOAuthLoginHandler_RegisterNew(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected UserRegisteredEvent, got %T", publisher.events[0])
 	}
-	if regEvent.UserID != userID || regEvent.Email != "oauth_user@example.com" {
+	if regEvent.UserID != userID || regEvent.Identifier != "9e0dc099-0df4-436f-b258-004ea10a6234" || regEvent.IdentityType != "google" {
 		t.Errorf("unexpected event data: %+v", regEvent)
 	}
 }
@@ -184,49 +184,6 @@ func TestOAuthLoginHandler_StateValidationFailure(t *testing.T) {
 	}
 }
 
-func TestOAuthLoginHandler_FindByEmail_DBError(t *testing.T) {
-	ctx := context.Background()
-	dbErr := errors.New("connection timeout")
-
-	userRepo := &mockUserRepo{
-		users:          make(map[string]*aggregate.User),
-		findByEmailErr: dbErr,
-	}
-	key := &port.JWKRecord{
-		ID:        "active-kid",
-		Status:    port.KeyStatusActive,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
-	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
-	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
-	publisher := &mockEventPublisher{}
-
-	handler := NewOAuthLoginHandler(
-		userRepo,
-		keyRepo,
-		sessRepo,
-		mockTokenService{},
-		mockOAuthService{},
-		publisher,
-		&mockTxManager{},
-	)
-
-	_, _, _, err := handler.Handle(ctx, OAuthLoginCommand{
-		Provider: "google",
-		Code:     "valid_code",
-	})
-	if err == nil {
-		t.Fatal("expected error when FindByEmail returns DB error, got nil")
-	}
-	if !strings.Contains(err.Error(), "find user by email") {
-		t.Errorf("got error %v, want error containing 'find user by email'", err)
-	}
-	if len(userRepo.users) != 0 {
-		t.Errorf("expected 0 users created when FindByEmail fails with DB error, got %d", len(userRepo.users))
-	}
-}
-
 func TestOAuthLoginHandler_FindBySocialID_DBError(t *testing.T) {
 	ctx := context.Background()
 	dbErr := errors.New("database locked")
@@ -280,14 +237,11 @@ func (mockUnverifiedOAuthService) ExchangeCodeForProfile(ctx context.Context, pr
 	}, nil
 }
 
-func TestOAuthLoginHandler_UnverifiedEmail_LinkRejected(t *testing.T) {
+func TestOAuthLoginHandler_UnverifiedEmail_Rejected(t *testing.T) {
 	ctx := context.Background()
 
-	existingUser, _ := aggregate.RegisterUser("11111111-1111-1111-1111-111111111111", "existing@example.com", "Existing User", "", "user")
 	userRepo := &mockUserRepo{
-		users: map[string]*aggregate.User{
-			existingUser.ID(): existingUser,
-		},
+		users: make(map[string]*aggregate.User),
 	}
 	key := &port.JWKRecord{
 		ID:        "active-kid",
@@ -314,7 +268,7 @@ func TestOAuthLoginHandler_UnverifiedEmail_LinkRejected(t *testing.T) {
 	})
 
 	if err == nil {
-		t.Fatal("expected error when attempting to link account with unverified social email, got nil")
+		t.Fatal("expected error when attempting to login with unverified social email, got nil")
 	}
 	if !strings.Contains(err.Error(), "is not verified by provider") {
 		t.Errorf("got error %v, want error containing 'is not verified by provider'", err)

@@ -5,20 +5,21 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/viethung213/gym-companion/internal/auth/infrastructure/infraerror"
 )
 
 // ErrInvalidStateFormat represents invalid format of state string.
-var ErrInvalidStateFormat = errors.New("invalid state format")
+var ErrInvalidStateFormat = infraerror.ErrInvalidStateFormat
 
 // ErrInvalidStateSignature represents signature verification failure.
-var ErrInvalidStateSignature = errors.New("invalid state signature")
+var ErrInvalidStateSignature = infraerror.ErrInvalidStateSignature
 
 // ErrStateExpired represents state timeout failure.
-var ErrStateExpired = errors.New("state token expired")
+var ErrStateExpired = infraerror.ErrStateExpired
 
 // GenerateState generates a cryptographically secure, signed state string.
 func GenerateState(secret string, ttl time.Duration) (string, error) {

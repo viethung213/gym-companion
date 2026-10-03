@@ -187,6 +187,7 @@ func run() error {
 	connectInterceptors := connect.WithInterceptors(
 		middleware.NewConnectRecoveryInterceptor(),
 		middleware.NewConnectLoggingInterceptor(),
+		middleware.NewConnectErrorMappingInterceptor(),
 		middleware.NewConnectAuthInterceptor(lazyKP),
 		middleware.NewConnectRateLimitInterceptor(),
 	)

@@ -4,6 +4,12 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 )
 
+const (
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+	RoleBrand = "brand"
+)
+
 // Role represents a validated user system role Value Object.
 type Role struct {
 	value string
@@ -11,10 +17,12 @@ type Role struct {
 
 // NewRole validates and creates a Role Value Object.
 func NewRole(v string) (Role, error) {
-	if v != "user" && v != "admin" {
+	switch v {
+	case RoleAdmin, RoleUser, RoleBrand:
+		return Role{value: v}, nil
+	default:
 		return Role{}, derror.ErrInvalidRole
 	}
-	return Role{value: v}, nil
 }
 
 // Value returns the raw string value of the Role.

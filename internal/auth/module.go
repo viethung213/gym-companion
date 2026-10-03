@@ -205,6 +205,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	}
 
 	refreshTokenHandler := command.NewRefreshTokenHandler(userRepo, keyRepo, sessRepo, tokenServ)
+	argon2Hasher := crypto.NewArgon2Hasher()
+	otpRepo := postgres.NewOTPRepository(gormDB)
+	resetTokenRepo := postgres.NewPasswordResetTokenRepository(gormDB)
+
+	registerHandler := command.NewRegisterHandler(userRepo, argon2Hasher, eventPub, txManager)
+	credentialsLoginHandler := command.NewCredentialsLoginHandler(userRepo, argon2Hasher, keyRepo, tokenServ, sessRepo)
+	sendOTPHandler := command.NewSendOTPHandler(otpRepo, argon2Hasher, eventPub, txManager)
+	verifyOTPHandler := command.NewVerifyOTPHandler(otpRepo, resetTokenRepo, userRepo, argon2Hasher)
+	changePasswordHandler := command.NewChangePasswordHandler(userRepo, argon2Hasher)
+	resetPasswordHandler := command.NewResetPasswordHandler(resetTokenRepo, userRepo, argon2Hasher, txManager)
 
 	// 9. Register AuthService Server to gRPC Server
 	grpcHandler := authGRPC.NewGRPCHandler(
@@ -214,6 +224,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		refreshTokenHandler,
 		getJWKSHandler,
 		getOAuthLoginURLHandler,
+		registerHandler,
+		credentialsLoginHandler,
+		sendOTPHandler,
+		verifyOTPHandler,
+		changePasswordHandler,
+		resetPasswordHandler,
 	)
 
 	log.Println("Auth Bounded Context initialized successfully.")

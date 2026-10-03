@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
-	"gorm.io/gorm"
 )
 
 // UserRepository implements repository.UserRepository port using GORM over PostgreSQL.
@@ -31,7 +33,7 @@ func (r *UserRepository) getDB(ctx context.Context) *gorm.DB {
 	return r.db.WithContext(ctx)
 }
 
-// Create inserts a new user record.
+// Create inserts a new user record and all associated identities.
 func (r *UserRepository) Create(ctx context.Context, u *aggregate.User) error {
 	dbUser := toUserModel(u)
 	if err := r.getDB(ctx).Create(dbUser).Error; err != nil {
@@ -40,23 +42,42 @@ func (r *UserRepository) Create(ctx context.Context, u *aggregate.User) error {
 	return nil
 }
 
-// Update modifies an existing user record.
+// Update modifies an existing user record and upserts its identities.
 func (r *UserRepository) Update(ctx context.Context, u *aggregate.User) error {
 	dbUser := toUserModel(u)
-	tx := r.getDB(ctx).Model(&UserModel{}).Where("id = ?", dbUser.ID).Updates(dbUser)
+	tx := r.getDB(ctx).Model(dbUser).Select("FullName", "RoleID", "Status", "UpdatedAt").Updates(dbUser)
 	if tx.Error != nil {
 		return fmt.Errorf("gorm update user: %w", tx.Error)
 	}
 	if tx.RowsAffected == 0 {
 		return derror.ErrUserNotFound
 	}
+
+	if dbUser.Identity != nil && dbUser.Identity.ID != "" {
+		err := r.getDB(ctx).Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "user_id"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"identity_type",
+				"identifier",
+				"credential_data",
+				"metadata",
+				"updated_at",
+			}),
+		}).Create(dbUser.Identity).Error
+		if err != nil {
+			return fmt.Errorf("gorm upsert user identity: %w", err)
+		}
+	}
+
 	return nil
 }
 
-// FindByID retrieves a user by ID.
+// FindByID retrieves a user and their identity by ID.
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*aggregate.User, error) {
 	var dbUser UserModel
-	if err := r.getDB(ctx).First(&dbUser, "id = ?", id).Error; err != nil {
+	if err := r.getDB(ctx).Preload("Identity").First(&dbUser, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrUserNotFound
 		}
@@ -65,44 +86,24 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*aggregate.Us
 	return dbUser.ToDomain()
 }
 
-// FindByEmail retrieves a user by email.
-func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*aggregate.User, error) {
-	var dbUser UserModel
-	if err := r.getDB(ctx).First(&dbUser, "email = ?", email).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, derror.ErrUserNotFound
-		}
-		return nil, fmt.Errorf("gorm find user by email: %w", err)
-	}
-	return dbUser.ToDomain()
-}
-
-// FindByGoogleID retrieves a user by Google Social ID.
-func (r *UserRepository) FindByGoogleID(
+// FindByIdentity retrieves a user associated with a specific identity type and identifier.
+func (r *UserRepository) FindByIdentity(
 	ctx context.Context,
-	googleID string,
+	identityType string,
+	identifier string,
 ) (*aggregate.User, error) {
-	var dbUser UserModel
-	if err := r.getDB(ctx).First(&dbUser, "google_id = ?", googleID).Error; err != nil {
+	var ident UserIdentityModel
+	err := r.getDB(ctx).First(
+		&ident,
+		"identity_type = ? AND identifier = ?",
+		identityType,
+		identifier,
+	).Error
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrUserNotFound
 		}
-		return nil, fmt.Errorf("gorm find user by google id: %w", err)
+		return nil, fmt.Errorf("gorm find identity: %w", err)
 	}
-	return dbUser.ToDomain()
-}
-
-// FindByFacebookID retrieves a user by Facebook Social ID.
-func (r *UserRepository) FindByFacebookID(
-	ctx context.Context,
-	facebookID string,
-) (*aggregate.User, error) {
-	var dbUser UserModel
-	if err := r.getDB(ctx).First(&dbUser, "facebook_id = ?", facebookID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, derror.ErrUserNotFound
-		}
-		return nil, fmt.Errorf("gorm find user by facebook id: %w", err)
-	}
-	return dbUser.ToDomain()
+	return r.FindByID(ctx, ident.UserID)
 }

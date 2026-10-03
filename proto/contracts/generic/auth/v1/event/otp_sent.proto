@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package contracts.generic.auth.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event;authv1event";
+
+message OTPSent {
+  string identifier = 1;              // Email address or Phone (+84...)
+  string code = 2;                    // 6-digit plain text OTP code for Notification Service
+  google.protobuf.Timestamp sent_at = 3;
+  int64 expires_in_seconds = 4;
+}

@@ -133,17 +133,14 @@ func TestJWTSigner_GenerateAndValidate(t *testing.T) {
 	}
 
 	signer := NewJWTSigner(keyRepo, "test-issuer", 5*time.Minute, 24*time.Hour)
-	email, _ := vo.NewEmail("user@example.com")
 	role, _ := vo.NewRole("user")
 
-	uID, _ := vo.NewUserID("9e0dc099-0df4-436f-b258-004ea10a6234")
 	user := aggregate.NewUser(
-		uID,
-		email,
-		"",
-		"",
+		"9e0dc099-0df4-436f-b258-004ea10a6234",
 		"john-doe",
 		role,
+		aggregate.UserStatusActive,
+		aggregate.Identity{},
 		time.Now(),
 		time.Now(),
 	)
@@ -183,16 +180,13 @@ func TestJWTSigner_ExpiredToken(t *testing.T) {
 
 	signer := NewJWTSigner(keyRepo, "test-issuer", -5*time.Minute, 24*time.Hour)
 
-	email, _ := vo.NewEmail("user@example.com")
 	role, _ := vo.NewRole("user")
-	uID, _ := vo.NewUserID("9e0dc099-0df4-436f-b258-004ea10a6234")
 	user := aggregate.NewUser(
-		uID,
-		email,
-		"",
-		"",
+		"9e0dc099-0df4-436f-b258-004ea10a6234",
 		"name",
 		role,
+		aggregate.UserStatusActive,
+		aggregate.Identity{},
 		time.Now(),
 		time.Now(),
 	)
@@ -218,10 +212,8 @@ func TestJWTSigner_InvalidSignature(t *testing.T) {
 
 	signer1 := NewJWTSigner(&mockKeyRepository{keys: []*port.JWKRecord{key1}}, "test-issuer", 5*time.Minute, 24*time.Hour)
 
-	email, _ := vo.NewEmail("u1@mail.com")
 	role, _ := vo.NewRole("user")
-	uID, _ := vo.NewUserID("9e0dc099-0df4-436f-b258-004ea10a6235")
-	user := aggregate.NewUser(uID, email, "", "", "n", role, time.Now(), time.Now())
+	user := aggregate.NewUser("9e0dc099-0df4-436f-b258-004ea10a6235", "n", role, aggregate.UserStatusActive, aggregate.Identity{}, time.Now(), time.Now())
 
 	tokenStr, _, err := signer1.GenerateAccessToken(ctx, user, key1.ID)
 	if err != nil {

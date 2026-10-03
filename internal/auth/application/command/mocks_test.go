@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
+	"github.com/viethung213/gym-companion/internal/auth/domain/entity"
 	"github.com/viethung213/gym-companion/internal/auth/domain/event"
 )
 
@@ -45,33 +46,15 @@ func (m *mockUserRepo) FindByID(ctx context.Context, id string) (*aggregate.User
 	return u, nil
 }
 
-func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*aggregate.User, error) {
-	if m.findByEmailErr != nil {
+func (m *mockUserRepo) FindByIdentity(ctx context.Context, identityType string, identifier string) (*aggregate.User, error) {
+	if identityType == "google" && m.findByGoogleIDErr != nil {
+		return nil, m.findByGoogleIDErr
+	}
+	if identityType == "email" && m.findByEmailErr != nil {
 		return nil, m.findByEmailErr
 	}
 	for _, u := range m.users {
-		if u.Email() == email {
-			return u, nil
-		}
-	}
-	return nil, derror.ErrUserNotFound
-}
-
-func (m *mockUserRepo) FindByGoogleID(ctx context.Context, googleID string) (*aggregate.User, error) {
-	if m.findByGoogleIDErr != nil {
-		return nil, m.findByGoogleIDErr
-	}
-	for _, u := range m.users {
-		if u.GoogleID() == googleID {
-			return u, nil
-		}
-	}
-	return nil, derror.ErrUserNotFound
-}
-
-func (m *mockUserRepo) FindByFacebookID(ctx context.Context, facebookID string) (*aggregate.User, error) {
-	for _, u := range m.users {
-		if u.FacebookID() == facebookID {
+		if _, ok := u.FindIdentity(identityType, identifier); ok {
 			return u, nil
 		}
 	}
@@ -245,4 +228,95 @@ type mockTxManager struct{}
 
 func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	return fn(ctx)
+}
+
+// ---------------------------------------------------------------------------
+// mockHasher
+// ---------------------------------------------------------------------------
+
+type mockHasher struct {
+	hashPrefix string
+}
+
+func (h *mockHasher) Hash(raw string) (string, error) {
+	return "hashed_" + raw, nil
+}
+
+func (h *mockHasher) Compare(hashed, raw string) error {
+	if hashed == "hashed_"+raw || hashed == raw {
+		return nil
+	}
+	return errors.New("hash mismatch")
+}
+
+// ---------------------------------------------------------------------------
+// mockOTPRepo
+// ---------------------------------------------------------------------------
+
+type mockOTPRepo struct {
+	otps map[string]*entity.OTP
+}
+
+func newMockOTPRepo() *mockOTPRepo {
+	return &mockOTPRepo{otps: make(map[string]*entity.OTP)}
+}
+
+func (m *mockOTPRepo) Save(ctx context.Context, o *entity.OTP) error {
+	m.otps[o.ID()] = o
+	return nil
+}
+
+func (m *mockOTPRepo) FindByID(ctx context.Context, id string) (*entity.OTP, error) {
+	o, ok := m.otps[id]
+	if !ok {
+		return nil, derror.ErrNotFound
+	}
+	return o, nil
+}
+
+func (m *mockOTPRepo) FindLatestActive(ctx context.Context, identifier string, purpose string) (*entity.OTP, error) {
+	var latest *entity.OTP
+	for _, o := range m.otps {
+		if o.Identifier() == identifier && o.Purpose() == purpose && !o.IsUsed() {
+			if latest == nil || o.CreatedAt().After(latest.CreatedAt()) {
+				latest = o
+			}
+		}
+	}
+	return latest, nil
+}
+
+func (m *mockOTPRepo) Update(ctx context.Context, o *entity.OTP) error {
+	m.otps[o.ID()] = o
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// mockPasswordResetTokenRepo
+// ---------------------------------------------------------------------------
+
+type mockPasswordResetTokenRepo struct {
+	tokens map[string]*entity.PasswordResetToken
+}
+
+func newMockPasswordResetTokenRepo() *mockPasswordResetTokenRepo {
+	return &mockPasswordResetTokenRepo{tokens: make(map[string]*entity.PasswordResetToken)}
+}
+
+func (m *mockPasswordResetTokenRepo) Save(ctx context.Context, token *entity.PasswordResetToken) error {
+	m.tokens[token.Token()] = token
+	return nil
+}
+
+func (m *mockPasswordResetTokenRepo) FindByToken(ctx context.Context, token string) (*entity.PasswordResetToken, error) {
+	t, ok := m.tokens[token]
+	if !ok {
+		return nil, derror.ErrNotFound
+	}
+	return t, nil
+}
+
+func (m *mockPasswordResetTokenRepo) Update(ctx context.Context, token *entity.PasswordResetToken) error {
+	m.tokens[token.Token()] = token
+	return nil
 }

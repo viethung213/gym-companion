@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
 	"github.com/viethung213/gym-companion/internal/auth/application/query"
+	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
 	authv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
@@ -27,6 +28,12 @@ type GRPCHandler struct {
 	refreshTokenHandler     *command.RefreshTokenHandler
 	getJWKSHandler          *query.GetJWKSHandler
 	getOAuthLoginURLHandler *query.GetOAuthLoginURLHandler
+	registerHandler         *command.RegisterHandler
+	credentialsLoginHandler *command.CredentialsLoginHandler
+	sendOTPHandler          *command.SendOTPHandler
+	verifyOTPHandler        *command.VerifyOTPHandler
+	changePasswordHandler   *command.ChangePasswordHandler
+	resetPasswordHandler    *command.ResetPasswordHandler
 }
 
 // Compile-time interface verification
@@ -40,6 +47,12 @@ func NewGRPCHandler(
 	refreshTokenHandler *command.RefreshTokenHandler,
 	getJWKSHandler *query.GetJWKSHandler,
 	getOAuthLoginURLHandler *query.GetOAuthLoginURLHandler,
+	registerHandler *command.RegisterHandler,
+	credentialsLoginHandler *command.CredentialsLoginHandler,
+	sendOTPHandler *command.SendOTPHandler,
+	verifyOTPHandler *command.VerifyOTPHandler,
+	changePasswordHandler *command.ChangePasswordHandler,
+	resetPasswordHandler *command.ResetPasswordHandler,
 ) *GRPCHandler {
 	return &GRPCHandler{
 		oauthLoginHandler:       oauthLoginHandler,
@@ -48,6 +61,12 @@ func NewGRPCHandler(
 		refreshTokenHandler:     refreshTokenHandler,
 		getJWKSHandler:          getJWKSHandler,
 		getOAuthLoginURLHandler: getOAuthLoginURLHandler,
+		registerHandler:         registerHandler,
+		credentialsLoginHandler: credentialsLoginHandler,
+		sendOTPHandler:          sendOTPHandler,
+		verifyOTPHandler:        verifyOTPHandler,
+		changePasswordHandler:   changePasswordHandler,
+		resetPasswordHandler:    resetPasswordHandler,
 	}
 }
 
@@ -189,9 +208,160 @@ func (h *GRPCHandler) LoginWithOAuth(
 	}, nil
 }
 
+// Register registers a new account using Email or Phone.
+func (h *GRPCHandler) Register(
+	ctx context.Context,
+	req *authv1message.RegisterRequest,
+) (*authv1message.RegisterResponse, error) {
+	if h.registerHandler == nil {
+		return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
+	}
+	res, err := h.registerHandler.Handle(ctx, command.RegisterCommand{
+		Identifier:  req.Identifier,
+		Password:    req.Password,
+		FullName:    req.FullName,
+		Gender:      req.Gender,
+		DateOfBirth: req.DateOfBirth,
+	})
+	if err != nil {
+		if errors.Is(err, derror.ErrConflict) {
+			return nil, status.Errorf(codes.AlreadyExists, "tài khoản đã tồn tại: %v", err)
+		}
+		return nil, status.Errorf(codes.InvalidArgument, "đăng ký thất bại: %v", err)
+	}
+	return &authv1message.RegisterResponse{Message: res.Message}, nil
+}
+
+// Login authenticates with email/phone and password.
+func (h *GRPCHandler) Login(
+	ctx context.Context,
+	req *authv1message.LoginRequest,
+) (*authv1message.LoginResponse, error) {
+	if h.credentialsLoginHandler == nil {
+		return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
+	}
+	res, err := h.credentialsLoginHandler.Handle(ctx, command.CredentialsLoginCommand{
+		Identifier: req.Identifier,
+		Password:   req.Password,
+	})
+	if err != nil {
+		if errors.Is(err, derror.ErrUnauthorized) {
+			return nil, status.Errorf(codes.Unauthenticated, "tài khoản hoặc mật khẩu không chính xác")
+		}
+		return nil, status.Errorf(codes.Internal, "đăng nhập thất bại: %v", err)
+	}
+	return &authv1message.LoginResponse{
+		AccessToken:  res.AccessToken,
+		RefreshToken: res.RefreshToken,
+		UserId:       res.UserID,
+	}, nil
+}
+
+// SendOTP requests generation of an OTP code.
+func (h *GRPCHandler) SendOTP(
+	ctx context.Context,
+	req *authv1message.SendOTPRequest,
+) (*authv1message.SendOTPResponse, error) {
+	if h.sendOTPHandler == nil {
+		return nil, status.Errorf(codes.Unimplemented, "method SendOTP not implemented")
+	}
+	res, err := h.sendOTPHandler.Handle(ctx, command.SendOTPCommand{
+		Identifier: req.Identifier,
+		Purpose:    req.Purpose,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "gửi OTP thất bại: %v", err)
+	}
+	return &authv1message.SendOTPResponse{
+		Success:          res.Success,
+		Message:          res.Message,
+		ExpiresInSeconds: res.ExpiresInSeconds,
+		OtpToken:         res.OTPToken,
+	}, nil
+}
+
+// VerifyOTP verifies an OTP code using otp_token.
+func (h *GRPCHandler) VerifyOTP(
+	ctx context.Context,
+	req *authv1message.VerifyOTPRequest,
+) (*authv1message.VerifyOTPResponse, error) {
+	if h.verifyOTPHandler == nil {
+		return nil, status.Errorf(codes.Unimplemented, "method VerifyOTP not implemented")
+	}
+	res, err := h.verifyOTPHandler.Handle(ctx, command.VerifyOTPCommand{
+		OTPToken: req.OtpToken,
+		Code:     req.Code,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "xác thực OTP thất bại: %v", err)
+	}
+	return &authv1message.VerifyOTPResponse{
+		Valid:      res.Valid,
+		ResetToken: res.ResetToken,
+		Message:    res.Message,
+	}, nil
+}
+
+// ChangePassword changes the user password for authenticated clients.
+func (h *GRPCHandler) ChangePassword(
+	ctx context.Context,
+	req *authv1message.ChangePasswordRequest,
+) (*authv1message.ChangePasswordResponse, error) {
+	if h.changePasswordHandler == nil {
+		return nil, status.Errorf(codes.Unimplemented, "method ChangePassword not implemented")
+	}
+	userID, _ := ctx.Value(middleware.UserIDKey).(string)
+	if userID == "" {
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get("x-user-id"); len(vals) > 0 {
+				userID = vals[0]
+			}
+		}
+	}
+	res, err := h.changePasswordHandler.Handle(ctx, command.ChangePasswordCommand{
+		UserID:          userID,
+		OldPassword:     req.OldPassword,
+		NewPassword:     req.NewPassword,
+		ConfirmPassword: req.ConfirmPassword,
+	})
+	if err != nil {
+		if errors.Is(err, derror.ErrUnauthorized) {
+			return nil, status.Errorf(codes.Unauthenticated, "mật khẩu cũ không chính xác")
+		}
+		return nil, status.Errorf(codes.InvalidArgument, "đổi mật khẩu thất bại: %v", err)
+	}
+	return &authv1message.ChangePasswordResponse{
+		Success: res.Success,
+		Message: res.Message,
+	}, nil
+}
+
+// ResetPassword resets password after OTP verification using a reset_token.
+func (h *GRPCHandler) ResetPassword(
+	ctx context.Context,
+	req *authv1message.ResetPasswordRequest,
+) (*authv1message.ResetPasswordResponse, error) {
+	if h.resetPasswordHandler == nil {
+		return nil, status.Errorf(codes.Unimplemented, "method ResetPassword not implemented")
+	}
+	res, err := h.resetPasswordHandler.Handle(ctx, command.ResetPasswordCommand{
+		ResetToken:      req.ResetToken,
+		NewPassword:     req.NewPassword,
+		ConfirmPassword: req.ConfirmPassword,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "đặt lại mật khẩu thất bại: %v", err)
+	}
+	return &authv1message.ResetPasswordResponse{
+		Success: res.Success,
+		Message: res.Message,
+	}, nil
+}
+
 // --- ConnectRPC Adapter ---
 
 type ConnectAuthHandler struct {
+	authv1serviceconnect.UnimplementedAuthServiceHandler
 	grpcHandler *GRPCHandler
 }
 
@@ -264,6 +434,75 @@ func (c *ConnectAuthHandler) LoginWithOAuth(
 	req *connect.Request[authv1message.LoginWithOAuthRequest],
 ) (*connect.Response[authv1message.LoginWithOAuthResponse], error) {
 	res, err := c.grpcHandler.LoginWithOAuth(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectAuthHandler) Register(
+	ctx context.Context,
+	req *connect.Request[authv1message.RegisterRequest],
+) (*connect.Response[authv1message.RegisterResponse], error) {
+	res, err := c.grpcHandler.Register(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectAuthHandler) Login(
+	ctx context.Context,
+	req *connect.Request[authv1message.LoginRequest],
+) (*connect.Response[authv1message.LoginResponse], error) {
+	res, err := c.grpcHandler.Login(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectAuthHandler) SendOTP(
+	ctx context.Context,
+	req *connect.Request[authv1message.SendOTPRequest],
+) (*connect.Response[authv1message.SendOTPResponse], error) {
+	res, err := c.grpcHandler.SendOTP(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectAuthHandler) VerifyOTP(
+	ctx context.Context,
+	req *connect.Request[authv1message.VerifyOTPRequest],
+) (*connect.Response[authv1message.VerifyOTPResponse], error) {
+	res, err := c.grpcHandler.VerifyOTP(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectAuthHandler) ChangePassword(
+	ctx context.Context,
+	req *connect.Request[authv1message.ChangePasswordRequest],
+) (*connect.Response[authv1message.ChangePasswordResponse], error) {
+	if userID := req.Header().Get("X-User-Id"); userID != "" {
+		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
+	}
+	res, err := c.grpcHandler.ChangePassword(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectAuthHandler) ResetPassword(
+	ctx context.Context,
+	req *connect.Request[authv1message.ResetPasswordRequest],
+) (*connect.Response[authv1message.ResetPasswordResponse], error) {
+	res, err := c.grpcHandler.ResetPassword(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}
