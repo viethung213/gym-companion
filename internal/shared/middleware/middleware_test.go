@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
 	"google.golang.org/grpc"
@@ -424,5 +425,104 @@ func TestRateLimiterRegistry_SweepCleanup(t *testing.T) {
 	}
 	if !newExists {
 		t.Errorf("expected new-key to exist in registry")
+	}
+}
+
+func TestToConnectError(t *testing.T) {
+	t.Parallel()
+
+	// 1. nil error
+	if err := ToConnectError(nil); err != nil {
+		t.Errorf("expected nil for nil input, got %v", err)
+	}
+
+	// 2. Already *connect.Error
+	origConnectErr := connect.NewError(connect.CodeInvalidArgument, errors.New("bad request"))
+	if err := ToConnectError(origConnectErr); err != origConnectErr {
+		t.Errorf("expected original connect error to be returned unchanged, got %v", err)
+	}
+
+	// 3. gRPC status error mapping
+	testCases := []struct {
+		grpcCode     codes.Code
+		expectedCode connect.Code
+	}{
+		{codes.OK, 0},
+		{codes.InvalidArgument, connect.CodeInvalidArgument},
+		{codes.Unauthenticated, connect.CodeUnauthenticated},
+		{codes.PermissionDenied, connect.CodePermissionDenied},
+		{codes.NotFound, connect.CodeNotFound},
+		{codes.AlreadyExists, connect.CodeAlreadyExists},
+		{codes.ResourceExhausted, connect.CodeResourceExhausted},
+		{codes.FailedPrecondition, connect.CodeFailedPrecondition},
+		{codes.Internal, connect.CodeInternal},
+		{codes.Unavailable, connect.CodeUnavailable},
+		{codes.Canceled, connect.CodeCanceled},
+		{codes.DeadlineExceeded, connect.CodeDeadlineExceeded},
+		{codes.Aborted, connect.CodeAborted},
+		{codes.OutOfRange, connect.CodeOutOfRange},
+		{codes.Unimplemented, connect.CodeUnimplemented},
+		{codes.DataLoss, connect.CodeDataLoss},
+	}
+
+	for _, tc := range testCases {
+		if tc.grpcCode == codes.OK {
+			err := ToConnectError(status.Error(tc.grpcCode, "ok message"))
+			if err != nil {
+				t.Errorf("expected nil error for codes.OK, got %v", err)
+			}
+			continue
+		}
+		grpcErr := status.Errorf(tc.grpcCode, "error message for %s", tc.grpcCode)
+		mapped := ToConnectError(grpcErr)
+		var cErr *connect.Error
+		if !errors.As(mapped, &cErr) {
+			t.Fatalf("expected *connect.Error for %s, got %T", tc.grpcCode, mapped)
+		}
+		if cErr.Code() != tc.expectedCode {
+			t.Errorf("for grpc code %s: expected connect code %s, got %s", tc.grpcCode, tc.expectedCode, cErr.Code())
+		}
+	}
+
+	// 4. Raw Go error (non-status)
+	rawErr := errors.New("raw standard error")
+	mappedRaw := ToConnectError(rawErr)
+	var cErr *connect.Error
+	if !errors.As(mappedRaw, &cErr) {
+		t.Fatalf("expected *connect.Error for raw error, got %T", mappedRaw)
+	}
+	if cErr.Code() != connect.CodeInternal {
+		t.Errorf("expected connect.CodeInternal for raw error, got %s", cErr.Code())
+	}
+}
+
+func TestConnectErrorMappingInterceptor(t *testing.T) {
+	t.Parallel()
+
+	interceptor := NewConnectErrorMappingInterceptor()
+
+	// Case A: Handler returns nil error
+	noopHandler := interceptor(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, nil
+	})
+	resp, err := noopHandler(context.Background(), nil)
+	if err != nil || resp != nil {
+		t.Errorf("expected nil resp and nil err, got resp=%v, err=%v", resp, err)
+	}
+
+	// Case B: Handler returns gRPC status error
+	errorHandler := interceptor(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, status.Error(codes.Unauthenticated, "invalid password")
+	})
+	_, err = errorHandler(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var cErr *connect.Error
+	if !errors.As(err, &cErr) {
+		t.Fatalf("expected *connect.Error, got %T", err)
+	}
+	if cErr.Code() != connect.CodeUnauthenticated {
+		t.Errorf("expected connect.CodeUnauthenticated, got %s", cErr.Code())
 	}
 }

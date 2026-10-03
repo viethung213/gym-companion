@@ -10,7 +10,79 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+// NewConnectErrorMappingInterceptor returns a Connect interceptor that translates
+// standard gRPC status errors (from google.golang.org/grpc/status) into *connect.Error
+// with corresponding Connect codes and HTTP status mapping.
+func NewConnectErrorMappingInterceptor() connect.UnaryInterceptorFunc {
+	return func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			resp, err := next(ctx, req)
+			if err == nil {
+				return resp, nil
+			}
+			return resp, ToConnectError(err)
+		}
+	}
+}
+
+// ToConnectError maps standard gRPC status errors or raw errors into *connect.Error.
+func ToConnectError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var connectErr *connect.Error
+	if errors.As(err, &connectErr) {
+		return connectErr
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	var code connect.Code
+	switch st.Code() {
+	case codes.OK:
+		return nil
+	case codes.Canceled:
+		code = connect.CodeCanceled
+	case codes.Unknown:
+		code = connect.CodeUnknown
+	case codes.InvalidArgument:
+		code = connect.CodeInvalidArgument
+	case codes.DeadlineExceeded:
+		code = connect.CodeDeadlineExceeded
+	case codes.NotFound:
+		code = connect.CodeNotFound
+	case codes.AlreadyExists:
+		code = connect.CodeAlreadyExists
+	case codes.PermissionDenied:
+		code = connect.CodePermissionDenied
+	case codes.ResourceExhausted:
+		code = connect.CodeResourceExhausted
+	case codes.FailedPrecondition:
+		code = connect.CodeFailedPrecondition
+	case codes.Aborted:
+		code = connect.CodeAborted
+	case codes.OutOfRange:
+		code = connect.CodeOutOfRange
+	case codes.Unimplemented:
+		code = connect.CodeUnimplemented
+	case codes.Internal:
+		code = connect.CodeInternal
+	case codes.Unavailable:
+		code = connect.CodeUnavailable
+	case codes.DataLoss:
+		code = connect.CodeDataLoss
+	case codes.Unauthenticated:
+		code = connect.CodeUnauthenticated
+	default:
+		code = connect.CodeUnknown
+	}
+	return connect.NewError(code, errors.New(st.Message()))
+}
 
 // NewConnectLoggingInterceptor returns a Connect interceptor that logs RPC duration, procedure, and status codes.
 func NewConnectLoggingInterceptor() connect.UnaryInterceptorFunc {

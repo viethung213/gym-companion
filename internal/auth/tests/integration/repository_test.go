@@ -56,16 +56,13 @@ func TestUserRepository_Integration(t *testing.T) {
 	repo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
-	userID, _ := vo.NewUserID(uuid.New().String())
+	userID := uuid.New().String()
 	email, _ := vo.NewEmail("integration-test@example.com")
-	role, _ := vo.NewRole("user")
-	user, err := aggregate.RegisterUser(userID.Value(), email.Value(), "John Doe", "", role.Value())
-	if err != nil {
-		t.Fatalf("Failed to register user: %v", err)
-	}
+	emailIdent := aggregate.NewIdentity(uuid.New().String(), aggregate.IdentityTypeEmail, email.Value(), "", nil, time.Now(), time.Now())
+	user := aggregate.RegisterUser(userID, "John Doe", emailIdent, "")
 
 	// 1. Create User
-	err = repo.Create(ctx, user)
+	err := repo.Create(ctx, user)
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
@@ -75,42 +72,63 @@ func TestUserRepository_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to find user by ID: %v", err)
 	}
-	if found.Email() != user.Email() {
-		t.Errorf("Expected email %s, got %s", user.Email(), found.Email())
+	if found.PrimaryEmail() != email.Value() {
+		t.Errorf("Expected email %s, got %s", email.Value(), found.PrimaryEmail())
 	}
 
-	// 3. Find By Email
-	foundByEmail, err := repo.FindByEmail(ctx, user.Email())
+	// 3. Find By Identity (Email)
+	foundByEmail, err := repo.FindByIdentity(ctx, aggregate.IdentityTypeEmail, email.Value())
 	if err != nil {
-		t.Fatalf("Failed to find user by email: %v", err)
+		t.Fatalf("Failed to find user by email identity: %v", err)
 	}
 	if foundByEmail.ID() != user.ID() {
 		t.Errorf("Expected ID %s, got %s", user.ID(), foundByEmail.ID())
 	}
 
-	// 4. Update User Social Links
-	user.LinkGoogle("google-social-id-123")
-	user.LinkFacebook("facebook-social-id-456")
+	// 4. Update User Identity (update credential)
+	now := time.Now()
+	updatedIdent := aggregate.NewIdentity(emailIdent.ID(), aggregate.IdentityTypeEmail, email.Value(), "new-hashed-password", nil, now, now)
+	user.SetIdentity(updatedIdent)
 	err = repo.Update(ctx, user)
 	if err != nil {
-		t.Fatalf("Failed to update user: %v", err)
+		t.Fatalf("Failed to update user identity: %v", err)
 	}
 
-	// 5. Query via Social ID
-	foundByGoogle, err := repo.FindByGoogleID(ctx, "google-social-id-123")
+	// 5. Query via FindByIdentity for distinct users with different identity types
+	googleUser := aggregate.RegisterUser(
+		uuid.New().String(),
+		"Google User",
+		aggregate.NewIdentity(uuid.New().String(), aggregate.IdentityTypeGoogle, "google-social-id-123", "", nil, now, now),
+		"",
+	)
+	if err := repo.Create(ctx, googleUser); err != nil {
+		t.Fatalf("Failed to create Google user: %v", err)
+	}
+
+	foundByGoogle, err := repo.FindByIdentity(ctx, aggregate.IdentityTypeGoogle, "google-social-id-123")
 	if err != nil {
 		t.Fatalf("Failed to find user by Google ID: %v", err)
 	}
-	if foundByGoogle.ID() != user.ID() {
-		t.Errorf("Expected ID %s, got %s", user.ID(), foundByGoogle.ID())
+	if foundByGoogle.ID() != googleUser.ID() {
+		t.Errorf("Expected ID %s, got %s", googleUser.ID(), foundByGoogle.ID())
 	}
 
-	foundByFacebook, err := repo.FindByFacebookID(ctx, "facebook-social-id-456")
-	if err != nil {
-		t.Fatalf("Failed to find user by Facebook ID: %v", err)
+	phoneUser := aggregate.RegisterUser(
+		uuid.New().String(),
+		"Phone User",
+		aggregate.NewIdentity(uuid.New().String(), aggregate.IdentityTypePhone, "+84901234567", "", nil, now, now),
+		"",
+	)
+	if err := repo.Create(ctx, phoneUser); err != nil {
+		t.Fatalf("Failed to create Phone user: %v", err)
 	}
-	if foundByFacebook.ID() != user.ID() {
-		t.Errorf("Expected ID %s, got %s", user.ID(), foundByFacebook.ID())
+
+	foundByPhone, err := repo.FindByIdentity(ctx, aggregate.IdentityTypePhone, "+84901234567")
+	if err != nil {
+		t.Fatalf("Failed to find user by Phone: %v", err)
+	}
+	if foundByPhone.ID() != phoneUser.ID() {
+		t.Errorf("Expected ID %s, got %s", phoneUser.ID(), foundByPhone.ID())
 	}
 }
 
@@ -184,12 +202,9 @@ func TestSessionRepository_Integration(t *testing.T) {
 	// Create user first because of foreign key constraint
 	userID := uuid.New().String()
 	email, _ := vo.NewEmail("session-test@example.com")
-	role, _ := vo.NewRole("user")
-	user, err := aggregate.RegisterUser(userID, email.Value(), "John Doe", "", role.Value())
-	if err != nil {
-		t.Fatalf("Failed to register user: %v", err)
-	}
-	err = userRepo.Create(ctx, user)
+	ident := aggregate.NewIdentity(uuid.New().String(), aggregate.IdentityTypeEmail, email.Value(), "", nil, time.Now(), time.Now())
+	user := aggregate.RegisterUser(userID, "John Doe", ident, "")
+	err := userRepo.Create(ctx, user)
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
@@ -517,11 +532,10 @@ func TestSQLTransactionManager_Integration(t *testing.T) {
 
 	userID := uuid.New().String()
 	email := "tx-test@example.com"
-	role := "user"
-
 	// 1. Rollback case: error inside transaction
 	err := txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, _ := aggregate.RegisterUser(userID, email, "Test User", "", role)
+		ident := aggregate.NewIdentity(uuid.New().String(), aggregate.IdentityTypeEmail, email, "", nil, time.Now(), time.Now())
+		user := aggregate.RegisterUser(userID, "Test User", ident, "")
 		if err := userRepo.Create(txCtx, user); err != nil {
 			return err
 		}
@@ -541,7 +555,8 @@ func TestSQLTransactionManager_Integration(t *testing.T) {
 
 	// 2. Commit case: success inside transaction
 	err = txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, _ := aggregate.RegisterUser(userID, email, "Test User", "", role)
+		ident := aggregate.NewIdentity(uuid.New().String(), aggregate.IdentityTypeEmail, email, "", nil, time.Now(), time.Now())
+		user := aggregate.RegisterUser(userID, "Test User", ident, "")
 		if err := userRepo.Create(txCtx, user); err != nil {
 			return err
 		}
@@ -557,7 +572,7 @@ func TestSQLTransactionManager_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to find committed user: %v", err)
 	}
-	if found.Email() != email {
-		t.Errorf("Expected email %s, got %s", email, found.Email())
+	if found.PrimaryEmail() != email {
+		t.Errorf("Expected email %s, got %s", email, found.PrimaryEmail())
 	}
 }

@@ -1,45 +1,45 @@
 //go:build unit
 
-package aggregate
+package aggregate_test
 
 import (
 	"testing"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/event"
+	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
 
 func TestRegisterUser_Success(t *testing.T) {
 	userID := "9e0dc099-0df4-436f-b258-004ea10a6234"
 	emailStr := "test@example.com"
 	fullName := "John Doe"
-	roleStr := "user"
+	now := time.Now()
+	ident := aggregate.NewIdentity("ident-1", aggregate.IdentityTypeEmail, emailStr, "hash", nil, now, now)
 
-	user, err := RegisterUser(userID, emailStr, fullName, "https://example.com/avatar.jpg", roleStr)
-	if err != nil {
-		t.Fatalf("unexpected registration failure: %v", err)
-	}
+	user := aggregate.RegisterUser(userID, fullName, ident, "https://example.com/avatar.jpg")
 
-	// Verify fields
 	if got, want := user.ID(), userID; got != want {
 		t.Errorf("got ID %s, want %s", got, want)
-	}
-	if got, want := user.Email(), emailStr; got != want {
-		t.Errorf("got email %s, want %s", got, want)
 	}
 	if got, want := user.FullName(), fullName; got != want {
 		t.Errorf("got full name %s, want %s", got, want)
 	}
-	if got, want := user.Role(), roleStr; got != want {
+	if got, want := user.Role(), "user"; got != want {
 		t.Errorf("got role %s, want %s", got, want)
 	}
+	if got, want := user.Status(), aggregate.UserStatusActive; got != want {
+		t.Errorf("got status %s, want %s", got, want)
+	}
+	if got, want := user.Identity().Identifier(), emailStr; got != want {
+		t.Errorf("got identity identifier %s, want %s", got, want)
+	}
 
-	// Verify timestamps
 	if user.CreatedAt().IsZero() || user.UpdatedAt().IsZero() {
 		t.Error("expected timestamps to be initialized")
 	}
 
-	// Verify Domain Events
 	events := user.DomainEvents()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 domain event, got %d", len(events))
@@ -50,83 +50,129 @@ func TestRegisterUser_Success(t *testing.T) {
 		t.Fatalf("expected UserRegisteredEvent, got %T", events[0])
 	}
 
-	if regEvent.UserID != userID || regEvent.Email != emailStr || regEvent.FullName != fullName {
+	if regEvent.UserID != userID || regEvent.IdentityType != aggregate.IdentityTypeEmail || regEvent.Identifier != emailStr || regEvent.FullName != fullName {
 		t.Errorf("unexpected event payload: %+v", regEvent)
 	}
 
-	// Verify clear works
 	user.ClearDomainEvents()
 	if len(user.DomainEvents()) != 0 {
 		t.Error("expected domain events to be cleared")
 	}
 }
 
-func TestRegisterUser_InvalidID(t *testing.T) {
-	tests := []struct {
-		name string
-		id   string
-	}{
-		{"empty id", ""},
-		{"random string", "invalid-id-format"},
-		{"too short", "9e0dc099-0df4"},
+func TestRegisterUser_DefaultRole(t *testing.T) {
+	ident := aggregate.NewIdentity("id-1", aggregate.IdentityTypeEmail, "test@example.com", "", nil, time.Now(), time.Now())
+	user := aggregate.RegisterUser("id-123", "John", ident, "")
+	if got, want := user.Role(), vo.RoleUser; got != want {
+		t.Errorf("got role %s, want %s", got, want)
+	}
+	if got, want := user.RoleVO().Value(), vo.RoleUser; got != want {
+		t.Errorf("got roleVO %s, want %s", got, want)
+	}
+}
+
+func TestUser_IdentityManagement(t *testing.T) {
+	now := time.Now()
+	id1 := aggregate.NewIdentity("id-1", aggregate.IdentityTypeGoogle, "google-sub-123", "", nil, now, now)
+	user := aggregate.RegisterUser("id-123", "John Doe", id1, "")
+
+	// FindIdentity
+	found, ok := user.FindIdentity(aggregate.IdentityTypeGoogle, "google-sub-123")
+	if !ok {
+		t.Fatalf("expected identity to be found")
+	}
+	if got, want := found.Identifier(), "google-sub-123"; got != want {
+		t.Errorf("got %s, want %s", got, want)
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := RegisterUser(tc.id, "test@example.com", "John", "", "user")
-			if err == nil {
-				t.Error("expected error due to invalid user id format")
+	// Find nonexistent identity
+	_, notFoundOk := user.FindIdentity(aggregate.IdentityTypeEmail, "missing@example.com")
+	if notFoundOk {
+		t.Errorf("expected identity to not be found")
+	}
+
+	// Update identity and check PrimaryEmail
+	emailId := aggregate.NewIdentity("id-2", aggregate.IdentityTypeEmail, "test@example.com", "hash", nil, now, now)
+	user.SetIdentity(emailId)
+	if got, want := user.PrimaryEmail(), "test@example.com"; got != want {
+		t.Errorf("got primary email %s, want %s", got, want)
+	}
+}
+
+func TestUser_StateTransitions(t *testing.T) {
+	ident := aggregate.NewIdentity("id-1", aggregate.IdentityTypeEmail, "test@example.com", "", nil, time.Now(), time.Now())
+	user := aggregate.RegisterUser("id-123", "John Doe", ident, "")
+
+	user.Lock()
+	if got, want := user.Status(), aggregate.UserStatusLocked; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+
+	user.Suspend()
+	if got, want := user.Status(), aggregate.UserStatusSuspended; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+
+	user.Activate()
+	if got, want := user.Status(), aggregate.UserStatusActive; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+
+	newRole, _ := vo.NewRole("brand")
+	user.ChangeRole(newRole)
+	if got, want := user.Role(), "brand"; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+
+	user.UpdateFullName("Jane Doe")
+	if got, want := user.FullName(), "Jane Doe"; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+func TestIdentityTypes_Validation(t *testing.T) {
+	tests := []struct {
+		name      string
+		give      string
+		wantOAuth bool
+	}{
+		{
+			name:      "email identity",
+			give:      aggregate.IdentityTypeEmail,
+			wantOAuth: false,
+		},
+		{
+			name:      "phone identity",
+			give:      aggregate.IdentityTypePhone,
+			wantOAuth: false,
+		},
+		{
+			name:      "google identity",
+			give:      aggregate.IdentityTypeGoogle,
+			wantOAuth: true,
+		},
+		{
+			name:      "facebook identity",
+			give:      aggregate.IdentityTypeFacebook,
+			wantOAuth: true,
+		},
+		{
+			name:      "unsupported identity",
+			give:      "twitter",
+			wantOAuth: false,
+		},
+		{
+			name:      "empty identity",
+			give:      "",
+			wantOAuth: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, want := aggregate.IsSupportedOAuthProvider(tt.give), tt.wantOAuth; got != want {
+				t.Errorf("IsSupportedOAuthProvider(%q) = %v, want %v", tt.give, got, want)
 			}
 		})
-	}
-}
-
-func TestRegisterUser_InvalidEmail(t *testing.T) {
-	_, err := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "invalid-email", "John", "", "user")
-	if err == nil {
-		t.Error("expected error due to invalid email format")
-	}
-}
-
-func TestRegisterUser_InvalidRole(t *testing.T) {
-	_, err := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "", "invalid-role")
-	if err == nil {
-		t.Error("expected error due to invalid role")
-	}
-}
-
-func TestUser_LinkGoogle(t *testing.T) {
-	user, _ := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "", "user")
-	originalUpdatedAt := user.UpdatedAt()
-
-	// Wait slightly to ensure time advances for UpdatedAt check
-	time.Sleep(10 * time.Millisecond)
-
-	googleID := "google-id-123"
-	user.LinkGoogle(googleID)
-
-	if got, want := user.GoogleID(), googleID; got != want {
-		t.Errorf("got GoogleID %s, want %s", got, want)
-	}
-	if !user.UpdatedAt().After(originalUpdatedAt) {
-		t.Error("expected UpdatedAt timestamp to be updated")
-	}
-}
-
-func TestUser_LinkFacebook(t *testing.T) {
-	user, _ := RegisterUser("9e0dc099-0df4-436f-b258-004ea10a6234", "test@example.com", "John", "", "user")
-	originalUpdatedAt := user.UpdatedAt()
-
-	// Wait slightly to ensure time advances for UpdatedAt check
-	time.Sleep(10 * time.Millisecond)
-
-	facebookID := "fb-id-123"
-	user.LinkFacebook(facebookID)
-
-	if got, want := user.FacebookID(), facebookID; got != want {
-		t.Errorf("got FacebookID %s, want %s", got, want)
-	}
-	if !user.UpdatedAt().After(originalUpdatedAt) {
-		t.Error("expected UpdatedAt timestamp to be updated")
 	}
 }

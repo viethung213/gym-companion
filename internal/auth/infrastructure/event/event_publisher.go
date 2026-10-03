@@ -35,6 +35,8 @@ func (p *OutboxWriter) Write(ctx context.Context, ev domainEvent.DomainEvent) er
 	switch e := ev.(type) {
 	case domainEvent.UserRegisteredEvent:
 		return p.publishUserRegistered(ctx, e)
+	case domainEvent.OTPSentEvent:
+		return p.publishOTPSent(ctx, e)
 	default:
 		return fmt.Errorf("unsupported domain event: %T", ev)
 	}
@@ -43,8 +45,11 @@ func (p *OutboxWriter) Write(ctx context.Context, ev domainEvent.DomainEvent) er
 func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent.UserRegisteredEvent) error {
 	userRegisteredProto := &authv1event.UserRegistered{
 		UserId:       ev.UserID,
-		Email:        ev.Email,
+		IdentityType: ev.IdentityType,
+		Identifier:   ev.Identifier,
 		FullName:     ev.FullName,
+		Gender:       ev.Gender,
+		DateOfBirth:  ev.DateOfBirth,
 		AvatarUrl:    ev.AvatarURL,
 		RegisteredAt: timestamppb.New(ev.RegisteredAt),
 	}
@@ -55,7 +60,7 @@ func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent
 	}
 
 	eventID := uuid.New().String()
-	eventType := "contracts.generic.auth.v1.userRegistered"
+	eventType := ev.EventName()
 
 	cloudEvent := map[string]interface{}{
 		"specversion":     "1.0",
@@ -73,4 +78,38 @@ func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent
 	}
 
 	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.UserID)
+}
+
+func (p *OutboxWriter) publishOTPSent(ctx context.Context, ev domainEvent.OTPSentEvent) error {
+	otpSentProto := &authv1event.OTPSent{
+		Identifier:       ev.Identifier,
+		Code:             ev.Code,
+		SentAt:           timestamppb.New(ev.SentAt),
+		ExpiresInSeconds: ev.ExpiresInSeconds,
+	}
+
+	payloadBytes, err := protojson.Marshal(otpSentProto)
+	if err != nil {
+		return fmt.Errorf("marshal otp sent proto: %w", err)
+	}
+
+	eventID := uuid.New().String()
+	eventType := ev.EventName()
+
+	cloudEvent := map[string]interface{}{
+		"specversion":     "1.0",
+		"id":              eventID,
+		"source":          "services/auth-service",
+		"type":            eventType,
+		"time":            ev.SentAt.Format(time.RFC3339),
+		"datacontenttype": "application/json",
+		"data":            json.RawMessage(payloadBytes),
+	}
+
+	envelopeBytes, err := json.Marshal(cloudEvent)
+	if err != nil {
+		return fmt.Errorf("marshal cloudevent envelope: %w", err)
+	}
+
+	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.Identifier)
 }

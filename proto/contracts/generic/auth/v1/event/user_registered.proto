@@ -8,8 +8,11 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 
 message UserRegistered {
   string user_id = 1;
-  string email = 2;
-  string full_name = 3;
-  google.protobuf.Timestamp registered_at = 4;
-  string avatar_url = 5;
+  string identity_type = 2;
+  string identifier = 3;
+  string full_name = 4;
+  google.protobuf.Timestamp registered_at = 5;
+  string avatar_url = 6;
+  string gender = 7;
+  string date_of_birth = 8;
 }

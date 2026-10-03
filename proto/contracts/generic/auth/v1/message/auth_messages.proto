@@ -70,3 +70,65 @@ message LoginWithOAuthResponse {
   string refresh_token = 2;
   string user_id = 3;
 }
+
+message RegisterRequest {
+  string identifier = 1;    // Email address or Domestic/E.164 Phone
+  string password = 2;
+  string full_name = 3;
+  string gender = 4;        // "MALE", "FEMALE", "OTHER"
+  string date_of_birth = 5; // Format: "YYYY-MM-DD"
+}
+
+message RegisterResponse {
+  string message = 1;
+}
+
+message LoginRequest {
+  string identifier = 1; // Email address or Domestic/E.164 Phone
+  string password = 2;
+}
+
+message SendOTPRequest {
+  string identifier = 1; // Email address or Phone (+84...)
+  string purpose = 2;    // "register", "login", "reset_password", "verify_phone", "verify_email", "change_password"
+}
+
+message SendOTPResponse {
+  bool success = 1;
+  string message = 2;
+  int64 expires_in_seconds = 3;
+  string otp_token = 4; // Mã định danh phiên OTP (UI lưu và gửi ngầm khi verify)
+}
+
+message VerifyOTPRequest {
+  string otp_token = 1; // Mã phiên OTP nhận từ SendOTPResponse
+  string code = 2;      // Mã OTP 6 chữ số do người dùng nhập
+}
+
+message VerifyOTPResponse {
+  bool valid = 1;
+  string reset_token = 2; // One-time token used for password reset if purpose is "reset_password"
+  string message = 3;
+}
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+  string confirm_password = 3; // Mật khẩu mới nhập lại để đối chiếu
+}
+
+message ChangePasswordResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ResetPasswordRequest {
+  string reset_token = 1; // One-time reset token returned from VerifyOTP
+  string new_password = 2;
+  string confirm_password = 3; // Mật khẩu mới nhập lại để đối chiếu
+}
+
+message ResetPasswordResponse {
+  bool success = 1;
+  string message = 2;
+}

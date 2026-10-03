@@ -11,8 +11,11 @@ type DomainEvent interface {
 // UserRegisteredEvent is triggered when a new user successfully signs up.
 type UserRegisteredEvent struct {
 	UserID       string
-	Email        string
+	IdentityType string
+	Identifier   string
 	FullName     string
+	Gender       string
+	DateOfBirth  string
 	AvatarURL    string
 	RegisteredAt time.Time
 }
@@ -24,5 +27,23 @@ func (e UserRegisteredEvent) OccurredAt() time.Time {
 
 // EventName returns the name identifier of the event.
 func (e UserRegisteredEvent) EventName() string {
-	return "UserRegistered"
+	return "contracts.generic.auth.v1.userRegistered"
+}
+
+// OTPSentEvent is triggered when a new OTP code is generated for verification.
+type OTPSentEvent struct {
+	Identifier       string
+	Code             string
+	ExpiresInSeconds int64
+	SentAt           time.Time
+}
+
+// OccurredAt returns the time the event happened.
+func (e OTPSentEvent) OccurredAt() time.Time {
+	return e.SentAt
+}
+
+// EventName returns the name identifier of the event.
+func (e OTPSentEvent) EventName() string {
+	return "contracts.generic.auth.v1.otpSent"
 }

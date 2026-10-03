@@ -49,8 +49,9 @@ func TestProfileEventConsumer_UserRegistered(t *testing.T) {
 	consumer := NewProfileEventConsumer(nil, repo, nil, nil)
 
 	eventData := &authv1event.UserRegistered{
-		UserId: "usr_reg_100",
-		Email:  "test@example.com",
+		UserId:       "usr_reg_100",
+		IdentityType: "email",
+		Identifier:   "test@example.com",
 	}
 
 	dataBytes, err := protojson.Marshal(eventData)

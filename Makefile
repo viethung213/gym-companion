@@ -1,4 +1,4 @@
-.PHONY: proto-gen proto-lint build-prod build-test test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
+.PHONY: proto-gen proto-lint build-prod build-test run-prod run-prod-d stop-prod test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
 
 # Lệnh chạy docker compose của Buf CLI
 BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
@@ -34,13 +34,26 @@ proto-lint:
 
 
 # =====================================================================
-# 2. Docker Build & Test Environments
+# 2. Docker Build & Run Environments
 # =====================================================================
 
 # Build production target image (tối ưu dung lượng, chỉ chứa binary chạy thực tế)
 build-prod:
 	@echo "Building Production Docker Image..."
 	docker build --target prod -t fitai-app:latest .
+
+# Chạy container Production (fitai-app:latest) tương tác trực tiếp, mount cổng 8080 và nạp .env
+run-prod:
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Starting Production Container on port 8080..."
+	docker run --rm -it --name fitai-backend --network fitai-network --env-file .env -p 8080:8080 -p 9090:9090 fitai-app:latest
+
+# Dừng container Production
+stop-prod:
+	@echo "Stopping Production Container..."
+	docker stop fitai-backend || true
+	docker rm fitai-backend || true
 
 # Build test target image (chứa toàn bộ môi trường Go để chạy test)
 build-test:
