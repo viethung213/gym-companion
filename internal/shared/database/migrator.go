@@ -17,9 +17,28 @@ var migrationFS embed.FS
 //go:embed seeds/*.sql
 var seedFS embed.FS
 
-// RunAutoMigrations executes versioned SQL migration scripts embedded in the binary.
-// It complies with versioned SQL migration guidelines without using GORM AutoMigrate.
+// migrationAdvisoryLockID is a 64-bit integer derived from "FITAI" in hex (0x4649544149).
+// It ensures that only one process or Pod runs migrations/seeds concurrently across the cluster.
+const migrationAdvisoryLockID = 0x4649544149
+
+// RunAutoMigrations executes versioned SQL migration scripts and seeds embedded in the binary.
+// It is protected by a PostgreSQL distributed advisory lock to guarantee concurrency safety across multiple pods/processes.
 func RunAutoMigrations(ctx context.Context, db *sql.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire dedicated connection for migrations: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLockID); err != nil {
+		return fmt.Errorf("acquire migration advisory lock: %w", err)
+	}
+	defer func() {
+		if _, err := conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockID); err != nil {
+			log.Printf("Warning: release migration advisory lock failed: %v", err)
+		}
+	}()
+
 	entries, err := migrationFS.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read embedded migrations directory: %w", err)
@@ -44,13 +63,13 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB) error {
 		// Strip UTF-8 Byte Order Mark (BOM) if present to avoid syntax errors in PostgreSQL parser
 		content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
 
-		if _, err := db.ExecContext(ctx, string(content)); err != nil {
+		if _, err := conn.ExecContext(ctx, string(content)); err != nil {
 			return fmt.Errorf("execute embedded migration %s: %w", file, err)
 		}
 		log.Printf("Successfully applied SQL migration: %s", file)
 	}
 
-	if err := RunSeeds(ctx, db); err != nil {
+	if err := runSeedsOnConn(ctx, conn); err != nil {
 		return fmt.Errorf("run seeds: %w", err)
 	}
 
@@ -59,6 +78,15 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB) error {
 
 // RunSeeds executes initial seed SQL scripts embedded in the binary.
 func RunSeeds(ctx context.Context, db *sql.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire dedicated connection for seeds: %w", err)
+	}
+	defer conn.Close()
+	return runSeedsOnConn(ctx, conn)
+}
+
+func runSeedsOnConn(ctx context.Context, conn *sql.Conn) error {
 	entries, err := seedFS.ReadDir("seeds")
 	if err != nil {
 		return fmt.Errorf("read embedded seeds directory: %w", err)
@@ -82,7 +110,7 @@ func RunSeeds(ctx context.Context, db *sql.DB) error {
 
 		content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
 
-		if _, err := db.ExecContext(ctx, string(content)); err != nil {
+		if _, err := conn.ExecContext(ctx, string(content)); err != nil {
 			return fmt.Errorf("execute embedded seed %s: %w", file, err)
 		}
 		log.Printf("Successfully applied SQL seed: %s", file)

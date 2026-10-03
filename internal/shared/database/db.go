@@ -14,8 +14,9 @@ import (
 
 // Registry manages and isolates database connection pools for all modules.
 type Registry struct {
-	mu    sync.RWMutex
-	pools map[string]*sql.DB
+	mu            sync.RWMutex
+	pools         map[string]*sql.DB
+	migrationOnce sync.Once
 }
 
 var (
@@ -108,6 +109,19 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 	}
 
 	r.pools[module] = conn
+
+	// Ensure embedded database schema migrations and seeds are automatically applied
+	// safely across processes/pods using a PostgreSQL distributed advisory lock.
+	var migErr error
+	r.migrationOnce.Do(func() {
+		migCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		migErr = RunAutoMigrations(migCtx, conn)
+	})
+	if migErr != nil {
+		return nil, fmt.Errorf("auto-migrate database on pool initialization for module %s: %w", module, migErr)
+	}
+
 	return conn, nil
 }
 
