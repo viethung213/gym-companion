@@ -150,4 +150,36 @@ func TestRefreshTokenHandler_Handle(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 	})
+
+	t.Run("LockedUser_ShouldDeleteSessionAndFail", func(t *testing.T) {
+		lockedUser := aggregate.RegisterUser("locked-uid", "Locked User", ident, "")
+		_ = lockedUser.Lock()
+		userRepo := &mockUserRepo{users: map[string]*aggregate.User{"locked-uid": lockedUser}}
+		keyRepo := &mockKeyRepo{
+			keys: []*port.JWKRecord{
+				{ID: "key-1", Status: port.KeyStatusActive, ExpiresAt: time.Now().Add(24 * time.Hour)},
+			},
+		}
+		sessRepo := &mockSessionRepo{
+			sessions: map[string]*port.SessionRecord{
+				"locked-token": {
+					Token:     "locked-token",
+					UserID:    "locked-uid",
+					ExpiresAt: time.Now().Add(24 * time.Hour),
+				},
+			},
+		}
+		tokenServ := mockTokenService{}
+
+		handler := NewRefreshTokenHandler(userRepo, keyRepo, sessRepo, tokenServ)
+		_, err := handler.Handle(ctx, RefreshTokenCommand{RefreshToken: "locked-token"})
+		if !errors.Is(err, derror.ErrUserLocked) {
+			t.Errorf("got error %v, want %v", err, derror.ErrUserLocked)
+		}
+
+		// Verify session was deleted
+		if _, ok := sessRepo.sessions["locked-token"]; ok {
+			t.Error("expected locked session to be revoked")
+		}
+	})
 }

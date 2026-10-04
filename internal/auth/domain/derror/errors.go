@@ -27,4 +27,18 @@ var (
 	// Password Reset Token Errors
 	ErrResetTokenAlreadyUsed = errors.New("password reset token has already been used")
 	ErrResetTokenExpired     = errors.New("password reset token has expired")
+
+	// Brand Request Errors
+	ErrBrandRequestNotFound       = errors.New("brand request not found")
+	ErrBrandRequestAlreadyPending = errors.New("a pending brand request already exists for this user")
+	ErrBrandRequestNotPending     = errors.New("brand request is not in pending status")
+	ErrInvalidBrandRequest        = errors.New("invalid brand request parameters")
+	ErrUserAlreadyBrand           = errors.New("user is already a brand")
+
+	// User Status Errors
+	ErrUserAlreadyLocked = errors.New("user is already locked")
+	ErrUserAlreadyActive = errors.New("user is already active")
+	ErrCannotLockAdmin   = errors.New("cannot lock an admin user")
+	ErrUserLocked        = errors.New("user account is locked")
+	ErrUserSuspended     = errors.New("user account is suspended")
 )

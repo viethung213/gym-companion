@@ -241,3 +241,23 @@ type PasswordResetTokenModel struct {
 func (PasswordResetTokenModel) TableName() string {
 	return "auth.password_reset_tokens"
 }
+
+// BrandRequestModel is the GORM model mapping to auth.brand_requests table.
+type BrandRequestModel struct {
+	ID              string     `gorm:"primaryKey;column:id"`
+	UserID          string     `gorm:"column:user_id;not null;index:idx_brand_requests_user_id"`
+	BrandName       string     `gorm:"column:brand_name;not null"`
+	Description     string     `gorm:"column:description"`
+	ContactPhone    string     `gorm:"column:contact_phone;not null"`
+	Address         string     `gorm:"column:address;not null"`
+	Status          string     `gorm:"column:status;not null;default:pending"`
+	RejectionReason *string    `gorm:"column:rejection_reason"`
+	ReviewedBy      *string    `gorm:"column:reviewed_by"`
+	ReviewedAt      *time.Time `gorm:"column:reviewed_at"`
+	CreatedAt       time.Time  `gorm:"column:created_at"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at"`
+}
+
+func (BrandRequestModel) TableName() string {
+	return "auth.brand_requests"
+}

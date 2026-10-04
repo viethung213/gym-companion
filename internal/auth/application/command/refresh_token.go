@@ -6,6 +6,8 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
+	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
 )
 
@@ -61,6 +63,19 @@ func (h *RefreshTokenHandler) Handle(ctx context.Context, cmd RefreshTokenComman
 	user, err := h.userRepo.FindByID(ctx, sess.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
+	}
+
+	if user.Status() == aggregate.UserStatusLocked {
+		_ = h.sessRepo.Delete(ctx, cmd.RefreshToken)
+		return nil, derror.ErrUserLocked
+	}
+	if user.Status() == aggregate.UserStatusSuspended {
+		_ = h.sessRepo.Delete(ctx, cmd.RefreshToken)
+		return nil, derror.ErrUserSuspended
+	}
+	if user.Status() != aggregate.UserStatusActive {
+		_ = h.sessRepo.Delete(ctx, cmd.RefreshToken)
+		return nil, apperror.ErrUnauthorized
 	}
 
 	// 3. Find active key

@@ -10,14 +10,14 @@ import (
 )
 
 func TestNewGRPCHandler(t *testing.T) {
-	h := NewGRPCHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := NewGRPCHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if h == nil {
 		t.Fatal("expected non-nil GRPCHandler")
 	}
 }
 
 func TestNewConnectAuthHandler(t *testing.T) {
-	grpcHandler := NewGRPCHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	grpcHandler := NewGRPCHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	connectHandler := NewConnectAuthHandler(grpcHandler)
 	if connectHandler == nil {
 		t.Fatal("expected non-nil ConnectAuthHandler")
@@ -25,7 +25,7 @@ func TestNewConnectAuthHandler(t *testing.T) {
 }
 
 func TestConnectAuthHandler_StructVerification(t *testing.T) {
-	grpcHandler := NewGRPCHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	grpcHandler := NewGRPCHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	c := &ConnectAuthHandler{grpcHandler: grpcHandler}
 
 	t.Run("nil request payload handling", func(t *testing.T) {

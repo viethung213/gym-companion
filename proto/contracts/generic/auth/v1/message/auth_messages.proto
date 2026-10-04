@@ -132,3 +132,122 @@ message ResetPasswordResponse {
   bool success = 1;
   string message = 2;
 }
+
+enum BrandRequestStatus {
+  BRAND_REQUEST_STATUS_UNSPECIFIED = 0;
+  BRAND_REQUEST_STATUS_PENDING = 1;
+  BRAND_REQUEST_STATUS_APPROVED = 2;
+  BRAND_REQUEST_STATUS_REJECTED = 3;
+}
+
+message BrandRequest {
+  string id = 1;
+  string user_id = 2;
+  string brand_name = 3;
+  string description = 4;
+  string contact_phone = 5;
+  string address = 6;
+  BrandRequestStatus status = 7;
+  string rejection_reason = 8;
+  string reviewed_by = 9;
+  string created_at = 10;
+  string reviewed_at = 11;
+  string updated_at = 12;
+}
+
+message RegisterBrandRequest {
+  string brand_name = 1;
+  string description = 2;
+  string contact_phone = 3;
+  string address = 4;
+}
+
+message RegisterBrandResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ApproveBrandRequest {
+  string request_id = 1;
+}
+
+message ApproveBrandResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RejectBrandRequest {
+  string request_id = 1;
+  string reason = 2;
+}
+
+message RejectBrandResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListBrandRequestsRequest {
+  BrandRequestStatus status = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListBrandRequestsResponse {
+  repeated BrandRequest items = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message UserInfo {
+  string id = 1;
+  string full_name = 2;
+  // Vai trò người dùng trong hệ thống: "admin", "user", "brand"
+  string role = 3;
+  // Trạng thái tài khoản: "active", "locked"
+  string status = 4;
+  string identity_type = 5;
+  string identifier = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+
+message ListUsersRequest {
+  // Lọc theo vai trò: "admin", "user", "brand" (để trống nếu lấy tất cả)
+  string role = 1;
+  // Lọc theo trạng thái: "active", "locked" (để trống nếu lấy tất cả)
+  string status = 2;
+  // Tìm kiếm theo họ tên, email hoặc số điện thoại
+  string search = 3;
+  int32 page = 4;
+  int32 page_size = 5;
+}
+
+message ListUsersResponse {
+  repeated UserInfo items = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message LockUserRequest {
+  string user_id = 1;
+  string reason = 2;
+}
+
+message LockUserResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message UnlockUserRequest {
+  string user_id = 1;
+}
+
+message UnlockUserResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+
+

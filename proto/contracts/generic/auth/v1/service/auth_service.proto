@@ -172,4 +172,82 @@ service AuthService {
       security: {} // Public bypass
     };
   }
+
+  // Đăng ký nâng cấp tài khoản người dùng thành Brand
+  rpc RegisterBrand (contracts.generic.auth.v1.message.RegisterBrandRequest) returns (contracts.generic.auth.v1.message.RegisterBrandResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/brand/register"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Brand"
+    };
+  }
+
+  // Admin phê duyệt yêu cầu nâng cấp Brand
+  rpc ApproveBrand (contracts.generic.auth.v1.message.ApproveBrandRequest) returns (contracts.generic.auth.v1.message.ApproveBrandResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/admin/brand-requests/{request_id}/approve"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
+  }
+
+  // Admin từ chối yêu cầu nâng cấp Brand
+  rpc RejectBrand (contracts.generic.auth.v1.message.RejectBrandRequest) returns (contracts.generic.auth.v1.message.RejectBrandResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/admin/brand-requests/{request_id}/reject"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
+  }
+
+  // Admin lấy danh sách các yêu cầu nâng cấp Brand
+  rpc ListBrandRequests (contracts.generic.auth.v1.message.ListBrandRequestsRequest) returns (contracts.generic.auth.v1.message.ListBrandRequestsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/auth/admin/brand-requests"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
+  }
+
+  // Admin lấy danh sách người dùng có lọc theo vai trò, trạng thái, tìm kiếm và phân trang
+  rpc ListUsers (contracts.generic.auth.v1.message.ListUsersRequest) returns (contracts.generic.auth.v1.message.ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/auth/admin/users"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
+  }
+
+  // Admin khóa tài khoản người dùng
+  rpc LockUser (contracts.generic.auth.v1.message.LockUserRequest) returns (contracts.generic.auth.v1.message.LockUserResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/admin/users/{user_id}/lock"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
+  }
+
+  // Admin mở khóa tài khoản người dùng
+  rpc UnlockUser (contracts.generic.auth.v1.message.UnlockUserRequest) returns (contracts.generic.auth.v1.message.UnlockUserResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/admin/users/{user_id}/unlock"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Authentication / Admin"
+    };
+  }
 }
+
+
+

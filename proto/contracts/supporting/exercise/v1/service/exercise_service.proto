@@ -34,7 +34,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service ExerciseService {
-  // Tìm kiếm bài tập trong thư viện (User & Coach)
+  // Tìm kiếm bài tập trong thư viện
   rpc SearchExercises (contracts.supporting.exercise.v1.message.SearchExercisesRequest) returns (contracts.supporting.exercise.v1.message.SearchExercisesResponse) {
     option (google.api.http) = {
       get: "/api/v1/exercises/search"

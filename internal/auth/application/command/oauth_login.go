@@ -84,6 +84,18 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 		return "", "", "", fmt.Errorf("find user by social id: %w", err)
 	}
 
+	if user != nil {
+		if user.Status() == aggregate.UserStatusLocked {
+			return "", "", "", derror.ErrUserLocked
+		}
+		if user.Status() == aggregate.UserStatusSuspended {
+			return "", "", "", derror.ErrUserSuspended
+		}
+		if user.Status() != aggregate.UserStatusActive {
+			return "", "", "", derror.ErrUnauthorized
+		}
+	}
+
 	var accessToken, refreshTokenStr string
 	var expiresAt time.Time
 
