@@ -43,7 +43,6 @@ func (r *OutboxLogRepository) LogProcessed(
 		INSERT INTO notification.outbox_log (
 			id, event_id, event_type, payload, partition_key, processed_at, status, error_message
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (event_id) DO NOTHING
 	`
 	if status == "" {
 		status = "SUCCESS"

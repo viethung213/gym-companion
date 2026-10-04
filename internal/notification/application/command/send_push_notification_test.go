@@ -165,4 +165,31 @@ func TestSendPushNotificationHandler(t *testing.T) {
 			t.Errorf("got status %s, want %s", got, want)
 		}
 	})
+
+	t.Run("high priority push notification bypasses disabled settings and quiet hours", func(t *testing.T) {
+		s, _ := aggregate.NewDefaultSetting("usr-high-priority")
+		_ = s.Update(false, false, false, "00:00", "23:59") // disabled push and inside quiet hours
+		_ = settingRepo.Save(context.Background(), s)
+
+		// Create a device for the user
+		dt, _ := vo.NewDeviceType("WEB")
+		dev, _ := aggregate.NewDevice("dev-high-1", "usr-high-priority", "token-high-1", dt)
+		_ = deviceRepo.Save(context.Background(), dev)
+
+		cmd := command.SendPushNotificationCommand{
+			UserID:         "usr-high-priority",
+			Title:          "Urgent Alert",
+			Body:           "Critical system event",
+			IsHighPriority: true,
+		}
+
+		res, err := handler.Handle(context.Background(), cmd)
+		if err != nil {
+			t.Fatalf("got unexpected error: %v", err)
+		}
+
+		if got, want := res.Status, "SENT"; got != want {
+			t.Errorf("got status %s, want %s", got, want)
+		}
+	})
 }

@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,23 +79,20 @@ func (h *VerifyOTPHandler) Handle(ctx context.Context, cmd VerifyOTPCommand) (*V
 
 	var resetToken string
 	if otp.Purpose() == "reset_password" {
-		// Tìm user tương ứng với identifier
-		var userFound bool
-		for _, idType := range []string{"email", "phone"} {
-			u, err := h.userRepo.FindByIdentity(ctx, idType, otp.Identifier())
-			if err == nil && u != nil {
-				resetToken = uuid.New().String()
-				resetEntity := entity.NewPasswordResetToken(resetToken, u.ID(), 15*time.Minute)
-				if err := h.resetTokenRepo.Save(ctx, resetEntity); err != nil {
-					return nil, fmt.Errorf("save reset token: %w", err)
-				}
-				userFound = true
-				break
-			}
+		idType := "phone"
+		if strings.Contains(otp.Identifier(), "@") {
+			idType = "email"
 		}
 
-		if !userFound {
+		u, err := h.userRepo.FindByIdentity(ctx, idType, otp.Identifier())
+		if err != nil || u == nil {
 			return nil, derror.ErrNotFound
+		}
+
+		resetToken = uuid.New().String()
+		resetEntity := entity.NewPasswordResetToken(resetToken, u.ID(), 15*time.Minute)
+		if err := h.resetTokenRepo.Save(ctx, resetEntity); err != nil {
+			return nil, fmt.Errorf("save reset token: %w", err)
 		}
 	}
 

@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	domainEvent "github.com/viethung213/gym-companion/internal/auth/domain/event"
 	authv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event"
+	notificationv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -81,16 +83,36 @@ func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent
 }
 
 func (p *OutboxWriter) publishOTPSent(ctx context.Context, ev domainEvent.OTPSentEvent) error {
-	otpSentProto := &authv1event.OTPSent{
-		Identifier:       ev.Identifier,
-		Code:             ev.Code,
-		SentAt:           timestamppb.New(ev.SentAt),
-		ExpiresInSeconds: ev.ExpiresInSeconds,
+	channel := "SMS"
+	dataMap := map[string]string{
+		"code":             ev.Code,
+		"otp":              ev.Code,
+		"identifier":       ev.Identifier,
+		"expiresInSeconds": fmt.Sprintf("%d", ev.ExpiresInSeconds),
+	}
+	if strings.Contains(ev.Identifier, "@") {
+		channel = "EMAIL"
+		dataMap["email"] = ev.Identifier
+	} else {
+		dataMap["phone"] = ev.Identifier
 	}
 
-	payloadBytes, err := protojson.Marshal(otpSentProto)
+	highPriorityProto := &notificationv1event.HighPriorityNotificationRequested{
+		Target: &notificationv1event.NotificationTarget{
+			Recipient: &notificationv1event.NotificationTarget_UserId{
+				UserId: ev.Identifier,
+			},
+		},
+		Title:       "Mã xác thực OTP Gym Companion",
+		Body:        fmt.Sprintf("Mã OTP của bạn là: %s. Mã có hiệu lực trong %d giây. Vui lòng không chia sẻ mã này cho bất kỳ ai.", ev.Code, ev.ExpiresInSeconds),
+		Data:        dataMap,
+		Channels:    []string{channel},
+		RequestedAt: ev.SentAt.Format(time.RFC3339),
+	}
+
+	payloadBytes, err := protojson.Marshal(highPriorityProto)
 	if err != nil {
-		return fmt.Errorf("marshal otp sent proto: %w", err)
+		return fmt.Errorf("marshal high priority notification proto: %w", err)
 	}
 
 	eventID := uuid.New().String()

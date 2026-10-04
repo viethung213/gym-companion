@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package contracts.generic.notification.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
+
+// UserList chứa danh sách nhiều user ID cụ thể khi gửi thông báo theo nhóm tự chọn.
+message UserList {
+  repeated string user_ids = 1;
+}
+
+// NotificationTarget định nghĩa đối tượng nhận thông báo linh hoạt (hỗ trợ cả 3 trường hợp: 1 người, toàn hệ thống, hoặc theo nhóm).
+message NotificationTarget {
+  oneof recipient {
+    // Trường hợp 1: Gửi đích danh 1 user cụ thể
+    string user_id = 1;
+
+    // Trường hợp 2: Gửi cho toàn bộ người dùng trong hệ thống (Broadcast)
+    bool all_users = 2;
+
+    // Trường hợp 3a: Gửi cho một nhóm đối tượng cụ thể (nhóm lớp học, nhóm khách hàng của Seller/HLV)
+    string group_id = 3;
+
+    // Trường hợp 3b: Gửi cho một danh sách user cụ thể được chọn sẵn
+    UserList user_list = 4;
+  }
+}

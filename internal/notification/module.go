@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -14,9 +15,11 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/config"
+	"github.com/viethung213/gym-companion/internal/notification/infrastructure/email"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence/postgres"
+	"github.com/viethung213/gym-companion/internal/notification/infrastructure/sms"
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
 	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
@@ -33,7 +36,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		return nil, nil, errors.New("deps.DB is required")
 	}
 
-	cfg := config.LoadConfig()
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return nil, nil, fmt.Errorf("load notification config: %w", err)
+	}
 
 	// 1. Repositories & Adapters
 	deviceRepo := postgres.NewDeviceRepository(deps.DB)
@@ -43,10 +49,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	outboxLogRepo := postgres.NewOutboxLogRepository(deps.DB)
 	txManager := postgres.NewTxManager(deps.DB)
 	fcmClient := fcm.NewClient(&cfg)
+	emailProvider := email.NewEmailProvider(&cfg)
+	smsProvider := sms.NewSMSProvider(&cfg)
 
 	// 2. Command Handlers
 	registerDeviceHandler := command.NewRegisterDeviceTokenHandler(deviceRepo)
 	sendPushHandler := command.NewSendPushNotificationHandler(deviceRepo, notificationRepo, settingRepo, fcmClient, txManager, outboxRepo)
+	sendEmailHandler := command.NewSendEmailNotificationHandler(settingRepo, emailProvider)
+	sendSMSHandler := command.NewSendSMSNotificationHandler(settingRepo, smsProvider)
 	updateSettingsHandler := command.NewUpdateNotificationSettingsHandler(settingRepo)
 	markAsReadHandler := command.NewMarkNotificationAsReadHandler(notificationRepo)
 
@@ -84,21 +94,45 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 			log.Printf("Warning: failed to get kafka writer for notification outbox: %v", wErr)
 		}
 
-		// Inbound Event Consumers for all module event topics
-		topics := []string{
-			"notification.events",
+		// 1. HIGH-PRIORITY Notification Consumer: Dedicated group & Multi-worker pool for instant dispatch
+		highTopic := "notification.events.high-priority"
+		highReader, highErr := deps.KafkaRegistry.GetReader("notification-group-high", highTopic, brokers)
+		if highErr == nil && highReader != nil {
+			highConsumer := notificationConsumer.NewNotificationEventConsumer(highReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
+			const highWorkers = 3
+			for i := 0; i < highWorkers; i++ {
+				go highConsumer.Start(ctxWorkers)
+			}
+			log.Printf("Notification HIGH-PRIORITY consumer started (%d workers) on topic '%s'", highWorkers, highTopic)
+		} else {
+			log.Printf("Warning: failed to get kafka reader for high-priority topic %s: %v", highTopic, highErr)
+		}
+
+		// 2. NORMAL-PRIORITY Notification Consumer: Dedicated group for background/standard dispatch
+		normalTopic := "notification.events.normal-priority"
+		normalReader, normalErr := deps.KafkaRegistry.GetReader("notification-group-normal", normalTopic, brokers)
+		if normalErr == nil && normalReader != nil {
+			normalConsumer := notificationConsumer.NewNotificationEventConsumer(normalReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
+			go normalConsumer.Start(ctxWorkers)
+			log.Printf("Notification NORMAL-PRIORITY consumer started on topic '%s'", normalTopic)
+		} else {
+			log.Printf("Warning: failed to get kafka reader for normal-priority topic %s: %v", normalTopic, normalErr)
+		}
+
+		// 3. CORE DOMAIN Inbound Event Consumers (Coaching, Nutrition, Workout Execution)
+		coreTopics := []string{
 			"coaching.events",
 			"nutrition.events",
 			"workout_execution.events",
 		}
-		for _, topic := range topics {
-			reader, rErr := deps.KafkaRegistry.GetReader("notification-group", topic, brokers)
+		for _, topic := range coreTopics {
+			reader, rErr := deps.KafkaRegistry.GetReader("notification-group-core", topic, brokers)
 			if rErr == nil && reader != nil {
-				consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, outboxLogRepo)
+				consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
 				go consumer.Start(ctxWorkers)
-				log.Printf("Notification consumer started on topic '%s'", topic)
+				log.Printf("Notification Core consumer started on topic '%s'", topic)
 			} else {
-				log.Printf("Warning: failed to get kafka reader for notification topic %s: %v", topic, rErr)
+				log.Printf("Warning: failed to get kafka reader for core topic %s: %v", topic, rErr)
 			}
 		}
 

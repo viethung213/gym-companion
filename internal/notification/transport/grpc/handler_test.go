@@ -12,14 +12,17 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
 	"github.com/viethung213/gym-companion/internal/notification/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
 type mockDeviceRepo struct {
 	devices []string
+	userIDs []string
 }
 
 func (m *mockDeviceRepo) Save(ctx context.Context, device *aggregate.Device) error {
 	m.devices = append(m.devices, device.DeviceToken())
+	m.userIDs = append(m.userIDs, device.UserID())
 	return nil
 }
 
@@ -110,15 +113,32 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 	connectHandler := grpc.NewConnectNotificationHandler(grpcHandler)
 
 	ctx := context.Background()
+	authCtx := context.WithValue(ctx, middleware.UserIDKey, "usr-grpc-1")
 
-	t.Run("RegisterDeviceToken gRPC & Connect", func(t *testing.T) {
+	t.Run("RegisterDeviceToken unauthenticated fails", func(t *testing.T) {
 		req := &notificationv1message.RegisterDeviceTokenRequest{
-			UserId:      "usr-grpc-1",
 			DeviceToken: "token-grpc-1",
 			DeviceType:  "IOS",
 		}
 
-		res, err := grpcHandler.RegisterDeviceToken(ctx, req)
+		_, err := grpcHandler.RegisterDeviceToken(ctx, req)
+		if err == nil {
+			t.Fatalf("expected unauthenticated error, got nil")
+		}
+
+		_, err = connectHandler.RegisterDeviceToken(ctx, connect.NewRequest(req))
+		if err == nil {
+			t.Fatalf("expected Connect unauthenticated error, got nil")
+		}
+	})
+
+	t.Run("RegisterDeviceToken authenticated succeeds using token user_id", func(t *testing.T) {
+		req := &notificationv1message.RegisterDeviceTokenRequest{
+			DeviceToken: "token-grpc-1",
+			DeviceType:  "IOS",
+		}
+
+		res, err := grpcHandler.RegisterDeviceToken(authCtx, req)
 		if err != nil {
 			t.Fatalf("gRPC RegisterDeviceToken error: %v", err)
 		}
@@ -126,12 +146,17 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got success = false, want true")
 		}
 
-		connRes, err := connectHandler.RegisterDeviceToken(ctx, connect.NewRequest(req))
+		connRes, err := connectHandler.RegisterDeviceToken(authCtx, connect.NewRequest(req))
 		if err != nil {
 			t.Fatalf("Connect RegisterDeviceToken error: %v", err)
 		}
 		if !connRes.Msg.GetSuccess() {
 			t.Errorf("got Connect success = false, want true")
+		}
+
+		// Verify user_id was retrieved from token context ("usr-grpc-1"), not from request body
+		if len(devRepo.userIDs) == 0 || devRepo.userIDs[len(devRepo.userIDs)-1] != "usr-grpc-1" {
+			t.Errorf("expected device saved with user_id 'usr-grpc-1' from context, got: %v", devRepo.userIDs)
 		}
 	})
 

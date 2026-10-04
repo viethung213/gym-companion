@@ -53,10 +53,17 @@ func (m *OTPModel) ToDomain() *entity.OTP {
 	)
 }
 
+func (r *OTPRepository) getDB(ctx context.Context) *gorm.DB {
+	if tx := GetTx(ctx); tx != nil {
+		return tx.WithContext(ctx)
+	}
+	return r.db.WithContext(ctx)
+}
+
 // Save inserts a new OTP record.
 func (r *OTPRepository) Save(ctx context.Context, otp *entity.OTP) error {
 	m := toOTPModel(otp)
-	if err := r.db.WithContext(ctx).Create(m).Error; err != nil {
+	if err := r.getDB(ctx).Create(m).Error; err != nil {
 		return fmt.Errorf("failed to save otp: %w", err)
 	}
 	return nil
@@ -65,7 +72,7 @@ func (r *OTPRepository) Save(ctx context.Context, otp *entity.OTP) error {
 // FindByID retrieves an OTP record by its ID (otp_token).
 func (r *OTPRepository) FindByID(ctx context.Context, id string) (*entity.OTP, error) {
 	var m OTPModel
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&m).Error
+	err := r.getDB(ctx).Where("id = ?", id).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrNotFound
@@ -78,7 +85,7 @@ func (r *OTPRepository) FindByID(ctx context.Context, id string) (*entity.OTP, e
 // FindLatestActive finds the most recent active OTP for an identifier and purpose.
 func (r *OTPRepository) FindLatestActive(ctx context.Context, identifier string, purpose string) (*entity.OTP, error) {
 	var m OTPModel
-	err := r.db.WithContext(ctx).
+	err := r.getDB(ctx).
 		Where("identifier = ? AND purpose = ? AND is_used = ?", identifier, purpose, false).
 		Order("created_at DESC").
 		First(&m).Error
@@ -94,7 +101,7 @@ func (r *OTPRepository) FindLatestActive(ctx context.Context, identifier string,
 // Update updates an existing OTP record.
 func (r *OTPRepository) Update(ctx context.Context, otp *entity.OTP) error {
 	m := toOTPModel(otp)
-	err := r.db.WithContext(ctx).
+	err := r.getDB(ctx).
 		Model(&OTPModel{}).
 		Where("id = ?", m.ID).
 		Updates(map[string]interface{}{

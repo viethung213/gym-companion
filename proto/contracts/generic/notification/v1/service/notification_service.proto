@@ -48,8 +48,16 @@ service NotificationService {
   // Đăng ký FCM / APNs device token của thiết bị người dùng
   rpc RegisterDeviceToken (contracts.generic.notification.v1.message.RegisterDeviceTokenRequest) returns (contracts.generic.notification.v1.message.RegisterDeviceTokenResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/devices"
+      post: "/api/v1/devices"
       body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {
+        security_requirement: {
+          key: "BearerAuth"
+          value: {}
+        }
+      }
     };
   }
 

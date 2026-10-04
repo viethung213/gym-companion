@@ -18,9 +18,8 @@ message SendPushNotificationResponse {
 }
 
 message RegisterDeviceTokenRequest {
-  string user_id = 1;
-  string device_token = 2;
-  string device_type = 3; // "IOS", "ANDROID", "WEB"
+  string device_token = 1;
+  string device_type = 2; // "IOS", "ANDROID", "WEB"
 }
 
 message RegisterDeviceTokenResponse {

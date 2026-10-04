@@ -60,13 +60,10 @@ func setupModuleDB(t *testing.T) *sql.DB {
 }
 
 func TestInitializeModule(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 
 	t.Run("Initialize with nil DB returns error", func(t *testing.T) {
-		t.Parallel()
-
+		t.Setenv("EMAIL_PROVIDER", "mock")
 		_, _, err := notification.Initialize(ctx, notification.ModuleDeps{DB: nil})
 		if err == nil {
 			t.Fatal("expected error for nil DB, got nil")
@@ -74,8 +71,8 @@ func TestInitializeModule(t *testing.T) {
 	})
 
 	t.Run("Initialize and RegisterConnectHandler success", func(t *testing.T) {
-		t.Parallel()
-
+		t.Setenv("EMAIL_PROVIDER", "mock")
+		t.Setenv("SMS_PROVIDER", "mock")
 		db := setupModuleDB(t)
 		defer db.Close()
 

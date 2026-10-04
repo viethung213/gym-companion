@@ -45,5 +45,5 @@ func (e OTPSentEvent) OccurredAt() time.Time {
 
 // EventName returns the name identifier of the event.
 func (e OTPSentEvent) EventName() string {
-	return "contracts.generic.auth.v1.otpSent"
+	return "contracts.generic.notification.v1.event.HighPriorityNotificationRequested"
 }

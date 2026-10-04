@@ -100,6 +100,15 @@ func (o *OTP) Verify(plainCode string, compareHash func(plain, hash string) bool
 	return nil
 }
 
+// Invalidate marks the OTP as superseded or cancelled only if cooldown period has elapsed.
+func (o *OTP) Invalidate(now time.Time) error {
+	if !o.CanResend(now) {
+		return derror.ErrOTPResendCooldown
+	}
+	o.isUsed = true
+	return nil
+}
+
 // CanResend checks if the cooldown period has elapsed.
 func (o *OTP) CanResend(now time.Time) bool {
 	return now.After(o.resendAvailableAt) || now.Equal(o.resendAvailableAt)

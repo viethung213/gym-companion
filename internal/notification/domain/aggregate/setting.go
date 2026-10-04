@@ -30,7 +30,7 @@ func NewDefaultSetting(userID string) (*Setting, error) {
 		userID:          userID,
 		enablePush:      true,
 		enableEmail:     true,
-		enableSMS:       false,
+		enableSMS:       true,
 		quietHoursStart: "",
 		quietHoursEnd:   "",
 		createdAt:       now,

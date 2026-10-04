@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package contracts.generic.notification.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
+
+import "contracts/generic/notification/v1/event/notification_target.proto";
+
+// HighPriorityNotificationRequested là Chuẩn Event yêu cầu phát thông báo ưu tiên cao (xử lý ngay lập tức).
+// Các service ngoài core khi cần phát thông báo khẩn cấp (như cảnh báo tài khoản, mã bảo mật, thông báo thời gian thực)
+// sẽ publish CloudEvent loại này sang Kafka topic: "notification.events.high-priority".
+// CloudEvent Type: "contracts.generic.notification.v1.event.HighPriorityNotificationRequested"
+message HighPriorityNotificationRequested {
+  NotificationTarget target = 1; // Mục tiêu nhận tin: 1 user, toàn bộ user, nhóm theo group_id hoặc danh sách
+  string title = 2;
+  string body = 3;
+  map<string, string> data = 4;
+  repeated string channels = 5;  // Danh sách kênh mong muốn phát: "PUSH", "EMAIL", "SMS". Để trống mặc định gửi qua ["PUSH"].
+  string requested_at = 6;
+}

@@ -18,10 +18,11 @@ import (
 )
 
 type SendPushNotificationCommand struct {
-	UserID string
-	Title  string
-	Body   string
-	Data   map[string]string
+	UserID         string
+	Title          string
+	Body           string
+	Data           map[string]string
+	IsHighPriority bool
 }
 
 type SendPushNotificationResponse struct {
@@ -131,7 +132,8 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 	}
 
 	// 3. Check User Notification Preferences (enable_push & quiet_hours)
-	if h.settingRepo != nil {
+	// High priority notifications bypass user settings and quiet hours
+	if !cmd.IsHighPriority && h.settingRepo != nil {
 		setting, setErr := h.settingRepo.GetByUserID(ctx, cmd.UserID)
 		if setErr != nil && errors.Is(setErr, derror.ErrSettingNotFound) {
 			var defaultErr error

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package contracts.generic.notification.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
+
+import "contracts/generic/notification/v1/event/notification_target.proto";
+
+// NormalPriorityNotificationRequested là Chuẩn Event yêu cầu phát thông báo độ ưu tiên bình thường (xử lý theo hàng đợi thông thường).
+// Các service ngoài core khi cần phát thông báo hàng ngày, tin tức cập nhật, nhắc nhở định kỳ hoặc khuyến mãi
+// sẽ publish CloudEvent loại này sang Kafka topic: "notification.events.normal-priority".
+// CloudEvent Type: "contracts.generic.notification.v1.event.NormalPriorityNotificationRequested"
+message NormalPriorityNotificationRequested {
+  NotificationTarget target = 1; // Mục tiêu nhận tin: 1 user, toàn bộ user, nhóm theo group_id hoặc danh sách
+  string title = 2;
+  string body = 3;
+  map<string, string> data = 4;
+  repeated string channels = 5;  // Danh sách kênh mong muốn phát: "PUSH", "EMAIL", "SMS". Để trống mặc định gửi qua ["PUSH"].
+  string requested_at = 6;
+}

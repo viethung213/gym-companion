@@ -62,6 +62,50 @@ func TestSendOTPHandler(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error on empty identifier")
 	}
+
+	// Test 4: Resend OTP after cooldown succeeds and invalidates previous active OTP
+	prevOTP, err := otpRepo.FindByID(ctx, res.OTPToken)
+	if err != nil {
+		t.Fatalf("failed to find previous otp: %v", err)
+	}
+	// Reconstitute with resendAvailableAt in the past to simulate cooldown elapsed
+	pastTime := time.Now().Add(-2 * time.Minute)
+	expiredCooldownOTP := entity.ReconstituteOTP(
+		prevOTP.ID(),
+		prevOTP.Identifier(),
+		prevOTP.OTPHash(),
+		prevOTP.Purpose(),
+		prevOTP.Attempts(),
+		prevOTP.MaxAttempts(),
+		pastTime.Add(5*time.Minute),
+		pastTime, // resendAvailableAt in the past
+		false,
+		pastTime,
+	)
+	_ = otpRepo.Update(ctx, expiredCooldownOTP)
+
+	res2, err := handler.Handle(ctx, SendOTPCommand{
+		Identifier: "0912345678",
+		Purpose:    "register",
+	})
+	if err != nil {
+		t.Fatalf("expected resend after cooldown to succeed, got %v", err)
+	}
+	if !res2.Success || res2.OTPToken == res.OTPToken {
+		t.Fatalf("expected new otp token, got %v", res2.OTPToken)
+	}
+
+	// Verify previous OTP was invalidated (is_used = true)
+	updatedPrevOTP, _ := otpRepo.FindByID(ctx, res.OTPToken)
+	if !updatedPrevOTP.IsUsed() {
+		t.Fatalf("expected previous active OTP to be marked as used/invalidated, but was still unused")
+	}
+
+	// Verify new OTP is active (is_used = false)
+	newOTP, _ := otpRepo.FindByID(ctx, res2.OTPToken)
+	if newOTP.IsUsed() {
+		t.Fatalf("expected new OTP to be active (is_used = false)")
+	}
 }
 
 func TestVerifyOTPHandler(t *testing.T) {
