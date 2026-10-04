@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
+	"google.golang.org/adk/v2/model/openaimodel"
 	"google.golang.org/genai"
 )
 
@@ -27,6 +28,22 @@ type FallbackLLM struct {
 // NewFallbackLLMFromEnv creates a FallbackLLM reading model list and API Key from Coaching module config.
 func NewFallbackLLMFromEnv(ctx context.Context) (model.LLM, error) {
 	cfg := config.LoadConfig()
+	if cfg.AIProvider == "groq" {
+		rawNames := append([]string{cfg.GroqModel}, strings.Split(cfg.GroqFallbackModels, ",")...)
+		modelNames := make([]string, 0, len(rawNames))
+		seen := make(map[string]bool)
+
+		for _, name := range rawNames {
+			trimmed := strings.TrimSpace(name)
+			if trimmed != "" && !seen[trimmed] {
+				seen[trimmed] = true
+				modelNames = append(modelNames, trimmed)
+			}
+		}
+
+		return NewGroqFallbackLLM(ctx, modelNames, cfg.GroqAPIKey, cfg.GroqBaseURL)
+	}
+
 	rawNames := append([]string{cfg.GeminiModel}, strings.Split(cfg.GeminiFallbackModels, ",")...)
 	modelNames := make([]string, 0, len(rawNames))
 	seen := make(map[string]bool)
@@ -40,6 +57,34 @@ func NewFallbackLLMFromEnv(ctx context.Context) (model.LLM, error) {
 	}
 
 	return NewFallbackLLM(ctx, modelNames, cfg.GoogleAPIKey)
+}
+
+// NewGroqFallbackLLM initializes a FallbackLLM from a slice of Groq model names, API key, and baseURL.
+func NewGroqFallbackLLM(ctx context.Context, modelNames []string, apiKey, baseURL string) (model.LLM, error) {
+	if len(modelNames) == 0 {
+		return nil, errors.New("fallback llm: modelNames list cannot be empty")
+	}
+
+	clientCfg := &openaimodel.ClientConfig{
+		APIKey:  apiKey,
+		BaseURL: baseURL,
+	}
+
+	models := make([]model.LLM, 0, len(modelNames))
+	for _, name := range modelNames {
+		m, err := openaimodel.NewModel(ctx, name, clientCfg)
+		if err != nil {
+			log.Printf("[FallbackLLM] Warning: Failed to initialize Groq model %s: %v", name, err)
+			continue
+		}
+		models = append(models, m)
+	}
+
+	if len(models) == 0 {
+		return nil, fmt.Errorf("fallback llm: could not initialize any Groq model from %v", modelNames)
+	}
+
+	return &FallbackLLM{models: models}, nil
 }
 
 // NewFallbackLLM initializes a FallbackLLM from a slice of model names and an API key.
@@ -82,10 +127,17 @@ func (f *FallbackLLM) Name() string {
 func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		for idx, m := range f.models {
+			modelReq := req
+			if req != nil {
+				reqCopy := *req
+				reqCopy.Model = m.Name()
+				modelReq = &reqCopy
+			}
+
 			var lastErr error
 			var receivedAny bool
 
-			for resp, err := range m.GenerateContent(ctx, req, stream) {
+			for resp, err := range m.GenerateContent(ctx, modelReq, stream) {
 				if err != nil {
 					lastErr = err
 					break
@@ -118,15 +170,19 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 	}
 }
 
-// isQuotaOrRateLimitErr checks if err is a 429 / Quota Exceeded / Rate Limit error.
+// isQuotaOrRateLimitErr checks if err is a 429 / 413 / Quota Exceeded / Rate Limit error.
 func isQuotaOrRateLimitErr(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "429") ||
+		strings.Contains(msg, "413") ||
 		strings.Contains(msg, "resource_exhausted") ||
 		strings.Contains(msg, "quota") ||
 		strings.Contains(msg, "rate limit") ||
+		strings.Contains(msg, "rate_limit") ||
+		strings.Contains(msg, "tokens per minute") ||
+		strings.Contains(msg, "tpm") ||
 		strings.Contains(msg, "too many requests")
 }
