@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -93,8 +94,13 @@ func (h *GRPCHandler) RegisterDeviceToken(
 	ctx context.Context,
 	req *notificationv1message.RegisterDeviceTokenRequest,
 ) (*notificationv1message.RegisterDeviceTokenResponse, error) {
+	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	if !ok || userID == "" {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+
 	err := h.registerDeviceHandler.Handle(ctx, command.RegisterDeviceTokenCommand{
-		UserID:      req.GetUserId(),
+		UserID:      userID,
 		DeviceToken: req.GetDeviceToken(),
 		DeviceType:  req.GetDeviceType(),
 	})

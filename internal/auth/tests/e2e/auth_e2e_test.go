@@ -783,19 +783,23 @@ func TestE2E_OTP_And_ResetPassword(t *testing.T) {
 
 	// 3. Retrieve the generated plain code from outbox record payload
 	var outboxRecord infraPostgres.OutboxModel
-	if err := db.Where("event_type ILIKE ?", "%otpsent%").Order("created_at DESC").First(&outboxRecord).Error; err != nil {
-		t.Fatalf("Failed to find OTPSent event in outbox: %v", err)
+	if err := db.Where("event_type ILIKE ? OR event_type ILIKE ?", "%HighPriorityNotificationRequested%", "%otpsent%").Order("created_at DESC").First(&outboxRecord).Error; err != nil {
+		t.Fatalf("Failed to find OTP notification event in outbox: %v", err)
 	}
 
 	var envelope struct {
 		Data struct {
-			Code string `json:"code"`
+			Code string            `json:"code"`
+			Data map[string]string `json:"data"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(outboxRecord.Payload, &envelope); err != nil {
 		t.Fatalf("Failed to unmarshal outbox payload: %v", err)
 	}
 	plainOTPCode := envelope.Data.Code
+	if plainOTPCode == "" && envelope.Data.Data != nil {
+		plainOTPCode = envelope.Data.Data["code"]
+	}
 	if plainOTPCode == "" {
 		t.Fatalf("OTP code in outbox payload was empty")
 	}

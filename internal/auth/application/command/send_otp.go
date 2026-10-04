@@ -102,6 +102,16 @@ func (h *SendOTPHandler) Handle(ctx context.Context, cmd SendOTPCommand) (*SendO
 
 	// 3. Lưu OTP và Domain Event vào Outbox trong cùng một Transaction
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		// Vô hiệu hóa OTP active trước đó khi và chỉ khi thời gian cooldown đã đạt chuẩn
+		if activeOTP != nil {
+			if err := activeOTP.Invalidate(now); err != nil {
+				return err
+			}
+			if err := h.otpRepo.Update(txCtx, activeOTP); err != nil {
+				return fmt.Errorf("invalidate previous active otp: %w", err)
+			}
+		}
+
 		if err := h.otpRepo.Save(txCtx, otpEntity); err != nil {
 			return fmt.Errorf("save otp: %w", err)
 		}

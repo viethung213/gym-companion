@@ -39,7 +39,7 @@ func TestSettingAggregate(t *testing.T) {
 		if got, want := setting.EnableEmail(), true; got != want {
 			t.Errorf("got EnableEmail %v, want %v", got, want)
 		}
-		if got, want := setting.EnableSMS(), false; got != want {
+		if got, want := setting.EnableSMS(), true; got != want {
 			t.Errorf("got EnableSMS %v, want %v", got, want)
 		}
 

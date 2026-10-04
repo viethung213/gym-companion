@@ -3,19 +3,12 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 )
-
-type NotificationEventConsumer struct {
-	reader          *kafka.Reader
-	sendPushHandler *command.SendPushNotificationHandler
-	outboxLogRepo   port.OutboxLogRepository
-}
 
 type cloudEventEnvelope struct {
 	ID     string          `json:"id"`
@@ -25,95 +18,39 @@ type cloudEventEnvelope struct {
 	Data   json.RawMessage `json:"data"`
 }
 
-type defaultEventData struct {
-	UserID      string `json:"userId"`
-	Title       string `json:"title"`
-	Message     string `json:"message"`
-	Body        string `json:"body"`
-	MealName    string `json:"mealName"`
-	MealType    string `json:"mealType"`
-	WorkoutName string `json:"workoutName"`
-}
-
-type eventPushConfig struct {
-	DefaultTitle string
-	DefaultBody  string
-}
-
-// getPushAllowedEventRules maps allowed CloudEvent types to their default Push title and body formatting rules.
-// STRICT RULE: Only the 3 explicit Core Events (Workout PR, Nutrition Meal Reminder -30m, Coaching Workout Reminder -1h)
-// and Notification Standard Event (NotificationRequested) are listened and dispatched for Push Notifications.
-func getPushAllowedEventRules() map[string]eventPushConfig {
-	return map[string]eventPushConfig{
-		// =========================================================================
-		// 1. STANDARD NOTIFICATION CONTRACT EVENT (Dành cho TẤT CẢ các module khác)
-		// =========================================================================
-		"contracts.generic.notification.v1.event.NotificationRequested": {
-			DefaultTitle: "Gym Companion Thông Báo",
-			DefaultBody:  "Bạn có thông báo mới từ ứng dụng.",
-		},
-		"contracts.generic.notification.v1.notificationRequested": {
-			DefaultTitle: "Gym Companion Thông Báo",
-			DefaultBody:  "Bạn có thông báo mới từ ứng dụng.",
-		},
-
-		// =========================================================================
-		// 2. CORE MODULE: WORKOUT EXECUTION (Lập Kỷ lục cá nhân mới - PR)
-		// =========================================================================
-		"contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved": {
-			DefaultTitle: "Kỷ lục cá nhân mới! 🏆",
-			DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!",
-		},
-		"contracts.core.workout_execution.v1.newPersonalRecordAchieved": {
-			DefaultTitle: "Kỷ lục cá nhân mới! 🏆",
-			DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!",
-		},
-
-		// =========================================================================
-		// 3. CORE MODULE: NUTRITION (Sắp đến bữa ăn - Trước 30 phút)
-		// =========================================================================
-		"contracts.core.nutrition.v1.event.UpcomingMealReminder": {
-			DefaultTitle: "Nhắc nhở bữa ăn 🥗",
-			DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
-		},
-		"contracts.core.nutrition.v1.upcomingMealReminder": {
-			DefaultTitle: "Nhắc nhở bữa ăn 🥗",
-			DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
-		},
-
-		// =========================================================================
-		// 4. CORE MODULE: COACHING (Sắp đến giờ tập - Trước 1 tiếng)
-		// =========================================================================
-		"contracts.core.coaching.v1.event.UpcomingWorkoutReminder": {
-			DefaultTitle: "Nhắc nhở buổi tập ⏰",
-			DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
-		},
-		"contracts.core.coaching.v1.upcomingWorkoutReminder": {
-			DefaultTitle: "Nhắc nhở buổi tập ⏰",
-			DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
-		},
-	}
+// NotificationEventConsumer coordinates Kafka message consumption and delegates
+// internal vs external events to specialized handlers.
+type NotificationEventConsumer struct {
+	reader          *kafka.Reader
+	selfHandler     *SelfEventHandler
+	externalHandler *ExternalEventHandler
 }
 
 func NewNotificationEventConsumer(
 	reader *kafka.Reader,
 	sendPushHandler *command.SendPushNotificationHandler,
+	sendEmailHandler *command.SendEmailNotificationHandler,
+	sendSMSHandler *command.SendSMSNotificationHandler,
 	outboxLogRepo port.OutboxLogRepository,
 ) *NotificationEventConsumer {
+	selfHandler := NewSelfEventHandler(sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
+	externalHandler := NewExternalEventHandler(sendPushHandler, outboxLogRepo)
+
 	return &NotificationEventConsumer{
 		reader:          reader,
-		sendPushHandler: sendPushHandler,
-		outboxLogRepo:   outboxLogRepo,
+		selfHandler:     selfHandler,
+		externalHandler: externalHandler,
 	}
 }
 
+// Start begins consuming Kafka messages continuously until the context is canceled.
 func (c *NotificationEventConsumer) Start(ctx context.Context) {
 	if c.reader == nil {
 		log.Println("[Kafka Consumer] Notification consumer skipping: Kafka reader is nil")
 		return
 	}
 
-	log.Println("[Kafka Consumer] Notification consumer started, listening ONLY for 3 Core Events & Notification Standard Event...")
+	log.Println("[Kafka Consumer] Notification consumer started, listening for events...")
 	for {
 		select {
 		case <-ctx.Done():
@@ -134,6 +71,17 @@ func (c *NotificationEventConsumer) Start(ctx context.Context) {
 	}
 }
 
+// SelfHandler returns the handler for events originating from the Notification service itself.
+func (c *NotificationEventConsumer) SelfHandler() *SelfEventHandler {
+	return c.selfHandler
+}
+
+// ExternalHandler returns the handler for domain events originating from other external services.
+func (c *NotificationEventConsumer) ExternalHandler() *ExternalEventHandler {
+	return c.externalHandler
+}
+
+// ProcessMessage routes CloudEvents to either the SelfEventHandler or ExternalEventHandler.
 func (c *NotificationEventConsumer) ProcessMessage(ctx context.Context, msgValue []byte) error {
 	var env cloudEventEnvelope
 	if err := json.Unmarshal(msgValue, &env); err != nil {
@@ -141,114 +89,16 @@ func (c *NotificationEventConsumer) ProcessMessage(ctx context.Context, msgValue
 		return err
 	}
 
-	// 1. FILTER RULE: Check if event type is one of the allowed core events or generic notification event
-	rule, isAllowed := getPushAllowedEventRules()[env.Type]
-	if !isAllowed {
-		// All other events are strictly ignored
-		return nil
+	// 1. Phân luồng sự kiện từ chính Notification Service (Self Events: Push, Email, SMS)
+	if c.selfHandler != nil && c.selfHandler.CanHandle(env.Type) {
+		return c.selfHandler.Handle(ctx, &env, msgValue)
 	}
 
-	var payload defaultEventData
-	if err := json.Unmarshal(env.Data, &payload); err != nil {
-		log.Printf("[Kafka Consumer] Unmarshal CloudEvent data failed for '%s': %v", env.Type, err)
-		return err
+	// 2. Phân luồng sự kiện từ các Service khác (External Services: Workout, Nutrition, Coaching, ...)
+	if c.externalHandler != nil && c.externalHandler.CanHandle(env.Type) {
+		return c.externalHandler.Handle(ctx, &env, msgValue)
 	}
 
-	if payload.UserID == "" {
-		return nil
-	}
-
-	// 2. IDEMPOTENCY CHECK via notification.outbox_log
-	if c.outboxLogRepo != nil && env.ID != "" {
-		fresh, logErr := c.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, payload.UserID, msgValue, "PROCESSING", "")
-		if logErr != nil {
-			log.Printf("[Kafka Consumer] LogProcessed error for event '%s': %v", env.ID, logErr)
-		} else if !fresh {
-			// Duplicate event detected, skip to avoid double push!
-			log.Printf("[Kafka Consumer] Duplicate event '%s' (ID: %s) already recorded in notification.outbox_log, skipping...", env.Type, env.ID)
-			return nil
-		}
-	}
-
-	// 3. Format Title & Body dynamically based on payload or default rule template
-	title := payload.Title
-	body := payload.Body
-	if body == "" {
-		body = payload.Message
-	}
-
-	switch env.Type {
-	case "contracts.core.nutrition.v1.event.UpcomingMealReminder":
-		if payload.MealName != "" {
-			title = "Nhắc nhở bữa ăn 🥗: " + payload.MealName
-			if payload.MealType != "" {
-				body = fmt.Sprintf("Sắp đến giờ ăn %s (%s). Nhớ chuẩn bị bữa ăn nhé!", payload.MealName, payload.MealType)
-			} else {
-				body = fmt.Sprintf("Sắp đến giờ ăn %s. Nhớ chuẩn bị bữa ăn nhé!", payload.MealName)
-			}
-		}
-	case "contracts.core.coaching.v1.event.UpcomingWorkoutReminder":
-		if payload.WorkoutName != "" {
-			title = "Nhắc nhở buổi tập ⏰: " + payload.WorkoutName
-			body = fmt.Sprintf("Sắp đến giờ tập %s. Chuẩn bị sẵn sàng nhé!", payload.WorkoutName)
-		}
-	}
-
-	if title == "" {
-		title = rule.DefaultTitle
-	}
-	if body == "" {
-		body = rule.DefaultBody
-	}
-
-	dataMap := map[string]string{
-		"eventId":   env.ID,
-		"eventType": env.Type,
-		"source":    env.Source,
-	}
-	if payload.MealName != "" {
-		dataMap["mealName"] = payload.MealName
-	}
-	if payload.WorkoutName != "" {
-		dataMap["workoutName"] = payload.WorkoutName
-	}
-
-	log.Printf("[Kafka Consumer] Targeted Event '%s' matched for user '%s', dispatching push...", env.Type, payload.UserID)
-	var sendErr error
-	if c.sendPushHandler != nil {
-		_, sendErr = c.sendPushHandler.Handle(ctx, command.SendPushNotificationCommand{
-			UserID: payload.UserID,
-			Title:  title,
-			Body:   body,
-			Data:   dataMap,
-		})
-	}
-
-	if sendErr != nil {
-		log.Printf("[Kafka Consumer] Error sending push notification for event '%s': %v", env.ID, sendErr)
-		if c.outboxLogRepo != nil && env.ID != "" {
-			_ = c.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
-				EventID:      env.ID,
-				EventType:    env.Type,
-				Payload:      msgValue,
-				PartitionKey: payload.UserID,
-				Status:       "FAILED",
-				ErrorMessage: sendErr.Error(),
-			})
-		}
-		return sendErr
-	}
-
-	if c.outboxLogRepo != nil && env.ID != "" {
-		_ = c.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
-			EventID:      env.ID,
-			EventType:    env.Type,
-			Payload:      msgValue,
-			PartitionKey: payload.UserID,
-			Status:       "SUCCESS",
-			ErrorMessage: "",
-		})
-	}
-
+	// Bỏ qua các sự kiện không nằm trong danh sách đăng ký
 	return nil
 }

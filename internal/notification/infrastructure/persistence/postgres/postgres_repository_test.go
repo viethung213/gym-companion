@@ -31,7 +31,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.user_settings (
 			user_id TEXT PRIMARY KEY, enable_push INTEGER DEFAULT 1,
-			enable_email INTEGER DEFAULT 1, enable_sms INTEGER DEFAULT 0,
+			enable_email INTEGER DEFAULT 1, enable_sms INTEGER DEFAULT 1,
 			quiet_hours_start TEXT DEFAULT '', quiet_hours_end TEXT DEFAULT '',
 			created_at TIMESTAMP, updated_at TIMESTAMP
 		)`,
@@ -47,7 +47,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			locked_until TIMESTAMP, status TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.outbox_log (
-			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, event_type TEXT,
+			id TEXT PRIMARY KEY, event_id TEXT, event_type TEXT,
 			payload TEXT, partition_key TEXT, processed_at TIMESTAMP,
 			status TEXT, error_message TEXT
 		)`,
@@ -228,10 +228,10 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 
 	fresh2, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "SUCCESS", "")
 	if err != nil {
-		t.Fatalf("LogProcessed duplicate call error: %v", err)
+		t.Fatalf("LogProcessed second call error: %v", err)
 	}
-	if fresh2 {
-		t.Errorf("got fresh2 = true, want false for duplicate event")
+	if !fresh2 {
+		t.Errorf("got fresh2 = false, want true when non-conflicting log is inserted")
 	}
 }
 

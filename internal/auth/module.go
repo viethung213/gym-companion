@@ -175,7 +175,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		return nil, nil, fmt.Errorf("get auth kafka writer: %w", err)
 	}
 
-	kafkaPub := authKafka.NewPublisher(writer)
+	highPriorityWriter, hpErr := deps.KafkaRegistry.GetWriter("notification.events.high-priority", kafkaBrokers)
+	if hpErr != nil {
+		log.Printf("Warning: failed to get high-priority notification kafka writer: %v", hpErr)
+	}
+
+	kafkaPub := authKafka.NewPublisher(writer, highPriorityWriter)
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 1*time.Second)
 
 	wg.Add(1)
