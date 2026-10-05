@@ -109,3 +109,32 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON auth.password_re
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_validity ON auth.password_reset_tokens (token, is_used, expires_at);
 CREATE INDEX IF NOT EXISTS idx_jwk_keys_status ON auth.jwk_keys (status);
 CREATE INDEX IF NOT EXISTS idx_auth_outbox_log_event_status ON auth.outbox_log (event_id, status);
+
+-- 8. BẢNG BRAND_REQUESTS (Yêu cầu nâng cấp tài khoản người dùng thành Brand)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid WHERE t.typname = 'brand_request_status' AND n.nspname = 'auth') THEN
+        CREATE TYPE auth.brand_request_status AS ENUM ('pending', 'approved', 'rejected');
+    END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS auth.brand_requests (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    brand_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    contact_phone VARCHAR(50) NOT NULL,
+    address TEXT NOT NULL,
+    status auth.brand_request_status NOT NULL DEFAULT 'pending',
+    rejection_reason TEXT,
+    reviewed_by VARCHAR(255) REFERENCES auth.users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_brand_requests_user_id ON auth.brand_requests (user_id);
+CREATE INDEX IF NOT EXISTS idx_brand_requests_status ON auth.brand_requests (status);
+CREATE INDEX IF NOT EXISTS idx_brand_requests_created_at ON auth.brand_requests (created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_brand_requests_user_pending ON auth.brand_requests (user_id) WHERE status = 'pending';
+

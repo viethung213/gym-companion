@@ -296,6 +296,28 @@ func TestCredentialsLoginHandler(t *testing.T) {
 	if err != derror.ErrUnauthorized {
 		t.Fatalf("expected ErrUnauthorized, got %v", err)
 	}
+
+	// Test 4: Locked user login fails with ErrUserLocked
+	_ = user.Lock()
+	_ = userRepo.Update(ctx, user)
+	_, err = handler.Handle(ctx, CredentialsLoginCommand{
+		Identifier: "cred@example.com",
+		Password:   "password123",
+	})
+	if err != derror.ErrUserLocked {
+		t.Fatalf("expected ErrUserLocked, got %v", err)
+	}
+
+	// Test 5: Suspended user login fails with ErrUserSuspended
+	user.Suspend()
+	_ = userRepo.Update(ctx, user)
+	_, err = handler.Handle(ctx, CredentialsLoginCommand{
+		Identifier: "cred@example.com",
+		Password:   "password123",
+	})
+	if err != derror.ErrUserSuspended {
+		t.Fatalf("expected ErrUserSuspended, got %v", err)
+	}
 }
 
 func TestChangePasswordHandler(t *testing.T) {

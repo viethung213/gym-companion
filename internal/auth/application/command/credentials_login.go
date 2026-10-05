@@ -84,6 +84,12 @@ func (h *CredentialsLoginHandler) Handle(ctx context.Context, cmd CredentialsLog
 		return nil, derror.ErrUnauthorized
 	}
 
+	if user.Status() == aggregate.UserStatusLocked {
+		return nil, derror.ErrUserLocked
+	}
+	if user.Status() == aggregate.UserStatusSuspended {
+		return nil, derror.ErrUserSuspended
+	}
 	if user.Status() != aggregate.UserStatusActive {
 		return nil, derror.ErrUnauthorized
 	}

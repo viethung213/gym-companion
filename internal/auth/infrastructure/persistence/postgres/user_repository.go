@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
@@ -105,4 +106,50 @@ func (r *UserRepository) FindByIdentity(
 		return nil, fmt.Errorf("gorm find identity: %w", err)
 	}
 	return r.FindByID(ctx, ident.UserID)
+}
+
+// List retrieves users with filtering by role, status, search keyword, and pagination.
+func (r *UserRepository) List(
+	ctx context.Context,
+	filter repository.ListUsersFilter,
+) ([]*aggregate.User, int, error) {
+	query := r.getDB(ctx).Model(&UserModel{})
+	if filter.Role != "" {
+		query = query.Where("role_id = ?", filter.Role)
+	}
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+	if filter.Search != "" {
+		term := "%" + strings.TrimSpace(filter.Search) + "%"
+		query = query.Where("full_name ILIKE ? OR id IN (SELECT user_id FROM auth.user_identities WHERE identifier ILIKE ?)", term, term)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("gorm count users: %w", err)
+	}
+
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query = query.Offset(filter.Offset)
+	}
+
+	var dbUsers []UserModel
+	if err := query.Preload("Identity").Order("created_at DESC").Find(&dbUsers).Error; err != nil {
+		return nil, 0, fmt.Errorf("gorm list users: %w", err)
+	}
+
+	results := make([]*aggregate.User, 0, len(dbUsers))
+	for i := range dbUsers {
+		domainUser, err := dbUsers[i].ToDomain()
+		if err != nil {
+			return nil, 0, fmt.Errorf("map user to domain: %w", err)
+		}
+		results = append(results, domainUser)
+	}
+
+	return results, int(total), nil
 }

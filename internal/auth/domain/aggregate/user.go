@@ -3,6 +3,7 @@ package aggregate
 import (
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/event"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
@@ -220,15 +221,26 @@ func (u *User) FindIdentityByType(identityType string) (Identity, bool) {
 }
 
 // Activate transitions the user state to active.
-func (u *User) Activate() {
+func (u *User) Activate() error {
+	if u.status == UserStatusActive {
+		return derror.ErrUserAlreadyActive
+	}
 	u.status = UserStatusActive
 	u.updatedAt = time.Now()
+	return nil
 }
 
 // Lock transitions the user state to locked.
-func (u *User) Lock() {
+func (u *User) Lock() error {
+	if u.role.Value() == vo.RoleAdmin {
+		return derror.ErrCannotLockAdmin
+	}
+	if u.status == UserStatusLocked {
+		return derror.ErrUserAlreadyLocked
+	}
 	u.status = UserStatusLocked
 	u.updatedAt = time.Now()
+	return nil
 }
 
 // Suspend transitions the user state to suspended.

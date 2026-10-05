@@ -103,26 +103,27 @@ service WorkoutExecutionService {
   }
 }
 
-// Service dành riêng cho Admin và HLV (Coach) tra cứu thông tin học viên / người dùng khác
+// Service dành riêng cho Admin tra cứu thông tin tập luyện của người dùng
 service AdminWorkoutExecutionService {
   option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_tag) = {
     name: "Workout Execution / Admin"
-    description: "API dành cho Admin/Coach tra cứu dữ liệu tập luyện của học viên"
+    description: "API dành cho Admin tra cứu dữ liệu tập luyện của người dùng"
   };
 
-  // Admin/HLV lấy danh sách kỷ lục cá nhân (1RM) của một người dùng chỉ định
+  // Admin lấy danh sách kỷ lục cá nhân (1RM) của một người dùng chỉ định
   rpc AdminGetPersonalRecords (contracts.core.workout_execution.v1.message.AdminGetPersonalRecordsRequest) returns (contracts.core.workout_execution.v1.message.AdminGetPersonalRecordsResponse) {
     option (google.api.http) = {
       get: "/api/v1/admin/execution/users/{user_id}/prs"
     };
   }
 
-  // Admin/HLV lấy lịch sử các buổi tập của một người dùng chỉ định
+  // Admin lấy lịch sử các buổi tập của một người dùng chỉ định
   rpc AdminGetWorkoutHistory (contracts.core.workout_execution.v1.message.AdminGetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.AdminGetWorkoutHistoryResponse) {
     option (google.api.http) = {
       get: "/api/v1/admin/execution/users/{user_id}/history"
     };
   }
+
 
   // Admin xin Presigned Upload URL để Client đẩy trực tiếp file ONNX hoặc rules JSON lên Cloud Storage / Supabase Storage
   rpc GetPresignedUploadURL (contracts.core.workout_execution.v1.message.GetPresignedUploadURLRequest) returns (contracts.core.workout_execution.v1.message.GetPresignedUploadURLResponse) {

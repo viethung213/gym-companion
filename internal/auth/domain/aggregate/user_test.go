@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/event"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
@@ -103,9 +104,14 @@ func TestUser_StateTransitions(t *testing.T) {
 	ident := aggregate.NewIdentity("id-1", aggregate.IdentityTypeEmail, "test@example.com", "", nil, time.Now(), time.Now())
 	user := aggregate.RegisterUser("id-123", "John Doe", ident, "")
 
-	user.Lock()
+	if err := user.Lock(); err != nil {
+		t.Fatalf("unexpected error locking user: %v", err)
+	}
 	if got, want := user.Status(), aggregate.UserStatusLocked; got != want {
 		t.Errorf("got %s, want %s", got, want)
+	}
+	if err := user.Lock(); err != derror.ErrUserAlreadyLocked {
+		t.Errorf("expected ErrUserAlreadyLocked, got %v", err)
 	}
 
 	user.Suspend()
@@ -113,9 +119,14 @@ func TestUser_StateTransitions(t *testing.T) {
 		t.Errorf("got %s, want %s", got, want)
 	}
 
-	user.Activate()
+	if err := user.Activate(); err != nil {
+		t.Fatalf("unexpected error activating user: %v", err)
+	}
 	if got, want := user.Status(), aggregate.UserStatusActive; got != want {
 		t.Errorf("got %s, want %s", got, want)
+	}
+	if err := user.Activate(); err != derror.ErrUserAlreadyActive {
+		t.Errorf("expected ErrUserAlreadyActive, got %v", err)
 	}
 
 	newRole, _ := vo.NewRole("brand")

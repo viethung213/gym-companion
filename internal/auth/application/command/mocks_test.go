@@ -5,6 +5,7 @@ package command
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
@@ -13,6 +14,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/entity"
 	"github.com/viethung213/gym-companion/internal/auth/domain/event"
+	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
 )
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,37 @@ func (m *mockUserRepo) FindByIdentity(ctx context.Context, identityType string, 
 		}
 	}
 	return nil, derror.ErrUserNotFound
+}
+
+func (m *mockUserRepo) List(ctx context.Context, filter repository.ListUsersFilter) ([]*aggregate.User, int, error) {
+	var filtered []*aggregate.User
+	for _, u := range m.users {
+		if filter.Role != "" && !strings.EqualFold(u.Role(), filter.Role) {
+			continue
+		}
+		if filter.Status != "" && !strings.EqualFold(u.Status(), filter.Status) {
+			continue
+		}
+		if filter.Search != "" {
+			term := strings.ToLower(filter.Search)
+			nameMatch := strings.Contains(strings.ToLower(u.FullName()), term)
+			identMatch := strings.Contains(strings.ToLower(u.Identity().Identifier()), term)
+			if !nameMatch && !identMatch {
+				continue
+			}
+		}
+		filtered = append(filtered, u)
+	}
+	total := len(filtered)
+	start := filter.Offset
+	if start > total {
+		start = total
+	}
+	end := start + filter.Limit
+	if end > total {
+		end = total
+	}
+	return filtered[start:end], total, nil
 }
 
 // ---------------------------------------------------------------------------
