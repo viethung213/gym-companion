@@ -7,6 +7,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
+	"github.com/viethung213/gym-companion/internal/auth/domain/event"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
@@ -19,9 +20,10 @@ type ApproveBrandCommand struct {
 
 // ApproveBrandHandler processes the administrative approval of a brand request.
 type ApproveBrandHandler struct {
-	brandRepo repository.BrandRequestRepository
-	userRepo  repository.UserRepository
-	txManager port.TransactionManager
+	brandRepo    repository.BrandRequestRepository
+	userRepo     repository.UserRepository
+	txManager    port.TransactionManager
+	outboxWriter port.OutboxWriter
 }
 
 // NewApproveBrandHandler creates a new instance of ApproveBrandHandler.
@@ -29,11 +31,17 @@ func NewApproveBrandHandler(
 	brandRepo repository.BrandRequestRepository,
 	userRepo repository.UserRepository,
 	txManager port.TransactionManager,
+	outboxWriter ...port.OutboxWriter,
 ) *ApproveBrandHandler {
+	var writer port.OutboxWriter
+	if len(outboxWriter) > 0 {
+		writer = outboxWriter[0]
+	}
 	return &ApproveBrandHandler{
-		brandRepo: brandRepo,
-		userRepo:  userRepo,
-		txManager: txManager,
+		brandRepo:    brandRepo,
+		userRepo:     userRepo,
+		txManager:    txManager,
+		outboxWriter: writer,
 	}
 }
 
@@ -76,6 +84,17 @@ func (h *ApproveBrandHandler) Handle(
 		}
 		if err := h.brandRepo.Update(txCtx, brandReq); err != nil {
 			return fmt.Errorf("update brand request: %w", err)
+		}
+		if h.outboxWriter != nil {
+			ev := event.UserRoleUpdatedEvent{
+				UserID:    user.ID(),
+				OldRole:   "user",
+				NewRole:   "brand",
+				UpdatedAt: now,
+			}
+			if err := h.outboxWriter.Write(txCtx, ev); err != nil {
+				return fmt.Errorf("write user role updated outbox event: %w", err)
+			}
 		}
 		return nil
 	})

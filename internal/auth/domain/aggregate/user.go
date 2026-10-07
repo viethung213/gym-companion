@@ -150,6 +150,7 @@ func RegisterNewUser(
 		Gender:       gender,
 		DateOfBirth:  dateOfBirth,
 		AvatarURL:    avatarURL,
+		Role:         role.Value(),
 		RegisteredAt: now,
 	})
 

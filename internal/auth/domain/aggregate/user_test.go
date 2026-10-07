@@ -51,7 +51,7 @@ func TestRegisterUser_Success(t *testing.T) {
 		t.Fatalf("expected UserRegisteredEvent, got %T", events[0])
 	}
 
-	if regEvent.UserID != userID || regEvent.IdentityType != aggregate.IdentityTypeEmail || regEvent.Identifier != emailStr || regEvent.FullName != fullName {
+	if regEvent.UserID != userID || regEvent.IdentityType != aggregate.IdentityTypeEmail || regEvent.Identifier != emailStr || regEvent.FullName != fullName || regEvent.Role != "user" {
 		t.Errorf("unexpected event payload: %+v", regEvent)
 	}
 

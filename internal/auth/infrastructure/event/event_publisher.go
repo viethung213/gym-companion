@@ -37,6 +37,8 @@ func (p *OutboxWriter) Write(ctx context.Context, ev domainEvent.DomainEvent) er
 	switch e := ev.(type) {
 	case domainEvent.UserRegisteredEvent:
 		return p.publishUserRegistered(ctx, e)
+	case domainEvent.UserRoleUpdatedEvent:
+		return p.publishUserRoleUpdated(ctx, e)
 	case domainEvent.OTPSentEvent:
 		return p.publishOTPSent(ctx, e)
 	default:
@@ -53,6 +55,7 @@ func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent
 		Gender:       ev.Gender,
 		DateOfBirth:  ev.DateOfBirth,
 		AvatarUrl:    ev.AvatarURL,
+		Role:         ev.Role,
 		RegisteredAt: timestamppb.New(ev.RegisteredAt),
 	}
 
@@ -134,4 +137,38 @@ func (p *OutboxWriter) publishOTPSent(ctx context.Context, ev domainEvent.OTPSen
 	}
 
 	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.Identifier)
+}
+
+func (p *OutboxWriter) publishUserRoleUpdated(ctx context.Context, ev domainEvent.UserRoleUpdatedEvent) error {
+	roleUpdatedProto := &authv1event.UserRoleUpdated{
+		UserId:    ev.UserID,
+		OldRole:   ev.OldRole,
+		NewRole:   ev.NewRole,
+		UpdatedAt: timestamppb.New(ev.UpdatedAt),
+	}
+
+	payloadBytes, err := protojson.Marshal(roleUpdatedProto)
+	if err != nil {
+		return fmt.Errorf("marshal user role updated proto: %w", err)
+	}
+
+	eventID := uuid.New().String()
+	eventType := ev.EventName()
+
+	cloudEvent := map[string]interface{}{
+		"specversion":     "1.0",
+		"id":              eventID,
+		"source":          "services/auth-service",
+		"type":            eventType,
+		"time":            ev.UpdatedAt.Format(time.RFC3339),
+		"datacontenttype": "application/json",
+		"data":            json.RawMessage(payloadBytes),
+	}
+
+	envelopeBytes, err := json.Marshal(cloudEvent)
+	if err != nil {
+		return fmt.Errorf("marshal cloudevent envelope: %w", err)
+	}
+
+	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.UserID)
 }

@@ -222,7 +222,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	resetPasswordHandler := command.NewResetPasswordHandler(resetTokenRepo, userRepo, argon2Hasher, txManager)
 	brandRepo := postgres.NewBrandRequestRepository(gormDB)
 	registerBrandHandler := command.NewRegisterBrandHandler(brandRepo, userRepo)
-	approveBrandHandler := command.NewApproveBrandHandler(brandRepo, userRepo, txManager)
+	approveBrandHandler := command.NewApproveBrandHandler(brandRepo, userRepo, txManager, eventPub)
 	rejectBrandHandler := command.NewRejectBrandHandler(brandRepo)
 	listBrandRequestsHandler := query.NewListBrandRequestsHandler(brandRepo)
 	listUsersHandler := query.NewListUsersHandler(userRepo)
