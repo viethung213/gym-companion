@@ -15,6 +15,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type SendPushNotificationCommand struct {
@@ -83,7 +84,7 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 				Channel:        "PUSH",
 				Title:          cmd.Title,
 				Body:           cmd.Body,
-				SentAt:         now.Format(time.RFC3339),
+				SentAt:         timestamppb.New(now),
 			}
 			payloadBytes, marshalErr := protojson.Marshal(payloadProto)
 			if marshalErr != nil {

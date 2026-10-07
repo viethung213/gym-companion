@@ -49,6 +49,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 
 	saveHealthProfileHandler := command.NewSaveHealthProfileHandler(userRepo, eventPub, txManager)
 	updateProfileHandler := command.NewUpdateProfileHandler(userRepo, eventPub, txManager)
+	updateIdentityHandler := command.NewUpdateIdentityHandler(userRepo, eventPub, txManager)
 	logPeriodicMetricsHandler := command.NewLogPeriodicMetricsHandler(userRepo, eventPub, txManager)
 	reportInjuryHandler := command.NewReportInjuryHandler(userRepo, eventPub, txManager)
 	recoverInjuryHandler := command.NewRecoverInjuryHandler(userRepo, eventPub, txManager)
@@ -108,6 +109,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 	grpcHandler := profileGRPC.NewGRPCHandler(
 		saveHealthProfileHandler,
 		updateProfileHandler,
+		updateIdentityHandler,
 		logPeriodicMetricsHandler,
 		reportInjuryHandler,
 		recoverInjuryHandler,

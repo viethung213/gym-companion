@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
 	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
+	domainEvent "github.com/viethung213/gym-companion/internal/profile/domain/event"
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
 )
 
@@ -229,4 +230,96 @@ func TestUserProfile_DefensiveCopy(t *testing.T) {
 	require.NoError(t, err)
 	// Internal injury in aggregate must remain NOT recovered until RecoverInjury method is called on aggregate
 	assert.False(t, p.Injuries()[0].IsRecovered())
+}
+
+func TestUserProfile_UpdateIdentity(t *testing.T) {
+	bio, _ := vo.NewBiologicalMetrics(70, 170, 25, "MALE")
+
+	t.Run("Successfully update both full name and avatar url", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+		p.PopEvents() // clear creation events
+
+		newName := "Nguyen Van A"
+		newAvatar := "https://example.com/avatar.jpg"
+		err = p.UpdateIdentity(&newName, &newAvatar)
+		require.NoError(t, err)
+		assert.Equal(t, newName, p.FullName())
+		assert.Equal(t, newAvatar, p.AvatarURL())
+
+		events := p.PopEvents()
+		require.Len(t, events, 1)
+		ev, ok := events[0].(*domainEvent.UserIdentityUpdatedEvent)
+		require.True(t, ok)
+		assert.Equal(t, "user-1", ev.UserID())
+		assert.Equal(t, newName, ev.FullName())
+		assert.Equal(t, newAvatar, ev.AvatarURL())
+		assert.False(t, ev.UpdatedAt().IsZero())
+	})
+
+	t.Run("Update only full name", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+		p.SetIdentity("Old Name", "https://old.com/avatar.jpg")
+		p.PopEvents()
+
+		newName := "New Name"
+		err = p.UpdateIdentity(&newName, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "New Name", p.FullName())
+		assert.Equal(t, "https://old.com/avatar.jpg", p.AvatarURL())
+
+		events := p.PopEvents()
+		require.Len(t, events, 1)
+	})
+
+	t.Run("Update only avatar url", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+		p.SetIdentity("Old Name", "https://old.com/avatar.jpg")
+		p.PopEvents()
+
+		newAvatar := "https://new.com/avatar.jpg"
+		err = p.UpdateIdentity(nil, &newAvatar)
+		require.NoError(t, err)
+		assert.Equal(t, "Old Name", p.FullName())
+		assert.Equal(t, newAvatar, p.AvatarURL())
+
+		events := p.PopEvents()
+		require.Len(t, events, 1)
+	})
+
+	t.Run("Error when both arguments are nil", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+
+		err = p.UpdateIdentity(nil, nil)
+		assert.ErrorIs(t, err, derror.ErrEmptyIdentityUpdate)
+	})
+
+	t.Run("Error when full name exceeds 100 characters", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+
+		longName := ""
+		for i := 0; i < 101; i++ {
+			longName += "a"
+		}
+		err = p.UpdateIdentity(&longName, nil)
+		assert.ErrorIs(t, err, derror.ErrInvalidFullName)
+	})
+
+	t.Run("No event recorded when values are unchanged", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+		p.SetIdentity("Current Name", "https://current.com/avatar.jpg")
+		p.PopEvents()
+
+		sameName := "Current Name"
+		sameAvatar := "https://current.com/avatar.jpg"
+		err = p.UpdateIdentity(&sameName, &sameAvatar)
+		require.NoError(t, err)
+		events := p.PopEvents()
+		assert.Empty(t, events)
+	})
 }

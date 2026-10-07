@@ -4,11 +4,13 @@ package contracts.generic.notification.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
 
+import "google/protobuf/timestamp.proto";
+
 message NotificationSent {
   string notification_id = 1;
   string user_id = 2;
   string channel = 3; // "PUSH", "EMAIL", "SMS"
   string title = 4;
   string body = 5;
-  string sent_at = 6;
+  google.protobuf.Timestamp sent_at = 6;
 }

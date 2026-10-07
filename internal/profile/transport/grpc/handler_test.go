@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
@@ -94,6 +95,7 @@ func setupGRPCHandler(repo *mockRepo) *grpc.GRPCHandler {
 
 	saveHandler := command.NewSaveHealthProfileHandler(repo, eventPub, txManager)
 	updateHandler := command.NewUpdateProfileHandler(repo, eventPub, txManager)
+	updateIdentityHandler := command.NewUpdateIdentityHandler(repo, eventPub, txManager)
 	logHandler := command.NewLogPeriodicMetricsHandler(repo, eventPub, txManager)
 	reportHandler := command.NewReportInjuryHandler(repo, eventPub, txManager)
 	recoverHandler := command.NewRecoverInjuryHandler(repo, eventPub, txManager)
@@ -104,6 +106,7 @@ func setupGRPCHandler(repo *mockRepo) *grpc.GRPCHandler {
 	return grpc.NewGRPCHandler(
 		saveHandler,
 		updateHandler,
+		updateIdentityHandler,
 		logHandler,
 		reportHandler,
 		recoverHandler,
@@ -327,5 +330,93 @@ func TestGRPCHandler_Endpoints(t *testing.T) {
 		res, err := handler.GetProfile(adminUserCtx, &profilev1message.GetProfileRequest{UserId: "grpc-user-1"})
 		require.NoError(t, err)
 		assert.Equal(t, "grpc-user-1", res.GetUserId())
+	})
+
+	// 8. UpdateIdentity
+	t.Run("UpdateIdentity", func(t *testing.T) {
+		name := "Le Van D"
+		avatar := "https://example.com/avatar_d.png"
+
+		// Success updating both
+		req := &profilev1message.UpdateIdentityRequest{
+			FullName:  &name,
+			AvatarUrl: &avatar,
+		}
+		res, err := handler.UpdateIdentity(ctx, req)
+		require.NoError(t, err)
+		assert.Equal(t, "grpc-user-1", res.GetUserId())
+		assert.Equal(t, name, res.GetFullName())
+		assert.Equal(t, avatar, res.GetAvatarUrl())
+
+		// Verify GetProfile returns updated name & avatar
+		pRes, err := handler.GetProfile(ctx, &profilev1message.GetProfileRequest{})
+		require.NoError(t, err)
+		assert.Equal(t, name, pRes.GetFullName())
+		assert.Equal(t, avatar, pRes.GetAvatarUrl())
+
+		// Update only full name
+		newName := "Le Van E"
+		resOnlyName, err := handler.UpdateIdentity(ctx, &profilev1message.UpdateIdentityRequest{FullName: &newName})
+		require.NoError(t, err)
+		assert.Equal(t, newName, resOnlyName.GetFullName())
+		assert.Equal(t, avatar, resOnlyName.GetAvatarUrl())
+
+		// Update only avatar
+		newAvatar := "https://example.com/avatar_e.png"
+		resOnlyAvatar, err := handler.UpdateIdentity(ctx, &profilev1message.UpdateIdentityRequest{AvatarUrl: &newAvatar})
+		require.NoError(t, err)
+		assert.Equal(t, newName, resOnlyAvatar.GetFullName())
+		assert.Equal(t, newAvatar, resOnlyAvatar.GetAvatarUrl())
+
+		// Error: Unauthenticated
+		_, err = handler.UpdateIdentity(context.Background(), req)
+		require.Error(t, err)
+		st, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Unauthenticated, st.Code())
+
+		// Error: Profile not found
+		nonExistCtx := context.WithValue(context.Background(), middleware.UserIDKey, "non-existent")
+		_, err = handler.UpdateIdentity(nonExistCtx, req)
+		require.Error(t, err)
+		st, ok = status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.NotFound, st.Code())
+
+		// Error: Invalid argument (empty update)
+		_, err = handler.UpdateIdentity(ctx, &profilev1message.UpdateIdentityRequest{})
+		require.Error(t, err)
+		st, ok = status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.InvalidArgument, st.Code())
+
+		// Error: Invalid argument (name > 100)
+		longName := ""
+		for i := 0; i < 101; i++ {
+			longName += "x"
+		}
+		_, err = handler.UpdateIdentity(ctx, &profilev1message.UpdateIdentityRequest{FullName: &longName})
+		require.Error(t, err)
+		st, ok = status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.InvalidArgument, st.Code())
+
+		// Error: Internal repo error
+		repo.failRepo = true
+		_, err = handler.UpdateIdentity(ctx, req)
+		require.Error(t, err)
+		st, ok = status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Internal, st.Code())
+		repo.failRepo = false
+
+		// ConnectRPC adapter coverage
+		connectHandler := grpc.NewConnectProfileHandler(handler)
+		cRes, err := connectHandler.UpdateIdentity(ctx, connect.NewRequest(&profilev1message.UpdateIdentityRequest{
+			FullName: &name,
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, "grpc-user-1", cRes.Msg.GetUserId())
+		assert.Equal(t, name, cRes.Msg.GetFullName())
 	})
 }

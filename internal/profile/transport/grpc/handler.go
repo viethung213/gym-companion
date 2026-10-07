@@ -23,6 +23,7 @@ type GRPCHandler struct {
 	profilev1service.UnimplementedProfileServiceServer
 	saveHealthProfileHandler     *command.SaveHealthProfileHandler
 	updateProfileHandler         *command.UpdateProfileHandler
+	updateIdentityHandler        *command.UpdateIdentityHandler
 	logPeriodicMetricsHandler    *command.LogPeriodicMetricsHandler
 	reportInjuryHandler          *command.ReportInjuryHandler
 	recoverInjuryHandler         *command.RecoverInjuryHandler
@@ -34,6 +35,7 @@ type GRPCHandler struct {
 func NewGRPCHandler(
 	saveHealthProfileHandler *command.SaveHealthProfileHandler,
 	updateProfileHandler *command.UpdateProfileHandler,
+	updateIdentityHandler *command.UpdateIdentityHandler,
 	logPeriodicMetricsHandler *command.LogPeriodicMetricsHandler,
 	reportInjuryHandler *command.ReportInjuryHandler,
 	recoverInjuryHandler *command.RecoverInjuryHandler,
@@ -44,6 +46,7 @@ func NewGRPCHandler(
 	return &GRPCHandler{
 		saveHealthProfileHandler:     saveHealthProfileHandler,
 		updateProfileHandler:         updateProfileHandler,
+		updateIdentityHandler:        updateIdentityHandler,
 		logPeriodicMetricsHandler:    logPeriodicMetricsHandler,
 		reportInjuryHandler:          reportInjuryHandler,
 		recoverInjuryHandler:         recoverInjuryHandler,
@@ -220,6 +223,50 @@ func (h *GRPCHandler) UpdateProfile(ctx context.Context, req *profilev1message.U
 	return &profilev1message.UpdateProfileResponse{
 		Success: true,
 		Message: "Profile updated successfully",
+	}, nil
+}
+
+func (h *GRPCHandler) UpdateIdentity(
+	ctx context.Context,
+	req *profilev1message.UpdateIdentityRequest,
+) (*profilev1message.UpdateIdentityResponse, error) {
+	targetUserID, err := resolveUserID(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var fullName *string
+	if req.FullName != nil {
+		fullName = req.FullName
+	}
+
+	var avatarURL *string
+	if req.AvatarUrl != nil {
+		avatarURL = req.AvatarUrl
+	}
+
+	cmd := command.UpdateIdentityCommand{
+		UserID:    targetUserID,
+		FullName:  fullName,
+		AvatarURL: avatarURL,
+	}
+
+	res, err := h.updateIdentityHandler.Handle(ctx, cmd)
+	if err != nil {
+		if errors.Is(err, derror.ErrProfileNotFound) {
+			return nil, status.Error(codes.NotFound, "user profile not found")
+		}
+		if errors.Is(err, derror.ErrEmptyIdentityUpdate) || errors.Is(err, derror.ErrInvalidFullName) {
+			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "update identity failed: %v", err)
+	}
+
+	return &profilev1message.UpdateIdentityResponse{
+		UserId:    res.UserID,
+		FullName:  res.FullName,
+		AvatarUrl: res.AvatarURL,
+		Message:   "Identity updated successfully",
 	}, nil
 }
 
@@ -424,6 +471,17 @@ func (c *ConnectProfileHandler) UpdateProfile(
 	req *connect.Request[profilev1message.UpdateProfileRequest],
 ) (*connect.Response[profilev1message.UpdateProfileResponse], error) {
 	res, err := c.grpcHandler.UpdateProfile(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectProfileHandler) UpdateIdentity(
+	ctx context.Context,
+	req *connect.Request[profilev1message.UpdateIdentityRequest],
+) (*connect.Response[profilev1message.UpdateIdentityResponse], error) {
+	res, err := c.grpcHandler.UpdateIdentity(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}

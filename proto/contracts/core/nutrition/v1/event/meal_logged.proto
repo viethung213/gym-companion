@@ -4,6 +4,8 @@ package contracts.core.nutrition.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/event;nutritionv1event";
 
+import "google/protobuf/timestamp.proto";
+
 message MealLogged {
   string user_id = 1;
   string meal_log_id = 2;
@@ -13,5 +15,5 @@ message MealLogged {
   float protein = 6;
   float carbs = 7;
   float fat = 8;
-  string logged_at = 9;
+  google.protobuf.Timestamp logged_at = 9;
 }

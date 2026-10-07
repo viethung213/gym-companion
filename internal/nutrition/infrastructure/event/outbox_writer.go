@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
 	domainEvent "github.com/viethung213/gym-companion/internal/nutrition/domain/event"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type OutboxWriter struct {
@@ -39,7 +40,7 @@ func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 			PlanId:    e.PlanID(),
 			UserId:    e.UserID(),
 			PlanDate:  e.PlanDate().Format("2006-01-02"),
-			Timestamp: e.Timestamp().Format(time.RFC3339),
+			Timestamp: timestamppb.New(e.Timestamp()),
 		}
 		payloadBytes, err := protojson.Marshal(payloadProto)
 		if err != nil {
@@ -52,7 +53,7 @@ func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 			PlanId:    e.PlanID(),
 			UserId:    e.UserID(),
 			Reason:    e.Reason(),
-			Timestamp: e.Timestamp().Format(time.RFC3339),
+			Timestamp: timestamppb.New(e.Timestamp()),
 		}
 		payloadBytes, err := protojson.Marshal(payloadProto)
 		if err != nil {
@@ -67,7 +68,7 @@ func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 			MealName:  e.MealName(),
 			MealType:  e.MealType(),
 			Calories:  float32(e.Calories()),
-			LoggedAt:  e.LoggedAt().Format(time.RFC3339),
+			LoggedAt:  timestamppb.New(e.LoggedAt()),
 		}
 		payloadBytes, err := protojson.Marshal(payloadProto)
 		if err != nil {
@@ -80,7 +81,7 @@ func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 			UserId:     e.UserID(),
 			ItemType:   e.ItemType(),
 			ItemName:   e.ItemName(),
-			UnlockedAt: e.UnlockedAt().Format(time.RFC3339),
+			UnlockedAt: timestamppb.New(e.UnlockedAt()),
 		}
 		payloadBytes, err := protojson.Marshal(payloadProto)
 		if err != nil {

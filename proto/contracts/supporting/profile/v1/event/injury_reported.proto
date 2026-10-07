@@ -4,12 +4,14 @@ package contracts.supporting.profile.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
 
+import "google/protobuf/timestamp.proto";
+
 message InjuryDetails {
   string injury_id = 1;
   string muscle_group = 2;
   string severity = 3;
   string notes = 4;
-  string reported_at = 5;
+  google.protobuf.Timestamp reported_at = 5;
 }
 
 message InjuryReported {

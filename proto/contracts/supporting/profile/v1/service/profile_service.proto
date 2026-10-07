@@ -57,6 +57,14 @@ service ProfileService {
     };
   }
 
+  // Cập nhật thông tin định danh cá nhân (Họ tên, ảnh đại diện)
+  rpc UpdateIdentity (contracts.supporting.profile.v1.message.UpdateIdentityRequest) returns (contracts.supporting.profile.v1.message.UpdateIdentityResponse) {
+    option (google.api.http) = {
+      patch: "/api/v1/profile/identity"
+      body: "*"
+    };
+  }
+
   // Cập nhật chỉ số cơ thể định kỳ (Cân nặng, Body Fat, ảnh tiến trình)
   rpc LogPeriodicMetrics (contracts.supporting.profile.v1.message.LogPeriodicMetricsRequest) returns (contracts.supporting.profile.v1.message.LogPeriodicMetricsResponse) {
     option (google.api.http) = {

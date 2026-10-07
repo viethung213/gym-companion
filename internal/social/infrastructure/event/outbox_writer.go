@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/application/port"
 	domainEvent "github.com/viethung213/gym-companion/internal/social/domain/event"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type OutboxWriter struct {
@@ -233,7 +234,7 @@ func (w *OutboxWriter) publishNotificationRequested(
 		Body:        body,
 		Data:        dataMap,
 		Channels:    []string{"PUSH"},
-		RequestedAt: now.Format(time.RFC3339),
+		RequestedAt: timestamppb.New(now),
 	}
 
 	dataBytes, err := protojson.Marshal(notifProto)

@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	domainEvent "github.com/viethung213/gym-companion/internal/profile/domain/event"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type OutboxWriter struct {
@@ -42,6 +43,8 @@ func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 		return w.publishInjuryReported(ctx, e)
 	case *domainEvent.InjuryRecoveredEvent:
 		return w.publishInjuryRecovered(ctx, e)
+	case *domainEvent.UserIdentityUpdatedEvent:
+		return w.publishUserIdentityUpdated(ctx, e)
 	default:
 		return fmt.Errorf("unsupported profile domain event: %T", ev)
 	}
@@ -62,6 +65,7 @@ func (w *OutboxWriter) publishProfileUpdated(ctx context.Context, ev *domainEven
 		Gender:         bio.Gender(),
 		Goals:          ev.Goals(),
 		CompletionRate: float32(ev.CompletionRate()),
+		UpdatedAt:      timestamppb.New(ev.UpdatedAt()),
 	}
 
 	payloadBytes, err := protojson.Marshal(payloadProto)
@@ -116,7 +120,7 @@ func (w *OutboxWriter) publishProfileCompleted(ctx context.Context, ev *domainEv
 		Goals:                 ev.Goals(),
 		RegisteredInjuries:    registeredInjuries,
 		PreferredWorkoutTimes: ev.PreferredWorkoutTimes(),
-		CompletedAt:           ev.CompletedAt().Format(time.RFC3339),
+		CompletedAt:           timestamppb.New(ev.CompletedAt()),
 	}
 
 	payloadBytes, err := protojson.Marshal(payloadProto)
@@ -162,7 +166,7 @@ func (w *OutboxWriter) publishInjuryReported(ctx context.Context, ev *domainEven
 			MuscleGroup: inj.MuscleGroup(),
 			Severity:    inj.Severity(),
 			Notes:       inj.Notes(),
-			ReportedAt:  inj.ReportedAt().Format(time.RFC3339),
+			ReportedAt:  timestamppb.New(inj.ReportedAt()),
 		},
 	}
 
@@ -206,7 +210,7 @@ func (w *OutboxWriter) publishInjuryRecovered(ctx context.Context, ev *domainEve
 		UserId:      ev.UserID(),
 		InjuryId:    inj.ID(),
 		MuscleGroup: inj.MuscleGroup(),
-		RecoveredAt: ev.RecoveredAt().Format(time.RFC3339),
+		RecoveredAt: timestamppb.New(ev.RecoveredAt()),
 	}
 
 	payloadBytes, err := protojson.Marshal(payloadProto)
@@ -223,6 +227,48 @@ func (w *OutboxWriter) publishInjuryRecovered(ctx context.Context, ev *domainEve
 		"source":          "services/profile-service",
 		"type":            eventType,
 		"time":            ev.RecoveredAt().Format(time.RFC3339),
+		"datacontenttype": "application/json",
+		"data":            json.RawMessage(payloadBytes),
+	}
+
+	cloudEventBytes, err := json.Marshal(cloudEvent)
+	if err != nil {
+		return fmt.Errorf("marshal cloudevent envelope: %w", err)
+	}
+
+	record := &port.OutboxRecord{
+		ID:           uuid.New().String(),
+		EventID:      eventID,
+		EventType:    eventType,
+		Payload:      cloudEventBytes,
+		PartitionKey: ev.UserID(),
+	}
+
+	return w.outboxRepo.Save(ctx, record)
+}
+
+func (w *OutboxWriter) publishUserIdentityUpdated(ctx context.Context, ev *domainEvent.UserIdentityUpdatedEvent) error {
+	payloadProto := &profilev1event.UserIdentityUpdated{
+		UserId:    ev.UserID(),
+		FullName:  ev.FullName(),
+		AvatarUrl: ev.AvatarURL(),
+		UpdatedAt: timestamppb.New(ev.UpdatedAt()),
+	}
+
+	payloadBytes, err := protojson.Marshal(payloadProto)
+	if err != nil {
+		return fmt.Errorf("marshal UserIdentityUpdated payload proto: %w", err)
+	}
+
+	eventID := uuid.New().String()
+	eventType := "contracts.supporting.profile.v1.event.UserIdentityUpdated"
+
+	cloudEvent := map[string]interface{}{
+		"specversion":     "1.0",
+		"id":              eventID,
+		"source":          "services/profile-service",
+		"type":            eventType,
+		"time":            ev.UpdatedAt().Format(time.RFC3339),
 		"datacontenttype": "application/json",
 		"data":            json.RawMessage(payloadBytes),
 	}
