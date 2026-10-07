@@ -6,14 +6,10 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event;authv1event";
 
-message UserRegistered {
+// UserRoleUpdated phát ra khi vai trò của một tài khoản thay đổi (ví dụ: được phê duyệt thành Brand).
+message UserRoleUpdated {
   string user_id = 1;
-  string identity_type = 2;
-  string identifier = 3;
-  string full_name = 4;
-  google.protobuf.Timestamp registered_at = 5;
-  string avatar_url = 6;
-  string gender = 7;
-  string date_of_birth = 8;
-  string role = 9;
+  string old_role = 2;
+  string new_role = 3;
+  google.protobuf.Timestamp updated_at = 4;
 }

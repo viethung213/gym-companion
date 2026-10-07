@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/entity"
+	"github.com/viethung213/gym-companion/internal/auth/domain/event"
 	"github.com/viethung213/gym-companion/internal/auth/domain/repository"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
@@ -188,6 +189,45 @@ func TestApproveBrandHandler(t *testing.T) {
 			t.Fatalf("got err %v, want %v", err, derror.ErrBrandRequestNotPending)
 		}
 	})
+
+	t.Run("success approve with outbox event publishing", func(t *testing.T) {
+		outbox := &mockOutboxWriter{}
+		handlerWithOutbox := NewApproveBrandHandler(brandRepo, userRepo, txManager, outbox)
+
+		u := aggregate.RegisterUser("user-event", "Brand User", aggregate.Identity{}, "")
+		_ = userRepo.Create(ctx, u)
+
+		req, _ := entity.NewBrandRequest("req-event", "user-event", "Event Brand", "Desc", "0912345678", "Street", time.Now())
+		_ = brandRepo.Create(ctx, req)
+
+		err := handlerWithOutbox.Handle(ctx, ApproveBrandCommand{
+			AdminID:   "admin-1",
+			RequestID: "req-event",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(outbox.events) != 1 {
+			t.Fatalf("expected 1 outbox event, got %d", len(outbox.events))
+		}
+		roleEvent, ok := outbox.events[0].(event.UserRoleUpdatedEvent)
+		if !ok {
+			t.Fatalf("expected UserRoleUpdatedEvent, got %T", outbox.events[0])
+		}
+		if roleEvent.UserID != "user-event" || roleEvent.NewRole != "brand" {
+			t.Errorf("unexpected event content: %+v", roleEvent)
+		}
+	})
+}
+
+type mockOutboxWriter struct {
+	events []event.DomainEvent
+}
+
+func (m *mockOutboxWriter) Write(ctx context.Context, ev event.DomainEvent) error {
+	m.events = append(m.events, ev)
+	return nil
 }
 
 func TestRejectBrandHandler(t *testing.T) {

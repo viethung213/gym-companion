@@ -47,3 +47,21 @@ func (e OTPSentEvent) OccurredAt() time.Time {
 func (e OTPSentEvent) EventName() string {
 	return "contracts.generic.notification.v1.event.HighPriorityNotificationRequested"
 }
+
+// UserRoleUpdatedEvent is triggered when a user's role is updated (e.g. approved as Brand).
+type UserRoleUpdatedEvent struct {
+	UserID    string
+	OldRole   string
+	NewRole   string
+	UpdatedAt time.Time
+}
+
+// OccurredAt returns the time the event happened.
+func (e UserRoleUpdatedEvent) OccurredAt() time.Time {
+	return e.UpdatedAt
+}
+
+// EventName returns the name identifier of the event.
+func (e UserRoleUpdatedEvent) EventName() string {
+	return "contracts.generic.auth.v1.userRoleUpdated"
+}
