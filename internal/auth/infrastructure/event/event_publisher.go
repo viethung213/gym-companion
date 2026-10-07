@@ -55,6 +55,7 @@ func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent
 		Gender:       ev.Gender,
 		DateOfBirth:  ev.DateOfBirth,
 		AvatarUrl:    ev.AvatarURL,
+		Role:         ev.Role,
 		RegisteredAt: timestamppb.New(ev.RegisteredAt),
 	}
 

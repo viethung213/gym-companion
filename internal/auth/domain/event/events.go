@@ -17,6 +17,7 @@ type UserRegisteredEvent struct {
 	Gender       string
 	DateOfBirth  string
 	AvatarURL    string
+	Role         string
 	RegisteredAt time.Time
 }
 
