@@ -1,0 +1,172 @@
+syntax = "proto3";
+
+package contracts.supporting.social.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/service;socialv1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/supporting/social/v1/message/social_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Social & Activity Feed API"
+    version: "1.0"
+    description: "API quản lý quan hệ bạn bè/theo dõi, bài viết, dòng hoạt động (feed), reactions và bình luận."
+  }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
+};
+
+service SocialService {
+  option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_tag) = {
+    name: "Social / Community"
+    description: "API Mạng xã hội, Theo dõi và Activity Feed"
+  };
+
+  // --- Follow / Unfollow & Social Graph ---
+
+  // Theo dõi một người dùng khác
+  rpc FollowUser (contracts.supporting.social.v1.message.FollowUserRequest) returns (contracts.supporting.social.v1.message.FollowUserResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/social/follow"
+      body: "*"
+    };
+  }
+
+  // Hủy theo dõi một người dùng
+  rpc UnfollowUser (contracts.supporting.social.v1.message.UnfollowUserRequest) returns (contracts.supporting.social.v1.message.UnfollowUserResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/social/unfollow"
+      body: "*"
+    };
+  }
+
+  // Lấy danh sách những người theo dõi một user (Followers)
+  rpc GetFollowers (contracts.supporting.social.v1.message.GetFollowersRequest) returns (contracts.supporting.social.v1.message.GetFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/users/{user_id}/followers"
+      additional_bindings {
+        get: "/api/v1/social/me/followers"
+      }
+    };
+  }
+
+  // Lấy danh sách những người mà một user đang theo dõi (Following)
+  rpc GetFollowing (contracts.supporting.social.v1.message.GetFollowingRequest) returns (contracts.supporting.social.v1.message.GetFollowingResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/users/{user_id}/following"
+      additional_bindings {
+        get: "/api/v1/social/me/following"
+      }
+    };
+  }
+
+  // Lấy thống kê mạng xã hội của một user (Followers, Following, Posts, is_following)
+  rpc GetSocialSummary (contracts.supporting.social.v1.message.GetSocialSummaryRequest) returns (contracts.supporting.social.v1.message.GetSocialSummaryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/users/{user_id}/summary"
+      additional_bindings {
+        get: "/api/v1/social/me/summary"
+      }
+    };
+  }
+
+  // Tìm kiếm danh sách người dùng và brand để theo dõi lẫn nhau (không hỗ trợ admin)
+  rpc SearchUsers (contracts.supporting.social.v1.message.SearchUsersRequest) returns (contracts.supporting.social.v1.message.SearchUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/users"
+      additional_bindings {
+        get: "/api/v1/social/users/search"
+      }
+    };
+  }
+
+  // --- Feed Items (Posts & Activities) ---
+
+  // Tạo bài viết mới
+  rpc CreatePost (contracts.supporting.social.v1.message.CreatePostRequest) returns (contracts.supporting.social.v1.message.CreatePostResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/social/posts"
+      body: "*"
+    };
+  }
+
+  // Xóa bài viết / hoạt động
+  rpc DeleteFeedItem (contracts.supporting.social.v1.message.DeleteFeedItemRequest) returns (contracts.supporting.social.v1.message.DeleteFeedItemResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/social/feed-items/{feed_item_id}"
+    };
+  }
+
+  // Lấy bảng tin hoạt động (Activity Feed) của bạn bè đang follow
+  rpc GetActivityFeed (contracts.supporting.social.v1.message.GetActivityFeedRequest) returns (contracts.supporting.social.v1.message.GetActivityFeedResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/feed"
+    };
+  }
+
+  // Lấy dòng hoạt động trên trang cá nhân của một người dùng
+  rpc GetUserProfileFeed (contracts.supporting.social.v1.message.GetUserProfileFeedRequest) returns (contracts.supporting.social.v1.message.GetUserProfileFeedResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/users/{user_id}/feed"
+      additional_bindings {
+        get: "/api/v1/social/me/feed"
+      }
+    };
+  }
+
+  // --- Reactions & Comments ---
+
+  // Thả cảm xúc hoặc toggle hủy cảm xúc trên Feed Item
+  rpc ReactTarget (contracts.supporting.social.v1.message.ReactTargetRequest) returns (contracts.supporting.social.v1.message.ReactTargetResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/social/feed-items/{feed_item_id}/reactions"
+      body: "*"
+    };
+  }
+
+  // Lấy danh sách các tương tác/cảm xúc trên Feed Item
+  rpc ListReactions (contracts.supporting.social.v1.message.ListReactionsRequest) returns (contracts.supporting.social.v1.message.ListReactionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/feed-items/{feed_item_id}/reactions"
+    };
+  }
+
+  // Thêm bình luận vào Feed Item
+  rpc AddComment (contracts.supporting.social.v1.message.AddCommentRequest) returns (contracts.supporting.social.v1.message.AddCommentResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/social/feed-items/{feed_item_id}/comments"
+      body: "*"
+    };
+  }
+
+  // Lấy danh sách bình luận trên Feed Item
+  rpc ListComments (contracts.supporting.social.v1.message.ListCommentsRequest) returns (contracts.supporting.social.v1.message.ListCommentsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/feed-items/{feed_item_id}/comments"
+    };
+  }
+
+  // Xóa bình luận
+  rpc DeleteComment (contracts.supporting.social.v1.message.DeleteCommentRequest) returns (contracts.supporting.social.v1.message.DeleteCommentResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/social/comments/{comment_id}"
+    };
+  }
+}

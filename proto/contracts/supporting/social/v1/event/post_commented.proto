@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package contracts.supporting.social.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/event;socialv1event";
+
+message PostCommented {
+  string comment_id = 1;
+  string feed_item_id = 2;
+  string post_owner_id = 3;
+  string user_id = 4;
+  string user_name = 5;
+  string user_avatar_url = 6;
+  string content = 7;
+  optional string parent_id = 8;
+  google.protobuf.Timestamp commented_at = 9;
+}

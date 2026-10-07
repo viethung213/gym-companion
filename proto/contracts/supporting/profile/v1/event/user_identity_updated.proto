@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package contracts.supporting.profile.v1.event;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
+
+import "google/protobuf/timestamp.proto";
+
+message UserIdentityUpdated {
+  string user_id = 1;
+  string full_name = 2;
+  string avatar_url = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}

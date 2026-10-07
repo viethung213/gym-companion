@@ -23,6 +23,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"github.com/viethung213/gym-companion/internal/social"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -191,6 +192,21 @@ func run() error {
 	}
 	defer shutdownCoaching()
 
+	// Initialize Social Module
+	socialDB, err := dbRegistry.GetPool("social")
+	if err != nil {
+		log.Println("Warning: social database pool not found, falling back to auth pool.")
+		socialDB = db
+	}
+	socialGRPCHandler, shutdownSocial, err := social.Initialize(ctx, social.ModuleDeps{
+		DB:            socialDB,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize social module: %w", err)
+	}
+	defer shutdownSocial()
+
 	// 2. Start Unified HTTP Server with ConnectRPC, h2c, and CORS on Port 8080
 	log.Printf("🚀 Starting Unified API Server (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
@@ -209,6 +225,7 @@ func run() error {
 	workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)
 	nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors)
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
+	social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors)
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 
