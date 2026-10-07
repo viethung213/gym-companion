@@ -1,0 +1,21 @@
+package entity_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/viethung213/gym-companion/internal/social/domain/entity"
+)
+
+func TestUserSnapshot(t *testing.T) {
+	now := time.Now().UTC()
+	u := entity.NewUserSnapshot("u-1", "Alice", "https://avatar.png", "user", now)
+	if u.ID() != "u-1" || u.FullName() != "Alice" || u.AvatarURL() != "https://avatar.png" || u.Role() != "user" || u.UpdatedAt() != now {
+		t.Errorf("unexpected snapshot properties")
+	}
+
+	u.UpdateRole("brand")
+	if u.Role() != "brand" {
+		t.Errorf("expected role 'brand', got %s", u.Role())
+	}
+}

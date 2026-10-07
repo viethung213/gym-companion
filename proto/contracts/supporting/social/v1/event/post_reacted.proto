@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package contracts.supporting.social.v1.event;
+
+import "contracts/supporting/social/v1/message/social_messages.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/event;socialv1event";
+
+message PostReacted {
+  string feed_item_id = 1;
+  string post_owner_id = 2;
+  string user_id = 3;
+  string user_name = 4;
+  string user_avatar_url = 5;
+  contracts.supporting.social.v1.message.ReactionType reaction_type = 6;
+  google.protobuf.Timestamp reacted_at = 7;
+}

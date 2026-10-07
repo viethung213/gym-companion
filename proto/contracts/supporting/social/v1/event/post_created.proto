@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package contracts.supporting.social.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/event;socialv1event";
+
+message PostCreated {
+  string post_id = 1;
+  string user_id = 2;
+  string content = 3;
+  repeated string media_urls = 4;
+  string visibility = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
