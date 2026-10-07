@@ -110,7 +110,7 @@ func (p *OutboxWriter) publishOTPSent(ctx context.Context, ev domainEvent.OTPSen
 		Body:        fmt.Sprintf("Mã OTP của bạn là: %s. Mã có hiệu lực trong %d giây. Vui lòng không chia sẻ mã này cho bất kỳ ai.", ev.Code, ev.ExpiresInSeconds),
 		Data:        dataMap,
 		Channels:    []string{channel},
-		RequestedAt: ev.SentAt.Format(time.RFC3339),
+		RequestedAt: timestamppb.New(ev.SentAt),
 	}
 
 	payloadBytes, err := protojson.Marshal(highPriorityProto)

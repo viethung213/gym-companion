@@ -4,6 +4,7 @@ package contracts.generic.notification.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event;notificationv1event";
 
+import "google/protobuf/timestamp.proto";
 import "contracts/generic/notification/v1/event/notification_target.proto";
 
 // NormalPriorityNotificationRequested là Chuẩn Event yêu cầu phát thông báo độ ưu tiên bình thường (xử lý theo hàng đợi thông thường).
@@ -16,5 +17,5 @@ message NormalPriorityNotificationRequested {
   string body = 3;
   map<string, string> data = 4;
   repeated string channels = 5;  // Danh sách kênh mong muốn phát: "PUSH", "EMAIL", "SMS". Để trống mặc định gửi qua ["PUSH"].
-  string requested_at = 6;
+  google.protobuf.Timestamp requested_at = 6;
 }

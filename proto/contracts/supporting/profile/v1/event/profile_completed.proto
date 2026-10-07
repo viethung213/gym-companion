@@ -4,6 +4,8 @@ package contracts.supporting.profile.v1.event;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
 
+import "google/protobuf/timestamp.proto";
+
 message BiologicalMetrics {
   float weight_kg = 1;
   float height_cm = 2;
@@ -17,5 +19,5 @@ message ProfileCompleted {
   repeated string goals = 3;
   repeated string registered_injuries = 4;
   repeated string preferred_workout_times = 5;
-  string completed_at = 6;
+  google.protobuf.Timestamp completed_at = 6;
 }

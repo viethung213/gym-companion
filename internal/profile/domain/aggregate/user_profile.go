@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -166,6 +167,40 @@ func (p *UserProfile) SetIdentity(fullName, avatarURL string) {
 	if avatarURL != "" {
 		p.avatarURL = avatarURL
 	}
+}
+
+func (p *UserProfile) UpdateIdentity(fullName, avatarURL *string) error {
+	if fullName == nil && avatarURL == nil {
+		return derror.ErrEmptyIdentityUpdate
+	}
+
+	hasChange := false
+	if fullName != nil {
+		name := strings.TrimSpace(*fullName)
+		if len(name) > 100 {
+			return derror.ErrInvalidFullName
+		}
+		if name != "" && name != p.fullName {
+			p.fullName = name
+			hasChange = true
+		}
+	}
+
+	if avatarURL != nil {
+		url := strings.TrimSpace(*avatarURL)
+		if url != p.avatarURL {
+			p.avatarURL = url
+			hasChange = true
+		}
+	}
+
+	if !hasChange {
+		return nil
+	}
+
+	p.updatedAt = time.Now()
+	p.RecordEvent(event.NewUserIdentityUpdatedEvent(p.userID, p.fullName, p.avatarURL, p.updatedAt))
+	return nil
 }
 func (p *UserProfile) BiologicalMetrics() vo.BiologicalMetrics { return p.biologicalMetrics }
 func (p *UserProfile) ExperienceLevel() string                 { return p.experienceLevel }
