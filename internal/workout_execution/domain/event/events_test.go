@@ -64,4 +64,20 @@ func TestDomainEventNames(t *testing.T) {
 
 	}
 
+	ev6 := &event.WorkoutSessionShared{
+		SessionID:       "s1",
+		UserID:          "u1",
+		Caption:         "Great session!",
+		MediaURLs:       []string{"https://example.com/pic.jpg"},
+		Visibility:      "PUBLIC",
+		DurationSeconds: 3600,
+		TotalSets:       10,
+		TotalVolumeKg:   5000,
+		SharedAt:        now,
+	}
+
+	if got, want := ev6.EventName(), "contracts.core.workout_execution.v1.workoutSessionShared"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }

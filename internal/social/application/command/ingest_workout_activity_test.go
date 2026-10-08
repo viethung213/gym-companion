@@ -25,7 +25,6 @@ func TestIngestWorkoutActivityHandler(t *testing.T) {
 			DurationSeconds: 3600,
 			TotalVolumeKg:   4500.5,
 			TotalSets:       18,
-			PRCount:         2,
 			SharedAt:        time.Now().UTC(),
 		})
 		if err != nil {

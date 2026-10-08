@@ -1,6 +1,7 @@
 package aggregate_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -535,4 +536,102 @@ func TestWorkoutSession_LogSet_DuplicateSetNumberOverwritesExisting(t *testing.T
 	if updatedSet.FormScore == nil || *updatedSet.FormScore != 95.0 {
 		t.Errorf("got FormScore = %v, want 95.0", updatedSet.FormScore)
 	}
+}
+
+func TestWorkoutSession_Share(t *testing.T) {
+	t.Run("cannot share in-progress session", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-share-1", "u1", "p1")
+		err := sess.Share("Caption", nil, "PUBLIC", "Bench Press", 1)
+		if !errors.Is(err, derror.ErrSessionNotCompleted) {
+			t.Errorf("got err = %v, want ErrSessionNotCompleted", err)
+		}
+		if sess.IsShared() {
+			t.Error("want IsShared = false")
+		}
+	})
+
+	t.Run("successfully share completed session", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-share-2", "u1", "p1")
+		_ = sess.LogSet(aggregate.WorkoutSetLog{
+			ID:         "set-1",
+			SetNumber:  1,
+			ExerciseID: "bench-press",
+			ActualReps: 10,
+			Weight:     60.0,
+		})
+		_ = sess.Complete(false, false)
+		sess.PopEvents() // clear prior events
+
+		mediaURLs := []string{"https://media.com/1.jpg"}
+		err := sess.Share("Killed chest day!", mediaURLs, "PUBLIC", "Bench Press", 1)
+		if err != nil {
+			t.Fatalf("Share() err = %v, want nil", err)
+		}
+		if !sess.IsShared() {
+			t.Error("want IsShared = true")
+		}
+
+		events := sess.PopEvents()
+		if len(events) != 1 {
+			t.Fatalf("got %d events, want 1", len(events))
+		}
+		ev, ok := events[0].(*event.WorkoutSessionShared)
+		if !ok {
+			t.Fatalf("expected *event.WorkoutSessionShared, got %T", events[0])
+		}
+		if ev.SessionID != "s-share-2" || ev.UserID != "u1" {
+			t.Errorf("event session/user mismatch: %+v", ev)
+		}
+		if ev.Caption != "Killed chest day!" {
+			t.Errorf("event caption mismatch: %+v", ev)
+		}
+		if ev.WorkoutTitle != "Bench Press" {
+			t.Errorf("got WorkoutTitle = %s, want Bench Press", ev.WorkoutTitle)
+		}
+		if ev.ExerciseCount != 1 {
+			t.Errorf("got ExerciseCount = %d, want 1", ev.ExerciseCount)
+		}
+		if ev.TotalSets != 1 || ev.TotalVolumeKg != 600.0 {
+			t.Errorf("got sets = %d, volume = %v; want 1, 600.0", ev.TotalSets, ev.TotalVolumeKg)
+		}
+		if len(ev.MediaURLs) != 1 || ev.MediaURLs[0] != "https://media.com/1.jpg" {
+			t.Errorf("got MediaURLs = %v", ev.MediaURLs)
+		}
+		if ev.EventName() != "contracts.core.workout_execution.v1.workoutSessionShared" {
+			t.Errorf("unexpected event name: %s", ev.EventName())
+		}
+	})
+
+	t.Run("cannot share twice", func(t *testing.T) {
+		sess, _ := aggregate.NewWorkoutSession("s-share-3", "u1", "p1")
+		_ = sess.Complete(false, false)
+		err := sess.Share("Caption", nil, "PUBLIC", "Bench Press", 1)
+		if err != nil {
+			t.Fatalf("first Share() err = %v, want nil", err)
+		}
+
+		err = sess.Share("Caption 2", nil, "PUBLIC", "Bench Press", 1)
+		if !errors.Is(err, derror.ErrSessionAlreadyShared) {
+			t.Errorf("second Share() got err = %v, want ErrSessionAlreadyShared", err)
+		}
+	})
+
+	t.Run("ReconstituteWorkoutSession restores shared state", func(t *testing.T) {
+		now := time.Now().UTC()
+		sessNotShared := aggregate.ReconstituteWorkoutSession(
+			"s-share-4", "u1", "p1", aggregate.StatusCompleted,
+			nil, nil, nil, &now, &now, now, now, false, 1,
+		)
+		if sessNotShared.IsShared() {
+			t.Error("want IsShared = false")
+		}
+
+		sessShared := aggregate.ReconstituteWorkoutSession(
+			"s-share-5", "u1", "p1", aggregate.StatusCompleted,
+			nil, nil, nil, &now, &now, now, now, true, 1,
+		)
+		if !sessShared.IsShared() {
+			t.Error("want IsShared = true")
+		}
+	})
 }

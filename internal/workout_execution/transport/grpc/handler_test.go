@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	workoutexecutionv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
@@ -172,6 +173,7 @@ func TestGRPCHandler(t *testing.T) {
 	startScheduledH := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, nil, tx)
 	logSetH := command.NewLogWorkoutSetHandler(sessionRepo, nil, tx)
 	completeH := command.NewCompleteWorkoutSessionHandler(sessionRepo, nil, nil, nil, tx)
+	shareH := command.NewShareWorkoutSessionHandler(sessionRepo, motionRepo, nil, tx)
 	abortH := command.NewAbortWorkoutSessionHandler(sessionRepo, nil, tx)
 	syncH := command.NewSyncWorkoutLogsHandler(sessionRepo, nil, tx)
 
@@ -181,7 +183,7 @@ func TestGRPCHandler(t *testing.T) {
 	historyQ := query.NewGetWorkoutHistoryQueryHandler(sessionRepo)
 
 	grpcHandler := grpc.NewGRPCHandler(
-		startH, startScheduledH, logSetH, completeH, abortH, syncH,
+		startH, startScheduledH, logSetH, completeH, shareH, abortH, syncH,
 		motionQ, prQ, errsQ, historyQ,
 		command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
 		command.NewDeleteMotionSpecificationHandler(motionRepo),
@@ -308,6 +310,70 @@ func TestGRPCHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("ShareWorkoutSession error and success", func(t *testing.T) {
+		// Unauthenticated
+		_, err := grpcHandler.ShareWorkoutSession(context.Background(), &workoutexecutionv1message.ShareWorkoutSessionRequest{SessionId: "sess-1"})
+		if err == nil {
+			t.Fatal("got nil, want unauthenticated error")
+		}
+
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+
+		// Missing session_id
+		_, err = grpcHandler.ShareWorkoutSession(ctxUser, &workoutexecutionv1message.ShareWorkoutSessionRequest{})
+		if err == nil {
+			t.Fatal("got nil, want invalid argument error")
+		}
+
+		// Session not found
+		sessionRepo.session = nil
+		_, err = grpcHandler.ShareWorkoutSession(ctxUser, &workoutexecutionv1message.ShareWorkoutSessionRequest{SessionId: "sess-1"})
+		if err == nil {
+			t.Fatal("got nil, want not found error")
+		}
+
+		// Success via gRPC handler
+		session, _ := aggregate.NewWorkoutSession("sess-1", "u1", "p1")
+		_ = session.Complete(false, false)
+		sessionRepo.session = session
+
+		res, err := grpcHandler.ShareWorkoutSession(ctxUser, &workoutexecutionv1message.ShareWorkoutSessionRequest{
+			SessionId: "sess-1",
+			Caption:   "Finished chest workout!",
+			MediaUrls: []string{"https://media.com/1.jpg"},
+		})
+		if err != nil {
+			t.Fatalf("ShareWorkoutSession err = %v, want nil", err)
+		}
+		if res.GetSessionId() != "sess-1" {
+			t.Errorf("got session_id = %q, want 'sess-1'", res.GetSessionId())
+		}
+		if !res.GetIsShared() {
+			t.Error("want is_shared = true")
+		}
+		if res.GetSharedAt() == nil {
+			t.Error("want non-nil shared_at")
+		}
+
+		// Success via Connect handler
+		sessionConnect, _ := aggregate.NewWorkoutSession("sess-connect", "u1", "p1")
+		_ = sessionConnect.Complete(false, false)
+		sessionRepo.session = sessionConnect
+
+		connectHandler := grpc.NewConnectWorkoutExecutionHandler(grpcHandler)
+		connectReq := connect.NewRequest(&workoutexecutionv1message.ShareWorkoutSessionRequest{
+			SessionId: "sess-connect",
+			Caption:   "Connect share test",
+		})
+		connectRes, err := connectHandler.ShareWorkoutSession(ctxUser, connectReq)
+		if err != nil {
+			t.Fatalf("Connect ShareWorkoutSession err = %v, want nil", err)
+		}
+		if connectRes.Msg.GetSessionId() != "sess-connect" || !connectRes.Msg.GetIsShared() {
+			t.Errorf("unexpected connect response: %+v", connectRes.Msg)
+		}
+	})
+
 	t.Run("SyncWorkoutLogs error and success", func(t *testing.T) {
 		sessionRepo.session = nil
 		_, err := grpcHandler.SyncWorkoutLogs(context.Background(), &workoutexecutionv1message.SyncWorkoutLogsRequest{SessionId: "sess-1"})
@@ -401,8 +467,8 @@ func TestGRPCHandler(t *testing.T) {
 
 		sessionRepo.err = nil
 		now := time.Now().UTC()
-		sessStarted := aggregate.ReconstituteWorkoutSession("sess-1", "u1", "p1", aggregate.StatusInProgress, nil, nil, nil, &now, nil, now, now)
-		sessUnstarted := aggregate.ReconstituteWorkoutSession("sess-2", "u1", "p1", aggregate.StatusScheduled, nil, nil, nil, nil, nil, now, now)
+		sessStarted := aggregate.ReconstituteWorkoutSession("sess-1", "u1", "p1", aggregate.StatusInProgress, nil, nil, nil, &now, nil, now, now, false)
+		sessUnstarted := aggregate.ReconstituteWorkoutSession("sess-2", "u1", "p1", aggregate.StatusScheduled, nil, nil, nil, nil, nil, now, now, false)
 
 		sessionRepo.sessions = []*aggregate.WorkoutSession{sessStarted, sessUnstarted}
 
@@ -451,7 +517,7 @@ func TestGRPCHandler(t *testing.T) {
 
 		// Coach attempt -> Success
 		now := time.Now().UTC()
-		sessStarted := aggregate.ReconstituteWorkoutSession("sess-1", "u1", "p1", aggregate.StatusInProgress, nil, nil, nil, &now, nil, now, now)
+		sessStarted := aggregate.ReconstituteWorkoutSession("sess-1", "u1", "p1", aggregate.StatusInProgress, nil, nil, nil, &now, nil, now, now, false)
 		sessionRepo.sessions = []*aggregate.WorkoutSession{sessStarted}
 
 		res, err := grpcHandler.AdminGetWorkoutHistory(ctxCoach, &workoutexecutionv1message.AdminGetWorkoutHistoryRequest{UserId: "u1", Limit: 10})
@@ -528,6 +594,7 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 			startScheduledH := command.NewStartScheduledWorkoutSessionHandler(repo, nil, tx)
 			logSetH := command.NewLogWorkoutSetHandler(repo, nil, tx)
 			completeH := command.NewCompleteWorkoutSessionHandler(repo, nil, nil, nil, tx)
+			shareH := command.NewShareWorkoutSessionHandler(repo, motionRepo, nil, tx)
 			abortH := command.NewAbortWorkoutSessionHandler(repo, nil, tx)
 			syncH := command.NewSyncWorkoutLogsHandler(repo, nil, tx)
 			motionQ := query.NewGetMotionSpecificationQueryHandler(motionRepo)
@@ -536,7 +603,7 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 			historyQ := query.NewGetWorkoutHistoryQueryHandler(repo)
 
 			h := grpc.NewGRPCHandler(
-				startH, startScheduledH, logSetH, completeH, abortH, syncH,
+				startH, startScheduledH, logSetH, completeH, shareH, abortH, syncH,
 				motionQ, prQ, errsQ, historyQ,
 				command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
 				command.NewDeleteMotionSpecificationHandler(motionRepo),

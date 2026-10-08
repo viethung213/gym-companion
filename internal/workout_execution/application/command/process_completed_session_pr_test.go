@@ -26,7 +26,7 @@ func TestProcessCompletedSessionForPRHandler(t *testing.T) {
 			"s1", "u1", "p1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 		session.CheckTimeoutAndAutoAbort(now) // turns into StatusAnomalous
 

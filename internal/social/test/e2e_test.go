@@ -183,7 +183,6 @@ func TestE2E_FullSocialJourney(t *testing.T) {
 		DurationSeconds: 4200,
 		TotalVolumeKg:   5400.0,
 		TotalSets:       16,
-		PRCount:         2,
 		SharedAt:        time.Now().UTC(),
 	})
 	if err != nil {

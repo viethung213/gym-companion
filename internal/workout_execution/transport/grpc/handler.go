@@ -29,6 +29,7 @@ type GRPCHandler struct {
 	startScheduledSessionHandler *command.StartScheduledWorkoutSessionHandler
 	logSetHandler                *command.LogWorkoutSetHandler
 	completeSessionHandler       *command.CompleteWorkoutSessionHandler
+	shareSessionHandler          *command.ShareWorkoutSessionHandler
 	abortSessionHandler          *command.AbortWorkoutSessionHandler
 	syncLogsHandler              *command.SyncWorkoutLogsHandler
 	getMotionSpecQuery           *query.GetMotionSpecificationQueryHandler
@@ -53,6 +54,7 @@ func NewGRPCHandler(
 	startScheduledSessionHandler *command.StartScheduledWorkoutSessionHandler,
 	logSetHandler *command.LogWorkoutSetHandler,
 	completeSessionHandler *command.CompleteWorkoutSessionHandler,
+	shareSessionHandler *command.ShareWorkoutSessionHandler,
 	abortSessionHandler *command.AbortWorkoutSessionHandler,
 	syncLogsHandler *command.SyncWorkoutLogsHandler,
 	getMotionSpecQuery *query.GetMotionSpecificationQueryHandler,
@@ -72,6 +74,7 @@ func NewGRPCHandler(
 		startScheduledSessionHandler: startScheduledSessionHandler,
 		logSetHandler:                logSetHandler,
 		completeSessionHandler:       completeSessionHandler,
+		shareSessionHandler:          shareSessionHandler,
 		abortSessionHandler:          abortSessionHandler,
 		syncLogsHandler:              syncLogsHandler,
 		getMotionSpecQuery:           getMotionSpecQuery,
@@ -241,6 +244,36 @@ func (h *GRPCHandler) CompleteWorkoutSession(ctx context.Context, req *workoutex
 		TotalVolume:      res.TotalVolume,
 		AverageFormScore: res.AverageFormScore,
 		AverageRpe:       res.AverageRPE,
+	}, nil
+}
+
+func (h *GRPCHandler) ShareWorkoutSession(ctx context.Context, req *workoutexecutionv1message.ShareWorkoutSessionRequest) (*workoutexecutionv1message.ShareWorkoutSessionResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if req == nil || req.GetSessionId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	}
+
+	cmd := command.ShareWorkoutSessionCommand{
+		SessionID:  req.GetSessionId(),
+		UserID:     userID,
+		Caption:    req.GetCaption(),
+		MediaURLs:  req.GetMediaUrls(),
+		Visibility: req.GetVisibility(),
+	}
+
+	res, err := h.shareSessionHandler.Handle(ctx, cmd)
+	if err != nil {
+		return nil, toGRPCError("failed to share workout session", err)
+	}
+
+	return &workoutexecutionv1message.ShareWorkoutSessionResponse{
+		SessionId: res.SessionID,
+		IsShared:  res.IsShared,
+		SharedAt:  timestamppb.New(res.SharedAt),
 	}, nil
 }
 
@@ -708,7 +741,9 @@ func toGRPCError(msg string, err error) error {
 		errors.Is(err, derror.ErrSessionAlreadyCompleted),
 		errors.Is(err, derror.ErrSessionAlreadyAborted),
 		errors.Is(err, derror.ErrActiveSessionAlreadyExists),
-		errors.Is(err, derror.ErrAnomalousSessionTimeout):
+		errors.Is(err, derror.ErrAnomalousSessionTimeout),
+		errors.Is(err, derror.ErrSessionAlreadyShared),
+		errors.Is(err, derror.ErrSessionNotCompleted):
 		return status.Errorf(codes.FailedPrecondition, "%s: %v", msg, err)
 
 	// 400 Overload confirmation required — client must explicitly confirm
@@ -760,6 +795,14 @@ func (c *ConnectWorkoutExecutionHandler) LogWorkoutSet(ctx context.Context, req 
 
 func (c *ConnectWorkoutExecutionHandler) CompleteWorkoutSession(ctx context.Context, req *connect.Request[workoutexecutionv1message.CompleteWorkoutSessionRequest]) (*connect.Response[workoutexecutionv1message.CompleteWorkoutSessionResponse], error) {
 	res, err := c.grpcHandler.CompleteWorkoutSession(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) ShareWorkoutSession(ctx context.Context, req *connect.Request[workoutexecutionv1message.ShareWorkoutSessionRequest]) (*connect.Response[workoutexecutionv1message.ShareWorkoutSessionResponse], error) {
+	res, err := c.grpcHandler.ShareWorkoutSession(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}

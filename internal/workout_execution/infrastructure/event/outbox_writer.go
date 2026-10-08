@@ -147,6 +147,12 @@ func extractUserID(ev interface{}) string {
 		if e != nil {
 			return e.UserID
 		}
+	case domainEvent.WorkoutSessionShared:
+		return e.UserID
+	case *domainEvent.WorkoutSessionShared:
+		if e != nil {
+			return e.UserID
+		}
 	}
 
 	v := reflect.ValueOf(ev)
@@ -231,6 +237,13 @@ func mapToProtoEvent(ev interface{}) proto.Message {
 			Reps:       int32(e.Reps),
 			AchievedAt: timestamppb.New(e.AchievedAt),
 		}
+	case domainEvent.WorkoutSessionShared:
+		return mapWorkoutSessionSharedToProto(&e)
+	case *domainEvent.WorkoutSessionShared:
+		if e == nil {
+			return nil
+		}
+		return mapWorkoutSessionSharedToProto(e)
 	default:
 		return nil
 	}
@@ -252,5 +265,21 @@ func mapWorkoutSessionCompletedToProto(e *domainEvent.WorkoutSessionCompleted) *
 		TotalVolume:      float32(e.Summary.TotalVolume),
 		AverageFormScore: avgScore,
 		AverageRpe:       float32(e.Summary.AverageRPE),
+	}
+}
+
+func mapWorkoutSessionSharedToProto(e *domainEvent.WorkoutSessionShared) *workoutexecutionv1event.WorkoutSessionShared {
+	return &workoutexecutionv1event.WorkoutSessionShared{
+		SessionId:       e.SessionID,
+		UserId:          e.UserID,
+		Caption:         e.Caption,
+		MediaUrls:       e.MediaURLs,
+		Visibility:      e.Visibility,
+		DurationSeconds: e.DurationSeconds,
+		TotalSets:       e.TotalSets,
+		TotalVolumeKg:   e.TotalVolumeKg,
+		SharedAt:        timestamppb.New(e.SharedAt),
+		WorkoutTitle:    e.WorkoutTitle,
+		ExerciseCount:   e.ExerciseCount,
 	}
 }

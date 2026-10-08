@@ -76,6 +76,19 @@ message CompleteWorkoutSessionResponse {
   float average_rpe = 6;
 }
 
+message ShareWorkoutSessionRequest {
+  string session_id = 1;
+  string caption = 2;             // Tùy chọn: lời tựa bài viết (có thể bỏ trống)
+  repeated string media_urls = 3; // Tùy chọn: danh sách URL ảnh/video (có thể bỏ trống)
+  string visibility = 4;          // Tùy chọn: mặc định là PUBLIC nếu bỏ trống
+}
+
+message ShareWorkoutSessionResponse {
+  string session_id = 1;
+  bool is_shared = 2;
+  google.protobuf.Timestamp shared_at = 3;
+}
+
 message ErrorLog {
   string error_code = 1;
   string severity = 2;

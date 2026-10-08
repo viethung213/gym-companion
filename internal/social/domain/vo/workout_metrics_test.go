@@ -8,7 +8,7 @@ import (
 
 func TestWorkoutMetrics(t *testing.T) {
 	t.Run("valid positive metrics", func(t *testing.T) {
-		m := vo.NewWorkoutMetrics("sess-1", "Chest Day", 3600, 5200.5, 5, 20, 2)
+		m := vo.NewWorkoutMetrics("sess-1", "Chest Day", 3600, 5200.5, 5, 20)
 
 		if m.SessionID() != "sess-1" {
 			t.Fatalf("got session id %q, want %q", m.SessionID(), "sess-1")
@@ -28,16 +28,13 @@ func TestWorkoutMetrics(t *testing.T) {
 		if m.TotalSets() != 20 {
 			t.Fatalf("got total sets %d, want 20", m.TotalSets())
 		}
-		if m.PRCount() != 2 {
-			t.Fatalf("got pr count %d, want 2", m.PRCount())
-		}
 		if m.IsZero() {
 			t.Fatalf("expected non-zero metrics")
 		}
 	})
 
 	t.Run("negative values clamped to zero", func(t *testing.T) {
-		m := vo.NewWorkoutMetrics("", "", -100, -50.0, -2, -5, -1)
+		m := vo.NewWorkoutMetrics("", "", -100, -50.0, -2, -5)
 
 		if m.DurationSeconds() != 0 {
 			t.Fatalf("got duration %d, want 0", m.DurationSeconds())
@@ -50,9 +47,6 @@ func TestWorkoutMetrics(t *testing.T) {
 		}
 		if m.TotalSets() != 0 {
 			t.Fatalf("got total sets %d, want 0", m.TotalSets())
-		}
-		if m.PRCount() != 0 {
-			t.Fatalf("got pr count %d, want 0", m.PRCount())
 		}
 		if !m.IsZero() {
 			t.Fatalf("expected IsZero to be true")

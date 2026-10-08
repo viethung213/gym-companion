@@ -15,7 +15,6 @@ type workoutDataJSON struct {
 	TotalVolumeKg   float64 `json:"total_volume_kg,omitempty"`
 	ExerciseCount   int32   `json:"exercise_count,omitempty"`
 	TotalSets       int32   `json:"total_sets,omitempty"`
-	PRCount         int32   `json:"pr_count,omitempty"`
 }
 
 func ToDomainFollow(m *FollowModel) (*aggregate.Follow, error) {
@@ -54,7 +53,6 @@ func ToDomainFeedItem(m *FeedItemModel) (*aggregate.FeedItem, error) {
 			wj.TotalVolumeKg,
 			wj.ExerciseCount,
 			wj.TotalSets,
-			wj.PRCount,
 		)
 
 		return aggregate.NewWorkoutActivityItem(
@@ -96,7 +94,6 @@ func ToPersistenceFeedItem(item *aggregate.FeedItem) *FeedItemModel {
 			TotalVolumeKg:   item.WorkoutData().TotalVolumeKg(),
 			ExerciseCount:   item.WorkoutData().ExerciseCount(),
 			TotalSets:       item.WorkoutData().TotalSets(),
-			PRCount:         item.WorkoutData().PRCount(),
 		}
 		dataBytes, _ = json.Marshal(wj)
 	} else {

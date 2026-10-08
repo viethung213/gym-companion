@@ -108,13 +108,13 @@ func (c *WorkoutSharedConsumer) handleEvent(ctx context.Context, _ string, event
 	return c.ingestHandler.Handle(ctx, command.IngestWorkoutActivityCommand{
 		SessionID:       event.GetSessionId(),
 		UserID:          event.GetUserId(),
-		Title:           event.GetTitle(),
+		Title:           event.GetWorkoutTitle(),
 		Caption:         event.GetCaption(),
 		MediaURLs:       event.GetMediaUrls(),
 		DurationSeconds: event.GetDurationSeconds(),
 		TotalVolumeKg:   float64(event.GetTotalVolumeKg()),
+		ExerciseCount:   event.GetExerciseCount(),
 		TotalSets:       event.GetTotalSets(),
-		PRCount:         event.GetPrCount(),
 		SharedAt:        sharedAt,
 	})
 }

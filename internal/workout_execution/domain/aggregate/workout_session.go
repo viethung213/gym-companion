@@ -115,6 +115,7 @@ type WorkoutSession struct {
 	createdAt    time.Time
 	updatedAt    time.Time
 	version      int
+	isShared     bool
 	domainEvents []interface{}
 }
 
@@ -180,6 +181,7 @@ func ReconstituteWorkoutSession(
 	startedAt *time.Time,
 	endedAt *time.Time,
 	createdAt, updatedAt time.Time,
+	isShared bool,
 	version ...int,
 ) *WorkoutSession {
 	v := 1
@@ -198,6 +200,7 @@ func ReconstituteWorkoutSession(
 		endedAt:     endedAt,
 		createdAt:   createdAt,
 		updatedAt:   updatedAt,
+		isShared:    isShared,
 		version:     v,
 	}
 }
@@ -221,6 +224,9 @@ func (s *WorkoutSession) Version() int {
 	}
 	return s.version
 }
+
+// IsShared returns whether the session has been shared to the social feed.
+func (s *WorkoutSession) IsShared() bool { return s.isShared }
 
 // ScheduledAt returns defensive copy of planned time.
 func (s *WorkoutSession) ScheduledAt() *time.Time {
@@ -534,6 +540,64 @@ func (s *WorkoutSession) MarkCriticalInactivity(now, lastCriticalAt time.Time) e
 		Reason:      reason,
 		IsAnomalous: true,
 		AbortedAt:   now,
+	})
+
+	return nil
+}
+
+// Share marks the completed session as shared and produces a WorkoutSessionShared domain event.
+// Each session can only be shared once.
+func (s *WorkoutSession) Share(
+	caption string,
+	mediaURLs []string,
+	visibility string,
+	workoutTitle string,
+	exerciseCount int32,
+) error {
+	if s.status != StatusCompleted {
+		return derror.ErrSessionNotCompleted
+	}
+	if s.isShared {
+		return derror.ErrSessionAlreadyShared
+	}
+
+	if visibility == "" {
+		visibility = "PUBLIC"
+	}
+
+	s.isShared = true
+	now := time.Now().UTC()
+	s.updatedAt = now
+
+	var durationSeconds int32
+	if s.startedAt != nil && s.endedAt != nil {
+		duration := s.endedAt.Sub(*s.startedAt).Seconds()
+		if duration > 0 {
+			durationSeconds = int32(duration)
+		}
+	}
+
+	summary := s.CalculateSummary()
+
+	// Defensive copy of mediaURLs per Go style rule 6
+	var mediaCopy []string
+	if len(mediaURLs) > 0 {
+		mediaCopy = make([]string, len(mediaURLs))
+		copy(mediaCopy, mediaURLs)
+	}
+
+	s.addDomainEvent(&event.WorkoutSessionShared{
+		SessionID:       s.id,
+		UserID:          s.userID,
+		Caption:         caption,
+		MediaURLs:       mediaCopy,
+		Visibility:      visibility,
+		DurationSeconds: durationSeconds,
+		TotalSets:       int32(summary.TotalSets),
+		TotalVolumeKg:   summary.TotalVolume,
+		SharedAt:        now,
+		WorkoutTitle:    workoutTitle,
+		ExerciseCount:   exerciseCount,
 	})
 
 	return nil

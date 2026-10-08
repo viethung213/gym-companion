@@ -363,7 +363,6 @@ func mapFeedItemDTOToProto(item *query.FeedItemDTO) *socialv1message.FeedItem {
 			TotalVolumeKg:   float32(item.WorkoutData.TotalVolumeKg()),
 			ExerciseCount:   item.WorkoutData.ExerciseCount(),
 			TotalSets:       item.WorkoutData.TotalSets(),
-			PrCount:         item.WorkoutData.PRCount(),
 		}
 	}
 
