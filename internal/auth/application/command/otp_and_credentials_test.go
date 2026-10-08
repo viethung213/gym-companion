@@ -197,6 +197,9 @@ func TestRegisterHandler(t *testing.T) {
 	if ev.Gender != "MALE" || ev.DateOfBirth != "1995-05-15" || ev.Identifier != "newuser@example.com" || ev.IdentityType != "email" {
 		t.Fatalf("event metadata mismatch: %+v", ev)
 	}
+	if ev.AvatarURL != aggregate.DefaultAvatarURL {
+		t.Fatalf("expected default avatar url, got %s", ev.AvatarURL)
+	}
 
 	// Test 1b: Successful phone registration (auto-detected and normalized to +84...)
 	publisher.events = nil

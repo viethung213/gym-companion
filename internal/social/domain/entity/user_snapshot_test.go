@@ -19,3 +19,11 @@ func TestUserSnapshot(t *testing.T) {
 		t.Errorf("expected role 'brand', got %s", u.Role())
 	}
 }
+
+func TestUserSnapshot_DefaultAvatar(t *testing.T) {
+	now := time.Now().UTC()
+	u := entity.NewUserSnapshot("u-2", "Bob", "", "user", now)
+	if u.AvatarURL() != entity.DefaultAvatarURL {
+		t.Errorf("expected default avatar %s, got %s", entity.DefaultAvatarURL, u.AvatarURL())
+	}
+}

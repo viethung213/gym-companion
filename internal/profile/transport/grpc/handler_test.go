@@ -368,6 +368,12 @@ func TestGRPCHandler_Endpoints(t *testing.T) {
 		assert.Equal(t, newName, resOnlyAvatar.GetFullName())
 		assert.Equal(t, newAvatar, resOnlyAvatar.GetAvatarUrl())
 
+		// Update only avatar with empty string resets to DefaultAvatarURL
+		emptyAvatar := ""
+		resEmptyAvatar, err := handler.UpdateIdentity(ctx, &profilev1message.UpdateIdentityRequest{AvatarUrl: &emptyAvatar})
+		require.NoError(t, err)
+		assert.Equal(t, aggregate.DefaultAvatarURL, resEmptyAvatar.GetAvatarUrl())
+
 		// Error: Unauthenticated
 		_, err = handler.UpdateIdentity(context.Background(), req)
 		require.Error(t, err)

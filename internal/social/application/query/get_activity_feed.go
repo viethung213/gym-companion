@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/viethung213/gym-companion/internal/social/domain/entity"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
@@ -72,10 +73,12 @@ func (h *GetActivityFeedHandler) Handle(ctx context.Context, q GetActivityFeedQu
 	result := make([]*FeedItemDTO, 0, len(feedItems))
 	for _, item := range feedItems {
 		authorName := ""
-		avatarURL := ""
+		avatarURL := entity.DefaultAvatarURL
 		if u, ok := userInfoMap[item.UserID()]; ok && u != nil {
 			authorName = u.FullName()
-			avatarURL = u.AvatarURL()
+			if u.AvatarURL() != "" {
+				avatarURL = u.AvatarURL()
+			}
 		}
 
 		userReaction := ""

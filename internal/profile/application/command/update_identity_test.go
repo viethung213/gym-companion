@@ -55,6 +55,20 @@ func TestUpdateIdentityHandler_Success(t *testing.T) {
 
 	// Verify event was published
 	assert.NotEmpty(t, eventPub.published)
+
+	// Update with empty avatar URL resets to DefaultAvatarURL
+	emptyAvatar := ""
+	cmdEmpty := command.UpdateIdentityCommand{
+		UserID:    "user-identity-1",
+		AvatarURL: &emptyAvatar,
+	}
+	resEmpty, err := handler.Handle(context.Background(), cmdEmpty)
+	require.NoError(t, err)
+	assert.Equal(t, aggregate.DefaultAvatarURL, resEmpty.AvatarURL)
+
+	savedEmpty, err := repo.FindByUserID(context.Background(), "user-identity-1")
+	require.NoError(t, err)
+	assert.Equal(t, aggregate.DefaultAvatarURL, savedEmpty.AvatarURL())
 }
 
 func TestUpdateIdentityHandler_Errors(t *testing.T) {

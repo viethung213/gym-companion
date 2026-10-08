@@ -322,4 +322,32 @@ func TestUserProfile_UpdateIdentity(t *testing.T) {
 		events := p.PopEvents()
 		assert.Empty(t, events)
 	})
+
+	t.Run("Update avatar with empty string resets to DefaultAvatarURL", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+		p.SetIdentity("Current Name", "https://custom.com/avatar.jpg")
+		p.PopEvents()
+
+		emptyAvatar := ""
+		err = p.UpdateIdentity(nil, &emptyAvatar)
+		require.NoError(t, err)
+		assert.Equal(t, aggregate.DefaultAvatarURL, p.AvatarURL())
+
+		events := p.PopEvents()
+		require.Len(t, events, 1)
+		ev, ok := events[0].(*domainEvent.UserIdentityUpdatedEvent)
+		require.True(t, ok)
+		assert.Equal(t, aggregate.DefaultAvatarURL, ev.AvatarURL())
+	})
+
+	t.Run("NewUserProfile and SetIdentity default avatar URL", func(t *testing.T) {
+		p, err := aggregate.NewUserProfile("user-1", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+		require.NoError(t, err)
+		assert.Equal(t, aggregate.DefaultAvatarURL, p.AvatarURL())
+
+		p.SetIdentity("User Name", "")
+		assert.Equal(t, aggregate.DefaultAvatarURL, p.AvatarURL())
+		assert.Equal(t, "User Name", p.FullName())
+	})
 }

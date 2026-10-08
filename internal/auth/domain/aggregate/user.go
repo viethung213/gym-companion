@@ -1,12 +1,17 @@
 package aggregate
 
 import (
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/event"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
 )
+
+// DefaultAvatarURL is the fallback avatar image URL used when user registration omits an avatar.
+const DefaultAvatarURL = "https://lqhhwimtzrcrmyfhlizv.supabase.co/storage/v1/object/public/" +
+	"gym-companion-assets/avatar_default/male/avatar-vo-tri-loopy-cute.jpg"
 
 // User status enum matching auth.user_status PostgreSQL enum
 const (
@@ -129,6 +134,10 @@ func RegisterNewUser(
 	identity Identity,
 	avatarURL string,
 ) *User {
+	if strings.TrimSpace(avatarURL) == "" {
+		avatarURL = DefaultAvatarURL
+	}
+
 	role, _ := vo.NewRole(vo.RoleUser)
 
 	now := time.Now()
