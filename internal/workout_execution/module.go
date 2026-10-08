@@ -79,6 +79,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	startScheduledSessionHandler := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
 	logSetHandler := command.NewLogWorkoutSetHandler(sessionRepo, outboxWriter, txManager)
 	completeSessionHandler := command.NewCompleteWorkoutSessionHandler(sessionRepo, loadGuard, nil, outboxWriter, txManager)
+	shareSessionHandler := command.NewShareWorkoutSessionHandler(sessionRepo, motionRepo, outboxWriter, txManager)
 	abortSessionHandler := command.NewAbortWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
 	syncLogsHandler := command.NewSyncWorkoutLogsHandler(sessionRepo, outboxWriter, txManager)
 	prProcessHandler := command.NewProcessCompletedSessionForPRHandler(sessionRepo, prRepo, outboxWriter, txManager)
@@ -102,6 +103,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		startScheduledSessionHandler,
 		logSetHandler,
 		completeSessionHandler,
+		shareSessionHandler,
 		abortSessionHandler,
 		syncLogsHandler,
 		getMotionSpecQuery,

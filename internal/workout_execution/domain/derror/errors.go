@@ -19,4 +19,6 @@ var (
 	ErrInvalidInput                 = errors.New("invalid input parameter")
 	ErrOptimisticLocking            = errors.New("concurrent update detected for workout session")
 	ErrForbidden                    = errors.New("forbidden: user does not own this workout session")
+	ErrSessionAlreadyShared         = errors.New("workout session is already shared")
+	ErrSessionNotCompleted          = errors.New("workout session is not completed")
 )

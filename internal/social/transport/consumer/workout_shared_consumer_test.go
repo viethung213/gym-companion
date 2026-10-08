@@ -68,15 +68,15 @@ func TestWorkoutSharedConsumer_ProcessMessage(t *testing.T) {
 	data := &workoutexecutionv1event.WorkoutSessionShared{
 		SessionId:       "sess-123",
 		UserId:          "u-athlete-1",
-		Title:           "Morning Leg Blast",
+		WorkoutTitle:    "Bench Press",
 		Caption:         "Felt awesome today!",
 		MediaUrls:       []string{"https://media.com/workout.jpg"},
 		Visibility:      "PUBLIC",
 		DurationSeconds: 3600,
 		TotalSets:       18,
 		TotalVolumeKg:   5200.5,
-		PrCount:         2,
 		SharedAt:        timestamppb.New(time.Now().UTC()),
+		ExerciseCount:   1,
 	}
 	dataBytes, _ := protojson.Marshal(data)
 
@@ -111,8 +111,11 @@ func TestWorkoutSharedConsumer_ProcessMessage(t *testing.T) {
 		if item.Caption() != "Felt awesome today!" {
 			t.Errorf("expected caption, got %s", item.Caption())
 		}
-		if item.WorkoutData().WorkoutTitle() != "Morning Leg Blast" {
-			t.Errorf("expected workout title, got %s", item.WorkoutData().WorkoutTitle())
+		if item.WorkoutData().WorkoutTitle() != "Bench Press" {
+			t.Errorf("expected WorkoutTitle 'Bench Press', got %s", item.WorkoutData().WorkoutTitle())
+		}
+		if item.WorkoutData().ExerciseCount() != 1 {
+			t.Errorf("expected ExerciseCount 1, got %d", item.WorkoutData().ExerciseCount())
 		}
 	}
 }

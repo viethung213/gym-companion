@@ -14,6 +14,23 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     version: "1.0"
     description: "API thực thi buổi tập, tracking camera đếm rep chấm điểm AI và lưu trữ lịch sử."
   }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
 };
 
 service WorkoutExecutionService {
@@ -58,6 +75,14 @@ service WorkoutExecutionService {
   rpc CompleteWorkoutSession (contracts.core.workout_execution.v1.message.CompleteWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.CompleteWorkoutSessionResponse) {
     option (google.api.http) = {
       post: "/api/v1/execution/sessions/{session_id}/complete"
+      body: "*"
+    };
+  }
+
+  // Chia sẻ buổi tập đã hoàn thành lên mạng xã hội
+  rpc ShareWorkoutSession (contracts.core.workout_execution.v1.message.ShareWorkoutSessionRequest) returns (contracts.core.workout_execution.v1.message.ShareWorkoutSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/execution/sessions/{session_id}/share"
       body: "*"
     };
   }

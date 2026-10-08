@@ -75,7 +75,7 @@ func TestLogWorkoutSetHandler(t *testing.T) {
 			"s1", "u1", "p1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 		repo := &mockSessionRepo{session: session}
 		outbox := newMockOutboxWriter(t)

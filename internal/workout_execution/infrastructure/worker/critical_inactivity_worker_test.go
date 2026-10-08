@@ -98,7 +98,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -151,7 +151,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session, saveErr: errors.New("save error")}
@@ -200,7 +200,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -238,7 +238,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -285,7 +285,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, now,
+			started, now, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -337,7 +337,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, now,
+			started, now, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -390,7 +390,7 @@ func TestCriticalInactivityWorker(t *testing.T) {
 				},
 			},
 			nil, &started, nil,
-			started, now,
+			started, now, false,
 		)
 
 		repo := &mockSessionRepo{session: session}

@@ -35,7 +35,7 @@ Thay vì chia tách bảng tin thành nhiều nguồn dữ liệu rời rạc, h
 2. **Hoạt động tập luyện chia sẻ (Workout Activity - `WORKOUT_ACTIVITY`)**:
    - Được nạp tự động thông qua sự kiện khi người dùng hoàn thành buổi tập tại phòng gym và bấm chia sẻ.
    - **Nội dung đính kèm**: Người dùng có thể viết lời tựa/cảm nghĩ (`caption`) và đính kèm hình ảnh/video check-in tại phòng gym (`media_urls`).
-   - **Chỉ số thể lực đặc thù**: Kèm theo khối dữ liệu thể lực chi tiết: Tên buổi tập (`workout_title`), thời lượng (`duration_seconds`), tổng khối lượng nâng (`total_volume_kg`), số hiệp hoàn thành (`total_sets`), số kỷ lục cá nhân mới phá được (`pr_count`).
+   - **Chỉ số thể lực đặc thù**: Kèm theo khối dữ liệu thể lực chi tiết: Tên buổi tập (`workout_title`), thời lượng (`duration_seconds`), tổng khối lượng nâng (`total_volume_kg`), số hiệp hoàn thành (`total_sets`).
 
 ---
 

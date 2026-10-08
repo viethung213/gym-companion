@@ -22,8 +22,8 @@ type IngestWorkoutActivityCommand struct {
 	MediaURLs       []string
 	DurationSeconds int32
 	TotalVolumeKg   float64
+	ExerciseCount   int32
 	TotalSets       int32
-	PRCount         int32
 	SharedAt        time.Time
 }
 
@@ -55,14 +55,17 @@ func (h *IngestWorkoutActivityHandler) Handle(ctx context.Context, cmd IngestWor
 	if err := cmd.Validate(); err != nil {
 		return err
 	}
+	exerciseCount := cmd.ExerciseCount
+	if exerciseCount <= 0 && (strings.TrimSpace(cmd.Title) != "" || cmd.TotalSets > 0) {
+		exerciseCount = 1
+	}
 	metrics := vo.NewWorkoutMetrics(
 		cmd.SessionID,
 		cmd.Title,
 		cmd.DurationSeconds,
 		cmd.TotalVolumeKg,
-		0,
+		exerciseCount,
 		cmd.TotalSets,
-		cmd.PRCount,
 	)
 
 	item, err := aggregate.NewWorkoutActivityItem(

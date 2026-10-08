@@ -94,7 +94,6 @@ message WorkoutMetricsSummary {
   float total_volume_kg = 4;
   int32 exercise_count = 5;
   int32 total_sets = 6;
-  int32 pr_count = 7;
 }
 
 message FeedItem {

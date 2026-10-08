@@ -7,7 +7,6 @@ type WorkoutMetrics struct {
 	totalVolumeKg   float64
 	exerciseCount   int32
 	totalSets       int32
-	prCount         int32
 }
 
 func NewWorkoutMetrics(
@@ -17,7 +16,6 @@ func NewWorkoutMetrics(
 	totalVolumeKg float64,
 	exerciseCount int32,
 	totalSets int32,
-	prCount int32,
 ) WorkoutMetrics {
 	if durationSeconds < 0 {
 		durationSeconds = 0
@@ -31,9 +29,6 @@ func NewWorkoutMetrics(
 	if totalSets < 0 {
 		totalSets = 0
 	}
-	if prCount < 0 {
-		prCount = 0
-	}
 	return WorkoutMetrics{
 		sessionID:       sessionID,
 		workoutTitle:    workoutTitle,
@@ -41,7 +36,6 @@ func NewWorkoutMetrics(
 		totalVolumeKg:   totalVolumeKg,
 		exerciseCount:   exerciseCount,
 		totalSets:       totalSets,
-		prCount:         prCount,
 	}
 }
 
@@ -51,7 +45,6 @@ func (m WorkoutMetrics) DurationSeconds() int32 { return m.durationSeconds }
 func (m WorkoutMetrics) TotalVolumeKg() float64 { return m.totalVolumeKg }
 func (m WorkoutMetrics) ExerciseCount() int32   { return m.exerciseCount }
 func (m WorkoutMetrics) TotalSets() int32       { return m.totalSets }
-func (m WorkoutMetrics) PRCount() int32         { return m.prCount }
 func (m WorkoutMetrics) IsZero() bool {
 	return m.sessionID == "" && m.totalVolumeKg == 0 && m.durationSeconds == 0
 }

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     version INT NOT NULL DEFAULT 1,
+    is_shared BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT chk_workout_session_status CHECK (
         status IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'ABORTED', 'ANOMALOUS')
     )
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
 
 ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS plan_id VARCHAR(255) NOT NULL DEFAULT '';
 ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS total_sets INT DEFAULT 0;
+ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE;
 
 
 CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_id ON workout_execution.workout_sessions(user_id);

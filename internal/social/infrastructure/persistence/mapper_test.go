@@ -64,7 +64,7 @@ func TestMapper_FeedItem_Post(t *testing.T) {
 
 func TestMapper_FeedItem_WorkoutActivity(t *testing.T) {
 	now := time.Now().UTC()
-	metrics := vo.NewWorkoutMetrics("sess-1", "Leg Workout", 3600, 5000.0, 5, 20, 1)
+	metrics := vo.NewWorkoutMetrics("sess-1", "Leg Workout", 3600, 5000.0, 5, 20)
 	workoutItem, err := aggregate.NewWorkoutActivityItem(
 		"item-2",
 		"u-2",

@@ -92,3 +92,23 @@ type MotionSpecificationUpdated struct {
 func (e *MotionSpecificationUpdated) EventName() string {
 	return "contracts.core.workout_execution.v1.motionSpecificationUpdated"
 }
+
+// WorkoutSessionShared is published when a completed workout session is shared to the social feed.
+type WorkoutSessionShared struct {
+	SessionID       string
+	UserID          string
+	Caption         string
+	MediaURLs       []string
+	Visibility      string
+	DurationSeconds int32
+	TotalSets       int32
+	TotalVolumeKg   float32
+	SharedAt        time.Time
+	WorkoutTitle    string
+	ExerciseCount   int32
+}
+
+// EventName returns the CloudEvent type for WorkoutSessionShared.
+func (e *WorkoutSessionShared) EventName() string {
+	return "contracts.core.workout_execution.v1.workoutSessionShared"
+}

@@ -13,7 +13,7 @@ import (
 func TestGetActivityFeedHandler(t *testing.T) {
 	now := time.Now().UTC()
 	p, _ := aggregate.NewPostItem("p-1", "user-friend", "Great workout", nil, vo.VisibilityPublic, 2, 1, now, now)
-	metrics := vo.NewWorkoutMetrics("sess-1", "Leg day", 3600, 4000.0, 5, 15, 1)
+	metrics := vo.NewWorkoutMetrics("sess-1", "Leg day", 3600, 4000.0, 5, 15)
 	a, _ := aggregate.NewWorkoutActivityItem("a-1", "user-friend", "Leg day", nil, metrics, vo.VisibilityPublic, 5, 2, now.Add(time.Minute), now.Add(time.Minute))
 
 	followRepo := &queryMockFollowRepo{followingIDs: []string{"user-friend"}}

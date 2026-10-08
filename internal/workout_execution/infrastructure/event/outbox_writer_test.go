@@ -214,6 +214,59 @@ func TestOutboxWriter(t *testing.T) {
 
 	})
 
+	t.Run("WriteEvents with WorkoutSessionShared", func(t *testing.T) {
+		repo := &mockOutboxRepo{}
+		writer := infraEvent.NewOutboxWriter(repo)
+
+		ev := &event.WorkoutSessionShared{
+			SessionID:       "s-123",
+			UserID:          "u-456",
+			Caption:         "Hard work pays off!",
+			MediaURLs:       []string{"https://img.com/1.jpg"},
+			Visibility:      "PUBLIC",
+			DurationSeconds: 1800,
+			TotalSets:       12,
+			TotalVolumeKg:   3500.0,
+			SharedAt:        time.Now().UTC(),
+			WorkoutTitle:    "Bench Press",
+			ExerciseCount:   1,
+		}
+
+		err := writer.WriteEvents(context.Background(), "WorkoutSession", "s-123", []interface{}{ev})
+		if err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+
+		if repo.savedRecord == nil {
+			t.Fatal("expected record to be saved")
+		}
+
+		if repo.savedRecord.EventType != "contracts.core.workout_execution.v1.workoutSessionShared" {
+			t.Errorf("got EventType = %s, want workoutSessionShared", repo.savedRecord.EventType)
+		}
+		if repo.savedRecord.PartitionKey != "u-456" {
+			t.Errorf("got PartitionKey = %s, want u-456", repo.savedRecord.PartitionKey)
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		if envelope["type"] != "contracts.core.workout_execution.v1.workoutSessionShared" {
+			t.Errorf("got cloud event type %v", envelope["type"])
+		}
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data to be map[string]interface{}, got %T", envelope["data"])
+		}
+		if got, want := dataMap["workoutTitle"], "Bench Press"; got != want {
+			t.Errorf("got data.workoutTitle = %v, want %v", got, want)
+		}
+		if got, want := dataMap["exerciseCount"], float64(1); got != want {
+			t.Errorf("got data.exerciseCount = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("WriteEvents repo save error", func(t *testing.T) {
 
 		repo := &mockOutboxRepo{saveErr: errors.New("db error")}

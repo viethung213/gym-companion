@@ -45,9 +45,11 @@ func ensureTablesExist(db *gorm.DB) {
 		ended_at TIMESTAMP WITH TIME ZONE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-		version INT NOT NULL DEFAULT 1
+		version INT NOT NULL DEFAULT 1,
+		is_shared BOOLEAN NOT NULL DEFAULT FALSE
 	);`)
 	db.Exec(`ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;`)
+	db.Exec(`ALTER TABLE workout_execution.workout_sessions ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE;`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS workout_execution.workout_set_logs (
 		id VARCHAR(255) PRIMARY KEY,

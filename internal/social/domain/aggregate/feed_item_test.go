@@ -80,7 +80,7 @@ func TestNewFeedItem_Post(t *testing.T) {
 
 func TestNewFeedItem_WorkoutActivity(t *testing.T) {
 	t.Run("valid workout activity item", func(t *testing.T) {
-		metrics := vo.NewWorkoutMetrics("sess-1", "Leg Day", 3600, 5000, 5, 20, 2)
+		metrics := vo.NewWorkoutMetrics("sess-1", "Leg Day", 3600, 5000, 5, 20)
 		a, err := NewWorkoutActivityItem("act-1", "user-a", "Heavy squats today!", nil, metrics, vo.VisibilityPublic, 0, 0, time.Time{}, time.Time{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -103,7 +103,7 @@ func TestNewFeedItem_WorkoutActivity(t *testing.T) {
 	})
 
 	t.Run("valid workout with workoutData only, empty caption and empty media", func(t *testing.T) {
-		metrics := vo.NewWorkoutMetrics("sess-1", "Leg Day", 3600, 5000, 5, 20, 2)
+		metrics := vo.NewWorkoutMetrics("sess-1", "Leg Day", 3600, 5000, 5, 20)
 		a, err := NewWorkoutActivityItem("act-1", "user-a", "", nil, metrics, vo.VisibilityPublic, 0, 0, time.Time{}, time.Time{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -114,7 +114,7 @@ func TestNewFeedItem_WorkoutActivity(t *testing.T) {
 	})
 
 	t.Run("valid workout with caption only, empty workoutData and empty media", func(t *testing.T) {
-		emptyMetrics := vo.NewWorkoutMetrics("", "", 0, 0, 0, 0, 0)
+		emptyMetrics := vo.NewWorkoutMetrics("", "", 0, 0, 0, 0)
 		a, err := NewWorkoutActivityItem("act-1", "user-a", "Only caption", nil, emptyMetrics, vo.VisibilityPublic, 0, 0, time.Time{}, time.Time{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -125,7 +125,7 @@ func TestNewFeedItem_WorkoutActivity(t *testing.T) {
 	})
 
 	t.Run("valid workout with media only, empty caption and empty workoutData", func(t *testing.T) {
-		emptyMetrics := vo.NewWorkoutMetrics("", "", 0, 0, 0, 0, 0)
+		emptyMetrics := vo.NewWorkoutMetrics("", "", 0, 0, 0, 0)
 		a, err := NewWorkoutActivityItem("act-1", "user-a", "", []string{"http://gym.jpg"}, emptyMetrics, vo.VisibilityPublic, 0, 0, time.Time{}, time.Time{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -136,7 +136,7 @@ func TestNewFeedItem_WorkoutActivity(t *testing.T) {
 	})
 
 	t.Run("all three empty rejected in workout activity", func(t *testing.T) {
-		emptyMetrics := vo.NewWorkoutMetrics("", "", 0, 0, 0, 0, 0)
+		emptyMetrics := vo.NewWorkoutMetrics("", "", 0, 0, 0, 0)
 		_, err := NewWorkoutActivityItem("act-1", "user-a", "   ", nil, emptyMetrics, vo.VisibilityPublic, 0, 0, time.Time{}, time.Time{})
 		if err != derror.ErrEmptyContent {
 			t.Errorf("expected ErrEmptyContent when caption, mediaURLs and workoutData are all empty, got %v", err)
@@ -144,7 +144,7 @@ func TestNewFeedItem_WorkoutActivity(t *testing.T) {
 	})
 
 	t.Run("unauthorized when empty user", func(t *testing.T) {
-		metrics := vo.NewWorkoutMetrics("sess-1", "Leg Day", 3600, 5000, 5, 20, 2)
+		metrics := vo.NewWorkoutMetrics("sess-1", "Leg Day", 3600, 5000, 5, 20)
 		_, err := NewWorkoutActivityItem("act-1", "", "Leg Day", nil, metrics, vo.VisibilityPublic, 0, 0, time.Time{}, time.Time{})
 		if err != derror.ErrUnauthorized {
 			t.Errorf("expected ErrUnauthorized, got %v", err)

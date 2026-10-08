@@ -75,7 +75,7 @@ func TestSessionTimeoutWorker(t *testing.T) {
 			"sess-timeout-1", "user-1", "plan-1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -103,7 +103,7 @@ func TestSessionTimeoutWorker(t *testing.T) {
 			"sess-timeout-2", "user-1", "plan-1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session, saveErr: errors.New("save error")}
@@ -127,7 +127,7 @@ func TestSessionTimeoutWorker(t *testing.T) {
 			"sess-timeout-3", "user-1", "plan-1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -150,7 +150,7 @@ func TestSessionTimeoutWorker(t *testing.T) {
 			"sess-timeout-4", "user-1", "plan-1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}
@@ -174,7 +174,7 @@ func TestSessionTimeoutWorker(t *testing.T) {
 			"sess-active-1", "user-1", "plan-1",
 			aggregate.StatusInProgress,
 			nil, nil, nil, &started, nil,
-			started, started,
+			started, started, false,
 		)
 
 		repo := &mockSessionRepo{session: session}

@@ -206,7 +206,7 @@ func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(
 	db := getDB(ctx, r.db)
 	var models []WorkoutSessionModel
 	err := db.Preload("Sets.Reps").Preload("Errors").
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND status = ?", userID, "COMPLETED").
 		Order("started_at DESC").
 		Limit(limit).Offset(offset).
 		Find(&models).Error

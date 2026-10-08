@@ -9,13 +9,13 @@ option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contra
 message WorkoutSessionShared {
   string session_id = 1;
   string user_id = 2;
-  string title = 3;
-  string caption = 4;
-  repeated string media_urls = 5;
-  string visibility = 6;
+  string caption = 3;
+  repeated string media_urls = 4;
+  string visibility = 5;
+  string workout_title = 6;
   int32 duration_seconds = 7;
   int32 total_sets = 8;
   float total_volume_kg = 9;
-  int32 pr_count = 10;
-  google.protobuf.Timestamp shared_at = 11;
+  google.protobuf.Timestamp shared_at = 10;
+  int32 exercise_count = 11;
 }
