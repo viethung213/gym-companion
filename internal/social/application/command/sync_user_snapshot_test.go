@@ -26,6 +26,20 @@ func TestSyncUserSnapshotHandler(t *testing.T) {
 		t.Errorf("unexpected user snapshot: %+v", u)
 	}
 
+	err = handler.Handle(context.Background(), SyncUserSnapshotCommand{
+		UserID:    "u-456",
+		FullName:  "Jane Doe",
+		AvatarURL: "",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	u2, _ := repo.GetByID(context.Background(), "u-456")
+	if u2 == nil || u2.AvatarURL() != entity.DefaultAvatarURL {
+		t.Errorf("expected default avatar url, got %+v", u2)
+	}
+
 	// Validation error: empty user
 	err = handler.Handle(context.Background(), SyncUserSnapshotCommand{
 		UserID: "",

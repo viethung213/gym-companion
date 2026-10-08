@@ -1,6 +1,13 @@
 package entity
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// DefaultAvatarURL is the fallback avatar image URL used when user snapshot omits an avatar.
+const DefaultAvatarURL = "https://lqhhwimtzrcrmyfhlizv.supabase.co/storage/v1/object/public/" +
+	"gym-companion-assets/avatar_default/male/avatar-vo-tri-loopy-cute.jpg"
 
 type UserSnapshot struct {
 	id        string
@@ -13,6 +20,9 @@ type UserSnapshot struct {
 func NewUserSnapshot(id, fullName, avatarURL, role string, updatedAt time.Time) *UserSnapshot {
 	if role == "" {
 		role = "user"
+	}
+	if strings.TrimSpace(avatarURL) == "" {
+		avatarURL = DefaultAvatarURL
 	}
 	if updatedAt.IsZero() {
 		updatedAt = time.Now().UTC()

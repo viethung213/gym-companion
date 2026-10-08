@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/viethung213/gym-companion/internal/social/domain/entity"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
@@ -47,10 +48,12 @@ func (h *ListReactionsHandler) Handle(ctx context.Context, q ListReactionsQuery)
 	result := make([]*ReactionItemDTO, 0, len(reactions))
 	for _, r := range reactions {
 		authorName := ""
-		avatarURL := ""
+		avatarURL := entity.DefaultAvatarURL
 		if u, ok := userInfoMap[r.UserID()]; ok && u != nil {
 			authorName = u.FullName()
-			avatarURL = u.AvatarURL()
+			if u.AvatarURL() != "" {
+				avatarURL = u.AvatarURL()
+			}
 		}
 
 		result = append(result, &ReactionItemDTO{

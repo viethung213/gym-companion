@@ -99,7 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_social_comments_parent_id
 CREATE TABLE IF NOT EXISTS social.users (
     id UUID PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL DEFAULT '',
-    avatar_url TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT NOT NULL DEFAULT 'https://lqhhwimtzrcrmyfhlizv.supabase.co/storage/v1/object/public/gym-companion-assets/avatar_default/male/avatar-vo-tri-loopy-cute.jpg',
     role VARCHAR(50) NOT NULL DEFAULT 'user',
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

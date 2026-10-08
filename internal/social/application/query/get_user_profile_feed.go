@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/viethung213/gym-companion/internal/social/domain/entity"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
@@ -46,10 +47,12 @@ func (h *GetUserProfileFeedHandler) Handle(ctx context.Context, q GetUserProfile
 
 	userInfo, _ := h.userSnapshotRepo.GetByID(ctx, q.TargetUserID)
 	authorName := ""
-	avatarURL := ""
+	avatarURL := entity.DefaultAvatarURL
 	if userInfo != nil {
 		authorName = userInfo.FullName()
-		avatarURL = userInfo.AvatarURL()
+		if userInfo.AvatarURL() != "" {
+			avatarURL = userInfo.AvatarURL()
+		}
 	}
 
 	result := make([]*FeedItemDTO, 0, len(feedItems))

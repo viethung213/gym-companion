@@ -72,6 +72,22 @@ func TestRegisterUser_DefaultRole(t *testing.T) {
 	}
 }
 
+func TestRegisterUser_DefaultAvatarURL(t *testing.T) {
+	ident := aggregate.NewIdentity("id-1", aggregate.IdentityTypeEmail, "test@example.com", "", nil, time.Now(), time.Now())
+	user := aggregate.RegisterUser("id-123", "John", ident, "")
+	events := user.DomainEvents()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 domain event, got %d", len(events))
+	}
+	regEvent, ok := events[0].(event.UserRegisteredEvent)
+	if !ok {
+		t.Fatalf("expected UserRegisteredEvent, got %T", events[0])
+	}
+	if regEvent.AvatarURL != aggregate.DefaultAvatarURL {
+		t.Errorf("got AvatarURL %s, want %s", regEvent.AvatarURL, aggregate.DefaultAvatarURL)
+	}
+}
+
 func TestUser_IdentityManagement(t *testing.T) {
 	now := time.Now()
 	id1 := aggregate.NewIdentity("id-1", aggregate.IdentityTypeGoogle, "google-sub-123", "", nil, now, now)

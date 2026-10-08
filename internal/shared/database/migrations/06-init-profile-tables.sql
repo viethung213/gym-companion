@@ -8,7 +8,7 @@ CREATE SCHEMA IF NOT EXISTS profile;
 CREATE TABLE IF NOT EXISTS profile.users (
     user_id UUID PRIMARY KEY,
     full_name VARCHAR(255) DEFAULT '',
-    avatar_url TEXT DEFAULT '',
+    avatar_url TEXT DEFAULT 'https://lqhhwimtzrcrmyfhlizv.supabase.co/storage/v1/object/public/gym-companion-assets/avatar_default/male/avatar-vo-tri-loopy-cute.jpg',
     date_of_birth DATE,
     gender VARCHAR(20),
     experience_level VARCHAR(50) DEFAULT 'BEGINNER',

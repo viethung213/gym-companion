@@ -111,6 +111,7 @@ func TestUserRegisteredConsumer_ProcessMessage(t *testing.T) {
 	p, err := userRepo.FindByUserID(ctx, "user-registered-999")
 	require.NoError(t, err)
 	assert.Equal(t, "user-registered-999", p.UserID())
+	assert.Equal(t, aggregate.DefaultAvatarURL, p.AvatarURL())
 
 	// 2. Idempotency test (duplicate event)
 	err = consumer.ProcessMessage(ctx, msg)

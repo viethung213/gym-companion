@@ -13,6 +13,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
 )
 
+// DefaultAvatarURL is the fallback avatar image URL used when user profile omits an avatar.
+const DefaultAvatarURL = "https://lqhhwimtzrcrmyfhlizv.supabase.co/storage/v1/object/public/" +
+	"gym-companion-assets/avatar_default/male/avatar-vo-tri-loopy-cute.jpg"
+
 type UserProfile struct {
 	userID                string
 	fullName              string
@@ -87,6 +91,7 @@ func NewUserProfile(
 
 	p := &UserProfile{
 		userID:                userID,
+		avatarURL:             DefaultAvatarURL,
 		biologicalMetrics:     bio,
 		experienceLevel:       experienceLevel,
 		goals:                 copiedGoals,
@@ -164,9 +169,11 @@ func (p *UserProfile) SetIdentity(fullName, avatarURL string) {
 	if fullName != "" {
 		p.fullName = fullName
 	}
-	if avatarURL != "" {
-		p.avatarURL = avatarURL
+	url := strings.TrimSpace(avatarURL)
+	if url == "" {
+		url = DefaultAvatarURL
 	}
+	p.avatarURL = url
 }
 
 func (p *UserProfile) UpdateIdentity(fullName, avatarURL *string) error {
@@ -188,6 +195,9 @@ func (p *UserProfile) UpdateIdentity(fullName, avatarURL *string) error {
 
 	if avatarURL != nil {
 		url := strings.TrimSpace(*avatarURL)
+		if url == "" {
+			url = DefaultAvatarURL
+		}
 		if url != p.avatarURL {
 			p.avatarURL = url
 			hasChange = true

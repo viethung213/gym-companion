@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/viethung213/gym-companion/internal/social/domain/entity"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
@@ -54,10 +55,12 @@ func (h *ListCommentsHandler) Handle(ctx context.Context, q ListCommentsQuery) (
 	result := make([]*CommentItemDTO, 0, len(comments))
 	for _, c := range comments {
 		authorName := ""
-		avatarURL := ""
+		avatarURL := entity.DefaultAvatarURL
 		if u, ok := userInfoMap[c.UserID()]; ok && u != nil {
 			authorName = u.FullName()
-			avatarURL = u.AvatarURL()
+			if u.AvatarURL() != "" {
+				avatarURL = u.AvatarURL()
+			}
 		}
 
 		result = append(result, &CommentItemDTO{
