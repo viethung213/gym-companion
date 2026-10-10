@@ -1,163 +1,299 @@
-# Implementation Plan: ELO Rating & Rank Tiers
+# Implementation Blueprint & LLD: ELO Rating & Rank Tiers
 
-## Goal and scope
-Hiện thực hóa tính năng **ELO Rating & Rank Tiers** cho module Gamification (`internal/gamification/`), cung cấp thước đo năng lực thể chất chuẩn hóa duy nhất ($1,000 \rightarrow 3,000$ ELO) kết hợp phân cấp 5 bậc hạng (Bronze $\rightarrow$ Diamond), cơ chế thưởng kỷ luật dinh dưỡng, và khóa bi quan chống xung đột đồng thời.
-
-Tài liệu này dựa trên các đặc tả và quyết định kiến trúc đã được phê duyệt:
-- [01-spec.md](./01-spec.md): Yêu cầu nghiệp vụ và tiêu chí nghiệm thu.
-- [02-design.md](./02-design.md): Thiết kế kỹ thuật Hexagonal, Database DDL, và Sequence Flow.
-- [ADR-0001: Thưởng Dinh Dưỡng](./adr/ADR-0001-incorporate-nutrition-adherence-bonus-into-elo.md)
-- [ADR-0002: Hoãn Solo PvP](./adr/ADR-0002-defer-solo-pvp-elo-scoring-mechanism.md)
-- [ADR-0003: Ánh Xạ Trực Tiếp Không Trạng Thái](./adr/ADR-0003-stateless-direct-rank-mapping-without-demotion-shield.md)
-- [ADR-0004: Khóa Bi Quan FOR UPDATE](./adr/ADR-0004-use-pessimistic-row-locking-for-elo-updates.md)
-- [ADR-0005: Trần Cứng 3000 ELO](./adr/ADR-0005-establish-elo-range-and-hard-cap.md)
+## 1. Coding Philosophy & Design Patterns
+- **Hexagonal Architecture (Ports & Adapters)**: Tầng Domain (`internal/gamification/domain/`) hoàn toàn cô lập, không chứa dependency bên ngoài (không import GORM, Gin, json tag, db tag).
+- **Domain-Driven Design (DDD)**:
+  - Aggregate Root `UserElo` đóng gói toàn bộ trạng thái và kiểm soát các biến động điểm. Mọi thay đổi trạng thái phải qua các method nghiệp vụ rõ ràng (`ApplyWorkoutResult`, `ApplyNutritionBonus`, `ApplyInactivityDecay`).
+  - Value Object `RankTier` bất biến, cung cấp hàm ánh xạ thuần túy `DetermineRankTier`.
+- **Domain Service**: `EloCalculator` là service tính toán thuần túy (Stateless / Pure Functions), tách biệt thuật toán tính điểm khỏi Aggregate.
+- **Explicit Domain Errors**: Sử dụng các sentinel errors định danh rõ ràng (`ErrEloOutOfRange`, `ErrNutritionRewardAlreadyClaimedToday`, `ErrInvalidWorkoutSession`) thay vì generic errors.
+- **Pessimistic Locking & Idempotent Inbox**: Bảo đảm tính toàn vẹn vật lý (The 3 AM Test) bằng khóa dòng `SELECT ... FOR UPDATE` và bảng `processed_events`.
 
 ---
 
-## Approach
-Tuân thủ nghiêm ngặt các nguyên tắc kiến trúc cốt lõi của dự án:
-1. **Contract-First (SSOT)**: Định nghĩa hợp đồng Protobuf tại `proto/contracts/supporting/gamification/v1/`, sinh mã nguồn tự động qua `buf generate`. Cấm viết tay router HTTP hoặc gRPC stubs.
-2. **Hexagonal Architecture (Ports & Adapters)**: Tầng Domain (`internal/gamification/domain/`) hoàn toàn độc lập, không import GORM, Gin, hay DB tags. Interface được định nghĩa ở nơi sử dụng (Domain/Application), không định nghĩa ở Infrastructure.
-3. **Database Schema Isolation**: Toàn bộ dữ liệu nằm trong schema riêng `gamification.*`. Sử dụng khóa bi quan `SELECT ... FOR UPDATE` cho các thao tác ghi để bảo vệ tính toàn vẹn ELO.
-4. **Event-Driven Standards & Outbox Pattern**: Lắng nghe CloudEvents từ Kafka qua Idempotent Inbox Guard (`processed_events`). Xuất sự kiện qua Transactional Outbox Pattern (`outbox_events`).
+## 2. Low-Level Code Design & Signatures
 
----
+### 2.1 Domain Layer (`internal/gamification/domain/`)
 
-## Phases
+#### Value Object: `vo/rank_tier.go`
+```go
+package vo
 
-### Phase 1: API & Event Contracts (Protobuf & Buf Generation)
-- **Khu vực tác động**: `proto/contracts/supporting/gamification/v1/` và `internal/gen/go/`
-- **Tiền điều kiện**: Buf CLI được cấu hình sẵn trong repository (`buf.yaml`, `buf.gen.yaml`).
-- **Nội dung bàn giao**:
-  - `message/gamification_messages.proto`: Khai báo Enum `RankTier`, Message `GetMyEloRequest/Response`, `GetEloHistoryRequest/Response`.
-  - `service/gamification_service.proto`: Khai báo RPC service `GamificationService`.
-  - `event/elo_events.proto`: Khai báo các sự kiện CloudEvents `EloScoreUpdated`, `RankTierPromoted`, `RankTierDemoted`.
-  - Chạy `buf generate` để sinh Go stubs tại `internal/gen/go/contracts/supporting/gamification/v1/`.
-- **Nghiệm thu**: Lệnh `buf lint` pass $100\%$, mã nguồn Go sinh ra biên dịch không có lỗi cú pháp.
+type RankTier string
 
-### Phase 2: Database Schema & Migration (PostgreSQL DDL)
-- **Khu vực tác động**: `internal/shared/database/migrations/13-create-gamification-tables.sql`
-- **Tiền điều kiện**: Đã có schema migration 01-12.
-- **Nội dung bàn giao**:
-  - Tạo schema `gamification`.
-  - Tạo bảng `user_elo` với ràng buộc `CHECK (current_elo >= 1000 AND current_elo <= 3000)`.
-  - Tạo bảng `elo_history` lưu vết biến động append-only kèm metadata.
-  - Tạo bảng `processed_events` làm Idempotent Inbox Guard.
-  - Tạo bảng `outbox_events` phục vụ Transactional Outbox.
-  - Tạo các chỉ mục B-Tree: `idx_user_elo_ranking`, `idx_elo_history_user_created`, `idx_outbox_events_pending`.
-- **Nghiệm thu**: Script SQL thực thi thành công trên PostgreSQL, các ràng buộc check và unique constraint hoạt động chuẩn xác.
+const (
+    RankTierUnspecified RankTier = "UNSPECIFIED"
+    RankTierBronze      RankTier = "BRONZE"
+    RankTierSilver      RankTier = "SILVER"
+    RankTierGold        RankTier = "GOLD"
+    RankTierPlatinum    RankTier = "PLATINUM"
+    RankTierDiamond     RankTier = "DIAMOND"
+)
 
-### Phase 3: Domain Core & Unit Tests (Pure Go)
-- **Khu vực tác động**: `internal/gamification/domain/`
-- **Tiền điều kiện**: Phase 1 hoàn thành (có kiểu dữ liệu generated nếu cần).
-- **Nội dung bàn giao**:
-  - `vo/rank_tier.go`: Định nghĩa 5 bậc hạng và hàm thuần túy `DetermineRankTier(elo int32)`.
-  - `service/elo_calculator.go`: Thuật toán tính $K$-factor, hiệu suất buổi tập, clamp biến động $[-25, +40]$, kẹp trần sàn $[1000, 3000]$.
-  - `aggregate/user_elo.go`: Aggregate Root `UserElo` với các nghiệp vụ `ApplyWorkoutResult()`, `ApplyNutritionBonus()`, `ApplyInactivityDecay()`.
-  - `event/elo_events.go`: Domain events nội bộ.
-  - `repository/user_elo_repository.go`: Port interface cho Persistence.
-- **Nghiệm thu**: Bộ Unit Tests cho Domain đạt độ bao phủ statement coverage $> 90\%$, bao gồm:
-  - Test thăng hạng tức thì khi chạm mốc $1200, 1500, 1800, 2200$.
-  - Test hạ hạng tức thì khi rớt điểm (ADR-0003).
-  - Test chạm trần cứng 3000 ELO (ADR-0005).
-  - Test thưởng dinh dưỡng $+3 \rightarrow +5$ ELO (ADR-0001).
+// DetermineRankTier ánh xạ điểm ELO sang Bậc Hạng tương ứng theo ADR-0003
+func DetermineRankTier(elo int32) RankTier
 
-### Phase 4: Infrastructure Persistence & Integration Tests
-- **Khu vực tác động**: `internal/gamification/infrastructure/persistence/`
-- **Tiền điều kiện**: Phase 2 và Phase 3 hoàn thành.
-- **Nội dung bàn giao**:
-  - Data Mapper: `ToDomain()` và `ToPersistence()` chuyển đổi giữa Aggregate và GORM/SQL Model.
-  - `postgres/user_elo_repository.go`: Hiện thực hóa `FindByID`, `GetForUpdate` (sử dụng `SELECT ... FOR UPDATE`), `Save`.
-  - `postgres/elo_history_repository.go`: Ghi log biến động điểm.
-  - `postgres/inbox_repository.go`: Kiểm tra và đánh dấu sự kiện đã xử lý (`processed_events`).
-  - `postgres/outbox_repository.go`: Ghi CloudEvents vào `outbox_events` trong cùng transaction.
-- **Nghiệm thu**: Integration Tests kiểm thử transaction:
-  - Test khóa `FOR UPDATE` tuần tự hóa 2 transaction đồng thời (ADR-0004).
-  - Test Idempotency: Gửi 2 lần cùng một `event_id` không gây lỗi và không cộng trùng điểm.
+// GetTierThreshold trả về ngưỡng điểm tối thiểu để đạt bậc hạng
+func GetTierThreshold(tier RankTier) int32
 
-### Phase 5: Application Layer (CQRS Use Cases)
-- **Khu vực tác động**: `internal/gamification/application/`
-- **Tiền điều kiện**: Phase 3 và Phase 4 hoàn thành.
-- **Nội dung bàn giao**:
-  - `command/process_workout_elo.go`: Điều phối Use Case hoàn thành buổi tập.
-  - `command/process_nutrition_elo.go`: Điều phối Use Case thưởng dinh dưỡng hàng ngày.
-  - `command/process_inactivity_decay.go`: Điều phối Use Case trừ điểm bất hoạt.
-  - `query/get_my_elo.go`: Lấy ELO cá nhân và khoảng cách điểm tới bậc kế tiếp.
-  - `query/get_elo_history.go`: Lấy danh sách lịch sử phân trang.
-- **Nghiệm thu**: Unit Tests cho Application Layer giả lập Repository Mock, kiểm thử thành công các luồng happy path và error path.
-
-### Phase 6: Transport Layer & Event Ingestion
-- **Khu vực tác động**: `internal/gamification/transport/`
-- **Tiền điều kiện**: Phase 5 hoàn thành.
-- **Nội dung bàn giao**:
-  - `consumer/workout_event_consumer.go`: Đăng ký lắng nghe topic `workout_execution.events`, giải mã CloudEvent `WorkoutSessionCompleted`.
-  - `consumer/nutrition_event_consumer.go`: Đăng ký lắng nghe topic `nutrition.events`, giải mã CloudEvent `MealLogged`.
-  - `grpc/gamification_handler.go`: Hiện thực hóa handler ConnectRPC theo interface sinh từ Buf stubs.
-  - `worker/outbox_worker.go`: Background worker quét `outbox_events` và đẩy ra Kafka topic `gamification.events`.
-- **Nghiệm thu**: Kiểm thử End-to-End: Bắn sự kiện giả lập qua Kafka, verify dữ liệu ELO trong database và sự kiện phát ra ở topic đích.
-
----
-
-## Verification & TDD Strategy (Kiểm Thử Trọng Tâm Nghiệp Vụ)
-
-Tuân thủ nguyên lý **Test-Driven Development (TDD)**:
-- **The Iron Law**: Không viết code production khi chưa có failing test (`RED -> GREEN -> REFACTOR`).
-- **Focus Logic**: Chỉ tập trung kiểm thử các bất biến nghiệp vụ (Business Invariants), thuật toán tính toán và ràng buộc giao dịch vật lý. **Tuyệt đối không viết test hình thức (Mocking the world)** cho các tầng trung gian không chứa logic (DTO mapper, getter/setter, CRUD râu ria).
-
-### 4 Bộ Test Cốt Lõi (Core Logic Test Suites)
-
-```text
- ┌────────────────────────────────────────────────────────────────────────┐
- │ 1. rank_tier_test.go (Domain VO)                                       │
- │    -> Kiểm tra logic chuyển bậc hạng tại các mốc biên (Boundary Logic) │
- ├────────────────────────────────────────────────────────────────────────┤
- │ 2. elo_calculator_test.go (Domain Service)                             │
- │    -> Kiểm tra công thức toán, K-factor, clamp [-25, +40], trần/sàn    │
- ├────────────────────────────────────────────────────────────────────────┤
- │ 3. user_elo_test.go (Domain Aggregate)                                 │
- │    -> Kiểm tra bất biến Aggregate, thăng/giáng hạng, chặn lặp dinh dưỡng│
- ├────────────────────────────────────────────────────────────────────────┤
- │ 4. repository_test.go (PostgreSQL Integration)                         │
- │    -> Kiểm tra khóa bi quan FOR UPDATE chống Lost Update & Inbox Guard │
- └────────────────────────────────────────────────────────────────────────┘
+// GetNextTierThreshold trả về ngưỡng điểm cần đạt để lên bậc tiếp theo (trả về 3000 nếu là Diamond)
+func GetNextTierThreshold(elo int32) (nextTier RankTier, threshold int32, pointsNeeded int32)
 ```
 
-### Ma Trận Kịch Bản Logic Trọng Yếu
+#### Domain Service: `service/elo_calculator.go`
+```go
+package service
 
-| Bộ Test | File Test | Kịch Bản Nghiệp Vụ Cần Bảo Vệ (Must-Have Assertions) |
+import "github.com/viethung213/gym-companion/internal/gamification/domain/vo"
+
+type WorkoutPerformanceParams struct {
+    CurrentTier  vo.RankTier
+    ActualVolume float64
+    TargetVolume float64
+    FormScore    float64 // 0..100 (0 nếu không có camera AI, áp dụng fallback)
+    IsPR         bool
+}
+
+type EloCalculator interface {
+    CalculateWorkoutDelta(params WorkoutPerformanceParams) int32
+    CalculateNutritionBonus(streakDays int32) int32
+    CalculateInactivityDecay() int32
+    GetKFactor(tier vo.RankTier) float64
+}
+
+type eloCalculatorImpl struct{}
+
+func NewEloCalculator() EloCalculator
+```
+
+#### Aggregate Root: `aggregate/user_elo.go`
+```go
+package aggregate
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "github.com/viethung213/gym-companion/internal/gamification/domain/vo"
+)
+
+type UserElo struct {
+    userID                   uuid.UUID
+    currentElo               int32
+    peakElo                  int32
+    rankTier                 vo.RankTier
+    lastWorkoutAt            *time.Time
+    lastDecayAt              *time.Time
+    lastNutritionRewardDate  *time.Time // Ngày địa phương nhận thưởng dinh dưỡng
+    createdAt                time.Time
+    updatedAt                time.Time
+    domainEvents             []any
+}
+
+func NewUserElo(userID uuid.UUID) *UserElo
+func ReconstituteUserElo(userID uuid.UUID, currentElo, peakElo int32, rankTier vo.RankTier, lastWorkoutAt, lastDecayAt, lastNutritionRewardDate *time.Time, createdAt, updatedAt time.Time) (*UserElo, error)
+
+func (u *UserElo) ApplyWorkoutResult(deltaElo int32, workoutTime time.Time) error
+func (u *UserElo) ApplyNutritionBonus(bonus int32, localDate time.Time) error
+func (u *UserElo) ApplyInactivityDecay(decayPoints int32, decayTime time.Time) error
+
+func (u *UserElo) UserID() uuid.UUID
+func (u *UserElo) CurrentElo() int32
+func (u *UserElo) RankTier() vo.RankTier
+func (u *UserElo) PeakElo() int32
+func (u *UserElo) LastNutritionRewardDate() *time.Time
+func (u *UserElo) PopDomainEvents() []any
+```
+
+#### Repository Port: `repository/user_elo_repository.go`
+```go
+package repository
+
+import (
+    "context"
+    "github.com/google/uuid"
+    "github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
+)
+
+type UserEloRepository interface {
+    FindByID(ctx context.Context, userID uuid.UUID) (*aggregate.UserElo, error)
+    GetForUpdate(ctx context.Context, userID uuid.UUID) (*aggregate.UserElo, error)
+    Save(ctx context.Context, userElo *aggregate.UserElo) error
+}
+```
+
+### 2.2 Persistence & Infrastructure Layer (`internal/gamification/infrastructure/persistence/postgres/`)
+
+#### Model & Data Mapper: `model.go` & `mapper.go`
+```go
+type UserEloModel struct {
+    UserID                  uuid.UUID  `gorm:"primaryKey;type:uuid"`
+    CurrentElo              int32      `gorm:"not null;default:1000"`
+    RankTier                string     `gorm:"not null;default:'BRONZE'"`
+    PeakElo                 int32      `gorm:"not null;default:1000"`
+    LastWorkoutAt           *time.Time
+    LastDecayAt             *time.Time
+    LastNutritionRewardDate *time.Time `gorm:"type:date"`
+    CreatedAt               time.Time
+    UpdatedAt               time.Time
+}
+
+func (m *UserEloModel) ToDomain() (*aggregate.UserElo, error)
+func ToPersistence(agg *aggregate.UserElo) *UserEloModel
+```
+
+#### Repositories & Transaction Control:
+- `user_elo_repository.go`: Thực thi `SELECT ... FOR UPDATE` trong context giao dịch.
+- `elo_history_repository.go`: `AppendHistory(ctx context.Context, record EloHistoryRecord) error`.
+- `inbox_repository.go`: `HasProcessed(ctx context.Context, eventID string) (bool, error)` và `MarkProcessed(...)`.
+- `outbox_repository.go`: `StoreOutboxEvent(ctx context.Context, event OutboxEvent) error`.
+
+### 2.3 Application Layer (`internal/gamification/application/`)
+
+```go
+// Commands
+type ProcessWorkoutEloCommand struct {
+    EventID      string
+    SessionID    string
+    UserID       uuid.UUID
+    ActualVolume float64
+    TargetVolume float64
+    FormScore    float64
+    IsPR         bool
+    CompletedAt  time.Time
+}
+
+type ProcessNutritionEloCommand struct {
+    EventID      string
+    UserID       uuid.UUID
+    UserLocalDate time.Time
+    CaloriesHit  bool
+    ProteinHit   bool
+    StreakDays   int32
+}
+
+// Queries
+type GetMyEloQuery struct {
+    UserID uuid.UUID
+}
+
+type GetMyEloDTO struct {
+    UserID            uuid.UUID
+    CurrentElo        int32
+    RankTier          string
+    PeakElo           int32
+    NextTierThreshold int32
+    PointsToNextTier  int32
+    UpdatedAt         time.Time
+}
+```
+
+---
+
+## 3. Algorithmic Logic & Edge Nuances (Small Details)
+
+### 3.1 Quy Cách Thuật Toán ELO Buổi Tập
+1. **$K$-Factor Scaling Theo Bậc (Anti-Inflation)**:
+   - Bronze, Silver: $K = 32$ (Tăng trưởng nhanh, tạo hưng phấn ban đầu).
+   - Gold: $K = 24$ (Ổn định dần).
+   - Platinum: $K = 16$ (Yêu cầu phong độ cao).
+   - Diamond: $K = 10$ (Bậc tinh anh; chặn leo rank thiếu kiểm soát).
+
+2. **Công Thức Tính Hiệu Suất (Performance Score)**:
+   $$\text{VolumeRatio} = \min\left(\frac{V_{\text{actual}}}{V_{\text{target}}}, 1.2\right)$$
+   $$\text{FormScoreRatio} = \frac{\text{FormScore}}{100.0} \quad (\text{Mặc định } 0.75 \text{ khi không có camera AI})$$
+   $$\text{PRBonus} = 1.0 \text{ nếu } \text{isPR} = \text{true}, \text{ ngược lại } 0.0$$
+   $$\text{PerformanceScore} = 0.5 \cdot \text{VolumeRatio} + 0.3 \cdot \text{FormScoreRatio} + 0.2 \cdot \text{PRBonus} - 0.5$$
+
+3. **Biên Độ Biến Động Kẹp Cứng & Trần/Sàn (ADR-0005)**:
+   $$\Delta ELO = \text{clamp}\left(\text{round}(K \cdot \text{PerformanceScore}), -25, +40\right)$$
+   $$\text{new\_elo} = \min\left(\max\left(\text{current\_elo} + \Delta ELO, 1000\right), 3000\right)$$
+
+### 3.2 Quy Cách Thưởng Dinh Dưỡng Hàng Ngày (ADR-0001)
+- **Điều kiện**: Calo đạt $\pm 10\%$ mục tiêu VÀ Protein đạt $\ge 90\%$ mục tiêu.
+- **Mức thưởng**: $+3$ ELO (hoặc $+5$ ELO nếu duy trì chuỗi 3 ngày liên tục).
+- **Chặn trùng lặp trong ngày**: So khớp `last_nutrition_reward_date == user_local_date`. Nếu đã nhận trong ngày, bỏ qua an toàn.
+- **Không phạt**: Ăn lệch mục tiêu hoặc quên ghi log tuyệt đối không bị trừ điểm.
+
+### 3.3 Quy Cách Suy Giảm Điểm Do Bất Hoạt (Inactivity Decay)
+- **Điều kiện**: `current_elo > 1000` VÀ `last_workout_at < NOW() - INTERVAL '14 days'` VÀ (`last_decay_at IS NULL` HOẶC `last_decay_at < NOW() - INTERVAL '7 days'`).
+- **Mức phạt**: Trừ $15$ ELO mỗi 7 ngày.
+- **Ngưỡng sàn**: $\text{new\_elo} = \max(\text{current\_elo} - 15, 1000)$ (Bậc Bronze không bao giờ bị trừ dưới 1000).
+
+### 3.4 Bảng Ánh Xạ Mã Lỗi (Error Mapping Table)
+| Domain Error | ConnectRPC Code | HTTP Status | Mô Tả |
+| :--- | :--- | :---: | :--- |
+| `ErrEloOutOfRange` | `CodeInvalidArgument` | 400 | Điểm ELO nằm ngoài khoảng $[1000, 3000]$. |
+| `ErrNutritionAlreadyClaimed` | `CodeAlreadyExists` | 409 | Thưởng dinh dưỡng đã được nhận trong ngày. |
+| `ErrUserEloNotFound` | `CodeNotFound` | 404 | Không tìm thấy hồ sơ người dùng. |
+| `ErrDuplicateEvent` | `CodeAlreadyExists` | 409 | Sự kiện đã được xử lý (Inbox Guard). |
+
+---
+
+## 4. Lean Test Design (TDD Alignment)
+
+Áp dụng phương pháp TDD tinh gọn: Tập trung $100\%$ vào kiểm thử bất biến nghiệp vụ, thuật toán và ràng buộc đồng thời vật lý. **Không viết test cho các hàm getter/setter, mapper thụ động, hoặc mock tràn lan**.
+
+### 4 Bộ Test Cốt Lõi (Core Test Suites)
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. rank_tier_test.go (Domain VO)                                       │
+│    -> Kiểm tra logic chuyển bậc hạng tại các mốc biên (Boundary Logic) │
+├────────────────────────────────────────────────────────────────────────┤
+│ 2. elo_calculator_test.go (Domain Service)                             │
+│    -> Kiểm tra công thức toán, K-factor, clamp [-25, +40], trần/sàn    │
+├────────────────────────────────────────────────────────────────────────┤
+│ 3. user_elo_test.go (Domain Aggregate)                                 │
+│    -> Kiểm tra bất biến Aggregate, thăng/giáng hạng, chặn lặp dinh dưỡng│
+├────────────────────────────────────────────────────────────────────────┤
+│ 4. repository_test.go (PostgreSQL Integration)                         │
+│    -> Kiểm tra khóa bi quan FOR UPDATE chống Lost Update & Inbox Guard │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Kịch Bản Kiểm Thử Bắt Buộc
+
+| Bộ Test | Đường Dẫn | Kịch Bản Kiểm Thử Trọng Tâm |
 | :--- | :--- | :--- |
-| **Bậc Hạng** | `domain/vo/rank_tier_test.go` | **Biên chuyển bậc chính xác**:<br>- `1000..1199` = Bronze<br>- `1200` = Silver (chuyển bậc tức thì)<br>- `1500` = Gold<br>- `1800` = Platinum<br>- `2200` = Diamond<br>- Sàn cứng $1000$, trần cứng $3000$. |
-| **Công Thức ELO** | `domain/service/elo_calculator_test.go` | **Thuật toán & Ràng buộc biên độ**:<br>- Hiệu suất tập $\rightarrow \Delta$ chính xác theo tỷ lệ volume & form.<br>- Buổi tập không AI (form = 0) $\rightarrow$ fallback chuẩn form $75\%$.<br>- Biến động bị clamp cứng trong $[-25, +40]$.<br>- Chạm trần $3000$ không được vượt; chạm sàn $1000$ không được rớt tiếp.<br>- $K$-factor suy giảm đúng theo bậc: Diamond ($K=10$) biến động nhỏ hơn Bronze ($K=32$). |
-| **Vòng Đời Aggregate** | `domain/aggregate/user_elo_test.go` | **Bất biến trạng thái & Phát sinh sự kiện**:<br>- Tăng điểm vượt mốc $\rightarrow$ Tự động thăng hạng + phát sinh `RankTierPromoted`.<br>- Tụt điểm dưới mốc $\rightarrow$ Tự động giáng hạng + phát sinh `RankTierDemoted` (ADR-0003).<br>- Thưởng dinh dưỡng $+3$ ELO: nhận lần 1 thành công; nhận lần 2 trong cùng ngày bị từ chối.<br>- Bất hoạt $>14$ ngày $\rightarrow$ trừ $15$ ELO (không rớt dưới sàn $1000$). |
-| **Khóa DB & Chống Trùng** | `infrastructure/persistence/postgres/repository_test.go` | **Bảo vệ toàn vẹn dữ liệu vật lý (The 3 AM Test)**:<br>- **Race Condition**: 10 Goroutines đồng thời cộng điểm trên cùng $1$ user qua `SELECT ... FOR UPDATE` $\rightarrow 0\%$ Lost Update, tổng điểm cuối cùng đúng $100\%$.<br>- **Idempotency**: Gửi 2 lần cùng một `event_id` $\rightarrow$ lần 2 bị từ chối, transaction rollback, không bị cộng trùng điểm. |
+| **Bậc Hạng** | `domain/vo/rank_tier_test.go` | - $1000..1199 \rightarrow$ Bronze; $1200 \rightarrow$ Silver; $1500 \rightarrow$ Gold; $1800 \rightarrow$ Platinum; $2200 \rightarrow$ Diamond.<br>- Sàn cứng $1000$, trần cứng $3000$. |
+| **Thuật Toán ELO** | `domain/service/elo_calculator_test.go` | - Volume & form chuẩn $\rightarrow \Delta$ chính xác theo công thức.<br>- Không có AI Camera (form = 0) $\rightarrow$ fallback chuẩn form $75\%$.<br>- Biến động kẹp cứng trong đoạn $[-25, +40]$.<br>- Kẹp trần 3000 ELO và sàn 1000 ELO (ADR-0005).<br>- $K$-factor suy giảm đúng bậc ($32 \rightarrow 24 \rightarrow 16 \rightarrow 10$). |
+| **Vòng Đời Aggregate** | `domain/aggregate/user_elo_test.go` | - Khởi tạo mặc định $1000$ ELO, Bronze Tier.<br>- Tăng điểm qua mốc $\rightarrow$ Tự thăng hạng + phát `RankTierPromoted`.<br>- Giảm điểm rớt mốc $\rightarrow$ Tự giáng hạng + phát `RankTierDemoted` (ADR-0003).<br>- Thưởng dinh dưỡng $+3$ ELO: nhận lần 1 thành công; nhận lần 2 cùng ngày trả lỗi `ErrNutritionAlreadyClaimed` (ADR-0001).<br>- Bất hoạt $>14$ ngày $\rightarrow$ trừ $15$ ELO (không rớt dưới sàn 1000). |
+| **Khóa & Toàn Vẹn** | `infrastructure/persistence/postgres/repository_test.go` | - **The 3 AM Test**: 10 Goroutines đồng thời gọi `GetForUpdate` cộng điểm cho 1 user $\rightarrow 0\%$ Lost Update, điểm cuối cùng đúng $100\%$ (ADR-0004).<br>- **Idempotency**: Gửi 2 lần cùng một `event_id` $\rightarrow$ lần 2 rollback, không cộng trùng. |
 
-### Lệnh Thực Thi Kiểm Thử
-
+### Lệnh Chạy Kiểm Thử
 ```bash
-# 1. Chạy Unit Tests thuần túy cho Domain Logic (nhanh, in-memory, zero I/O)
+# 1. Chạy Unit Tests Domain (nhanh, zero I/O)
 go test -v -race ./internal/gamification/domain/...
 
-# 2. Chạy Integration Tests kiểm tra khóa bi quan & idempotency với PostgreSQL
+# 2. Chạy Integration Tests khóa bi quan PostgreSQL
 go test -v -race -tags=integration ./internal/gamification/infrastructure/persistence/postgres/...
 
-# 3. Kiểm tra độ bao phủ mã nguồn cho Domain Layer (Mục tiêu > 90%)
+# 3. Kiểm tra Statement Coverage
 go test -coverprofile=coverage.out ./internal/gamification/domain/...
 go tool cover -func=coverage.out
 ```
 
 ---
 
-## Data migration, compatibility, and rollout
-- **Migration an toàn**: Thêm mới schema `gamification` độc lập, không can thiệp hay sửa đổi bất kỳ bảng nào của các module hiện hữu (`auth`, `profile`, `workout_execution`).
-- **Khởi tạo dữ liệu người dùng (Lazy Onboarding)**: Người dùng cũ chưa có bản ghi trong `gamification.user_elo` sẽ được tự động khởi tạo mặc định (1,000 ELO, Bậc Bronze) ngay trong lần đầu tiên phát sinh buổi tập hoặc khi mở ứng dụng xem rank.
-- **Rollback Plan**: Xóa bảng và schema `gamification` mà không gây bất kỳ ảnh hưởng nào đến các chức năng tập luyện hay dinh dưỡng của hệ thống.
+## 5. Execution Phases & Sequencing
+
+- **Phase 1: API & Event Contracts (Protobuf)**:
+  - Khai báo Protobuf (`gamification_service.proto`, `gamification_messages.proto`, `elo_events.proto`).
+  - Chạy `buf generate` sinh Go stubs tại `internal/gen/go/contracts/supporting/gamification/v1/`.
+- **Phase 2: Database Schema & Migration (PostgreSQL DDL)**:
+  - Migration script tạo schema `gamification`, bảng `user_elo`, `elo_history`, `processed_events`, `outbox_events` kèm chỉ mục và check constraints.
+- **Phase 3: Domain Core & Unit Tests (Pure Go, TDD)**:
+  - Viết test trước (RED) $\rightarrow$ Hiện thực hóa Value Object, Domain Service, Aggregate Root, Repository Port (GREEN) $\rightarrow$ Tối ưu (REFACTOR).
+- **Phase 4: Persistence Layer & Concurrency Integration Tests**:
+  - Triển khai PostgreSQL Repository với `SELECT ... FOR UPDATE`, Inbox Guard, Outbox Writer.
+  - Chạy kiểm thử race condition 10 Goroutines đồng thời.
+- **Phase 5: Application CQRS & Transport Wiring**:
+  - Hiện thực hóa Command Handlers, Query Handlers, Kafka Consumers, và ConnectRPC Handler.
+  - Background Outbox Worker quét và publish sự kiện sang Kafka.
 
 ---
 
-## Risks and open decisions
+## 6. Migration, Compatibility & Rollout
 
-| Rủi ro | Mức độ | Biện pháp giảm thiểu |
-| :--- | :---: | :--- |
-| **Sự kiện trùng lặp từ Kafka** | Cao | Chặn đứng bằng bảng `processed_events` (Idempotent Inbox Guard) trong transaction. |
-| **Tranh chấp khóa dòng khi tải cao** | Trung bình | Khóa chỉ giữ 1-3ms cho truy vấn nội bộ; giao dịch tuần tự hóa theo `user_id`. |
-| **Sai lệch múi giờ khi tính thưởng dinh dưỡng** | Thấp | Chuyển đổi timestamp của sự kiện sang `user_local_date` trước khi kiểm tra ngày nhận thưởng. |
+- **Schema Cô Lập**: Schema `gamification.*` hoàn toàn độc lập, không ảnh hưởng đến các module hiện hành.
+- **Lazy Onboarding**: Người dùng mới được khởi tạo mặc định $1000$ ELO (Bronze) ngay trong lần đầu phát sinh buổi tập hoặc truy vấn điểm, không cần chạy data backfill cho người dùng cũ.
+- **Rollback Safety**: Xóa bảng và schema `gamification` mà không gây ảnh hưởng đến dữ liệu tập luyện của module `workout_execution`.

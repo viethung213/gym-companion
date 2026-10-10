@@ -11,13 +11,13 @@
 
 ## 1. System & Component Architecture
 
-### 1.1 Tổng quan Kiến trúc Hexagonal (Ports & Adapters)
-Tính năng **ELO Rating & Rank Tiers** tuân thủ nghiêm ngặt mô hình kiến trúc Hexagonal của dự án. Tầng Domain hoàn toàn cô lập với cơ sở dữ liệu và framework, tiếp nhận các tác vụ qua Driving Adapters (Kafka Consumer & ConnectRPC) và giao tiếp với thế giới bên ngoài qua Driven Adapters (PostgreSQL Persistence & Transactional Outbox):
+### 1.1 Tổng Quan Kiến Trúc Hexagonal (Ports & Adapters)
+Tính năng **ELO Rating & Rank Tiers** tuân thủ mô hình Hexagonal Architecture của dự án. Tầng Domain hoàn toàn cô lập với cơ sở dữ liệu và framework, giao tiếp qua Driving Adapters (Kafka Consumer, ConnectRPC) và Driven Adapters (PostgreSQL Persistence, Transactional Outbox):
 
 ```mermaid
 flowchart TD
     subgraph ExternalSources["External Event Sources (Kafka Topics)"]
-        W_EVT["workout_execution.events<br/>(WorkoutSessionCompleted,<br/>NewPersonalRecordAchieved)"]
+        W_EVT["workout_execution.events<br/>(WorkoutSessionCompleted)"]
         N_EVT["nutrition.events<br/>(MealLogged)"]
     end
 
@@ -29,6 +29,7 @@ flowchart TD
     subgraph ApplicationLayer["Application Layer (Use Cases)"]
         CMD_WORKOUT["ProcessWorkoutEloCommandHandler"]
         CMD_NUTRI["ProcessNutritionEloCommandHandler"]
+        CMD_DECAY["ProcessInactivityDecayCommandHandler"]
         QRY_MY_ELO["GetMyEloQueryHandler"]
         QRY_HIST["GetEloHistoryQueryHandler"]
     end
@@ -37,9 +38,7 @@ flowchart TD
         AGG_ELO["UserElo (Aggregate Root)"]
         VO_TIER["RankTier (Value Object)"]
         SRV_CALC["EloCalculator (Domain Service)"]
-        EVT_PROM["RankTierPromoted"]
-        EVT_DEMO["RankTierDemoted"]
-        EVT_UPD["EloScoreUpdated"]
+        PORT_REPO["UserEloRepository (Port)"]
     end
 
     subgraph DrivenAdapters["Driven Adapters (Infrastructure Layer)"]
@@ -65,10 +64,11 @@ flowchart TD
     K_CONS --> CMD_WORKOUT & CMD_NUTRI
     RPC_SRV --> QRY_MY_ELO & QRY_HIST
 
-    CMD_WORKOUT & CMD_NUTRI --> AGG_ELO & SRV_CALC
-    AGG_ELO --> EVT_PROM & EVT_DEMO & EVT_UPD
+    CMD_WORKOUT & CMD_NUTRI & CMD_DECAY --> AGG_ELO & SRV_CALC
+    CMD_WORKOUT & CMD_NUTRI & CMD_DECAY --> PORT_REPO
+    PORT_REPO -.-> REPO_ELO
 
-    CMD_WORKOUT & CMD_NUTRI --> INBOX & REPO_ELO & REPO_HIST & OUTBOX
+    CMD_WORKOUT & CMD_NUTRI --> INBOX & REPO_HIST & OUTBOX
     INBOX --> DB_INBOX
     REPO_ELO --> DB_ELO
     REPO_HIST --> DB_HIST
@@ -77,33 +77,22 @@ flowchart TD
     DB_OUTBOX --> WORKER --> TOPIC_OUT
 ```
 
-### 1.2 Ranh giới Module & Các File Mã Nguồn Dự Kiến
-Các thành phần mã nguồn sẽ được đặt trong thư mục `internal/gamification/` theo chuẩn Hexagonal:
-
+### 1.2 Ranh Giới Module & Các File Mã Nguồn Dự Kiến
 - **Domain Layer (`internal/gamification/domain/`)**:
-  - `aggregate/user_elo.go`: Aggregate root `UserElo` quản lý trạng thái điểm số, phiên bản, thời gian cập nhật.
-  - `vo/rank_tier.go`: Value object định nghĩa 5 bậc hạng và hàm thuần túy `DetermineTier(elo int32) RankTier`.
-  - `service/elo_calculator.go`: Domain service hiện thực hóa công thức tính $\Delta ELO$ từ volume, form score, PR và dinh dưỡng.
-  - `event/elo_events.go`: Khai báo domain events nội bộ (`EloScoreUpdated`, `RankTierPromoted`, `RankTierDemoted`).
-  - `repository/user_elo_repository.go`: Port interface định nghĩa các phương thức `FindByID`, `Save`, `GetForUpdate`.
-
+  - `aggregate/user_elo.go`: Aggregate root quản lý điểm, phiên bản, thời gian tập và bất biến thăng/giáng hạng.
+  - `vo/rank_tier.go`: Value object định nghĩa 5 bậc hạng và hàm ánh xạ `DetermineRankTier(elo int32) RankTier`.
+  - `service/elo_calculator.go`: Domain service tính toán biến động điểm ELO từ hiệu suất và kỷ luật.
+  - `event/elo_events.go`: Domain events (`EloScoreUpdated`, `RankTierPromoted`, `RankTierDemoted`).
+  - `repository/user_elo_repository.go`: Port interface (`FindByID`, `GetForUpdate`, `Save`).
 - **Application Layer (`internal/gamification/application/`)**:
-  - `command/process_workout_elo.go`: Use case xử lý sự kiện buổi tập hoàn thành.
-  - `command/process_nutrition_elo.go`: Use case xử lý sự kiện thưởng dinh dưỡng.
-  - `query/get_my_elo.go`: Use case lấy thông tin rank và ELO cá nhân.
-  - `query/get_elo_history.go`: Use case lấy lịch sử biến động điểm.
-
+  - `command/`: Handlers cho `ProcessWorkoutElo`, `ProcessNutritionElo`, `ProcessInactivityDecay`.
+  - `query/`: Handlers cho `GetMyElo`, `GetEloHistory`.
 - **Infrastructure Layer (`internal/gamification/infrastructure/`)**:
-  - `persistence/postgres/user_elo_repository.go`: Hiện thực hóa truy vấn PostgreSQL với GORM/sqlc.
-  - `persistence/postgres/elo_history_repository.go`: Ghi log biến động điểm.
-  - `persistence/postgres/inbox_repository.go`: Lưu vết sự kiện đã xử lý chống lặp.
-  - `persistence/postgres/outbox_repository.go`: Ghi nhận sự kiện CloudEvents vào outbox.
-  - `worker/outbox_worker.go`: Background worker quét bảng outbox và publish sang Kafka.
-
+  - `persistence/postgres/`: Triển khai repository với `SELECT ... FOR UPDATE`, inbox guard, outbox writer.
+  - `worker/outbox_worker.go`: Background worker quét bảng outbox và publish CloudEvents sang Kafka.
 - **Transport Layer (`internal/gamification/transport/`)**:
-  - `consumer/workout_event_consumer.go`: Kafka reader cho `WorkoutSessionCompleted`.
-  - `consumer/nutrition_event_consumer.go`: Kafka reader cho `MealLogged`.
-  - `grpc/gamification_handler.go`: Hiện thực hóa ConnectRPC service theo protobuf contract.
+  - `consumer/`: Kafka readers cho các sự kiện hoàn thành buổi tập và dinh dưỡng.
+  - `grpc/`: ConnectRPC handler hiện thực hóa protobuf contract.
 
 ---
 
@@ -160,7 +149,6 @@ erDiagram
 ### 2.2 Đặc Tả Schema PostgreSQL (`gamification.*`)
 
 ```sql
--- Schema cô lập của module Gamification
 CREATE SCHEMA IF NOT EXISTS gamification;
 
 -- Bảng 1: Hồ sơ ELO & Bậc Hạng Người Dùng
@@ -171,7 +159,7 @@ CREATE TABLE IF NOT EXISTS gamification.user_elo (
     peak_elo INTEGER NOT NULL DEFAULT 1000 CHECK (peak_elo >= 1000 AND peak_elo <= 3000 AND peak_elo >= current_elo),
     last_workout_at TIMESTAMPTZ,
     last_decay_at TIMESTAMPTZ,
-    last_nutrition_reward_date DATE, -- Lưu ngày địa phương đã nhận thưởng dinh dưỡng (chống cộng lặp trong ngày)
+    last_nutrition_reward_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -187,9 +175,9 @@ CREATE TABLE IF NOT EXISTS gamification.elo_history (
     old_elo INTEGER NOT NULL,
     new_elo INTEGER NOT NULL,
     delta_elo INTEGER NOT NULL,
-    change_reason VARCHAR(50) NOT NULL, -- WORKOUT_COMPLETED, NUTRITION_ADHERENCE, INACTIVITY_DECAY, ADMIN_ADJUST
-    source_event_id VARCHAR(100),       -- ID của CloudEvent kích hoạt biến động
-    metadata JSONB DEFAULT '{}'::jsonb, -- Thông tin thêm (session_id, form_score, volume_ratio, etc.)
+    change_reason VARCHAR(50) NOT NULL,
+    source_event_id VARCHAR(100),
+    metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -212,7 +200,7 @@ CREATE TABLE IF NOT EXISTS gamification.outbox_events (
     aggregate_id UUID NOT NULL,
     event_type VARCHAR(150) NOT NULL,
     payload JSONB NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, PUBLISHED, FAILED
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     retry_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMPTZ
@@ -224,42 +212,32 @@ CREATE INDEX IF NOT EXISTS idx_outbox_events_pending
 ```
 
 ### 2.3 Quy Tắc Ánh Xạ Bậc Hạng Trực Tiếp (Stateless Direct Rank Mapping - ADR-0003)
+Hệ thống **không sử dụng máy trạng thái** và không dùng khiên rớt hạng (`Demotion Shield`). Bậc hạng là hàm thuần túy theo dải điểm `current_elo`:
 
-Theo quyết định tại **ADR-0003**, hệ thống **không sử dụng máy trạng thái (No State Machine)** và không áp dụng cơ chế khiên rớt hạng (`Demotion Shield`). Bậc hạng là một hàm thuần túy (Pure Function) không lưu trạng thái trung gian, phân định trực tiếp theo dải điểm `current_elo`:
-
-| Bậc Hạng (Rank Tier) | Dải Điểm ELO (Range) | Đặc Điểm & Cơ Chế Giáng Hạng |
+| Bậc Hạng (Rank Tier) | Dải Điểm ELO | Đặc Điểm & Cơ Chế Giáng Hạng |
 | :--- | :---: | :--- |
-| **Đồng (Bronze)** | $1,000 - 1,199$ | Mức khởi tạo mặc định; sàn tối thiểu hệ thống (không bị decay dưới 1,000). |
-| **Bạc (Silver)** | $1,200 - 1,499$ | Thăng hạng ngay khi chạm 1,200; rớt xuống dưới 1,200 giáng về Đồng tức thì. |
-| **Vàng (Gold)** | $1,500 - 1,799$ | Thăng hạng ngay khi chạm 1,500; rớt xuống dưới 1,500 giáng về Bạc tức thì. |
-| **Bạch Kim (Platinum)**| $1,800 - 2,199$ | Thăng hạng ngay khi chạm 1,800; rớt xuống dưới 1,800 giáng về Vàng tức thì. |
-| **Kim Cương (Diamond)**| $2,200 - 3,000$ | Bậc tối cao; trần cứng 3,000 ELO (ADR-0005); rớt dưới 2,200 giáng về Platinum. |
+| **Bronze (Đồng)** | $1,000 - 1,199$ | Khởi tạo mặc định; sàn tối thiểu hệ thống (không decay dưới 1,000). |
+| **Silver (Bạc)** | $1,200 - 1,499$ | Thăng hạng khi $\ge 1,200$; rớt dưới 1,200 giáng về Bronze tức thì. |
+| **Gold (Vàng)** | $1,500 - 1,799$ | Thăng hạng khi $\ge 1,500$; rớt dưới 1,500 giáng về Silver tức thì. |
+| **Platinum (Bạch Kim)**| $1,800 - 2,199$ | Thăng hạng khi $\ge 1,800$; rớt dưới 1,800 giáng về Gold tức thì. |
+| **Diamond (Kim Cương)**| $2,200 - 3,000$ | Bậc tối cao; trần cứng 3,000 ELO (ADR-0005); rớt dưới 2,200 giáng về Platinum. |
 
 ```mermaid
 flowchart LR
     Score["current_elo (1000..3000)"] --> Decision{"Ngưỡng điểm"}
-    Decision -->|">= 2200"| D["DIAMOND (Kim Cương)"]
-    Decision -->|">= 1800"| P["PLATINUM (Bạch Kim)"]
-    Decision -->|">= 1500"| G["GOLD (Vàng)"]
-    Decision -->|">= 1200"| S["SILVER (Bạc)"]
-    Decision -->|"< 1200"| B["BRONZE (Đồng)"]
+    Decision -->|">= 2200"| D["DIAMOND"]
+    Decision -->|">= 1800"| P["PLATINUM"]
+    Decision -->|">= 1500"| G["GOLD"]
+    Decision -->|">= 1200"| S["SILVER"]
+    Decision -->|"< 1200"| B["BRONZE"]
 ```
 
 ---
 
-## 3. Detailed Flow & Execution Logic
+## 3. High-Level Flow & Execution Logic
 
-Tất cả các luồng xử lý nghiệp vụ (Use Cases) được chuẩn hóa theo cấu trúc thống nhất: **Mục tiêu & Kích hoạt $\rightarrow$ Biểu đồ trình tự $\rightarrow$ Các bước thực thi $\rightarrow$ Kiểm soát giao dịch & Lũy đẳng**.
+### 3.1 Luồng Xử Lý Buổi Tập Hoàn Thành (UC-ELO-01)
 
----
-
-### 3.1 Luồng Xử Lý Sự Kiện Buổi Tập Hoàn Thành (UC-ELO-01)
-
-#### 1. Mục tiêu & Kích hoạt
-- **Trigger**: Consumer nhận được CloudEvent `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` từ Kafka topic `workout_execution.events`.
-- **Preconditions**: Buổi tập hợp lệ, có `session_id`, `user_id`, thời lượng và khối lượng nâng thực tế.
-
-#### 2. Biểu đồ trình tự tương tác
 ```mermaid
 sequenceDiagram
     autonumber
@@ -270,70 +248,45 @@ sequenceDiagram
     participant OW as Outbox Worker
     participant EventBus as Kafka (gamification.events)
 
-    K->>App: Consume(WorkoutSessionCompleted Event)
+    K->>App: Consume(WorkoutSessionCompleted)
     App->>DB: BEGIN TRANSACTION
-
-    App->>DB: INSERT INTO processed_events (event_id, event_type) VALUES (...) ON CONFLICT DO NOTHING
-    alt Event đã xử lý trước đó (Duplicate)
+    App->>DB: INSERT INTO processed_events (...) ON CONFLICT DO NOTHING
+    alt Event trùng lặp (Duplicate)
         App->>DB: ROLLBACK TRANSACTION
         App-->>K: Commit Offset (Bỏ qua)
     else Event mới hợp lệ
-        App->>DB: SELECT * FROM user_elo WHERE user_id = :userId FOR UPDATE
-        alt Chưa có bản ghi UserElo (Lazy Init)
-            App->>Domain: NewUserElo(userId, defaultElo = 1000)
+        App->>DB: SELECT * FROM user_elo WHERE user_id = :id FOR UPDATE
+        alt Chưa có bản ghi (Lazy Init)
+            App->>Domain: NewUserElo(id, 1000)
             App->>DB: INSERT INTO user_elo (...)
         end
-
-        App->>Domain: CalculateDelta(volumeRatio, formScore, isPR)
-        Note over Domain: Tính ΔELO qua EloCalculator<br/>Kẹp biên độ [-25, +40]
-        App->>Domain: ApplyWorkoutResult(deltaElo, sessionTime)
-        Note over Domain: Cập nhật current_elo, peak_elo<br/>Phát sinh EloScoreUpdated, Promoted/Demoted
-
+        App->>Domain: ApplyWorkoutResult(volumeRatio, formScore, isPR)
         App->>DB: UPDATE user_elo SET current_elo = :newElo, rank_tier = :newTier, ...
-        App->>DB: INSERT INTO elo_history (user_id, old_elo, new_elo, delta_elo, ...)
-        
-        alt Có sự kiện thăng hoặc hạ hạng
-            App->>DB: INSERT INTO outbox_events (event_type = RankTierPromoted / Demoted, ...)
+        App->>DB: INSERT INTO elo_history (...)
+        alt Có sự kiện đổi bậc
+            App->>DB: INSERT INTO outbox_events (RankTierPromoted / Demoted)
         end
-        App->>DB: INSERT INTO outbox_events (event_type = EloScoreUpdated, ...)
-
+        App->>DB: INSERT INTO outbox_events (EloScoreUpdated)
         App->>DB: COMMIT TRANSACTION
         App-->>K: Commit Offset
-
         par Background Dispatch
             OW->>DB: SELECT * FROM outbox_events WHERE status = 'PENDING' FOR UPDATE SKIP LOCKED
-            OW->>EventBus: Publish CloudEvent 1.0 (gamification.events)
-            OW->>DB: UPDATE outbox_events SET status = 'PUBLISHED', processed_at = NOW()
+            OW->>EventBus: Publish CloudEvent 1.0
+            OW->>DB: UPDATE outbox_events SET status = 'PUBLISHED'
         end
     end
 ```
 
-#### 3. Các bước thực thi chi tiết
-1. **Kiểm tra lũy đẳng**: Ghi `event_id` vào bảng `gamification.processed_events`. Nếu xung đột khóa chính, rollback và bỏ qua.
-2. **Khóa dòng bi quan**: Thực thi `SELECT ... FROM gamification.user_elo WHERE user_id = :id FOR UPDATE` để tuần tự hóa giao dịch (ADR-0004).
-3. **Tính toán biến động điểm**:
-   - Gọi `EloCalculator.CalculateWorkoutDelta()` với tham số tỷ lệ khối lượng, điểm form (fallback 75 nếu không có AI), và cờ PR.
-   - Kẹp biến động $\Delta ELO \in [-25, +40]$.
-4. **Cập nhật trạng thái Aggregate**:
-   - Cập nhật điểm mới, kẹp trần sàn $[1000, 3000]$ (ADR-0005).
-   - Xác định bậc hạng mới qua `DetermineRankTier(newElo)` (ADR-0003).
-   - Phát sinh Domain Events: `EloScoreUpdated`, và `RankTierPromoted` hoặc `RankTierDemoted` (nếu đổi bậc).
-5. **Lưu trữ dữ liệu**: Cập nhật `user_elo`, ghi nhật ký `elo_history`, ghi nhận sự kiện vào `outbox_events`.
-6. **Commit**: Hoàn tất giao dịch và commit offset Kafka.
-
-#### 4. Kiểm soát giao dịch & Lũy đẳng
-- Toàn bộ bước 1 đến 5 chạy trong **1 Transaction duy nhất**.
-- Khóa `FOR UPDATE` bảo vệ toàn vẹn điểm số khi có nhiều buổi tập hoàn tất gần như đồng thời.
+**Các bước thực thi & Ranh giới giao dịch:**
+1. **Lũy đẳng**: Chặn sự kiện lặp qua `processed_events`.
+2. **Khóa dòng**: `SELECT ... FOR UPDATE` trên `user_elo` tuần tự hóa giao dịch ghi (ADR-0004).
+3. **Cập nhật Aggregate**: Tính toán $\Delta ELO$, kẹp trần sàn $[1000, 3000]$, tự động thăng/giáng bậc tức thì.
+4. **Lưu trữ nguyên tử**: Cập nhật `user_elo`, ghi nhật ký `elo_history`, lưu sự kiện vào `outbox_events` trong cùng một transaction.
 
 ---
 
 ### 3.2 Luồng Thưởng Kỷ Luật Dinh Dưỡng Hàng Ngày (UC-ELO-02)
 
-#### 1. Mục tiêu & Kích hoạt
-- **Trigger**: Consumer nhận được CloudEvent `contracts.core.nutrition.v1.event.MealLogged` từ Kafka topic `nutrition.events`.
-- **Preconditions**: Người dùng ghi nhận bữa ăn trong ngày; module `nutrition` xác nhận tổng calo và macro ngày.
-
-#### 2. Biểu đồ trình tự tương tác
 ```mermaid
 sequenceDiagram
     autonumber
@@ -341,28 +294,22 @@ sequenceDiagram
     participant App as ProcessNutritionEloHandler
     participant DB as PostgreSQL (gamification)
     participant Domain as UserElo Aggregate
-    participant OW as Outbox Worker
 
-    K->>App: Consume(MealLogged Event)
+    K->>App: Consume(MealLogged)
     App->>DB: BEGIN TRANSACTION
-
-    App->>DB: SELECT * FROM user_elo WHERE user_id = :userId FOR UPDATE
-    
-    alt Đã nhận thưởng trong ngày (last_nutrition_reward_date == user_local_date)
+    App->>DB: SELECT * FROM user_elo WHERE user_id = :id FOR UPDATE
+    alt Đã nhận hôm nay (last_nutrition_reward_date == user_local_date)
         App->>DB: ROLLBACK TRANSACTION
-        App-->>K: Commit Offset (Bỏ qua vì đã nhận hôm nay)
-    else Chưa nhận thưởng hôm nay
+        App-->>K: Commit Offset (Bỏ qua)
+    else Chưa nhận hôm nay
         alt Đạt chuẩn Calo (±10%) và Protein (>=90%)
-            App->>Domain: ApplyNutritionBonus(+3 hoặc +5 ELO, userLocalDate)
-            Note over Domain: new_elo = min(current_elo + bonus, 3000)<br/>Cập nhật last_nutrition_reward_date
-            
-            App->>DB: UPDATE user_elo SET current_elo = :newElo, last_nutrition_reward_date = :userLocalDate, ...
-            App->>DB: INSERT INTO elo_history (change_reason = 'NUTRITION_ADHERENCE', delta_elo = :bonus, ...)
-            App->>DB: INSERT INTO outbox_events (event_type = 'EloScoreUpdated', ...)
-            
+            App->>Domain: ApplyNutritionBonus(+3 hoặc +5, localDate)
+            App->>DB: UPDATE user_elo SET current_elo = :newElo, last_nutrition_reward_date = :localDate
+            App->>DB: INSERT INTO elo_history (change_reason = 'NUTRITION_ADHERENCE')
+            App->>DB: INSERT INTO outbox_events (EloScoreUpdated)
             App->>DB: COMMIT TRANSACTION
             App-->>K: Commit Offset
-        else Không đạt chuẩn calo/macro
+        else Không đạt chuẩn
             App->>DB: ROLLBACK TRANSACTION
             Note over App: Tuyệt đối không trừ điểm ELO (ADR-0001)
             App-->>K: Commit Offset
@@ -370,30 +317,10 @@ sequenceDiagram
     end
 ```
 
-#### 3. Các bước thực thi chi tiết
-1. **Kiểm tra ngày nhận thưởng**: Khóa dòng `user_elo` bằng `FOR UPDATE`. Kiểm tra `last_nutrition_reward_date`:
-   - Nếu đã bằng `user_local_date`: Bỏ qua để chống cộng lặp thưởng trong ngày.
-2. **Đánh giá tiêu chuẩn dinh dưỡng**:
-   - Nếu Calo đạt trong ngưỡng an toàn $\pm 10\%$ và Protein đạt $\ge 90\%$ mục tiêu ngày:
-     - Thưởng $+3$ ELO (hoặc $+5$ ELO nếu đạt streak 3 ngày ăn chuẩn).
-     - Cập nhật `last_nutrition_reward_date = user_local_date`.
-     - Ghi nhận `elo_history` với lý do `NUTRITION_ADHERENCE`.
-     - Ghi Outbox event `EloScoreUpdated`.
-3. **Chính sách không phạt**: Nếu người dùng ăn lệch mục tiêu hoặc quên log: Không trừ ELO (ADR-0001).
-
-#### 4. Kiểm soát giao dịch & Lũy đẳng ngày
-- Khóa `FOR UPDATE` ngăn chặn 2 sự kiện log bữa ăn liên tiếp trong cùng 1 giây kích hoạt thưởng 2 lần.
-- Cột `last_nutrition_reward_date DATE` đóng vai trò là Daily Idempotency Guard tự nhiên.
-
 ---
 
-### 3.3 Luồng Suy Giảm Điểm Do Bất Hoạt (UC-ELO-03)
+### 3.3 Luồng Suy Giảm Điểm Bất Hoạt (UC-ELO-03)
 
-#### 1. Mục tiêu & Kích hoạt
-- **Trigger**: Background Scheduler kích hoạt định kỳ (hàng ngày vào lúc 02:00 AM) chạy job quét tài khoản bất hoạt.
-- **Preconditions**: Người dùng có `current_elo > 1000` (Bậc Đồng sàn 1,000 không bao giờ bị decay) và `last_workout_at < NOW() - INTERVAL '14 days'`.
-
-#### 2. Biểu đồ trình tự tương tác
 ```mermaid
 sequenceDiagram
     autonumber
@@ -404,41 +331,22 @@ sequenceDiagram
     Job->>DB: SELECT user_id FROM user_elo WHERE current_elo > 1000 AND last_workout_at < NOW() - INTERVAL '14 days' AND (last_decay_at IS NULL OR last_decay_at < NOW() - INTERVAL '7 days') LIMIT 100
     loop Từng người dùng bất hoạt
         Job->>DB: BEGIN TRANSACTION
-        Job->>DB: SELECT * FROM user_elo WHERE user_id = :userId FOR UPDATE
-        
-        Job->>Domain: ApplyInactivityDecay(decayPoints = 15)
-        Note over Domain: new_elo = max(current_elo - 15, 1000)<br/>Kiểm tra giáng bậc tức thì (ADR-0003)
-        
+        Job->>DB: SELECT * FROM user_elo WHERE user_id = :id FOR UPDATE
+        Job->>Domain: ApplyInactivityDecay(15)
         Job->>DB: UPDATE user_elo SET current_elo = :newElo, rank_tier = :newTier, last_decay_at = NOW()
-        Job->>DB: INSERT INTO elo_history (change_reason = 'INACTIVITY_DECAY', delta_elo = -15, ...)
+        Job->>DB: INSERT INTO elo_history (change_reason = 'INACTIVITY_DECAY', delta_elo = -15)
         alt Tụt hạng
-            Job->>DB: INSERT INTO outbox_events (event_type = 'RankTierDemoted', ...)
+            Job->>DB: INSERT INTO outbox_events (RankTierDemoted)
         end
-        Job->>DB: INSERT INTO outbox_events (event_type = 'EloScoreUpdated', ...)
+        Job->>DB: INSERT INTO outbox_events (EloScoreUpdated)
         Job->>DB: COMMIT TRANSACTION
     end
 ```
 
-#### 3. Các bước thực thi chi tiết
-1. **Lọc người dùng đủ điều kiện decay**: Quét batch 100 người dùng có `current_elo > 1000`, nghỉ tập $>14$ ngày và chưa bị trừ decay trong 7 ngày gần nhất.
-2. **Khóa dòng & Trừ điểm**: Mở transaction riêng cho từng user với `SELECT ... FOR UPDATE`.
-3. **Cập nhật sàn**: Trừ $15$ ELO, đảm bảo điểm sau trừ không thấp hơn sàn $1000$: $\text{new\_elo} = \max(\text{current\_elo} - 15, 1000)$.
-4. **Hạ bậc tức thì**: Nếu điểm rớt xuống dưới ngưỡng của bậc hiện tại, chuyển bậc ngay lập tức và phát sự kiện `RankTierDemoted` (ADR-0003).
-5. **Ghi log & Commit**: Cập nhật `last_decay_at = NOW()`, ghi `elo_history`, commit transaction.
-
-#### 4. Kiểm soát giao dịch & Ngưỡng chặn sàn
-- Mỗi người dùng chạy trong 1 transaction độc lập, tránh giữ khóa lâu trên toàn bảng.
-- Ràng buộc check `current_elo >= 1000` bảo đảm an toàn dữ liệu mức cơ sở dữ liệu.
-
 ---
 
-### 3.4 Luồng Truy Vấn ELO & Lịch Sử Biến Động (UC-ELO-04)
+### 3.4 Luồng Truy Vấn ELO Cá Nhân & Lịch Sử (UC-ELO-04)
 
-#### 1. Mục tiêu & Kích hoạt
-- **Trigger**: Client gọi RPC `GetMyElo` hoặc `GetEloHistory` qua ConnectRPC / REST Gateway.
-- **Preconditions**: Bearer Token hợp lệ, giải mã được `user_id`.
-
-#### 2. Biểu đồ trình tự tương tác
 ```mermaid
 sequenceDiagram
     autonumber
@@ -449,72 +357,20 @@ sequenceDiagram
 
     Client->>RPC: GetMyElo(user_id)
     RPC->>Qry: Handle(GetMyEloQuery)
-    Qry->>DB: SELECT * FROM gamification.user_elo WHERE user_id = :userId
-    alt Người dùng mới chưa có hồ sơ ELO
-        Qry->>DB: INSERT INTO user_elo (user_id, current_elo, rank_tier) VALUES (:userId, 1000, 'BRONZE') ON CONFLICT DO NOTHING
-        Note over Qry: Lazy Onboarding: Gán mặc định 1,000 ELO (Bronze)
+    Qry->>DB: SELECT * FROM gamification.user_elo WHERE user_id = :id
+    alt Chưa có hồ sơ (Lazy Onboarding)
+        Qry->>DB: INSERT INTO user_elo (user_id, current_elo, rank_tier) VALUES (:id, 1000, 'BRONZE') ON CONFLICT DO NOTHING
     end
-    Qry->>Qry: Tính next_tier_threshold & points_to_next_tier
+    Qry->>Qry: Tính points_to_next_tier
     Qry-->>RPC: GetMyEloResponse DTO
     RPC-->>Client: 200 OK (current_elo, rank_tier, points_to_next_tier)
 ```
-
-#### 3. Các bước thực thi chi tiết
-1. **Truy vấn hồ sơ**: Đọc từ bảng `gamification.user_elo`.
-2. **Khởi tạo lười (Lazy Onboarding)**: Nếu chưa tồn tại, tự động insert bản ghi mặc định (1,000 ELO, Bậc Bronze) mà không cần migration dữ liệu cũ.
-3. **Tính toán khoảng cách thăng hạng**:
-   - Xác định ngưỡng điểm của bậc kế tiếp theo `current_elo`.
-   - Tính `points_to_next_tier = next_threshold - current_elo` (nếu đang ở Kim Cương thì trả về $0$).
-4. **Phân trang lịch sử**: Đối với `GetEloHistory`, thực hiện truy vấn `SELECT ... FROM gamification.elo_history WHERE user_id = :id ORDER BY created_at DESC LIMIT :pageSize OFFSET :offset`.
-
-#### 4. Hiệu năng & Chỉ mục
-- Truy vấn đọc thuần túy (Read-only), không sử dụng khóa dòng.
-- Tận dụng chỉ mục B-Tree `idx_user_elo_ranking` và `idx_elo_history_user_created` cho độ trễ $< 5\text{ms}$.
-
----
-
-### 3.5 Quy Cách Thuật Toán Cốt Lõi (Core Mathematical Specification)
-
-#### 1. Hệ Số Biến Động $K$ Suy Giảm Theo Bậc
-Nhằm tránh lạm phát điểm ở các bậc cao, hệ số $K$ suy giảm dần:
-| Bậc Hạng | Hệ Số $K$ | Mục Đích Thiết Kế |
-| :--- | :---: | :--- |
-| **Bronze, Silver** | $32$ | Tạo động lực ban đầu, điểm số phản hồi nhanh và rõ rệt. |
-| **Gold** | $24$ | Cân bằng giữa tiến bộ và giữ hạng. |
-| **Platinum** | $16$ | Đòi hỏi phong độ ổn định, hạn chế dao động lớn. |
-| **Diamond** | $10$ | Bậc tinh anh; biến động điểm chặt chẽ, chống gian lận leo rank. |
-
-#### 2. Công Thức Biến Động Điểm Buổi Tập ($\Delta ELO$)
-$$\text{VolumeRatio} = \min\left(\frac{V_{\text{actual}}}{V_{\text{target}}}, 1.2\right)$$
-$$\text{FormScoreRatio} = \frac{\text{FormScore}}{100.0} \quad (\text{Mặc định } 0.75 \text{ cho bài tập không có camera AI})$$
-$$\text{PerformanceScore} = 0.5 \cdot \text{VolumeRatio} + 0.3 \cdot \text{FormScoreRatio} + 0.2 \cdot \text{PRBonus} - 0.5$$
-$$\Delta ELO = \text{clamp}\left(\text{round}(K \cdot \text{PerformanceScore}), -25, +40\right)$$
-
-*Trong đó:*
-- $\text{PRBonus} = 1.0$ nếu người dùng phá kỷ lục cá nhân trong buổi tập, ngược lại bằng $0.0$.
-- Biên độ biến động trong 1 buổi tập bị kẹp cứng trong đoạn $[-25, +40]$ ELO.
-
-#### 3. Ràng Buộc Trần Cứng & Sàn Điểm Tuyệt Đối (ADR-0005)
-$$\text{new\_elo} = \min\left(\max\left(\text{current\_elo} + \Delta ELO, 1000\right), 3000\right)$$
-- **Sàn tối thiểu**: $1,000$ ELO (người dùng không bao giờ bị trừ dưới 1,000).
-- **Trần cứng tối đa**: $3,000$ ELO (người dùng đạt 3,000 sẽ dừng tích lũy thêm điểm ELO).
-
-#### 4. Hàm Ánh Xạ Bậc Hạng Trực Tiếp (ADR-0003)
-$$\text{DetermineRankTier}(\text{elo}) = \begin{cases} 
-\text{DIAMOND} & \text{nếu } \text{elo} \ge 2200 \\
-\text{PLATINUM} & \text{nếu } \text{elo} \ge 1800 \\
-\text{GOLD} & \text{nếu } \text{elo} \ge 1500 \\
-\text{SILVER} & \text{nếu } \text{elo} \ge 1200 \\
-\text{BRONZE} & \text{ngược lại}
-\end{cases}$$
 
 ---
 
 ## 4. API & Integration Contracts
 
-### 4.1 Hợp Đồng Protobuf (`proto/contracts/supporting/gamification/v1/`)
-
-#### Service Contract: `service/gamification_service.proto`
+### 4.1 Service Contract (`proto/contracts/supporting/gamification/v1/service/gamification_service.proto`)
 ```protobuf
 syntax = "proto3";
 
@@ -525,17 +381,15 @@ import "contracts/supporting/gamification/v1/message/gamification_messages.proto
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service;gamificationservicev1";
 
 service GamificationService {
-  // Lấy thông tin ELO và bậc hạng cá nhân
   rpc GetMyElo(contracts.supporting.gamification.v1.message.GetMyEloRequest) 
       returns (contracts.supporting.gamification.v1.message.GetMyEloResponse);
 
-  // Lấy lịch sử biến động điểm ELO
   rpc GetEloHistory(contracts.supporting.gamification.v1.message.GetEloHistoryRequest) 
       returns (contracts.supporting.gamification.v1.message.GetEloHistoryResponse);
 }
 ```
 
-#### Message Contract: `message/gamification_messages.proto`
+### 4.2 Message Schemas (`proto/contracts/supporting/gamification/v1/message/gamification_messages.proto`)
 ```protobuf
 syntax = "proto3";
 
@@ -589,7 +443,7 @@ message GetEloHistoryResponse {
 }
 ```
 
-#### Event Contract: `event/elo_events.proto`
+### 4.3 CloudEvents Contracts (`proto/contracts/supporting/gamification/v1/event/elo_events.proto`)
 ```protobuf
 syntax = "proto3";
 
@@ -631,12 +485,12 @@ message RankTierDemoted {
 ## 5. Non-Functional & Security Considerations
 
 ### 5.1 Concurrency & Idempotency (The 3 AM Test)
-- **Khóa bi quan (Pessimistic Locking)**: Mọi thao tác cập nhật ELO bắt buộc thực hiện trong transaction với câu lệnh `SELECT ... FROM gamification.user_elo WHERE user_id = $1 FOR UPDATE`. Điều này đảm bảo khi có nhiều sự kiện gửi đến cùng lúc (ví dụ: kết thúc buổi tập đồng thời với log bữa ăn), các giao dịch sẽ được tuần tự hóa (serialized), loại bỏ hoàn toàn race condition gây mất điểm.
-- **Bảng `processed_events`**: Đóng vai trò là chốt chặn lũy đẳng (Idempotent Inbox Guard). Khi Kafka gửi lại sự kiện lặp (do network retry), ràng buộc khóa chính `PRIMARY KEY (event_id)` sẽ kích hoạt lỗi xung đột và hủy giao dịch ngay lập tức mà không làm thay đổi điểm ELO.
+- **Khóa bi quan (Pessimistic Locking)**: Cập nhật ELO luôn thực thi trong transaction với `SELECT ... FROM gamification.user_elo WHERE user_id = $1 FOR UPDATE` (ADR-0004), tuần tự hóa mọi cập nhật đồng thời, loại bỏ 100% race conditions và Lost Updates.
+- **Idempotent Inbox Guard**: Bảng `processed_events` chặn đứng sự kiện trùng lặp từ Kafka qua ràng buộc khóa chính `event_id`.
 
-### 5.2 Schema Isolation
-- Mã nguồn của `internal/gamification/` chỉ kết nối và thao tác với schema `gamification.*`.
-- Không thực hiện bất kỳ lệnh `JOIN` nào sang các bảng của `workout_execution`, `social`, hay `profile`.
+### 5.2 Schema Isolation & Security
+- Phân hệ Gamification chỉ truy cập schema `gamification.*`. Cấm mọi câu lệnh `JOIN` sang các schema khác (`auth`, `workout_execution`, `nutrition`).
+- API phục vụ người dùng bên ngoài chỉ cung cấp quyền đọc (Read-only); biến động điểm chỉ được kích hoạt bởi sự kiện nội bộ đã xác thực.
 
-### 5.3 Rollout & Khởi Tạo Dữ Liệu
-- Khi người dùng mới chưa có bản ghi trong `gamification.user_elo`, câu lệnh nạp dữ liệu sẽ tự động tạo bản ghi khởi tạo với `current_elo = 1000`, `rank_tier = 'BRONZE'` mà không yêu cầu bước migration phức tạp cho dữ liệu người dùng cũ.
+### 5.3 Lazy Onboarding
+- Khởi tạo mặc định $1000$ ELO (Bronze) ngay khi phát sinh buổi tập hoặc truy vấn lần đầu, không yêu cầu migration dữ liệu người dùng cũ.
