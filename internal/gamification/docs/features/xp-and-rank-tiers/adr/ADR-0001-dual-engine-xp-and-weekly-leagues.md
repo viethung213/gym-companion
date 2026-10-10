@@ -37,7 +37,7 @@ Chosen: **Option 3 (Động cơ XP Kép - Dual-Engine XP)**.
 1. **Lifetime XP & Cấp Độ Trọn Đời**:
    - `total_xp` được cộng dồn vĩnh viễn sau mỗi buổi tập và ngày dinh dưỡng hợp lệ.
    - Cấp độ xác định động qua hàm toán học:
-     $$\text{Level} = \min(\lfloor \sqrt{\text{total\_xp} / 50} \rfloor + 1, 100)$$
+     $$\text{Level} = \min(\lfloor \sqrt{X / 50} \rfloor + 1, 100)$$ (với $X$ là `total_xp`)
    - Cấp độ vĩnh viễn không bao giờ bị hạ bậc.
 2. **Weekly XP & Giải Đấu Tuần 30 Người**:
    - `weekly_xp` chỉ tính các hoạt động trong tuần hiện tại (00:00 Thứ Hai đến 23:59 Chủ Nhật).

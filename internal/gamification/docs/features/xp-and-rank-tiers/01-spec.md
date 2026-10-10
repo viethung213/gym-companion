@@ -113,7 +113,7 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
   - Dao động chuẩn trong 1 buổi tập: $70 \rightarrow 150$ XP.
 - **BR-XP-03 (Nutrition Bonus)**: Thưởng dương cố định $+30$ XP/ngày, tối đa 1 lần/ngày, không trừ điểm khi ăn sai (ADR-0004).
 - **BR-XP-04 (Level Thresholds)**: Cấp độ $1..100$ được tính theo công thức lũy tiến chuẩn:
-  $$\text{Level}(X) = \min\left(\lfloor \sqrt{X / 50} \rfloor + 1, 100\right) \quad (\text{với } X = \text{total\_xp})$$
+  $$\text{Level}(X) = \min\left(\lfloor \sqrt{X / 50} \rfloor + 1, 100\right)$$ (với $X$ là `total_xp`)
   - Level 1: $0$ XP.
   - Level 2: $100$ XP.
   - Level 3: $250$ XP.

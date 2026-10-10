@@ -54,7 +54,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 * **Công thức XP minh bạch theo buổi tập**:
   $$\text{XP} = (\text{Base: 50} + \text{Volume: 10–30} + \text{Form: 10–20} + \text{PR: 25}) \times \text{Streak Multiplier (1.0x – 1.2x)}$$
 * **Thưởng dinh dưỡng**: Nhận thêm $+30$ XP khi hoàn thành mục tiêu Calo/Protein trong ngày (không phạt khi quên log hay ăn cheat meal).
-* **Cấp độ trọn đời (Level 1–100)**: Xác định theo hàm căn bậc hai $\text{Level} = \min(\lfloor \sqrt{\text{total\_xp} / 50} \rfloor + 1, 100)$. Cấp độ chỉ tăng không giảm, vĩnh viễn vinh danh đẳng cấp của gymer.
+* **Cấp độ trọn đời (Level 1–100)**: Xác định theo hàm căn bậc hai $\text{Level} = \min(\lfloor \sqrt{X / 50} \rfloor + 1, 100)$ (với $X$ là `total_xp`). Cấp độ chỉ tăng không giảm, vĩnh viễn vinh danh đẳng cấp của gymer.
 * Chi tiết đặc tả: xem [features/xp-and-rank-tiers/01-spec.md](./features/xp-and-rank-tiers/01-spec.md).
 
 ---
@@ -122,7 +122,7 @@ Xem chi tiết tại: **[architecture.md](./architecture.md)**
 | :--- | :--- | :--- |
 | **Total XP (`total_xp`)** | Kinh Nghiệm Trọn Đời | Thước đo tích lũy nỗ lực vĩnh viễn, 100% củng cố tích cực, không bao giờ bị trừ hay suy giảm theo thời gian. |
 | **Weekly XP (`weekly_xp`)** | Kinh Nghiệm Tuần | Điểm kinh nghiệm tích lũy trong tuần thi đấu hiện tại (00:00 T2 $\rightarrow$ 23:59 CN), là thước đo duy nhất để xếp hạng Giải Đấu Tuần. |
-| **Level (`level`)** | Cấp Độ Trọn Đời | Cấp độ từ 1 đến 100, xác định động theo căn bậc hai của Total XP: $\lfloor \sqrt{\text{total\_xp} / 50} \rfloor + 1$. Cấp độ chỉ tăng không giảm. |
+| **Level (`level`)** | Cấp Độ Trọn Đời | Cấp độ từ 1 đến 100, xác định động theo căn bậc hai của Total XP: $\lfloor \sqrt{X / 50} \rfloor + 1$ (với $X$ là `total_xp`). Cấp độ chỉ tăng không giảm. |
 | **Weekly League** | Giải Đấu Tuần | Giải đấu hàng tuần nhóm 30 người (Cohort of 30) với 5 bậc: Đồng (Bronze), Bạc (Silver), Vàng (Gold), Bạch Kim (Platinum), Kim Cương (Diamond). |
 | **Promotion Zone** | Vùng Thăng Hạng | Top 7 người đứng đầu bảng đấu 30 người (Top ~20%) sẽ thăng lên bậc giải đấu cao hơn vào tuần tiếp theo. |
 | **Demotion Zone** | Vùng Rớt Hạng | Bottom 5 người cuối bảng đấu 30 người (Bottom ~20%) sẽ bị hạ 1 bậc giải đấu vào tuần tiếp theo (bậc Đồng không bị rớt). |
