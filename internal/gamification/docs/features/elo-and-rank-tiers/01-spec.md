@@ -21,8 +21,8 @@ Tính năng **ELO Rating & Rank Tiers** cung cấp thước đo năng lực th�
 
 ### In scope
 - Khởi tạo hồ sơ ELO cơ sở (1,000 ELO, Bronze) cho người dùng mới.
-- Tính toán biến động $\Delta ELO$ theo hiệu suất tập: Khối lượng nâng (Volume), Kỹ thuật động tác (Form Score), và Kỷ lục cá nhân (PR).
-- Thưởng kỷ luật dinh dưỡng hàng ngày ($+3 \rightarrow +5$ ELO/ngày) khi đạt mục tiêu Calo/Protein (ADR-0001).
+- Quản lý kỷ lục điểm số cao nhất (`peak_elo`) và biến động $\Delta ELO$ theo hiệu suất tập: Khối lượng nâng (Volume), Kỹ thuật động tác (Form Score), và Kỷ lục cá nhân (PR).
+- Thưởng kỷ luật dinh dưỡng hàng ngày cố định ($+3$ ELO/ngày) khi đạt mục tiêu Calo/Protein (ADR-0001).
 - Ánh xạ bậc hạng tức thì không trạng thái (ADR-0003).
 - Cơ chế suy giảm điểm bất hoạt khi nghỉ tập $> 14$ ngày.
 - Phát CloudEvents: `EloScoreUpdated`, `RankTierPromoted`, `RankTierDemoted`.
@@ -41,11 +41,11 @@ Chưa có module tính toán điểm ELO. Dữ liệu buổi tập hoàn thành 
 - **Preconditions**: Buổi tập hoàn thành hợp lệ, có `session_id`, `user_id`.
 - **Trigger**: Nhận CloudEvent `WorkoutSessionCompleted`.
 - **Main Flow**:
-  1. Kiểm tra tính lũy đẳng qua `session_id`. Nếu đã xử lý, bỏ qua.
-  2. Nạp hồ sơ ELO của người dùng (khởi tạo mặc định 1,000 ELO nếu chưa tồn tại).
+  1. Kiểm tra tính lũy đẳng: Nếu `session_id` đã tồn tại trong lịch sử `elo_history` (`source_event_id = session_id`), bỏ qua an toàn và commit offset.
+  2. Nạp hồ sơ ELO của người dùng (khởi tạo mặc định 1,000 ELO và 1,000 Peak ELO nếu chưa tồn tại).
   3. Tính toán $\Delta ELO$ dựa trên Volume Ratio, Form Score, cờ PR và hệ số $K$ của bậc hạng hiện tại.
-  4. Cập nhật ELO mới (kẹp trần sàn $[1000, 3000]$) và ghi nhận vào lịch sử `elo_history`.
-  5. Đánh giá bậc hạng mới: Nếu đổi bậc, phát sinh sự kiện `RankTierPromoted` hoặc `RankTierDemoted`.
+  4. Cập nhật ELO mới (kẹp trần sàn $[1000, 3000]$), cập nhật `peak_elo = max(peak_elo, new_elo)` và ghi nhận vào lịch sử `elo_history` với `source_event_id = session_id`.
+  5. Đánh giá bậc hạng mới qua hàm ánh xạ: Nếu đổi bậc, phát sinh sự kiện `RankTierPromoted` hoặc `RankTierDemoted`.
   6. Lưu sự kiện vào Transactional Outbox trong cùng một transaction nghiệp vụ.
 - **Postconditions**: ELO được cập nhật tuần tự, sự kiện sẵn sàng đẩy ra Kafka topic `gamification.events`.
 
@@ -56,7 +56,7 @@ Chưa có module tính toán điểm ELO. Dữ liệu buổi tập hoàn thành 
 - **Main Flow**:
   1. Kiểm tra ngày nhận thưởng: Nếu `last_nutrition_reward_date == user_local_date`, bỏ qua.
   2. Đánh giá chỉ số ngày: Calo đạt $\pm 10\%$ và Protein đạt $\ge 90\%$ mục tiêu do AI Coach đề ra.
-  3. Nếu đạt chuẩn: Cộng $+3$ ELO (hoặc $+5$ ELO nếu đạt chuỗi 3 ngày), cập nhật `last_nutrition_reward_date = user_local_date`, ghi log `elo_history` lý do `NUTRITION_ADHERENCE`, phát sự kiện `EloScoreUpdated`.
+  3. Nếu đạt chuẩn: Cộng cố định $+3$ ELO, cập nhật `last_nutrition_reward_date = user_local_date`, cập nhật `peak_elo = max(peak_elo, new_elo)`, ghi log `elo_history` lý do `NUTRITION_ADHERENCE`, phát sự kiện `EloScoreUpdated`.
   4. Nếu không đạt chuẩn hoặc quên ghi log: Không thực hiện trừ điểm ELO (ADR-0001).
 - **Postconditions**: Người dùng nhận thưởng kỷ luật dinh dưỡng tối đa 1 lần/ngày.
 
@@ -81,29 +81,30 @@ Chưa có module tính toán điểm ELO. Dữ liệu buổi tập hoàn thành 
 - **Postconditions**: Người dùng xem được tiến trình thăng hạng và đồ thị biến động điểm.
 
 ## Functional requirements
-- **FR-ELO-01**: Khởi tạo hồ sơ ELO mức cơ sở 1,000 ELO (Bronze) khi người dùng mới phát sinh buổi tập hoặc truy vấn lần đầu.
+- **FR-ELO-01**: Khởi tạo hồ sơ ELO mức cơ sở 1,000 ELO (Bronze) và 1,000 Peak ELO khi người dùng mới phát sinh buổi tập hoặc truy vấn lần đầu.
 - **FR-ELO-02**: Tính toán biến động $\Delta ELO$ sau mỗi buổi tập hoàn thành hợp lệ và cộng/trừ trực tiếp vào điểm người dùng.
-- **FR-ELO-03**: Phân định người dùng vào đúng 1 trong 5 bậc hạng (Bronze, Silver, Gold, Platinum, Diamond) theo mốc ELO hiện tại.
+- **FR-ELO-03**: Phân định người dùng vào đúng 1 trong 5 bậc hạng (Bronze, Silver, Gold, Platinum, Diamond) qua hàm ánh xạ thuần túy theo mốc ELO hiện tại (không lưu trữ trạng thái bậc hạng riêng trong database).
 - **FR-ELO-04**: Tự động hạ bậc (Demotion) ngay lập tức khi ELO tụt xuống dưới ngưỡng sàn của bậc hiện tại, không dùng khiên đệm (ADR-0003).
 - **FR-ELO-05**: Áp dụng suy giảm 15 ELO mỗi 7 ngày nếu người dùng không tập luyện quá 14 ngày liên tiếp (chỉ áp dụng khi ELO > 1,000).
 - **FR-ELO-06**: Lưu trữ lịch sử toàn bộ các lần biến động điểm ELO (append-only) để phục vụ truy vấn đồ thị tiến trình.
-- **FR-ELO-07**: Thưởng $+3 \rightarrow +5$ ELO/ngày khi đạt mục tiêu dinh dưỡng; tuyệt đối không phạt khi ăn lệch mục tiêu (ADR-0001).
+- **FR-ELO-07**: Thưởng cố định $+3$ ELO/ngày khi đạt mục tiêu dinh dưỡng; tuyệt đối không phạt khi ăn lệch mục tiêu (ADR-0001).
+- **FR-ELO-08**: Duy trì kỷ lục cá nhân cao nhất (`peak_elo`): chỉ tăng khi `current_elo > peak_elo`, không bao giờ bị giảm khi rớt hạng hoặc decay.
 
 ## Business rules and invariants
 - **BR-ELO-01 (Rank Thresholds)**: 5 bậc hạng cố định: Bronze ($1,000 - 1,199$), Silver ($1,200 - 1,499$), Gold ($1,500 - 1,799$), Platinum ($1,800 - 2,199$), Diamond ($2,200 - 3,000$).
 - **BR-ELO-02 (K-Factor Scaling)**: Hệ số $K$ suy giảm theo bậc: Bronze/Silver ($K=32$), Gold ($K=24$), Platinum ($K=16$), Diamond ($K=10$).
-- **BR-ELO-03 (Workout Formula)**: Biến động tính từ Volume Ratio, Form Score Ratio (mặc định 75 cho bài tập không AI) và PR Bonus ($+1.0$). Biên độ dao động trong 1 buổi tập bị kẹp cứng: $-25 \le \Delta ELO \le +40$.
-- **BR-ELO-04 (Direct Mapping)**: Bậc hạng phản ánh trực tiếp theo điểm số hiện tại, không có trạng thái trung gian, giáng bậc tức thì khi tụt mốc (ADR-0003).
-- **BR-ELO-05 (Hard Boundaries)**: Điểm ELO luôn nằm trong đoạn $[1000, 3000]$ (ADR-0005). Không bao giờ tụt dưới 1,000 và không tích lũy vượt quá 3,000.
-- **BR-ELO-06 (Concurrency & Idempotency)**: Giao dịch cập nhật điểm phải tuần tự hóa để ngăn ngừa Lost Update (ADR-0004). Mỗi `session_id` chỉ tính điểm duy nhất 1 lần.
-- **BR-ELO-07 (Nutrition Adherence)**: Thưởng dương tối đa $+5$ ELO/ngày, không phạt khi cheat meal/quên log (ADR-0001).
+- **BR-ELO-03 (Workout Formula)**: Biến động tính từ Volume Ratio, Form Score Ratio (nhận từ payload sự kiện của `workout_execution`) và PR Bonus ($+1.0$). Biên độ dao động trong 1 buổi tập bị kẹp cứng: $-25 \le \Delta ELO \le +40$.
+- **BR-ELO-04 (Direct Mapping - Stateless)**: Bậc hạng phản ánh trực tiếp theo điểm số hiện tại, là hàm thuần túy $\text{RankTier} = f(\text{current\_elo})$ và không lưu trữ trạng thái riêng trong database, giáng bậc tức thì khi tụt mốc (ADR-0003).
+- **BR-ELO-05 (Hard Boundaries & Peak Invariant)**: Điểm ELO luôn nằm trong đoạn $[1000, 3000]$ (ADR-0005). Không bao giờ tụt dưới 1,000 và không tích lũy vượt quá 3,000. Chỉ số `peak_elo` phản ánh mốc cao nhất từng đạt, cập nhật tức thì khi `current_elo > peak_elo` và không bao giờ giảm.
+- **BR-ELO-06 (Concurrency & Idempotency)**: Giao dịch cập nhật điểm phải tuần tự hóa để ngăn ngừa Lost Update (ADR-0004). Mỗi `session_id` chỉ tính điểm duy nhất 1 lần, bảo vệ bằng ràng buộc duy nhất trên `elo_history(user_id, source_event_id)`.
+- **BR-ELO-07 (Nutrition Adherence)**: Thưởng dương cố định $+3$ ELO/ngày, tối đa 1 lần/ngày theo `user_local_date`, không phạt khi cheat meal/quên log (ADR-0001).
 
 ## Validation and permissions
 - Chỉ có sự kiện CloudEvents hợp lệ từ hệ thống nội bộ qua Kafka mới có quyền thay đổi điểm ELO.
 - API công khai phục vụ Client chỉ cung cấp quyền đọc (Read-only).
 
 ## Error and boundary scenarios
-- **Duplicate Event**: Sự kiện trùng lặp `session_id` bị chặn bởi Idempotent Inbox Guard, bỏ qua an toàn.
+- **Duplicate Event**: Sự kiện trùng lặp `session_id` bị chặn bởi ràng buộc duy nhất trên `elo_history(user_id, source_event_id)`, bỏ qua an toàn.
 - **Anomalous Session**: Buổi tập thời lượng $> 240$ phút hoặc hiệp $< 1$ bị đánh dấu bất thường, không cộng điểm ELO.
 - **Boundary Exact Points**: Chạm đúng 1,200 là Silver; chạm đúng 1,500 là Gold; tụt về 1,199 lập tức về Bronze.
 - **Hard Cap Reached**: User 2,990 ELO nhận $+40$ ELO sẽ dừng chính xác ở mức 3,000 ELO.
@@ -124,9 +125,9 @@ Chưa có module tính toán điểm ELO. Dữ liệu buổi tập hoàn thành 
 - [ADR-0005: Thiết Lập Trần Cứng 3,000 ELO và Sàn Cơ Sở 1,000 ELO](./adr/ADR-0005-establish-elo-range-and-hard-cap.md)
 
 ## Resolved decisions & confirmations
-1. **Khởi tạo ELO**: Áp dụng Lazy Onboarding mức cố định 1,000 ELO (Bronze) cho toàn bộ người dùng mới; không yêu cầu bài test đầu vào phức tạp.
+1. **Khởi tạo ELO**: Áp dụng Lazy Onboarding mức cố định 1,000 ELO (Bronze) và 1,000 Peak ELO cho toàn bộ người dùng mới; không yêu cầu bài test đầu vào phức tạp.
 2. **Cơ chế Decay**: Thực thi bằng Scheduled Worker chạy ngầm hàng đêm (02:00 AM) để chủ động kiểm soát tải hệ thống.
-3. **Form Score bài tập phi AI**: Gán giá trị mặc định 75/100 khi buổi tập không sử dụng AI Camera.
+3. **Form Score**: Nhận giá trị từ payload sự kiện `WorkoutSessionCompleted`; module `workout_execution` chịu trách nhiệm fallback chuẩn 75/100 nếu buổi tập không sử dụng AI Camera.
 
 ## Explicit assumptions
 - Dữ liệu buổi tập hoàn thành từ `workout_execution` là nguồn sự thật đáng tin cậy.

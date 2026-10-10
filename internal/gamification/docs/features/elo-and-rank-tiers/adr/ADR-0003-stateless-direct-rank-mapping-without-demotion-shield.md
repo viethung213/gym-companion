@@ -26,7 +26,7 @@ Chosen: **Option 2 (Stateless Direct Mapping)** theo quyết định của Maint
 
 ### Consequences
 - **Positive:**
-  - **Mô hình dữ liệu sạch**: Bảng `gamification.user_elo` không cần lưu trữ hay quản lý trạng thái khiên rớt hạng.
+  - **Mô hình dữ liệu sạch**: Bảng `gamification.user_elo` không lưu trữ cột `rank_tier` riêng biệt và không cần quản lý trạng thái khiên rớt hạng (loại bỏ hoàn toàn state duplication, tránh nguy cơ lệch dữ liệu giữa điểm số và bậc hạng). Bậc Hạng được chuyển đổi động từ `current_elo`.
   - **Logic nghiệp vụ đơn giản**: Hàm xác định bậc hạng chỉ là một hàm so sánh ngưỡng cố định (Switch-case / Lookup table).
   - **Dễ kiểm thử và bảo trì**: Không có rủi ro race condition hoặc lỗi logic liên quan đến việc tiêu hao khiên khi xử lý song song các sự kiện.
 - **Trade-offs / Negatives:**

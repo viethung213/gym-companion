@@ -19,7 +19,7 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 - [ ] **T-03 [Database Migration, BR-05]**: Viết script migration PostgreSQL khởi tạo schema và các bảng dữ liệu cho Gamification.
   - **Đường dẫn**: `internal/shared/database/migrations/13-create-gamification-tables.sql`
-  - **Nội dung**: Schema `gamification`, bảng `user_elo` (check `[1000, 3000]`), `elo_history`, `processed_events`, `outbox_events` kèm chỉ mục B-Tree.
+  - **Nội dung**: Schema `gamification`, bảng `user_elo` (không lưu cột `rank_tier`, check `[1000, 3000]`), `elo_history` (kèm unique index `uq_elo_history_workout_session`), `outbox_events` kèm chỉ mục B-Tree.
   - **Xác minh**: Script SQL thực thi thành công trên PostgreSQL.
 
 ---
@@ -33,20 +33,21 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 - [ ] **T-05 [TDD, FR-02, BR-02, BR-03, BR-05]**: Thuật toán tính điểm ELO theo hiệu suất tập luyện (Domain Service).
   - **RED**: Viết table-driven test trước tại `internal/gamification/domain/service/elo_calculator_test.go` kiểm thử:
-    - Công thức hiệu suất từ volume ratio & form score ratio (fallback $75\%$ cho bài tập không AI).
+    - Công thức hiệu suất từ volume ratio & form score ratio (nhận từ payload sự kiện của `workout_execution`).
     - Biến động kẹp cứng trong đoạn $[-25, +40]$ ELO.
     - Kẹp trần cứng $3000$ ELO và sàn tối thiểu $1000$ ELO (ADR-0005).
     - Hệ số $K$ suy giảm theo Tier ($32 \rightarrow 24 \rightarrow 16 \rightarrow 10$).
+    - Thưởng dinh dưỡng cố định $+3$ ELO/ngày (ADR-0001).
     - Khẳng định test **FAIL**.
   - **GREEN**: Hiện thực hóa thuật toán tại `internal/gamification/domain/service/elo_calculator.go` để test **PASS**.
   - **REFACTOR**: Tối ưu tính toán số thực và hằng số cấu hình.
 
-- [ ] **T-06 [TDD, FR-01, FR-04, FR-05, FR-07, BR-04, BR-07]**: Bất biến trạng thái, thăng/giáng bậc và thưởng dinh dưỡng (Aggregate Root).
+- [ ] **T-06 [TDD, FR-01, FR-04, FR-05, FR-07, FR-08, BR-04, BR-05, BR-07]**: Bất biến trạng thái, thăng/giáng bậc, kỷ lục peak_elo và thưởng dinh dưỡng (Aggregate Root).
   - **RED**: Viết test trước tại `internal/gamification/domain/aggregate/user_elo_test.go` kiểm thử:
-    - Khởi tạo `NewUserElo(userID)` mặc định $1000$ ELO, Bậc Bronze.
-    - `ApplyWorkoutResult`: Tự động thăng hạng / giáng hạng tức thì và phát sinh Domain Events (ADR-0003).
+    - Khởi tạo `NewUserElo(userID)` mặc định $1000$ ELO, $1000$ Peak ELO, Bậc Bronze (`RankTier()` tính động).
+    - `ApplyWorkoutResult`: Tự động thăng hạng / giáng hạng tức thì, phát sinh Domain Events (ADR-0003), cập nhật `peakElo = max(peakElo, currentElo)`.
     - `ApplyNutritionBonus`: Nhận lần 1 thành công $+3$ ELO; nhận lần 2 cùng ngày trả lỗi `ErrNutritionAlreadyClaimed` (ADR-0001).
-    - `ApplyInactivityDecay`: Quá 14 ngày không tập trừ $15$ ELO (không rớt dưới sàn 1000).
+    - `ApplyInactivityDecay`: Quá 14 ngày không tập trừ $15$ ELO (không rớt dưới sàn 1000, `peakElo` không bị giảm).
     - Khẳng định test **FAIL**.
   - **GREEN**: Hiện thực hóa Aggregate tại `internal/gamification/domain/aggregate/user_elo.go` và domain events tại `internal/gamification/domain/event/elo_events.go` để test **PASS**.
   - **REFACTOR**: Đảm bảo đóng gói bất biến tuyệt đối (zero ORM tags, zero external imports).
@@ -59,12 +60,12 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 ## Phase 3: Persistence Layer & Concurrency Integration Tests
 
-- [ ] **T-08 [TDD Integration, BR-06, ADR-0004]**: Khóa dòng bi quan và chặn trùng lặp sự kiện (PostgreSQL).
+- [ ] **T-08 [TDD Integration, BR-06, ADR-0004]**: Khóa dòng bi quan và chặn trùng lặp buổi tập (PostgreSQL).
   - **RED**: Viết integration test tại `internal/gamification/infrastructure/persistence/postgres/repository_test.go`:
     - **The 3 AM Test**: Khởi tạo user $1200$ ELO. Bắn đồng thời **10 Goroutines** cùng gọi `GetForUpdate` và cộng $+10$ ELO $\rightarrow$ Khẳng định **0% Lost Update**, điểm cuối cùng đúng $1300$ ELO.
-    - **Idempotency Guard**: Ghi 2 lần cùng một `event_id` $\rightarrow$ Lần 2 bị từ chối vi phạm khóa chính, transaction rollback an toàn.
+    - **Idempotency Guard**: Ghi 2 lần cùng một `session_id` $\rightarrow$ Lần 2 bị từ chối vi phạm unique constraint `uq_elo_history_workout_session`, transaction rollback an toàn.
     - Khẳng định test **FAIL**.
-  - **GREEN**: Hiện thực hóa Data Model/Mapper (`model.go`), `PostgresUserEloRepository` với `SELECT ... FOR UPDATE`, `PostgresInboxRepository`, và `PostgresOutboxRepository` để test **PASS**.
+  - **GREEN**: Hiện thực hóa Data Model/Mapper (`model.go`), `PostgresUserEloRepository` với `SELECT ... FOR UPDATE`, `PostgresEloHistoryRepository` và `PostgresOutboxRepository` để test **PASS**.
   - **REFACTOR**: Tối ưu câu lệnh SQL và quản lý transaction context.
 
 ---
@@ -73,7 +74,7 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 - [ ] **T-09 [Application Commands, UC-ELO-01, UC-ELO-02, UC-ELO-03]**: Điều phối nghiệp vụ và ranh giới giao dịch.
   - **Đường dẫn**:
-    - `internal/gamification/application/command/process_workout_elo.go` (Check Inbox $\rightarrow$ Khóa bi quan `user_elo` $\rightarrow$ Tính ELO $\rightarrow$ Ghi log $\rightarrow$ Ghi Outbox).
+    - `internal/gamification/application/command/process_workout_elo.go` (Khóa bi quan `user_elo` $\rightarrow$ Tính ELO $\rightarrow$ Ghi `elo_history` kèm `session_id` để chặn lặp $\rightarrow$ Ghi Outbox).
     - `internal/gamification/application/command/process_nutrition_elo.go` (Cộng thưởng dinh dưỡng $+3$ ELO hàng ngày).
     - `internal/gamification/application/command/process_inactivity_decay.go` (Trừ điểm bất hoạt).
 

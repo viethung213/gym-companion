@@ -43,15 +43,13 @@ flowchart TD
 
     subgraph DrivenAdapters["Driven Adapters (Infrastructure Layer)"]
         REPO_ELO["PostgresUserEloRepository<br/>(/infrastructure/persistence/)"]
-        REPO_HIST["PostgresEloHistoryRepository"]
-        INBOX["Idempotent Inbox Guard"]
+        REPO_HIST["PostgresEloHistoryRepository<br/>(Ledger & Idempotency Guard)"]
         OUTBOX["Transactional Outbox Writer"]
     end
 
     subgraph Database["PostgreSQL (Schema: gamification.*)"]
         DB_ELO[("gamification.user_elo")]
         DB_HIST[("gamification.elo_history")]
-        DB_INBOX[("gamification.processed_events")]
         DB_OUTBOX[("gamification.outbox_events")]
     end
 
@@ -68,8 +66,7 @@ flowchart TD
     CMD_WORKOUT & CMD_NUTRI & CMD_DECAY --> PORT_REPO
     PORT_REPO -.-> REPO_ELO
 
-    CMD_WORKOUT & CMD_NUTRI --> INBOX & REPO_HIST & OUTBOX
-    INBOX --> DB_INBOX
+    CMD_WORKOUT & CMD_NUTRI --> REPO_HIST & OUTBOX
     REPO_ELO --> DB_ELO
     REPO_HIST --> DB_HIST
     OUTBOX --> DB_OUTBOX
@@ -88,7 +85,7 @@ flowchart TD
   - `command/`: Handlers cho `ProcessWorkoutElo`, `ProcessNutritionElo`, `ProcessInactivityDecay`.
   - `query/`: Handlers cho `GetMyElo`, `GetEloHistory`.
 - **Infrastructure Layer (`internal/gamification/infrastructure/`)**:
-  - `persistence/postgres/`: Triển khai repository với `SELECT ... FOR UPDATE`, inbox guard, outbox writer.
+  - `persistence/postgres/`: Triển khai repository với `SELECT ... FOR UPDATE`, elo history ledger (kiểm soát lũy đẳng), outbox writer.
   - `worker/outbox_worker.go`: Background worker quét bảng outbox và publish CloudEvents sang Kafka.
 - **Transport Layer (`internal/gamification/transport/`)**:
   - `consumer/`: Kafka readers cho các sự kiện hoàn thành buổi tập và dinh dưỡng.
@@ -106,7 +103,6 @@ erDiagram
     USER_ELO {
         uuid user_id PK
         int current_elo
-        varchar rank_tier
         int peak_elo
         timestamp last_workout_at
         timestamp last_decay_at
@@ -127,12 +123,6 @@ erDiagram
         timestamp created_at
     }
 
-    PROCESSED_EVENTS {
-        varchar event_id PK
-        varchar event_type
-        timestamp processed_at
-    }
-
     OUTBOX_EVENTS {
         uuid id PK
         varchar aggregate_type
@@ -151,11 +141,10 @@ erDiagram
 ```sql
 CREATE SCHEMA IF NOT EXISTS gamification;
 
--- Bảng 1: Hồ sơ ELO & Bậc Hạng Người Dùng
+-- Bảng 1: Hồ sơ ELO Người Dùng (Rank Tier là hàm thuần túy từ current_elo theo ADR-0003, không lưu cột thừa)
 CREATE TABLE IF NOT EXISTS gamification.user_elo (
     user_id UUID PRIMARY KEY,
     current_elo INTEGER NOT NULL DEFAULT 1000 CHECK (current_elo >= 1000 AND current_elo <= 3000),
-    rank_tier VARCHAR(20) NOT NULL DEFAULT 'BRONZE',
     peak_elo INTEGER NOT NULL DEFAULT 1000 CHECK (peak_elo >= 1000 AND peak_elo <= 3000 AND peak_elo >= current_elo),
     last_workout_at TIMESTAMPTZ,
     last_decay_at TIMESTAMPTZ,
@@ -168,7 +157,7 @@ CREATE INDEX IF NOT EXISTS idx_user_elo_ranking ON gamification.user_elo (curren
 CREATE INDEX IF NOT EXISTS idx_user_elo_decay ON gamification.user_elo (last_workout_at) 
     WHERE current_elo > 1000;
 
--- Bảng 2: Lịch Sử Biến Động Điểm ELO (Append-only Audit Log)
+-- Bảng 2: Lịch Sử Biến Động Điểm ELO (Append-only Audit Log & Idempotency Guard)
 CREATE TABLE IF NOT EXISTS gamification.elo_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES gamification.user_elo(user_id) ON DELETE CASCADE,
@@ -182,18 +171,13 @@ CREATE TABLE IF NOT EXISTS gamification.elo_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_elo_history_user_created ON gamification.elo_history (user_id, created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_elo_history_source_event 
-    ON gamification.elo_history (user_id, change_reason, source_event_id) 
-    WHERE source_event_id IS NOT NULL;
 
--- Bảng 3: Hộp Thư Đã Xử Lý (Idempotent Inbox Guard)
-CREATE TABLE IF NOT EXISTS gamification.processed_events (
-    event_id VARCHAR(100) PRIMARY KEY,
-    event_type VARCHAR(100) NOT NULL,
-    processed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+-- Chốt chặn lũy đẳng: Mỗi session_id buổi tập chỉ được tính ELO duy nhất một lần
+CREATE UNIQUE INDEX IF NOT EXISTS uq_elo_history_workout_session 
+    ON gamification.elo_history (user_id, source_event_id) 
+    WHERE change_reason = 'WORKOUT_COMPLETED' AND source_event_id IS NOT NULL;
 
--- Bảng 4: Transactional Outbox (CloudEvents 1.0)
+-- Bảng 3: Transactional Outbox (CloudEvents 1.0)
 CREATE TABLE IF NOT EXISTS gamification.outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     aggregate_type VARCHAR(50) NOT NULL DEFAULT 'UserElo',
@@ -250,19 +234,19 @@ sequenceDiagram
 
     K->>App: Consume(WorkoutSessionCompleted)
     App->>DB: BEGIN TRANSACTION
-    App->>DB: INSERT INTO processed_events (...) ON CONFLICT DO NOTHING
-    alt Event trùng lặp (Duplicate)
+    App->>DB: SELECT * FROM user_elo WHERE user_id = :id FOR UPDATE
+    alt Chưa có bản ghi (Lazy Init)
+        App->>Domain: NewUserElo(id)
+        App->>DB: INSERT INTO user_elo (user_id, current_elo, peak_elo) VALUES (:id, 1000, 1000)
+    end
+    App->>DB: INSERT INTO elo_history (user_id, old_elo, new_elo, delta_elo, change_reason, source_event_id) VALUES (...)
+    alt Session trùng lặp (Duplicate session_id)
+        Note over DB: Vi phạm uq_elo_history_workout_session
         App->>DB: ROLLBACK TRANSACTION
-        App-->>K: Commit Offset (Bỏ qua)
-    else Event mới hợp lệ
-        App->>DB: SELECT * FROM user_elo WHERE user_id = :id FOR UPDATE
-        alt Chưa có bản ghi (Lazy Init)
-            App->>Domain: NewUserElo(id, 1000)
-            App->>DB: INSERT INTO user_elo (...)
-        end
-        App->>Domain: ApplyWorkoutResult(volumeRatio, formScore, isPR)
-        App->>DB: UPDATE user_elo SET current_elo = :newElo, rank_tier = :newTier, ...
-        App->>DB: INSERT INTO elo_history (...)
+        App-->>K: Commit Offset (Bỏ qua an toàn)
+    else Session mới hợp lệ
+        App->>Domain: ApplyWorkoutResult(deltaElo, workoutTime)
+        App->>DB: UPDATE user_elo SET current_elo = :newElo, peak_elo = :newPeak, last_workout_at = :time, updated_at = NOW()
         alt Có sự kiện đổi bậc
             App->>DB: INSERT INTO outbox_events (RankTierPromoted / Demoted)
         end
@@ -278,10 +262,9 @@ sequenceDiagram
 ```
 
 **Các bước thực thi & Ranh giới giao dịch:**
-1. **Lũy đẳng**: Chặn sự kiện lặp qua `processed_events`.
-2. **Khóa dòng**: `SELECT ... FOR UPDATE` trên `user_elo` tuần tự hóa giao dịch ghi (ADR-0004).
-3. **Cập nhật Aggregate**: Tính toán $\Delta ELO$, kẹp trần sàn $[1000, 3000]$, tự động thăng/giáng bậc tức thì.
-4. **Lưu trữ nguyên tử**: Cập nhật `user_elo`, ghi nhật ký `elo_history`, lưu sự kiện vào `outbox_events` trong cùng một transaction.
+1. **Khóa dòng & Lũy đẳng**: `SELECT ... FOR UPDATE` trên `user_elo` tuần tự hóa cập nhật đồng thời (ADR-0004). Chặn sự kiện lặp qua ràng buộc duy nhất `uq_elo_history_workout_session` trên `elo_history` (`source_event_id = session_id`).
+2. **Cập nhật Aggregate**: Tính toán $\Delta ELO$, kẹp trần sàn $[1000, 3000]$, cập nhật `peak_elo = max(peak_elo, new_elo)`. Đánh giá bậc hạng tức thì qua hàm thuần túy `DetermineRankTier`.
+3. **Lưu trữ nguyên tử**: Cập nhật `user_elo`, ghi nhật ký `elo_history`, lưu sự kiện vào `outbox_events` trong cùng một transaction.
 
 ---
 
@@ -303,9 +286,9 @@ sequenceDiagram
         App-->>K: Commit Offset (Bỏ qua)
     else Chưa nhận hôm nay
         alt Đạt chuẩn Calo (±10%) và Protein (>=90%)
-            App->>Domain: ApplyNutritionBonus(+3 hoặc +5, localDate)
-            App->>DB: UPDATE user_elo SET current_elo = :newElo, last_nutrition_reward_date = :localDate
-            App->>DB: INSERT INTO elo_history (change_reason = 'NUTRITION_ADHERENCE')
+            App->>Domain: ApplyNutritionBonus(+3, localDate)
+            App->>DB: UPDATE user_elo SET current_elo = :newElo, peak_elo = :newPeak, last_nutrition_reward_date = :localDate, updated_at = NOW()
+            App->>DB: INSERT INTO elo_history (change_reason = 'NUTRITION_ADHERENCE', delta_elo = 3)
             App->>DB: INSERT INTO outbox_events (EloScoreUpdated)
             App->>DB: COMMIT TRANSACTION
             App-->>K: Commit Offset
@@ -333,7 +316,7 @@ sequenceDiagram
         Job->>DB: BEGIN TRANSACTION
         Job->>DB: SELECT * FROM user_elo WHERE user_id = :id FOR UPDATE
         Job->>Domain: ApplyInactivityDecay(15)
-        Job->>DB: UPDATE user_elo SET current_elo = :newElo, rank_tier = :newTier, last_decay_at = NOW()
+        Job->>DB: UPDATE user_elo SET current_elo = :newElo, last_decay_at = NOW(), updated_at = NOW()
         Job->>DB: INSERT INTO elo_history (change_reason = 'INACTIVITY_DECAY', delta_elo = -15)
         alt Tụt hạng
             Job->>DB: INSERT INTO outbox_events (RankTierDemoted)
@@ -359,11 +342,11 @@ sequenceDiagram
     RPC->>Qry: Handle(GetMyEloQuery)
     Qry->>DB: SELECT * FROM gamification.user_elo WHERE user_id = :id
     alt Chưa có hồ sơ (Lazy Onboarding)
-        Qry->>DB: INSERT INTO user_elo (user_id, current_elo, rank_tier) VALUES (:id, 1000, 'BRONZE') ON CONFLICT DO NOTHING
+        Qry->>DB: INSERT INTO user_elo (user_id, current_elo, peak_elo) VALUES (:id, 1000, 1000) ON CONFLICT DO NOTHING
     end
-    Qry->>Qry: Tính points_to_next_tier
+    Qry->>Qry: DetermineRankTier(current_elo) & tính points_to_next_tier
     Qry-->>RPC: GetMyEloResponse DTO
-    RPC-->>Client: 200 OK (current_elo, rank_tier, points_to_next_tier)
+    RPC-->>Client: 200 OK (current_elo, rank_tier, peak_elo, points_to_next_tier)
 ```
 
 ---
@@ -486,7 +469,7 @@ message RankTierDemoted {
 
 ### 5.1 Concurrency & Idempotency (The 3 AM Test)
 - **Khóa bi quan (Pessimistic Locking)**: Cập nhật ELO luôn thực thi trong transaction với `SELECT ... FROM gamification.user_elo WHERE user_id = $1 FOR UPDATE` (ADR-0004), tuần tự hóa mọi cập nhật đồng thời, loại bỏ 100% race conditions và Lost Updates.
-- **Idempotent Inbox Guard**: Bảng `processed_events` chặn đứng sự kiện trùng lặp từ Kafka qua ràng buộc khóa chính `event_id`.
+- **Idempotency Guard**: Ràng buộc duy nhất `uq_elo_history_workout_session` trên `gamification.elo_history (user_id, source_event_id)` chặn đứng việc tính toán trùng lặp cho cùng một `session_id`, loại bỏ bảng trung gian thừa mà vẫn đảm bảo tính lũy đẳng tuyệt đối.
 
 ### 5.2 Schema Isolation & Security
 - Phân hệ Gamification chỉ truy cập schema `gamification.*`. Cấm mọi câu lệnh `JOIN` sang các schema khác (`auth`, `workout_execution`, `nutrition`).

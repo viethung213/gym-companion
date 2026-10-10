@@ -100,7 +100,7 @@ Xem chi tiết tại: **[architecture.md](./architecture.md)**
 | **ELO Rating (`elo_rating`)** | Điểm ELO thể chất | Thước đo năng lực chuẩn hóa duy nhất phản ánh tổng hòa thể lực, kỹ thuật và tính kỷ luật của gymer. Khởi đầu ở mức 1,000 điểm. |
 | **Rank Tier** | Bậc Hạng | Phân cấp trình độ gồm 5 bậc cố định: Đồng (Bronze), Bạc (Silver), Vàng (Gold), Bạch Kim (Platinum), Kim Cương (Diamond). |
 | **Inactivity Decay** | Suy Giảm Bất Hoạt | Cơ chế tự động trừ 15 ELO mỗi 7 ngày nếu người dùng không tập luyện quá 14 ngày liên tiếp (chỉ áp dụng từ Bạc trở lên, không trừ dưới sàn 1,000). |
-| **Nutrition Compliance Bonus** | Thưởng Kỷ Luật Dinh Dưỡng | Điểm ELO thưởng dương ($+3 \rightarrow +5$ ELO/ngày) khi đạt mục tiêu Calo và Protein; tuyệt đối không phạt trừ ELO khi ăn sai/quên ghi log. |
+| **Nutrition Compliance Bonus** | Thưởng Kỷ Luật Dinh Dưỡng | Điểm ELO thưởng dương cố định ($+3$ ELO/ngày) khi đạt mục tiêu Calo và Protein; tuyệt đối không phạt trừ ELO khi ăn sai/quên ghi log. |
 | **FitCoins** | Tiền tệ thể thao ảo | Đơn vị tiền tệ thưởng cho sự nỗ lực tập luyện, dùng để đổi các ưu đãi/voucher từ đối tác thương hiệu (Brand) hoặc vật phẩm cá nhân hóa. |
 | **Coin Ledger (`coin_ledger`)** | Sổ Cái Kiểm Toán Bất Biến | Bảng lưu trữ append-only ghi nhận $100\%$ các giao dịch thu/chi coin kèm số dư lũy kế (`running_balance`). Nghiêm cấm sửa hoặc xóa bản ghi cũ. |
 | **Daily Earning Cap** | Trần Thu Nhập Hàng Ngày | Hạn mức trần tối đa 100 FitCoins/ngày từ hoạt động tập luyện nhằm ngăn chặn hành vi farm coin ảo và gian lận bào voucher đối tác. |

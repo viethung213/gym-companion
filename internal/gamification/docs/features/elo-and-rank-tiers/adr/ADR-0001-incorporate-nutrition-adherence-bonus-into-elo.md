@@ -17,19 +17,21 @@ Cần xác định cơ chế tích hợp dữ liệu từ module `nutrition` và
 
 ## Considered Options
 - **Option 1 (Thưởng & Phạt hai chiều)**: Ăn chuẩn mục tiêu được cộng ELO; ăn vượt calo hoặc quên ghi nhật ký bữa ăn bị trừ ELO.
-- **Option 2 (Chỉ Thưởng Dương - Positive Reinforcement Only)**: Ăn đạt chuẩn Calo/Protein mục tiêu được cộng thêm điểm thưởng ELO ($\Delta ELO_{\text{nutrition}} = +3 \rightarrow +5$ ELO) hoặc áp dụng hệ số nhân cho buổi tập ngày hôm đó; tuyệt đối không trừ ELO khi ăn lệch hoặc không ghi log.
+- **Option 2 (Chỉ Thưởng Dương - Positive Reinforcement Only)**: Ăn đạt chuẩn Calo/Protein mục tiêu được cộng thêm điểm thưởng ELO cố định ($\Delta ELO_{\text{nutrition}} = +3$ ELO/ngày); tuyệt đối không trừ ELO khi ăn lệch hoặc không ghi log.
 - **Option 3 (Tách riêng ELO Dinh Dưỡng)**: Xây dựng một thang điểm Nutrition Score độc lập, không gộp vào `elo_rating`.
 
 ## Decision Outcome
 Chosen: **Option 2 (Chỉ Thưởng Dương)** vì:
 1. **Tránh làm hỏng dữ liệu dinh dưỡng (3 AM Test)**: Nếu áp dụng hình phạt trừ ELO khi quên log hoặc ăn lố calo, người dùng sẽ ghi log giả mạo (fake-log) để bảo vệ điểm ELO. Dữ liệu giả sẽ phá vỡ các thuật toán gợi ý thực đơn và thích ứng của AI Coach.
 2. **Khuyến khích hành vi tích cực**: Điểm thưởng dinh dưỡng đóng vai trò như một cú hích tích cực (Dopamine hit) động viên gymer theo dõi chế độ ăn uống khoa học.
+3. **Đơn giản hóa trạng thái (State Minimization)**: Thưởng cố định $+3$ ELO/ngày dựa trên ngày địa phương (`last_nutrition_reward_date`), không theo dõi chuỗi ngày (streak count) phức tạp trong module Gamification.
 
 ### Consequences
 - **Positive:**
   - Khuyến khích người dùng ghi nhật ký bữa ăn trung thực mà không có tâm lý sợ bị trừ điểm.
   - Phản ánh đúng nguyên lý thể hình: Dinh dưỡng tốt giúp nâng cao hiệu suất thể chất.
+  - Schema dữ liệu tinh gọn, không cần lưu trữ hoặc tính toán chuỗi ngày dinh dưỡng.
 - **Trade-offs / Negatives:**
-  - Cần thêm logic tổng hợp nhật ký ăn uống cuối ngày (`DailyNutritionEvaluated`) hoặc xử lý sự kiện từ module `nutrition`.
+  - Cần thêm logic tổng hợp nhật ký ăn uống cuối ngày hoặc xử lý sự kiện từ module `nutrition`.
 - **Mitigation:**
-  - Giới hạn trần thưởng dinh dưỡng tối đa $+5$ ELO/ngày để không làm lu mờ vai trò cốt lõi của việc tập luyện nặng.
+  - Giới hạn trần thưởng dinh dưỡng cố định $+3$ ELO/ngày (tối đa 1 lần/ngày) để không làm lu mờ vai trò cốt lõi của việc tập luyện nặng.
