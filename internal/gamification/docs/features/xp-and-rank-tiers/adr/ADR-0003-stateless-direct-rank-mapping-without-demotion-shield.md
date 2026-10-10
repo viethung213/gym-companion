@@ -1,8 +1,8 @@
 # ADR-0003: Ánh Xạ Bậc Hạng Trực Tiếp Không Trạng Thái (Loại Bỏ Demotion Shield)
 
-- **Feature**: elo-and-rank-tiers
+- **Feature**: xp-and-rank-tiers
 - **Date**: 2026-10-09
-- **Status**: Accepted
+- **Status**: Superseded by ADR-0006 (Thay thế bởi Mô hình XP & Weekly Leagues)
 - **Deciders**: Maintainer (User), AI Assistant
 
 ## Context and Problem Statement

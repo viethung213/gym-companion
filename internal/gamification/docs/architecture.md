@@ -8,7 +8,7 @@ Tài liệu này đặc tả kiến trúc tổng thể, ranh giới Bounded Cont
 
 FITAI được xây dựng theo mô hình **Domain-Encapsulated Modular Monolith**. Mỗi Bounded Context được cô lập thành một thư mục độc lập dưới `/internal/<module_name>/`.
 
-Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting Domain**), tiếp nhận các sự kiện nghiệp vụ từ hệ thống để vận hành cơ chế tính điểm ELO, vinh danh huy hiệu và quản lý tiền tệ thể thao:
+Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting Domain**), tiếp nhận các sự kiện nghiệp vụ từ hệ thống để vận hành cơ chế tích lũy kinh nghiệm (XP & Cấp độ), giải đấu tuần (Weekly Leagues), vinh danh huy hiệu và quản lý tiền tệ thể thao:
 
 ```mermaid
 flowchart TD
@@ -27,7 +27,7 @@ flowchart TD
         direction TB
         G_CONSUMER["Kafka Consumers"]
         G_APP["Application CQRS"]
-        G_DOMAIN["Domain Layer<br/>(ELO, Badges, FitCoins)"]
+        G_DOMAIN["Domain Layer<br/>(XP, Badges, FitCoins)"]
         G_REPO["Persistence<br/>(Schema: gamification.*)"]
         G_OUTBOX["Transactional Outbox"]
     end
@@ -47,14 +47,14 @@ Module Gamification tuân thủ mô hình **Ports & Adapters**, giữ tầng Dom
 ```text
 internal/gamification/
 ├── domain/                      # LÕI NGHIỆP VỤ (Pure Go - Không phụ thuộc DB, Framework)
-│   ├── aggregate/               # Quản lý trạng thái và quy tắc nghiệp vụ ELO, Ví tiền
+│   ├── aggregate/               # Quản lý trạng thái và quy tắc nghiệp vụ XP, Ví tiền
 │   ├── entity/                  # Các thực thể nghiệp vụ (Huy hiệu, Dòng sổ cái)
 │   ├── vo/                      # Value Objects (Bậc hạng, Loại giao dịch, Danh mục)
 │   ├── event/                   # Domain Events nội bộ
 │   └── repository/              # Port Interfaces (Định nghĩa hợp đồng lưu trữ)
 │
 ├── application/                 # TẦNG ĐIỀU PHỐI (Use Cases)
-│   ├── command/                 # Xử lý các tác vụ ghi (Cộng ELO, Mở badge, Đổi quà)
+│   ├── command/                 # Xử lý các tác vụ ghi (Cộng XP, Mở badge, Đổi quà)
 │   ├── query/                   # Xử lý các tác vụ đọc (Thông tin ví, Bảng xếp hạng)
 │   └── port/                    # Output Ports giao tiếp ngoài (Transaction, Cross-module reader)
 │

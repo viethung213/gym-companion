@@ -1,8 +1,8 @@
 # ADR-0005: Thiết Lập Trần Cứng (Max ELO = 3,000) và Sàn Điểm ELO Cơ Sở
 
-- **Feature**: elo-and-rank-tiers
+- **Feature**: xp-and-rank-tiers
 - **Date**: 2026-10-09
-- **Status**: Accepted
+- **Status**: Superseded by ADR-0006
 - **Deciders**: Maintainer (User), AI Assistant
 
 ## Context and Problem Statement

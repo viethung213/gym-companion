@@ -1,16 +1,16 @@
-# ADR-0004: Sử Dụng Khóa Dòng Bi Quan (SELECT FOR UPDATE) Cho Cập Nhật Điểm ELO
+# ADR-0004: Sử Dụng Khóa Dòng Bi Quan (SELECT FOR UPDATE) Cho Cập Nhật Điểm XP
 
-- **Feature**: elo-and-rank-tiers
+- **Feature**: xp-and-rank-tiers
 - **Date**: 2026-10-09
 - **Status**: Accepted
 - **Deciders**: Maintainer (User), AI Assistant
 
 ## Context and Problem Statement
-Trong các hệ thống phân tán, các sự kiện cập nhật điểm ELO có thể xuất hiện đồng thời trên cùng một tài khoản người dùng (ví dụ: Worker chạy trừ điểm bất hoạt Inactivity Decay chạm trán sự kiện hoàn thành buổi tập WorkoutSessionCompleted lúc nửa đêm). Nếu không có cơ chế kiểm soát đồng thời, hệ thống sẽ gặp lỗi mất cập nhật (Lost Update).
+Trong các hệ thống phân tán, các sự kiện cập nhật điểm XP có thể xuất hiện đồng thời trên cùng một tài khoản người dùng (ví dụ: sự kiện hoàn thành buổi tập WorkoutSessionCompleted chạm trán sự kiện dinh dưỡng MealLogged lúc nửa đêm). Nếu không có cơ chế kiểm soát đồng thời, hệ thống sẽ gặp lỗi mất cập nhật (Lost Update).
 
 Cần quyết định giữa hai giải pháp kiểm soát đồng thời:
 1. **Khóa Lạc Quan (Optimistic Locking)**: Dùng cột `version` và câu lệnh `UPDATE ... WHERE version = :oldVersion`.
-2. **Khóa Bi Quan (Pessimistic Locking)**: Dùng `SELECT ... FROM gamification.user_elo WHERE user_id = :id FOR UPDATE` trong transaction.
+2. **Khóa Bi Quan (Pessimistic Locking)**: Dùng `SELECT ... FROM gamification.user_xp WHERE user_id = :id FOR UPDATE` trong transaction.
 
 ## Decision Drivers
 - **Practical Simplicity (Đơn giản thực tế)**: Không làm phức tạp hóa mã nguồn ứng dụng Go khi không có nhu cầu thực sự.
@@ -24,7 +24,7 @@ Cần quyết định giữa hai giải pháp kiểm soát đồng thời:
 ## Decision Outcome
 Chosen: **Option 2 (Pessimistic Row Locking với `FOR UPDATE`)** theo thống nhất giữa Maintainer và AI Assistant.
 - Tần suất xung đột ghi trên cùng một gymer là cực kỳ hiếm.
-- Giao dịch cập nhật ELO chỉ gồm các truy vấn SQL nội bộ (tuyệt đối không gọi HTTP/gRPC ra ngoài trong transaction), thời gian giữ lock chỉ mất 1-3ms.
+- Giao dịch cập nhật XP chỉ gồm các truy vấn SQL nội bộ (tuyệt đối không gọi HTTP/gRPC ra ngoài trong transaction), thời gian giữ lock chỉ mất 1-3ms.
 - PostgreSQL giải quyết việc xếp hàng ở mức engine database, mã nguồn Go giữ được sự trong sáng và tối giản, không cần cơ chế retry phức tạp.
 
 ### Consequences
