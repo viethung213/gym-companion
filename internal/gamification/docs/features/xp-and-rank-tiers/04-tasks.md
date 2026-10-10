@@ -61,7 +61,7 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 ## Phase 3: Persistence Layer & Concurrency Integration Tests
 
-- [ ] **T-08 [TDD Integration, BR-XP-06, ADR-0004]**: Khóa dòng bi quan và chặn trùng lặp buổi tập (PostgreSQL).
+- [ ] **T-08 [TDD Integration, BR-XP-06, ADR-0003]**: Khóa dòng bi quan và chặn trùng lặp buổi tập (PostgreSQL).
   - **RED**: Viết integration test tại `internal/gamification/infrastructure/persistence/postgres/repository_test.go`:
     - **The 3 AM Test**: Khởi tạo user. Bắn đồng thời **10 Goroutines** cùng gọi `GetForUpdate` và cộng $+50$ XP $\rightarrow$ Khẳng định **0% Lost Update**, điểm cuối cùng đúng $500$ XP.
     - **Idempotency Guard**: Ghi 2 lần cùng một `session_id` $\rightarrow$ Lần 2 bị từ chối vi phạm unique constraint `uq_xp_history_workout_session`, transaction rollback an toàn.

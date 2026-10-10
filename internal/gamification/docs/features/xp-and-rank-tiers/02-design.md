@@ -1,11 +1,10 @@
 # Design: XP (Experience Points) & Weekly Leagues
 
 ## ADR References
-- [ADR-0001: Tích Hợp Điểm Thưởng Kỷ Luật Dinh Dưỡng Vào Hệ Thống XP](./adr/ADR-0001-incorporate-nutrition-adherence-bonus-into-elo.md)
-- [ADR-0002: Hoãn Xác Lập Cơ Chế Điểm Thưởng Solo PvP](./adr/ADR-0002-defer-solo-pvp-elo-scoring-mechanism.md)
-- [ADR-0003: Ánh Xạ Bậc Hạng Trực Tiếp Không Trạng Thái](./adr/ADR-0003-stateless-direct-rank-mapping-without-demotion-shield.md)
-- [ADR-0004: Sử Dụng Khóa Dòng Bi Quan (SELECT FOR UPDATE) Cho Cập Nhật Điểm XP](./adr/ADR-0004-use-pessimistic-row-locking-for-elo-updates.md)
-- [ADR-0006: Chuyển Đổi Từ ELO Sang XP & Weekly Leagues](./adr/ADR-0006-transition-from-elo-to-xp-and-weekly-leagues.md)
+- [ADR-0001: Kiến Trúc Động Cơ XP Kép: XP Trọn Đời & Giải Đấu Tuần](./adr/ADR-0001-dual-engine-xp-and-weekly-leagues.md)
+- [ADR-0002: Cơ Chế Làm Mới Tuần Lười Biếng (Lazy Week Reset)](./adr/ADR-0002-lazy-week-reset-on-user-activity.md)
+- [ADR-0003: Sử Dụng Khóa Dòng Bi Quan (SELECT FOR UPDATE) Cho Cập Nhật Điểm XP](./adr/ADR-0003-use-pessimistic-row-locking-for-xp-updates.md)
+- [ADR-0004: Tích Hợp Điểm Thưởng Kỷ Luật Dinh Dưỡng Vào Hệ Thống XP](./adr/ADR-0004-incorporate-nutrition-adherence-bonus-into-xp.md)
 
 ---
 
@@ -415,11 +414,11 @@ message UserLeveledUp {
 ## 5. Non-Functional & Security Considerations
 
 ### 5.1 Concurrency & Idempotency (The 3 AM Test)
-- **Khóa bi quan (Pessimistic Locking)**: Cập nhật XP luôn thực thi trong transaction với `SELECT ... FROM gamification.user_xp WHERE user_id = $1 FOR UPDATE` (ADR-0004), tuần tự hóa mọi cập nhật đồng thời, loại bỏ 100% race conditions và Lost Updates.
+- **Khóa bi quan (Pessimistic Locking)**: Cập nhật XP luôn thực thi trong transaction với `SELECT ... FROM gamification.user_xp WHERE user_id = $1 FOR UPDATE` (ADR-0003), tuần tự hóa mọi cập nhật đồng thời, loại bỏ 100% race conditions và Lost Updates.
 - **Idempotency Guard**: Ràng buộc duy nhất `uq_xp_history_workout_session` trên `gamification.xp_history (user_id, source_event_id)` chặn đứng việc tính thưởng lặp cho cùng một `session_id`, bảo vệ nguyên tử trong cùng transaction.
 
 ### 5.2 Hiệu Năng Reset Tuần (Lazy Reset on Activity)
-- Xóa bỏ hoàn toàn scheduled job quét hàng triệu bản ghi lúc nửa đêm Chủ nhật. Cờ `current_week_number` bảo đảm tải reset được chia đều tự nhiên theo từng lượt tập của người dùng sang tuần mới.
+- Xóa bỏ hoàn toàn scheduled job quét hàng triệu bản ghi lúc nửa đêm Chủ nhật (ADR-0002). Cờ `current_week_number` bảo đảm tải reset được chia đều tự nhiên theo từng lượt tập của người dùng sang tuần mới.
 
 ### 5.3 Schema Isolation
 - Phân hệ Gamification chỉ truy cập schema `gamification.*`. Cấm mọi câu lệnh `JOIN` sang các schema khác (`auth`, `workout_execution`, `nutrition`).

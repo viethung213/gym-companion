@@ -7,13 +7,13 @@ Tính năng **XP (Experience Points) & Weekly Leagues** cung cấp cơ chế t�
 
 ## Problem and desired outcome
 - **Problem**: 
-  - Hệ thống ELO trước đây áp dụng thuật toán đối kháng Zero-Sum vào tập gym (PvE), dẫn đến việc gymer tập buổi deload (giảm tải phục hồi) hoặc ốm mệt bị trừ điểm, gây tâm lý trừng phạt tiêu cực (negative reinforcement).
-  - Cơ chế Inactivity Decay trừ điểm sau 14 ngày triệt tiêu động lực quay lại phòng gym của gymer sau kỳ nghỉ hoặc chấn thương.
-  - Công thức K-factor phức tạp, khó giải thích cho người dùng phổ thông.
+  - Tập gym là hành trình bền bỉ đầy thử thách; người mới tập rất dễ nản lòng và bỏ cuộc nếu không nhận được sự ghi nhận kịp thời và trực quan cho từng nỗ lực hàng ngày.
+  - Các hệ thống xếp hạng thông thường thường thiếu sự cân bằng: hoặc chỉ có điểm tích lũy dài hạn khiến người mới không thể bắt kịp người cũ, hoặc chỉ có điểm ngắn hạn khiến nỗ lực gắn bó lâu năm không được vinh danh.
+  - Người tập thể hình cần chu kỳ nghỉ ngơi và phục hồi cơ bắp (deload), nên bất kỳ cơ chế phạt trừ điểm nào khi nghỉ ngơi đều gây ức chế tâm lý và phá vỡ quy luật sinh học.
 - **Desired outcome**:
-  - **100% Khích lệ dương (Positive Reinforcement)**: Bất kỳ nỗ lực nào tại phòng gym đều được cộng điểm XP. Tuyệt đối không trừ điểm khi tập nhẹ hoặc nghỉ ngơi.
-  - **Minh bạch, dễ hiểu**: Công thức tính XP rõ ràng theo từng thành phần (Base check-in, Volume tạ, Kỹ thuật form, Kỷ lục PR).
-  - **Động lực kép**: Cày cấp độ dài hạn (Level 1..100) kết hợp với đua top giải đấu tuần (Weekly Leagues).
+  - **100% Khích lệ tích cực (Positive Reinforcement)**: Bất kỳ nỗ lực nào tại phòng gym đều được cộng điểm XP. Tuyệt đối không trừ điểm khi tập nhẹ, nghỉ ngơi, hay deload.
+  - **Minh bạch, dễ hiểu**: Công thức tính XP rõ ràng theo từng thành phần (Base check-in, Volume tạ, Kỹ thuật form AI, Kỷ lục PR).
+  - **Động lực kép (Dual-Engine)**: Cày cấp độ dài hạn (Level 1..100) kết hợp với đua top giải đấu tuần nhóm 30 người (Weekly Leagues).
 
 ## Actors and entry points
 - **Gym User**: Xem tổng XP, cấp độ hiện tại (Level), XP tuần, bậc giải đấu và lịch sử tích lũy trên ứng dụng.
@@ -27,15 +27,15 @@ Tính năng **XP (Experience Points) & Weekly Leagues** cung cấp cơ chế t�
 ### In scope
 - Khởi tạo hồ sơ XP cơ sở (`total_xp = 0`, `current_level = 1`, `weekly_xp = 0`, `rank_tier = BRONZE`) theo cơ chế Lazy Onboarding.
 - Tính toán điểm thưởng $\Delta XP$ sau mỗi buổi tập hoàn thành: Base check-in ($+50$ XP), Khối lượng nâng ($+10 \rightarrow +30$ XP), Kỹ thuật động tác ($+10 \rightarrow +20$ XP), và Kỷ lục cá nhân PR ($+25$ XP).
-- Thưởng kỷ luật dinh dưỡng hàng ngày cố định ($+30$ XP/ngày) khi đạt mục tiêu Calo/Protein (ADR-0001).
+- Thưởng kỷ luật dinh dưỡng hàng ngày cố định ($+30$ XP/ngày) khi đạt mục tiêu Calo/Protein (ADR-0004).
 - Tích hợp hệ số nhân chuỗi ngày tập (Streak Multiplier: $+10\%$ nếu streak $\ge 3$, $+20\%$ nếu streak $\ge 7$).
-- Cơ chế **Lazy Reset on Activity** cho `weekly_xp` dựa trên chu kỳ tuần ISO (`current_week_number`), triệt tiêu 100% rủi ro nghẽn DB lúc nửa đêm Chủ nhật (ADR-0006).
+- Cơ chế **Lazy Reset on Activity** cho `weekly_xp` dựa trên chu kỳ tuần ISO (`current_week_number`), triệt tiêu 100% rủi ro nghẽn DB lúc nửa đêm Chủ nhật (ADR-0002).
 - Tự động thăng cấp Level ($1 \rightarrow 100$) khi `total_xp` chạm các ngưỡng mốc.
 - Phát CloudEvents: `XpEarned`, `UserLeveledUp`.
 
 ### Out of scope & Deferred
 - **Computer Vision**: Đếm rep, chấm điểm form (thuộc module `workout_execution`).
-- **Solo PvP 1v1 [DEFERRED]**: Đấu đối kháng thời gian thực tạm hoãn chờ module Competition (ADR-0002).
+- **Solo PvP 1v1 [DEFERRED]**: Đấu đối kháng thời gian thực tạm hoãn chờ module Competition.
 - **Cohort Matching 30 người**: Thuật toán chia nhóm bảng đấu chi tiết thuộc module `leaderboards`.
 
 ## Current behavior
@@ -49,7 +49,7 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
 - **Trigger**: Nhận CloudEvent `WorkoutSessionCompleted`.
 - **Main Flow**:
   1. Kiểm tra tính lũy đẳng: Nếu `session_id` đã tồn tại trong `xp_history` (`source_event_id = session_id`), bỏ qua an toàn và commit offset.
-  2. Nạp hồ sơ XP người dùng với khóa dòng bi quan `SELECT ... FOR UPDATE` (ADR-0004). Khởi tạo mặc định nếu chưa tồn tại (Lazy Onboarding).
+  2. Nạp hồ sơ XP người dùng với khóa dòng bi quan `SELECT ... FOR UPDATE` (ADR-0003). Khởi tạo mặc định nếu chưa tồn tại (Lazy Onboarding).
   3. Kiểm tra chu kỳ tuần: Nếu `user.current_week_number != current_week`, đặt `weekly_xp = 0` và gán `current_week_number = current_week` (Lazy Reset).
   4. Tính toán $\Delta XP$ từ Base ($50$), Volume Ratio, Form Score, cờ PR và Streak Multiplier (nếu có).
   5. Cập nhật `total_xp += delta_xp`, `weekly_xp += delta_xp`, cập nhật `last_workout_at = workout_time`.
@@ -72,7 +72,7 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
      - Cập nhật `last_nutrition_reward_date = user_local_date`.
      - Đánh giá Level Up nếu chạm mốc.
      - Ghi log `xp_history` lý do `NUTRITION_ADHERENCE`, lưu sự kiện `XpEarned` vào Outbox.
-  4. Nếu không đạt chuẩn hoặc quên ghi log: Không phạt, nhận 0 XP (ADR-0001).
+  4. Nếu không đạt chuẩn hoặc quên ghi log: Không phạt, nhận 0 XP (ADR-0004).
 - **Postconditions**: Người dùng nhận tối đa 30 XP dinh dưỡng mỗi ngày.
 
 ### UC-XP-03: Truy vấn thông tin XP cá nhân và tiến trình cấp độ
@@ -94,9 +94,9 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
 ## Functional requirements
 - **FR-XP-01**: Khởi tạo hồ sơ XP mức cơ sở (`total_xp = 0`, `current_level = 1`, `weekly_xp = 0`, `rank_tier = BRONZE`) khi người dùng mới phát sinh hoạt động hoặc truy vấn lần đầu.
 - **FR-XP-02**: Tính toán điểm thưởng $\Delta XP \ge 0$ cho mỗi buổi tập hoàn thành hợp lệ và cộng nguyên tử vào `total_xp` và `weekly_xp`.
-- **FR-XP-03**: Thưởng cố định $+30$ XP/ngày khi đạt chuẩn dinh dưỡng, tối đa 1 lần/ngày theo `user_local_date` (ADR-0001).
+- **FR-XP-03**: Thưởng cố định $+30$ XP/ngày khi đạt chuẩn dinh dưỡng, tối đa 1 lần/ngày theo `user_local_date` (ADR-0004).
 - **FR-XP-04**: Tự động thăng cấp Level ($1 \rightarrow 100$) khi `total_xp` chạm các ngưỡng mốc, phát sự kiện `UserLeveledUp`.
-- **FR-XP-05**: Tự động reset `weekly_xp = 0` khi phát hiện chu kỳ tuần mới (`current_week_number != now.WeekNumber`) theo cơ chế Lazy Reset (ADR-0006).
+- **FR-XP-05**: Tự động reset `weekly_xp = 0` khi phát hiện chu kỳ tuần mới (`current_week_number != now.WeekNumber`) theo cơ chế Lazy Reset (ADR-0002).
 - **FR-XP-06**: Tuyệt đối không có hành động trừ điểm XP trong mọi tình huống (kể cả nghỉ tập, ăn cheat meal, hay tuần deload).
 - **FR-XP-07**: Lưu trữ toàn bộ lịch sử biến động XP dưới dạng append-only trong `xp_history` để phục vụ đối soát và đồ thị tiến trình.
 - **FR-XP-08**: Bảo đảm tính lũy đẳng: mỗi `session_id` buổi tập chỉ được nhận thưởng XP duy nhất 1 lần.
@@ -111,7 +111,7 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
   - $\text{PRBonus} = 25$ (nếu `isPR = true`, ngược lại $0$).
   - $\text{StreakMultiplier} = 1.0$ (mặc định), $1.1$ (nếu streak $\ge 3$), $1.2$ (nếu streak $\ge 7$).
   - Dao động chuẩn trong 1 buổi tập: $70 \rightarrow 150$ XP.
-- **BR-XP-03 (Nutrition Bonus)**: Thưởng dương cố định $+30$ XP/ngày, tối đa 1 lần/ngày, không trừ điểm khi ăn sai (ADR-0001).
+- **BR-XP-03 (Nutrition Bonus)**: Thưởng dương cố định $+30$ XP/ngày, tối đa 1 lần/ngày, không trừ điểm khi ăn sai (ADR-0004).
 - **BR-XP-04 (Level Thresholds)**: Cấp độ $1..100$ được tính theo công thức lũy tiến chuẩn:
   $$\text{Level}(X) = \min\left(\lfloor \sqrt{X / 50} \rfloor + 1, 100\right) \quad (\text{với } X = \text{total\_xp})$$
   - Level 1: $0$ XP.
@@ -120,8 +120,8 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
   - Level 5: $800$ XP.
   - Level 10: $4,050$ XP.
   - Level 50: $120,050$ XP.
-- **BR-XP-05 (Weekly Cycle & Lazy Reset)**: Chu kỳ tuần bắt đầu lúc Thứ Hai 00:00:00 UTC và kết thúc Chủ Nhật 23:59:59 UTC. Hệ thống theo dõi chuỗi định danh tuần ISO (ví dụ: `2026-W41`). Reset lười diễn ra ngay khi phát sinh thao tác ghi đầu tiên của tuần mới.
-- **BR-XP-06 (Concurrency & Idempotency)**: Mọi thao tác ghi điểm trên cùng một `user_id` phải tuần tự hóa qua khóa dòng bi quan `SELECT ... FOR UPDATE` (ADR-0004). Mỗi `session_id` chỉ tính điểm duy nhất 1 lần, bảo vệ bởi ràng buộc duy nhất trên `xp_history(user_id, source_event_id)`.
+- **BR-XP-05 (Weekly Cycle & Lazy Reset)**: Chu kỳ tuần bắt đầu lúc Thứ Hai 00:00:00 UTC và kết thúc Chủ Nhật 23:59:59 UTC. Hệ thống theo dõi chuỗi định danh tuần ISO (ví dụ: `2026-W41`). Reset lười diễn ra ngay khi phát sinh thao tác ghi đầu tiên của tuần mới (ADR-0002).
+- **BR-XP-06 (Concurrency & Idempotency)**: Mọi thao tác ghi điểm trên cùng một `user_id` phải tuần tự hóa qua khóa dòng bi quan `SELECT ... FOR UPDATE` (ADR-0003). Mỗi `session_id` chỉ tính điểm duy nhất 1 lần, bảo vệ bởi ràng buộc duy nhất trên `xp_history(user_id, source_event_id)`.
 
 ## Error and boundary scenarios
 - **Duplicate Workout Event**: Sự kiện trùng lặp `session_id` bị chặn bởi unique index trên `xp_history`, transaction rollback an toàn và commit offset bỏ qua.
@@ -138,9 +138,7 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
 - [ ] GIVEN hai sự kiện cộng XP gửi đến đồng thời trên 1 user THEN thực thi tuần tự qua khóa dòng, 0% Lost Update.
 
 ## Architecture Decision Records (ADRs)
-- [ADR-0001: Thưởng Kỷ Luật Dinh Dưỡng Vào XP](./adr/ADR-0001-incorporate-nutrition-adherence-bonus-into-elo.md)
-- [ADR-0002: Hoãn Cơ Chế Thưởng Điểm Solo PvP](./adr/ADR-0002-defer-solo-pvp-elo-scoring-mechanism.md)
-- [ADR-0003: Ánh Xạ Bậc Hạng Trực Tiếp Không Trạng Thái](./adr/ADR-0003-stateless-direct-rank-mapping-without-demotion-shield.md)
-- [ADR-0004: Sử Dụng Khóa Bi Quan SELECT FOR UPDATE](./adr/ADR-0004-use-pessimistic-row-locking-for-elo-updates.md)
-- [ADR-0005: (SUPERSEDED) Thiết Lập Trần Cứng 3,000 ELO](./adr/ADR-0005-establish-elo-range-and-hard-cap.md)
-- [ADR-0006: Chuyển Đổi Từ ELO Sang XP & Weekly Leagues](./adr/ADR-0006-transition-from-elo-to-xp-and-weekly-leagues.md)
+- [ADR-0001: Kiến Trúc Động Cơ XP Kép: XP Trọn Đời & Giải Đấu Tuần](./adr/ADR-0001-dual-engine-xp-and-weekly-leagues.md)
+- [ADR-0002: Cơ Chế Làm Mới Tuần Lười Biếng (Lazy Week Reset)](./adr/ADR-0002-lazy-week-reset-on-user-activity.md)
+- [ADR-0003: Sử Dụng Khóa Dòng Bi Quan SELECT FOR UPDATE Cho Cập Nhật Điểm XP](./adr/ADR-0003-use-pessimistic-row-locking-for-xp-updates.md)
+- [ADR-0004: Tích Hợp Điểm Thưởng Kỷ Luật Dinh Dưỡng (+30 XP/ngày) Vào Hệ Thống XP](./adr/ADR-0004-incorporate-nutrition-adherence-bonus-into-xp.md)

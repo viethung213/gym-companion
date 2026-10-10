@@ -8,7 +8,7 @@
   - Value Object `RankTier` bất biến định nghĩa 5 bậc giải đấu tuần (Bronze $\rightarrow$ Diamond).
 - **Domain Service**: `XpCalculator` là service tính toán thuần túy (Stateless / Pure Functions), tách biệt thuật toán tính điểm thưởng khỏi Aggregate.
 - **Explicit Domain Errors**: Sử dụng các sentinel errors định danh rõ ràng (`ErrNutritionRewardAlreadyClaimedToday`, `ErrInvalidWorkoutSession`, `ErrDuplicateWorkoutSession`).
-- **Pessimistic Locking & Idempotent Ledger**: Bảo đảm tính toàn vẹn vật lý (The 3 AM Test) bằng khóa dòng `SELECT ... FOR UPDATE` và ràng buộc duy nhất `uq_xp_history_workout_session` trên bảng `xp_history` (ADR-0004).
+- **Pessimistic Locking & Idempotent Ledger**: Bảo đảm tính toàn vẹn vật lý (The 3 AM Test) bằng khóa dòng `SELECT ... FOR UPDATE` và ràng buộc duy nhất `uq_xp_history_workout_session` trên bảng `xp_history` (ADR-0003).
 
 ---
 
@@ -260,7 +260,7 @@ type GetMyXpDTO struct {
 | **Cấp Độ** | `domain/vo/level_calculator_test.go` | - $0$ XP $\rightarrow$ Level 1, cần 100 XP.<br>- $100$ XP $\rightarrow$ Level 2.<br>- $250$ XP $\rightarrow$ Level 3.<br>- Kẹp trần tối đa Level 100, `xpNeeded = 0`. |
 | **Thuật Toán XP** | `domain/service/xp_calculator_test.go` | - Buổi tập chuẩn $\rightarrow$ dao động $70..125$ XP.<br>- PR phá kỷ lục $\rightarrow$ cộng thêm đúng 25 XP.<br>- Chuỗi 7 ngày $\rightarrow$ nhân $1.2\times$.<br>- Dinh dưỡng đạt chuẩn $\rightarrow$ đúng 30 XP. |
 | **Vòng Đời Aggregate** | `domain/aggregate/user_xp_test.go` | - Khởi tạo mặc định: 0 XP, Level 1, 0 Weekly XP.<br>- Tăng XP qua mốc $\rightarrow$ Tự tăng `currentLevel` + phát `UserLeveledUp`.<br>- Sang tuần mới (khác `currentWeekNumber`) $\rightarrow$ `weeklyXp` tự động reset về 0 và cộng dồn điểm mới.<br>- Dinh dưỡng nhận lần 1 thành công; nhận lần 2 cùng ngày trả lỗi `ErrNutritionRewardAlreadyClaimedToday`. |
-| **Khóa & Toàn Vẹn** | `infrastructure/persistence/postgres/repository_test.go` | - **The 3 AM Test**: 10 Goroutines đồng thời gọi `GetForUpdate` cộng điểm cho 1 user $\rightarrow 0\%$ Lost Update, tổng XP đúng 100% (ADR-0004).<br>- **Idempotency**: Gửi 2 lần cùng một `session_id` $\rightarrow$ lần 2 rollback vi phạm `uq_xp_history_workout_session`, không cộng trùng. |
+| **Khóa & Toàn Vẹn** | `infrastructure/persistence/postgres/repository_test.go` | - **The 3 AM Test**: 10 Goroutines đồng thời gọi `GetForUpdate` cộng điểm cho 1 user $\rightarrow 0\%$ Lost Update, tổng XP đúng 100% (ADR-0003).<br>- **Idempotency**: Gửi 2 lần cùng một `session_id` $\rightarrow$ lần 2 rollback vi phạm `uq_xp_history_workout_session`, không cộng trùng. |
 
 ### Lệnh Chạy Kiểm Thử
 ```bash

@@ -11,7 +11,7 @@ internal/gamification/docs/
 └── features/                          # Đặc tả chi tiết từng tính năng (Feature Specifications)
     ├── xp-and-rank-tiers/             # 1. Hệ Thống XP & Cấp Độ Trọn Đời (Lifetime XP & Level 1-100) (Đang triển khai)
     │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
-    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0006)
+    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0004)
     │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
     │   ├── 03-plan.md                 # Chiến lược triển khai theo pha
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-13)
