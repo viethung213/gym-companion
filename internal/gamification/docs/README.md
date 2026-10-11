@@ -16,9 +16,13 @@ internal/gamification/docs/
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-12)
     ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Đang triển khai)
     │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
-    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
+    │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-07)
-    ├── streaks-and-habits/            # 3. Chuỗi Ngày Kỷ Luật (Streaks Engine) (Roadmap)
+    ├── streaks-and-habits/            # 3. Chuỗi Ngày Kỷ Luật (Streaks Engine) (Đang triển khai)
+    │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Thói quen kép
+    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
+    │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
+    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-ST-01 -> T-ST-06)
     └── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Đang triển khai)
         ├── 01-spec.md                 # Đặc tả nghiệp vụ & 6 trường hợp tích lũy coin
         ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0004)
@@ -79,11 +83,11 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 
 ---
 
-### 2.3. Chuỗi Ngày Kỷ Luật (Streaks Engine)
+### 2.3. [Chuỗi Ngày Kỷ Luật (Streaks Engine)](./features/streaks-and-habits/01-spec.md)
 * **Động cơ giữ chân cốt lõi (Habit Engine)**: Đếm số ngày liên tục người dùng hoàn thành ít nhất 1 buổi tập hoặc đạt mục tiêu dinh dưỡng.
 * **Kỷ luật thực chất (Workout & Nutrition)**: Ngày tập thì nâng tạ, ngày nghỉ thì log ăn uống đúng chuẩn Calo/Protein để giữ chuỗi liên tục.
 * **Cột mốc Chuỗi (Streak Milestones)**: Thưởng FitCoins khi cán mốc 7, 14, 30, 50, 100, 365 ngày liên tục.
-* Chi tiết đặc tả: Phân tách thành lớp tính năng độc lập (Stack PR) kế tiếp.
+* Chi tiết đặc tả: xem [features/streaks-and-habits/01-spec.md](./features/streaks-and-habits/01-spec.md).
 
 ---
 
