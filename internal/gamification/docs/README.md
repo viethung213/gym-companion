@@ -15,7 +15,12 @@ internal/gamification/docs/
     │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
     │   ├── 03-plan.md                 # Chiến lược triển khai theo pha
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-13)
-    ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Roadmap)
+    ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Đang triển khai)
+    │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
+    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
+    │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
+    │   ├── 03-plan.md                 # Kế hoạch mã nguồn chi tiết & Test Plan
+    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-08)
     ├── streaks-and-habits/            # 3. Chuỗi Ngày & Đóng Băng Chuỗi (Streaks & Streak Freeze) (Roadmap)
     ├── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Roadmap)
     └── badges-and-achievements/       # 5. Huy Hiệu Thành Tựu & Thử Thách Hàng Tháng (Roadmap)
@@ -61,7 +66,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 
 ---
 
-### 2.2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderboard)
+### 2.2. [Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderboard)](./features/leaderboards/01-spec.md)
 * **Thước đo duy nhất**: Toàn bộ thứ hạng được tính toán dựa trên **Điểm Kinh Nghiệm Trọn Đời (`xp`)**.
 * **Tối giản & Trực quan**: Loại bỏ sự phức tạp của việc chia phòng đấu hay reset tuần; ai tích lũy nỗ lực nhiều hơn sẽ đứng cao hơn.
 * **Bảng vàng danh dự**:
@@ -70,7 +75,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 * **Hiệu năng & Thời gian thực (The 3 AM Test)**:
   * Không sử dụng cron job ngầm hay worker chốt giải đấu; thứ hạng cập nhật tức thì theo thời gian thực mỗi khi có buổi tập mới.
   * Tối ưu hóa bằng index B-tree `(xp DESC, updated_at ASC)` trên bảng `gamification.user_xp`, đảm bảo thời gian truy vấn $< 5\text{ ms}$.
-* Chi tiết đặc tả: Phân tách thành lớp tính năng độc lập (Stack PR) kế tiếp.
+* Chi tiết đặc tả: xem [features/leaderboards/01-spec.md](./features/leaderboards/01-spec.md).
 
 ---
 
