@@ -39,6 +39,7 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 - Truy vấn vị trí thứ hạng của người dùng hiện tại (`my_rank`, `my_xp`, `my_level`).
 - Quy tắc phân định hòa điểm (Tie-breaking): Bằng điểm thì ưu tiên người đạt mốc điểm trước (`updated_at ASC`).
 - Tối ưu hóa truy vấn cơ sở dữ liệu bằng B-tree index trên `gamification.user_xp (xp DESC, updated_at ASC)`.
+- Làm giàu thông tin hiển thị (`display_name`, `avatar_url`) thông qua Port nội bộ `ProfileReaderPort` (In-process call sang module `profile`).
 - Định nghĩa API hợp đồng Protobuf: `GetGlobalLeaderboardRequest` và `GetGlobalLeaderboardResponse`.
 
 ### Out of scope & Explicitly Deferred
@@ -68,8 +69,9 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
      - Nếu người dùng nằm trong Top 50: Lấy trực tiếp vị trí index $+ 1$ làm `my_rank`.
      - Nếu người dùng nằm ngoài Top 50: Thực thi câu lệnh đếm số người có điểm cao hơn:
        $$\text{rank} = \text{COUNT}(\text{users có } \texttt{xp} > \texttt{my\_xp}) + 1$$
-  4. Hệ thống đóng gói danh sách Top 50 (gồm `rank`, `user_id`, `xp`, `level`) kèm khối `my_standing` (gồm `rank`, `user_id`, `xp`, `level`).
-  5. Trả về response `200 OK`.
+  4. Hệ thống gọi `ProfileReaderPort.BatchGetSummaries(ctx, userIDs)` để nạp `display_name` và `avatar_url` cho Top 50 và người dùng gọi API.
+  5. Hệ thống đóng gói danh sách Top 50 (gồm `rank`, `user_id`, `display_name`, `avatar_url`, `xp`, `level`) kèm khối `my_standing` (gồm `rank`, `user_id`, `display_name`, `avatar_url`, `xp`, `level`).
+  6. Trả về response `200 OK`.
 - **Postconditions**: Người dùng nắm bắt được bảng xếp hạng toàn cầu và vị trí phấn đấu của bản thân.
 
 ---
@@ -132,15 +134,16 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 
 ---
 
-## Open Questions & Decisions Needed
+## Architectural Decisions
 
-> [!NOTE]
+> [!IMPORTANT]
 > **Hiển thị Tên & Ảnh đại diện (Display Name & Avatar) trên Leaderboard**:
-> Do nguyên tắc Modular Monolith cấm JOIN chéo sang schema `profile`, API của Gamification sẽ trả về `user_id`. Để Client hiển thị được Tên và Avatar của Top 50:
-> - **Phương án A (BFF / API Gateway Aggregation - Khuyến nghị)**: Tầng API Gateway hoặc Mobile Client sẽ gửi batch `user_ids` sang module `profile` để nạp tên và avatar tương ứng.
-> - **Phương án B (Event-Driven Profile Cache)**: Module Gamification lắng nghe sự kiện `UserProfileUpdated` từ Kafka và lưu bản sao `display_name`, `avatar_url` trực tiếp trong bảng `user_xp`.
->
-> *(Khuyến nghị Phương án A để giữ module Gamification tinh gọn, thuần túy và không bị dư thừa dữ liệu).*
+> Do nguyên tắc Modular Monolith cấm JOIN chéo sang schema `profile`, đồng thời loại bỏ việc sao chép dữ liệu thừa qua Kafka hay bắt client thực hiện nhiều lượt gọi mạng, hệ thống sử dụng **Port Nội Bộ (In-process Cross-Module Port - `ProfileReaderPort`)**:
+> - **Nguyên tắc Hexagonal**: Tầng Application của module Gamification khai báo interface `ProfileReaderPort` với phương thức `BatchGetSummaries(ctx, userIDs)`.
+> - **Triển khai Adapter**: Tầng Infrastructure của Gamification hiện thực adapter gọi trực tiếp sang Application Service / Facade của module `profile` trong cùng một tiến trình (In-memory call).
+> - **Thực thi Database**: Module `profile` thực hiện 1 câu query `SELECT id, display_name, avatar_url FROM profile.users WHERE id = ANY($1)` trên PK index ($< 2\text{ ms}$).
+> - **Kiểm soát ranh giới**: Gamification chỉ nhận DTO thuần túy (`ProfileSummary { DisplayName, AvatarURL }`), hoàn toàn không phụ thuộc hay import model/entity của `profile`.
+> - **Khả năng chịu lỗi (Resilience)**: Thiết lập timeout $500\text{ ms}$; nếu module profile gặp sự cố, hệ thống fallback hiển thị `user_id` và tên mặc định `"Gymer"` thay vì làm lỗi toàn bộ bảng xếp hạng.
 
 ---
 
