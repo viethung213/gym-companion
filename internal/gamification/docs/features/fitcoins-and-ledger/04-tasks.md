@@ -13,13 +13,15 @@
 - **Mục tiêu**: Định nghĩa API ConnectRPC `WalletService` theo chuẩn Contract-First.
 - **Tệp nguồn**:
   - `contracts/gamification/wallet/v1/wallet.proto`
+  - `proto/contracts/supporting/gamification/v1/event/wallet_events.proto`
 - **Các bước thực hiện**:
   1. Khai báo dịch vụ `WalletService` với các RPCs: `GetWallet`, `ListTransactions`, `SpendCoins`.
   2. Khai báo các message: `GetWalletRequest`, `GetWalletResponse`, `SpendCoinsRequest`, `SpendCoinsResponse`, `LedgerEntry`.
-  3. Chạy lệnh sinh mã: `buf generate`.
+  3. Khai báo các CloudEvents message: `CoinsEarned`, `CoinsSpent`.
+  4. Chạy lệnh sinh mã: `buf generate`.
 - **Tiêu chí hoàn thành (DoD)**:
   - `buf lint` không có lỗi.
-  - File Go stubs sinh ra thành công tại `internal/gen/go/contracts/gamification/wallet/v1/`.
+  - File Go stubs sinh ra thành công tại `internal/gen/go/contracts/`.
 
 ---
 
@@ -84,15 +86,17 @@
 ---
 
 ### [T-FC-06] [APP] Triển Khai Tầng Application & Command Handlers
-- **Mục tiêu**: Xây dựng Use Cases nạp và trừ coin có bảo vệ Idempotency.
+- **Mục tiêu**: Xây dựng Use Cases nạp và trừ coin có bảo vệ Idempotency và ghi nhận sự kiện Outbox trong cùng 1 transaction.
 - **Tệp nguồn**:
   - `internal/gamification/application/port/wallet_repository.go`
+  - `internal/gamification/application/port/outbox_repository.go`
   - `internal/gamification/application/command/earn_coins.go`
   - `internal/gamification/application/command/spend_coins.go`
   - `internal/gamification/application/query/get_wallet_balance.go`
   - `internal/gamification/application/query/list_ledger_transactions.go`
 - **Các kịch bản kiểm thử**:
-  - `spend_coins_test.go`: Test trùng lặp `idempotency_key` trả về kết quả cũ mà không trừ tiền lần 2; test rollback khi lưu lỗi.
+  - `spend_coins_test.go`: Test trùng lặp `idempotency_key` trả về kết quả cũ mà không trừ tiền lần 2; test rollback khi lưu lỗi; test ghi bản ghi `CoinsSpent` vào Outbox.
+  - `earn_coins_test.go`: Test ghi bản ghi `CoinsEarned` vào Outbox khi cộng coin thành công.
 - **Tiêu chí hoàn thành (DoD)**:
   - Unit tests cho Command Handlers pass $100\%$.
 

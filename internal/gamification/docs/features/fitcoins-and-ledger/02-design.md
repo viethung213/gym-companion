@@ -27,10 +27,17 @@ flowchart TD
 
     subgraph DrivenAdapters["Infrastructure Layer (Driven)"]
         REPO_IMPL["PostgresWalletRepository<br/>(GORM / raw SQL with Row Lock)"]
+        OUTBOX["Transactional Outbox Writer"]
     end
 
     subgraph Storage["Database Storage"]
         DB[(PostgreSQL<br/>gamification.user_wallet<br/>gamification.coin_ledger)]
+        DB_OUTBOX[(gamification.outbox)]
+    end
+
+    subgraph Dispatcher["Async Event Dispatcher"]
+        WORKER["Transactional Outbox Worker"]
+        EVT_BUS["Kafka Topic: gamification.events"]
     end
 
     KAFKA_IN -->|Dispatch Earning Event| CMD_EARN
@@ -41,6 +48,8 @@ flowchart TD
     QRY_BAL & QRY_TX -->|Read| PORT_REPO
     PORT_REPO -.->|Implement| REPO_IMPL
     REPO_IMPL -->|SELECT FOR UPDATE / INSERT| DB
+    REPO_IMPL -->|Write Events| OUTBOX --> DB_OUTBOX
+    DB_OUTBOX --> WORKER --> EVT_BUS
 ```
 
 ### Ranh giới & Trách nhiệm các tầng:
@@ -157,8 +166,12 @@ sequenceDiagram
         Handler->>Repo: SaveWalletAndLedger(wallet, ledgerEntry)
         Repo->>DB: UPDATE gamification.user_wallet SET balance = ..., last_workout_reward_date = ...
         Repo->>DB: INSERT INTO gamification.coin_ledger (amount=+5, balance_after=..., idempotency_key=...)
+        Repo->>DB: INSERT INTO gamification.outbox (Event: CoinsEarned)
         Repo-->>Handler: Commit OK
         Handler-->>Consumer: 200 OK (Thưởng thành công)
+        par Async Dispatch
+            DB->>Kafka: Outbox Worker quét bản ghi & publish CloudEvent sang gamification.events
+        end
     end
 ```
 
@@ -190,8 +203,12 @@ sequenceDiagram
             Handler->>Repo: SaveWalletAndLedger(wallet, ledgerEntry)
             Repo->>DB: UPDATE gamification.user_wallet SET balance = balance - 100
             Repo->>DB: INSERT INTO gamification.coin_ledger (amount=-100, balance_after=...)
+            Repo->>DB: INSERT INTO gamification.outbox (Event: CoinsSpent)
             Repo-->>Handler: Commit OK
             Handler-->>Caller: 200 OK (Giao dịch thành công, new_balance)
+            par Async Dispatch
+                DB->>Caller: Outbox Worker quét bản ghi & publish CloudEvent sang gamification.events
+            end
         end
     end
 ```
@@ -288,12 +305,15 @@ internal/gamification/
 │   │   ├── get_wallet_balance.go         # Use Case đọc số dư
 │   │   └── list_ledger_transactions.go   # Use Case đọc lịch sử sổ cái
 │   └── port/
-│       └── wallet_repository.go          # Output Port giao tiếp DB
+│       ├── wallet_repository.go          # Output Port giao tiếp DB
+│       └── outbox_repository.go          # Output Port ghi nhận sự kiện Outbox
 │
 ├── infrastructure/
-│   └── persistence/
-│       ├── wallet_repository.go          # GORM / SQL implementation with Row Lock
-│       └── wallet_repository_test.go     # Integration test tương tranh PostgreSQL
+│   ├── persistence/
+│   │   ├── wallet_repository.go          # GORM / SQL implementation with Row Lock
+│   │   └── wallet_repository_test.go     # Integration test tương tranh PostgreSQL
+│   └── event/
+│       └── wallet_outbox_writer.go       # Đóng gói CloudEvents sang gamification.outbox
 │
 └── transport/
     ├── grpc/
@@ -302,3 +322,38 @@ internal/gamification/
         ├── level_up_consumer.go          # Lắng nghe UserLeveledUp
         └── workout_consumer.go           # Lắng nghe WorkoutCompleted
 ```
+
+---
+
+## 5. Đặc Tả Sự Kiện CloudEvents (`proto/contracts/supporting/gamification/v1/event/wallet_events.proto`)
+
+```protobuf
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event;gamificationeventv1";
+
+// Sự kiện phát sinh khi người dùng tích lũy FitCoins thành công
+message CoinsEarned {
+  string user_id = 1;
+  int64 amount = 2;              // Số coin được thưởng (> 0)
+  int64 balance_after = 3;       // Số dư ví sau khi cộng
+  string reason = 4;             // EARN_LEVEL_UP, EARN_WORKOUT, EARN_PR, etc.
+  string source_ref_id = 5;      // Mã tham chiếu (level, session_id, date)
+  google.protobuf.Timestamp occurred_at = 6;
+}
+
+// Sự kiện phát sinh khi người dùng chi tiêu FitCoins thành công
+message CoinsSpent {
+  string user_id = 1;
+  int64 amount = 2;              // Số coin đã tiêu (> 0)
+  int64 balance_after = 3;       // Số dư ví sau khi trừ
+  string reason = 4;             // SPEND_STREAK_FREEZE, SPEND_DOUBLE_XP, etc.
+  string idempotency_key = 5;    // Khóa chống trừ trùng lặp
+  google.protobuf.Timestamp occurred_at = 6;
+}
+```
+
