@@ -8,7 +8,7 @@ Tài liệu này đặc tả kiến trúc tổng thể, ranh giới Bounded Cont
 
 FITAI được xây dựng theo mô hình **Domain-Encapsulated Modular Monolith**. Mỗi Bounded Context được cô lập thành một thư mục độc lập dưới `/internal/<module_name>/`.
 
-Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting Domain**), tiếp nhận các sự kiện nghiệp vụ từ hệ thống để vận hành cơ chế tích lũy kinh nghiệm (XP & Cấp độ), giải đấu tuần (Weekly Leagues), vinh danh huy hiệu và quản lý tiền tệ thể thao:
+Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting Domain**), tiếp nhận các sự kiện nghiệp vụ từ hệ thống để vận hành cơ chế tích lũy kinh nghiệm (XP & Cấp độ), bảng xếp hạng toàn hệ thống (Leaderboard), vinh danh huy hiệu và quản lý tiền tệ thể thao:
 
 ```mermaid
 flowchart TD

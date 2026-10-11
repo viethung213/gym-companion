@@ -1,6 +1,6 @@
-# ADR-0003: Sử Dụng Khóa Dòng Bi Quan (SELECT FOR UPDATE) Cho Cập Nhật Điểm XP
+# ADR-0002: Sử Dụng Khóa Dòng Bi Quan (SELECT FOR UPDATE) Cho Cập Nhật Điểm XP
 
-- **Feature**: xp-and-rank-tiers
+- **Feature**: xp-and-levels
 - **Date**: 2026-10-09
 - **Status**: Accepted
 - **Deciders**: Maintainer (User), AI Assistant
@@ -10,7 +10,7 @@ Khi người dùng hoàn thành buổi tập hoặc cập nhật chỉ số dinh
 
 Nếu hai giao dịch cùng đọc bản ghi `user_xp`, cùng tính toán và ghi lại vào database, sự kiện đến sau có thể ghi đè làm mất điểm của sự kiện trước (**Lost Update Anomaly**).
 
-Cần lựa chọn cơ chế kiểm soát tương tranh (Concurrency Control) để bảo vệ số dư `total_xp` và `weekly_xp`.
+Cần lựa chọn cơ chế kiểm soát tương tranh (Concurrency Control) để bảo vệ số dư điểm `xp`.
 
 ## Decision Drivers
 - **Tính toàn vẹn dữ liệu tuyệt đối (Zero Lost Updates)**: Không bao giờ được phép mất dù chỉ 1 điểm XP nỗ lực của gymer.
@@ -27,7 +27,7 @@ Cần lựa chọn cơ chế kiểm soát tương tranh (Concurrency Control) đ
 Chosen: **Option 2 (Pessimistic Row Locking - `SELECT ... FOR UPDATE`)**.
 
 ```sql
-SELECT user_id, total_xp, weekly_xp, current_week_number, updated_at
+SELECT user_id, xp, level, updated_at
 FROM gamification.user_xp
 WHERE user_id = $1
 FOR UPDATE;

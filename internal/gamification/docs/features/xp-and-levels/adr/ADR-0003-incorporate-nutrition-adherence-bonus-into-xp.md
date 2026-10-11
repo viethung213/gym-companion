@@ -1,6 +1,6 @@
-# ADR-0004: Tích Hợp Điểm Thưởng Kỷ Luật Dinh Dưỡng (+30 XP/ngày) Vào Hệ Thống XP
+# ADR-0003: Tích Hợp Điểm Thưởng Kỷ Luật Dinh Dưỡng (+30 XP/ngày) Vào Hệ Thống XP
 
-- **Feature**: xp-and-rank-tiers
+- **Feature**: xp-and-levels
 - **Date**: 2026-10-09
 - **Status**: Accepted
 - **Deciders**: Maintainer (User), AI Assistant
