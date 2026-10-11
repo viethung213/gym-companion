@@ -264,7 +264,7 @@ type SpendRequest struct {
 ### BR-FC-02: Nguyên Tắc Sổ Cái Append-Only (Immutable Ledger Rule)
 - Bảng `gamification.coin_ledger` nghiêm cấm cập nhật (`UPDATE`) hoặc xóa (`DELETE`).
 - Phương trình cân bằng sổ cái luôn được bảo toàn:
-  $$\text{balance\_after} = \text{balance\_before} + \text{amount}$$
+  $$B_{\text{after}} = B_{\text{before}} + \Delta_{\text{amount}} \quad (\text{với } B \text{ là } \texttt{balance})$$
 
 ### BR-FC-03: Chống Chi Tiêu Kép (Anti-Double-Spending Rule)
 - Mọi thao tác thay đổi số dư ví bắt buộc phải sử dụng khóa dòng bi quan:

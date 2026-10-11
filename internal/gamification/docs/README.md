@@ -22,8 +22,12 @@ internal/gamification/docs/
     │   ├── 03-plan.md                 # Kế hoạch mã nguồn chi tiết & Test Plan
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-08)
     ├── streaks-and-habits/            # 3. Chuỗi Ngày & Đóng Băng Chuỗi (Streaks & Streak Freeze) (Roadmap)
-    ├── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Đang đặc tả)
-    │   └── 01-spec.md                 # Đặc tả nghiệp vụ & Sổ cái bất biến
+    ├── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Đang triển khai)
+    │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & 6 trường hợp tích lũy coin
+    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0003)
+    │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
+    │   ├── 03-plan.md                 # Kế hoạch mã nguồn chi tiết & Test Plan
+    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-FC-01 -> T-FC-08)
     └── badges-and-achievements/       # 5. Huy Hiệu Thành Tựu & Thử Thách Hàng Tháng (Roadmap)
 ```
 
