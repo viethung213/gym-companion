@@ -19,7 +19,7 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 - [ ] **T-03 [Database Migration, BR-XP-05]**: Viết script migration PostgreSQL khởi tạo schema và các bảng dữ liệu cho Gamification.
   - **Đường dẫn**: `internal/shared/database/migrations/13-create-gamification-tables.sql`
-  - **Nội dung**: Schema `gamification`, bảng `user_xp (user_id, xp, level, updated_at)`, `xp_history` (kèm unique index `uq_xp_history_workout_session`), `outbox_events` kèm chỉ mục B-Tree.
+  - **Nội dung**: Schema `gamification`, bảng `user_xp (user_id, xp, level, updated_at)`, `xp_history` (kèm unique index `uq_xp_history_workout_session`), `outbox` và `outbox_log` kèm chỉ mục B-Tree.
   - **Xác minh**: Script SQL thực thi thành công trên PostgreSQL.
 
 ---
@@ -90,7 +90,7 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 - [ ] **T-12 [Transactional Outbox Worker]**: Quét và xuất bản CloudEvents sang Kafka.
   - **Đường dẫn**: `internal/gamification/infrastructure/worker/outbox_worker.go`
-  - **Yêu cầu**: Background worker định kỳ đọc `outbox_events` bằng `SELECT ... FOR UPDATE SKIP LOCKED` và publish tới Kafka topic `gamification.events`.
+  - **Yêu cầu**: Background worker định kỳ đọc `gamification.outbox` bằng `SELECT ... FOR UPDATE SKIP LOCKED` và publish tới Kafka topic `gamification.events`.
 
 ---
 

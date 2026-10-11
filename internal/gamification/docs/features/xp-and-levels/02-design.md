@@ -47,7 +47,7 @@ flowchart TD
     subgraph Database["PostgreSQL (Schema: gamification.*)"]
         DB_XP[("gamification.user_xp")]
         DB_HIST[("gamification.xp_history")]
-        DB_OUTBOX[("gamification.outbox_events")]
+        DB_OUTBOX[("gamification.outbox")]
     end
 
     subgraph Dispatcher["Async Event Dispatcher"]
@@ -144,16 +144,18 @@ erDiagram
         timestamp created_at
     }
 
-    OUTBOX_EVENTS {
-        uuid id PK
+    OUTBOX {
+        varchar id PK
+        varchar event_id UK
         varchar aggregate_type
-        uuid aggregate_id
+        varchar aggregate_id
         varchar event_type
         jsonb payload
+        varchar partition_key
+        boolean published
         varchar status
-        int retry_count
-        timestamp created_at
-        timestamp processed_at
+        timestamptz created_at
+        timestamptz locked_until
     }
 ```
 
@@ -198,22 +200,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_xp_history_workout_session
     ON gamification.xp_history (user_id, source_event_id) 
     WHERE reason = 'WORKOUT_COMPLETED' AND source_event_id IS NOT NULL;
 
--- Bảng 3: Transactional Outbox (Đảm bảo độ tin cậy At-Least-Once khi bắn CloudEvents)
-CREATE TABLE IF NOT EXISTS gamification.outbox_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    aggregate_type VARCHAR(50) NOT NULL,
-    aggregate_id UUID NOT NULL,
-    event_type VARCHAR(100) NOT NULL,
-    payload JSONB NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    processed_at TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_outbox_events_pending 
-    ON gamification.outbox_events (status, created_at ASC) 
-    WHERE status = 'PENDING';
+-- Bảng 3: Transactional Outbox (Dùng chung cho toàn module Gamification)
+-- Chi tiết DDL gamification.outbox, gamification.outbox_log và cơ chế Worker xem tại:
+-- internal/gamification/docs/architecture.md#4-chuẩn-transactional-outbox-dùng-chung-module-wide-outbox
 ```
 
 ---
@@ -248,15 +237,15 @@ sequenceDiagram
         App->>Domain: ApplyWorkoutResult(deltaXp, workoutTime)
         App->>DB: UPDATE user_xp SET xp = :newXp, level = :newLevel, last_workout_at = :time, updated_at = NOW()
         alt Có sự kiện lên cấp (Level Up)
-            App->>DB: INSERT INTO outbox_events (UserLeveledUp)
+            App->>DB: INSERT INTO outbox (UserLeveledUp)
         end
-        App->>DB: INSERT INTO outbox_events (XpEarned)
+        App->>DB: INSERT INTO outbox (XpEarned)
         App->>DB: COMMIT TRANSACTION
         App-->>K: Commit Offset
         par Background Dispatch
-            OW->>DB: SELECT * FROM outbox_events WHERE status = 'PENDING' FOR UPDATE SKIP LOCKED
-            OW->>EventBus: Publish CloudEvent 1.0
-            OW->>DB: UPDATE outbox_events SET status = 'PUBLISHED'
+            OW->>DB: SELECT * FROM outbox WHERE published = FALSE FOR UPDATE SKIP LOCKED
+            OW->>EventBus: Publish CloudEvent 1.0 (Topic: gamification.events)
+            OW->>DB: UPDATE outbox SET published = TRUE, status = 'PUBLISHED'
         end
     end
 ```
@@ -283,9 +272,9 @@ sequenceDiagram
             App->>DB: UPDATE user_xp SET xp = :newXp, level = :newLevel, last_nutrition_reward_date = :localDate, updated_at = NOW()
             App->>DB: INSERT INTO xp_history (reason = 'NUTRITION_ADHERENCE', delta_xp = 30)
             alt Lên cấp
-                App->>DB: INSERT INTO outbox_events (UserLeveledUp)
+                App->>DB: INSERT INTO outbox (UserLeveledUp)
             end
-            App->>DB: INSERT INTO outbox_events (XpEarned)
+            App->>DB: INSERT INTO outbox (XpEarned)
             App->>DB: COMMIT TRANSACTION
             App-->>K: Commit Offset
         else Không đạt chuẩn
