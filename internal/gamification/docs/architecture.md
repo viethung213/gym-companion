@@ -13,7 +13,9 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 ```mermaid
 flowchart TD
     subgraph CoreDomains["Inbound Events (Nguồn sự kiện)"]
+        AU["auth<br/>(Sự kiện đăng ký tài khoản userRegistered)"]
         WE["workout_execution<br/>(Sự kiện hoàn thành buổi tập)"]
+        NU["nutrition<br/>(Sự kiện đạt mục tiêu calo/protein)"]
         PR["profile<br/>(Sự kiện hoàn tất hồ sơ)"]
         SO["social<br/>(Sự kiện chia sẻ hoạt động)"]
     end
@@ -32,7 +34,7 @@ flowchart TD
         G_OUTBOX["Transactional Outbox"]
     end
 
-    WE & PR & SO --> TOPIC_IN
+    AU & WE & NU & PR & SO --> TOPIC_IN
     TOPIC_IN --> G_CONSUMER
     G_CONSUMER --> G_APP --> G_DOMAIN --> G_REPO
     G_DOMAIN --> G_OUTBOX --> TOPIC_GA
@@ -66,6 +68,9 @@ internal/gamification/
 └── transport/                   # TẦNG GIAO DIỆN (Driving Adapters)
     ├── grpc/                    # ConnectRPC Service Handlers
     └── consumer/                # Kafka Message Consumers
+        ├── user_registered_consumer.go        # Khởi tạo tức thì hồ sơ game hóa khi đăng ký
+        ├── activity_ingestion_coordinator.go   # Điều phối tuần tự sự kiện buổi tập
+        └── nutrition_streak_consumer.go       # Consumer đạt mục tiêu dinh dưỡng
 ```
 
 ---
@@ -186,6 +191,7 @@ Tất cả các sự kiện bên dưới được định nghĩa trong contract 
 #### Sự Kiện Ngoại Vi Lắng Nghe (Inbound Events)
 | Tên Sự Kiện | Module Phát | Xử Lý Phía Gamification |
 | :--- | :--- | :--- |
+| `contracts.generic.auth.v1.userRegistered` | `auth` | Khởi tạo tức thì bộ ba hồ sơ Gamification (`user_xp = 0, level = 1`, `user_streak = 0`, `user_wallet = 0`). |
 | `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` | `workout_execution` | Điều phối qua `ActivityIngestionCoordinator` để cộng XP và tăng chuỗi Streak. |
 | `contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved` | `workout_execution` | Thưởng thêm XP và FitCoins khi lập kỷ lục mới. |
 | `contracts.core.nutrition.v1.event.DailyNutritionGoalAchieved` | `nutrition` | Thưởng $+30$ XP và duy trì Streak dinh dưỡng trong ngày nghỉ. |
@@ -238,4 +244,22 @@ BƯỚC 3: ATOMIC WALLET TRANSACTION (< 2 ms)
 1. **0% Nguy Cơ Deadlock:** Tại bất kỳ thời điểm nào, tiến trình không bao giờ giữ 2 khóa dòng cùng lúc. Triệt tiêu hoàn toàn điều kiện chờ vòng (circular wait condition) với bất kỳ luồng Dinh dưỡng hay Cửa hàng nào.
 2. **Giải Phóng DB Connection Pool:** Mỗi bước chỉ chiếm kết nối pool trong tích tắc ($< 2\text{ ms}$) rồi nhả ngay, bảo vệ pool an toàn tuyệt đối dưới tải cao lúc 3 AM.
 3. **Cô Lập Lỗi (Failure Isolation):** Nỗ lực mồ hôi của gymer tại phòng tập luôn được ghi nhận trọn vẹn (XP và Streak được commit chắc chắn). Bất kỳ trục trặc nào ở bước thưởng tiền ảo FitCoins đều được cách ly xử lý riêng mà không bao giờ xóa mất thành quả tập luyện của người dùng.
+
+---
+
+## 6. Khởi Tạo Hồ Sơ Game Hóa Tức Thì (Eager Initialization via UserRegistered)
+
+### 6.1 Vấn Đề Của Khởi Tạo Lười (Lazy Initialization Anti-Pattern)
+Nếu chỉ tạo bản ghi khi người dùng hoàn thành buổi tập đầu tiên (Lazy Initialization):
+- Khi user vừa đăng ký tài khoản, mở app vào tab Bảng Xếp Hạng (Leaderboards) hoặc Ví FitCoins (Wallet), database chưa hề có bản ghi của user đó.
+- Truy vấn tính thứ hạng cá nhân (`SELECT COUNT(*) + 1 FROM gamification.user_xp WHERE xp > :my_xp`) bị lỗi hoặc trả về kết quả sai do `:my_xp = NULL`.
+- Truy vấn ví hoặc chuỗi phải xử lý các ngoại lệ `RecordNotFound`, làm tăng độ phức tạp của code tầng Query và nguy cơ crash ứng dụng lúc 3 AM.
+
+### 6.2 Giải Pháp: Eager Initialization Với UserRegistered Consumer
+Gamification triển khai `UserRegisteredConsumer` lắng nghe sự kiện `contracts.generic.auth.v1.userRegistered` từ topic `auth.events` (Consumer Group: `gamification-user-registered-group`):
+- Ngay khi tài khoản được tạo ở Auth, Gamification thực thi 1 Local Database Transaction khởi tạo đồng thời bộ ba cơ sở với tính lũy đẳng (`ON CONFLICT (user_id) DO NOTHING`):
+  1. `gamification.user_xp`: `xp = 0`, `level = 1`
+  2. `gamification.user_streak`: `current_streak = 0`, `longest_streak = 0`
+  3. `gamification.user_wallet`: `balance = 0`, `total_earned = 0`, `total_spent = 0`
+- **Kết quả**: 100% gymer tồn tại trong hệ thống đều có sẵn trạng thái Game hóa từ giây đầu tiên. Các API tra cứu (`GetStreak`, `GetWallet`, `GetGlobalLeaderboard`) hoạt động mượt mà, nhất quán tuyệt đối, loại bỏ hoàn toàn các nhánh code xử lý dữ liệu khuyết thiếu.
 

@@ -104,7 +104,8 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 
 ## Error, Alternate, and Boundary Scenarios
 - **Người Dùng Mới Chưa Có Hoạt Động (0 XP)**:
-  - Nếu người dùng mới đăng ký (hoặc chưa phát sinh buổi tập nào), hệ thống khởi tạo mặc định hoặc coi là $0$ XP, thứ hạng hiển thị ở vị trí cuối cùng của hệ thống.
+  - Khi người dùng đăng ký tài khoản, `UserRegisteredConsumer` đã tự động khởi tạo bản ghi trong `gamification.user_xp` với $0$ XP và Level $1$.
+  - Khi người dùng gọi API trước khi tập buổi nào, `my_standing` hiển thị chính xác: `rank = tổng số user có XP > 0 + 1`, `xp = 0`, `level = 1`.
 - **Hệ Thống Rỗng (Chưa Có User Nào Có XP)**:
   - Trả về danh sách rỗng `items: []`, `my_rank: 1` mà không gây lỗi panic/crash.
 - **Người Dùng Nằm Ngoài Top 50**:

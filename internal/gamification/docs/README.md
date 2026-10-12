@@ -36,6 +36,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 * **Tích lũy & Trao thưởng tự do**: Tiền tệ ảo FitCoins (Gems) nhận được khi lên cấp hoặc hoàn thành chuỗi ngày; dùng để mua Streak Freeze, nhân đôi XP, hoặc đổi voucher đối tác.
 
 ### Trách nhiệm:
+* Lắng nghe sự kiện đăng ký tài khoản từ Auth để khởi tạo tức thì hồ sơ Game hóa cơ sở (0 XP, Level 1, 0 Streak, 0 FitCoins).
 * Quản lý điểm kinh nghiệm XP và cấp độ Level (`user_xp`, `xp_history`).
 * Cung cấp dữ liệu Bảng xếp hạng toàn hệ thống theo điểm XP (Top 50) và tra cứu thứ hạng cá nhân (`my_rank`).
 * Quản lý chuỗi ngày tập liên tục (Streak) và trạng thái Đóng Băng Chuỗi (Streak Freeze).
