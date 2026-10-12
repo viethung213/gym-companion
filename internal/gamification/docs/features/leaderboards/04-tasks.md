@@ -24,19 +24,15 @@
 
 ---
 
-### [T-LB-02] [VERIFICATION] Xác Thực Chỉ Mục B-Tree Composite Index
-- **Mục tiêu**: Xác thực chỉ mục `idx_user_xp_leaderboard (xp DESC, updated_at ASC)` (đã khởi tạo trong migration DDL cơ sở tại `xp-and-levels`) phục vụ tối ưu câu lệnh `ORDER BY xp DESC, updated_at ASC`.
+### [T-LB-02] [MIGRATION] Migration Bảng User Snapshots & Chỉ Mục B-Tree
+- **Mục tiêu**: Bổ sung bảng `gamification.user_snapshots` và xác thực chỉ mục `idx_user_xp_leaderboard (xp DESC, updated_at ASC)`.
 - **Tệp nguồn**:
   - `internal/shared/database/migrations/13-create-gamification-tables.sql`
 - **Các bước thực hiện**:
-  1. Kiểm tra DDL đã có chỉ mục:
-     ```sql
-     CREATE INDEX IF NOT EXISTS idx_user_xp_leaderboard 
-     ON gamification.user_xp (xp DESC, updated_at ASC);
-     ```
-  2. Chạy `EXPLAIN ANALYZE` trên PostgreSQL với query Top 50.
+  1. Thêm DDL tạo bảng `gamification.user_snapshots` (`user_id UUID PRIMARY KEY`, `display_name VARCHAR(100)`, `avatar_url TEXT`, `updated_at TIMESTAMPTZ`).
+  2. Xác thực chỉ mục `idx_user_xp_leaderboard ON gamification.user_xp (xp DESC, updated_at ASC)`.
 - **Tiêu chí hoàn thành (DoD)**:
-  - Kiểm tra `EXPLAIN ANALYZE` xác nhận câu lệnh `LIMIT 50` sử dụng `Index Scan` trên `idx_user_xp_leaderboard`.
+  - Chạy migration SQL thành công, bảng `user_snapshots` được tạo với đầy đủ ràng buộc.
 
 ---
 
@@ -44,10 +40,10 @@
 - **Mục tiêu**: Khai báo các interface tại tầng Application theo nguyên tắc Đảo ngược phụ thuộc (DIP).
 - **Tệp nguồn**:
   - `internal/gamification/application/port/leaderboard_repository.go`
-  - `internal/gamification/application/port/profile_reader.go`
+  - `internal/gamification/application/port/user_snapshot_repository.go`
 - **Các bước thực hiện**:
-  1. Khai báo interface `LeaderboardRepository` với các hàm `GetTopUsers`, `GetUserRank`, `GetUserXpRecord`.
-  2. Khai báo interface `ProfileReaderPort` với hàm `BatchGetSummaries`.
+  1. Khai báo interface `LeaderboardRepository` với các hàm `GetTopUsers` (trả về danh sách kèm thông tin snapshot), `GetUserRank`.
+  2. Khai báo interface `UserSnapshotRepository` với hàm `Upsert` và `UpdateIdentity`.
 - **Tiêu chí hoàn thành (DoD)**:
   - Code compile sạch, không import bất kỳ package ORM hay external framework nào.
 
@@ -60,8 +56,8 @@
 - **Các kịch bản kiểm thử**:
   1. `TestGetGlobalLeaderboard_CurrentUserInTop50`: Kiểm tra user nằm trong Top 50 lấy đúng vị trí không cần gọi `GetUserRank`.
   2. `TestGetGlobalLeaderboard_CurrentUserOutsideTop50`: Kiểm tra user ngoài Top 50 tính đúng thứ hạng qua `GetUserRank`.
-  3. `TestGetGlobalLeaderboard_UserWithZeroXp`: Kiểm tra user chưa có điểm XP hiển thị mặc định Level 1 và thứ hạng cuối.
-  4. `TestGetGlobalLeaderboard_ProfileServiceFallback`: Kiểm tra khi module Profile lỗi/timeout thì tên hiển thị fallback về `"Gymer"`.
+  3. `TestGetGlobalLeaderboard_UserWithZeroXp`: Kiểm tra user mới có 0 XP hiển thị mặc định Level 1 và thứ hạng cuối.
+  4. `TestGetGlobalLeaderboard_SnapshotDefaultFallback`: Kiểm tra khi user chưa có snapshot thì tên hiển thị fallback về `"Gymer"`.
   5. `TestGetGlobalLeaderboard_LimitClamping`: Kiểm tra giới hạn limit từ 1 đến 100 (mặc định 50).
 - **Tiêu chí hoàn thành (DoD)**:
   - Chạy `go test ./internal/gamification/application/query/...` báo lỗi biên dịch/failing test như dự kiến.
@@ -74,7 +70,7 @@
   - `internal/gamification/application/query/get_global_leaderboard.go`
 - **Các bước thực hiện**:
   1. Hiện thực hóa `GetGlobalLeaderboardHandler.Handle`.
-  2. Tích hợp gọi repo, gom danh sách `user_ids`, gọi `profileReader` có context timeout $500\text{ ms}$.
+  2. Gọi `LeaderboardRepository.GetTopUsers` nhận danh sách đã JOIN sẵn tên/avatar từ snapshot cục bộ.
   3. Ghép DTO và trả về `GetGlobalLeaderboardResult`.
 - **Tiêu chí hoàn thành (DoD)**:
   - Chạy `go test ./internal/gamification/application/query/...` pass $100\%$.
@@ -82,30 +78,32 @@
 
 ---
 
-### [T-LB-06] [INFRA] Hiện Thực Hóa PostgresLeaderboardRepository & ProfileReaderAdapter
-- **Mục tiêu**: Triển khai các Driven Adapters tại tầng Infrastructure.
+### [T-LB-06] [INFRA] Hiện Thực Hóa Postgres Repositories & Consumer Đồng Bộ Snapshot
+- **Mục tiêu**: Triển khai tầng lưu trữ PostgreSQL và Consumer đồng bộ tên/avatar qua Kafka.
 - **Tệp nguồn**:
   - `internal/gamification/infrastructure/persistence/leaderboard_repository.go`
-  - `internal/gamification/infrastructure/adapter/profile_adapter.go`
+  - `internal/gamification/infrastructure/persistence/user_snapshot_repository.go`
+  - `internal/gamification/transport/consumer/user_identity_updated_consumer.go`
 - **Các bước thực hiện**:
-  1. Viết `PostgresLeaderboardRepository` sử dụng GORM/SQL truy vấn bảng `gamification.user_xp`.
-  2. Viết `InProcessProfileReaderAdapter` kết nối sang module `profile`.
+  1. Viết `PostgresLeaderboardRepository` thực thi `user_xp LEFT JOIN user_snapshots`.
+  2. Viết `PostgresUserSnapshotRepository` thực hiện UPSERT snapshot.
+  3. Viết `UserIdentityUpdatedConsumer` lắng nghe `contracts.supporting.profile.v1.event.UserIdentityUpdated` từ topic `profile.events` để cập nhật `user_snapshots`.
 - **Tiêu chí hoàn thành (DoD)**:
-  - Các adapter hiện thực đầy đủ các methods của Ports tương ứng.
+  - Toàn bộ repo và consumer compile sạch, pass unit tests.
 
 ---
 
 ### [T-LB-07] [TEST] Integration Test Với PostgreSQL Thật
-- **Mục tiêu**: Xác thực hiệu năng truy vấn và thuật toán hòa điểm trên database thực tế.
+- **Mục tiêu**: Xác thực hiệu năng truy vấn `user_xp LEFT JOIN user_snapshots` trên database thực tế.
 - **Tệp nguồn**:
   - `internal/gamification/infrastructure/persistence/leaderboard_repository_test.go`
 - **Các kịch bản kiểm thử**:
-  1. Kiểm tra thứ tự sắp xếp giảm dần theo XP.
+  1. Kiểm tra thứ tự sắp xếp giảm dần theo XP và hiển thị đúng tên/avatar từ snapshot.
   2. Kiểm tra Tie-breaking: cùng XP thì ai có `updated_at` nhỏ hơn đứng trước; cùng cả `updated_at` thì so sánh `user_id`.
   3. Kiểm tra tính toán `GetUserRank` chính xác trên tập dữ liệu 100 dòng.
 - **Tiêu chí hoàn thành (DoD)**:
   - Toàn bộ integration test chạy thành công.
-  - Thời gian truy vấn Top 50 $< 5\text{ ms}$.
+  - Thời gian truy vấn Top 50 $< 2\text{ ms}$.
 
 ---
 

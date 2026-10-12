@@ -17,10 +17,13 @@ internal/gamification/docs/
     ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Đang triển khai)
     │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
     │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
-    │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-07)
-    ├── streaks-and-habits/            # 3. Chuỗi Ngày & Đóng Băng Chuỗi (Streaks & Streak Freeze) (Roadmap)
-    └── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Roadmap)
+    ├── streaks-and-habits/            # 3. Chuỗi Ngày Kỷ Luật (Streaks Engine) (Roadmap)
+    └── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Đang triển khai)
+        ├── 01-spec.md                 # Đặc tả nghiệp vụ & 6 trường hợp tích lũy coin
+        ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0004)
+        ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
+        └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-FC-01 -> T-FC-07)
 ```
 
 ---

@@ -235,7 +235,7 @@ BƯỚC 2: ATOMIC STREAK TRANSACTION (< 2 ms)
 BƯỚC 3: ATOMIC WALLET TRANSACTION (< 2 ms)
   BEGIN;
     SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE;
-    --> Cộng FitCoins thưởng (Domain Aggregate UserWallet)
+    --> Cộng FitCoins thưởng (Domain Aggregate UserWallet qua WalletRewarder Port)
     --> Ghi nhận Outbox coinsEarned
   COMMIT;  -- Nhả khóa user_wallet.
 ```

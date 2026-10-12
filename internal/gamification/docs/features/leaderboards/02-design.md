@@ -8,67 +8,79 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống (XP Leaderboard)** là mộ
 flowchart TD
     subgraph DrivingAdapters["Transport Layer (Driving)"]
         GRPC["LeaderboardGrpcHandler<br/>(ConnectRPC)"]
+        K_IDENT["UserIdentityUpdated Consumer<br/>(profile.events)"]
     end
 
     subgraph ApplicationLayer["Application Layer (Use Case)"]
         HANDLER["GetGlobalLeaderboardQueryHandler"]
         PORT_REPO["LeaderboardRepository (Output Port)"]
-        PORT_PROFILE["ProfileReaderPort (Output Port)"]
+        CMD_SNAPSHOT["SyncUserSnapshotCommandHandler"]
     end
 
     subgraph DrivenAdapters["Infrastructure Layer (Driven)"]
-        REPO_IMPL["PostgresLeaderboardRepository<br/>(GORM / raw SQL)"]
-        PROFILE_ADAPTER["ProfileReaderAdapter<br/>(In-process Cross-Module Adapter)"]
+        REPO_IMPL["PostgresLeaderboardRepository<br/>(Index Scan JOIN user_snapshots)"]
+        SNAPSHOT_REPO["PostgresUserSnapshotRepository"]
     end
 
-    subgraph External["External Modules & Storage"]
-        DB[(PostgreSQL<br/>gamification.user_xp)]
-        PROFILE_MOD["Profile Module<br/>(profile.users)"]
+    subgraph Storage["Database Storage (Schema gamification.*)"]
+        DB[(PostgreSQL<br/>gamification.user_xp<br/>gamification.user_snapshots)]
     end
 
     GRPC -->|Dispatch Query| HANDLER
+    K_IDENT -->|Sync Identity Event| CMD_SNAPSHOT
     HANDLER -->|Query Top 50 & Rank| PORT_REPO
-    HANDLER -->|Enrich Display Info| PORT_PROFILE
+    CMD_SNAPSHOT --> SNAPSHOT_REPO
     PORT_REPO -.->|Implement| REPO_IMPL
-    PORT_PROFILE -.->|Implement| PROFILE_ADAPTER
-    REPO_IMPL -->|Index Scan| DB
-    PROFILE_ADAPTER -->|In-memory Call| PROFILE_MOD
+    SNAPSHOT_REPO -.->|Write| DB
+    REPO_IMPL -->|Single Local Query| DB
 ```
 
 ### Ranh giới trách nhiệm giữa các tầng:
-1. **Transport Layer**: Tiếp nhận request ConnectRPC `GetGlobalLeaderboard`, xác thực Bearer Token, trích xuất `user_id` và chuyển giao cho Application Query Handler.
+1. **Transport Layer**:
+   - `LeaderboardGrpcHandler`: Tiếp nhận request ConnectRPC `GetGlobalLeaderboard`, xác thực Bearer Token, trích xuất `user_id` và chuyển giao cho Application Query Handler.
+   - `UserIdentityUpdated Consumer`: Lắng nghe sự kiện đổi tên/ảnh đại diện từ `profile.events` để cập nhật bảng `user_snapshots` bất đồng bộ.
 2. **Application Layer**:
-   - `GetGlobalLeaderboardQueryHandler`: Điều phối truy vấn Top 50 từ cơ sở dữ liệu và gọi `ProfileReaderPort` để làm giàu thông tin tên/ảnh của gymer.
-   - Định nghĩa hai Output Ports: `LeaderboardRepository` và `ProfileReaderPort`.
+   - `GetGlobalLeaderboardQueryHandler`: Thực thi use case tra cứu Top 50 và thứ hạng cá nhân thuần túy qua `LeaderboardRepository`. Hoàn toàn không phụ thuộc thời gian chạy (Zero Runtime Coupling) vào module `profile`.
 3. **Infrastructure Layer**:
-   - `PostgresLeaderboardRepository`: Thực thi các truy vấn SQL tối ưu hóa trên bảng `gamification.user_xp`.
-   - `ProfileReaderAdapter`: Hiện thực hóa `ProfileReaderPort` bằng cách gọi hàm in-memory sang Application Service của module `profile` với timeout $500\text{ ms}$ và cơ chế fallback an toàn.
+   - `PostgresLeaderboardRepository`: Thực thi câu lệnh SQL tối ưu hóa `user_xp LEFT JOIN user_snapshots` bằng Index Scan trong $< 2\text{ ms}$.
 
 ---
 
 ## 2. Thiết Kế Cơ Sở Dữ Liệu & Chỉ Mục (Database & Index DDL)
 
-Tính năng vận hành trực tiếp trên bảng `gamification.user_xp` sẵn có từ module `xp-and-levels`, không tạo bảng trung gian hay nhân bản dữ liệu.
-
-### Chỉ mục B-Tree Composite Index
-Để đáp ứng chuẩn hiệu năng "The 3 AM Test" (độ trễ $< 5\text{ ms}$), hệ thống kích hoạt chỉ mục kết hợp:
+Hệ thống kết hợp dữ liệu điểm số `gamification.user_xp` và bảng bản sao hiển thị `gamification.user_snapshots` trong cùng PostgreSQL schema:
 
 ```sql
--- Migration: Tạo index phục vụ truy vấn Bảng Xếp Hạng
+-- 1. Bảng User Snapshot cục bộ: Lưu trữ tên hiển thị và avatar đồng bộ qua Kafka
+CREATE TABLE IF NOT EXISTS gamification.user_snapshots (
+    user_id UUID PRIMARY KEY,
+    display_name VARCHAR(100) NOT NULL DEFAULT 'Gymer',
+    avatar_url TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 2. Chỉ mục Composite B-Tree phục vụ truy vấn Bảng Xếp Hạng
 CREATE INDEX IF NOT EXISTS idx_user_xp_leaderboard 
 ON gamification.user_xp (xp DESC, updated_at ASC);
 ```
 
 ### Phân tích cơ chế truy vấn vật lý (Physical Query Mechanics):
 
-#### Truy vấn 1: Lấy danh sách Top 50 dẫn đầu
+#### Truy vấn 1: Lấy danh sách Top 50 dẫn đầu kèm tên và ảnh đại diện
 ```sql
-SELECT user_id, xp, level, updated_at
-FROM gamification.user_xp
-ORDER BY xp DESC, updated_at ASC
+SELECT 
+    xp.user_id, 
+    COALESCE(s.display_name, 'Gymer') AS display_name, 
+    COALESCE(s.avatar_url, '') AS avatar_url, 
+    xp.xp, 
+    xp.level, 
+    xp.updated_at
+FROM gamification.user_xp xp
+LEFT JOIN gamification.user_snapshots s ON xp.user_id = s.user_id
+ORDER BY xp.xp DESC, xp.updated_at ASC
 LIMIT 50;
 ```
-* **Kế hoạch thực thi (Execution Plan)**: PostgreSQL sử dụng **Index Scan** trên `idx_user_xp_leaderboard`. Engine duyệt tuần tự đúng 50 leaf nodes đầu tiên của cây B-tree và dừng lại ngay lập tức (không cần sắp xếp lại toàn bộ bảng).
+* **Kế hoạch thực thi (Execution Plan)**: PostgreSQL sử dụng **Index Scan** trên `idx_user_xp_leaderboard` để lấy 50 dòng đầu tiên, sau đó thực hiện **Index Scan** trên khóa chính của `user_snapshots`. Toàn bộ quá trình diễn ra nội bộ trong database engine.
 * **Thời gian thực thi**: $< 2\text{ ms}$.
 
 #### Truy vấn 2: Xác định vị trí người dùng gọi API (`my_rank`)
@@ -94,7 +106,7 @@ Nhằm kiểm soát rủi ro "The 3 AM Test" khi số lượng người dùng v�
 
 ## 3. Luồng Xử Lý Nghiệp Vụ (Sequence Diagram)
 
-### Luồng thành công chính (Happy Path with Profile Enrichment):
+### Luồng Tra Cứu Bảng Xếp Hạng (Leaderboard Query Sequence):
 
 ```mermaid
 sequenceDiagram
@@ -103,45 +115,25 @@ sequenceDiagram
     participant Grpc as LeaderboardGrpcHandler
     participant App as GetGlobalLeaderboardQueryHandler
     participant Repo as PostgresLeaderboardRepository
-    participant DB as PostgreSQL (gamification.user_xp)
-    participant Adapter as ProfileReaderAdapter
-    participant Profile as Profile Module (In-Memory)
+    participant DB as PostgreSQL (gamification.*)
 
     Client->>Grpc: GetGlobalLeaderboard(limit = 50) [Bearer Token]
     Grpc->>App: Handle(ctx, Query{UserID: myID, Limit: 50})
     
-    rect rgb(240, 248, 255)
-        Note over App, DB: Bước 1: Truy vấn Top 50 & Rank từ Gamification DB
-        App->>Repo: GetTopRankedUsers(ctx, 50)
-        Repo->>DB: SELECT ... ORDER BY xp DESC, updated_at ASC LIMIT 50
-        DB-->>Repo: Return 50 rows
-        Repo-->>App: top50Entries
-        
-        App->>Repo: GetUserRank(ctx, myID, myXp, myUpdatedAt)
-        Repo->>DB: SELECT COUNT(*) + 1 WHERE ...
-        DB-->>Repo: Return myRank
-        Repo-->>App: myRank
-    end
+    Note over App, DB: Truy vấn đơn lẻ Top 50 & Rank nội bộ trong schema (< 2 ms)
+    App->>Repo: GetTopRankedUsers(ctx, 50)
+    Repo->>DB: SELECT xp.*, s.display_name, s.avatar_url FROM user_xp LEFT JOIN user_snapshots ... LIMIT 50
+    DB-->>Repo: Return 50 rows (đầy đủ điểm số, tên, avatar)
+    Repo-->>App: top50Entries
+    
+    App->>Repo: GetUserRank(ctx, myID, myXp, myUpdatedAt)
+    Repo->>DB: SELECT COUNT(*) + 1 WHERE ...
+    DB-->>Repo: Return myRank
+    Repo-->>App: myRank
 
-    rect rgb(255, 250, 240)
-        Note over App, Profile: Bước 2: Làm giàu tên & ảnh qua Port nội bộ (In-memory)
-        App->>Adapter: BatchGetSummaries(ctxWithTimeout, [50 UserIDs + myID])
-        Adapter->>Profile: BatchGetProfiles(ctx, userIDs)
-        Profile-->>Adapter: map[UUID]ProfileSummary{DisplayName, AvatarURL}
-        Adapter-->>App: profileMap
-    end
-
-    Note over App: Bước 3: Ghép dữ liệu & đóng gói Response trong RAM
     App-->>Grpc: QueryResult{Items: []LeaderboardEntry, MyStanding: LeaderboardEntry}
     Grpc-->>Client: 200 OK (GetGlobalLeaderboardResponse)
 ```
-
-### Cơ chế phòng vệ khi Module Profile gặp sự cố (Resilience & Fallback Guard):
-* Lệnh gọi sang `ProfileReaderPort` được bọc bởi `context.WithTimeout(ctx, 500*time.Millisecond)`.
-* Nếu module `profile` bị lỗi, timeout hoặc trả về thiếu bản ghi của một `user_id`:
-  * Tầng Application **không làm crash request**.
-  * Tự động áp dụng giá trị fallback mặc định: `display_name = "Gymer"`, `avatar_url = ""`.
-  * Bảng xếp hạng vẫn được hiển thị nguyên vẹn cho người dùng.
 
 ---
 
@@ -189,9 +181,9 @@ message LeaderboardEntry {
   int64 rank = 1;
   // ID định danh người dùng
   string user_id = 2;
-  // Tên hiển thị công khai (Lấy từ module profile)
+  // Tên hiển thị công khai (Lấy từ bảng user_snapshots)
   string display_name = 3;
-  // Đường dẫn ảnh đại diện (Lấy từ module profile)
+  // Đường dẫn ảnh đại diện (Lấy từ bảng user_snapshots)
   string avatar_url = 4;
   // Tổng điểm kinh nghiệm tích lũy trọn đời
   int64 xp = 5;
@@ -211,23 +203,25 @@ message GetGlobalLeaderboardResponse {
 
 ## 5. Cấu Trúc Mã Nguồn (Code Organization)
 
-> Leaderboard là một **CQRS Read Model / Query Service** của phân hệ XP, truy vấn trực tiếp trên bảng `gamification.user_xp`. Cấu trúc tổng thể của toàn module xem tại [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters).
+> Leaderboard là một **CQRS Read Model / Query Service** của phân hệ XP, truy vấn trực tiếp trên bảng `gamification.user_xp` và `gamification.user_snapshots`. Cấu trúc tổng thể của toàn module xem tại [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters).
 
 ```text
 internal/gamification/
 ├── application/
 │   ├── port/
-│   │   ├── leaderboard_repository.go     # Output Port truy vấn DB bảng user_xp
-│   │   └── profile_reader.go             # Output Port nạp thông tin tên/avatar
+│   │   ├── leaderboard_repository.go         # Output Port truy vấn DB user_xp & user_snapshots
+│   │   └── user_snapshot_repository.go       # Output Port lưu trữ user snapshot
 │   └── query/
-│       ├── get_global_leaderboard.go     # Query DTO & Handler chính
-│       └── get_global_leaderboard_test.go# Unit tests với mock repository & port
+│       ├── get_global_leaderboard.go         # Query DTO & Handler chính
+│       └── get_global_leaderboard_test.go    # Unit tests với mock repository
 ├── infrastructure/
-│   ├── persistence/
-│   │   └── leaderboard_repository.go     # GORM implementation đọc user_xp qua index B-tree
-│   └── adapter/
-│       └── profile_adapter.go            # In-process adapter gọi sang module profile (kèm timeout & fallback)
+│   └── persistence/
+│       ├── leaderboard_repository.go         # GORM implementation đọc user_xp LEFT JOIN user_snapshots
+│       └── user_snapshot_repository.go       # GORM implementation lưu user_snapshots
 └── transport/
-    └── grpc/
-        └── leaderboard_handler.go        # ConnectRPC Server Handler
+    ├── grpc/
+    │   └── leaderboard_handler.go            # ConnectRPC Server Handler
+    └── consumer/
+        ├── user_registered_consumer.go       # Khởi tạo snapshot và tài khoản khi đăng ký
+        └── user_identity_updated_consumer.go # Đồng bộ tên/avatar từ profile.events
 ```
