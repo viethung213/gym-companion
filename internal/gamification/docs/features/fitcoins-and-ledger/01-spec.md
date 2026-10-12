@@ -137,7 +137,7 @@ flowchart TD
 
 ### Case 4: Thưởng Kỷ Luật Dinh Dưỡng Hàng Ngày (Nutrition Adherence Reward)
 - **Bản chất**: Thể hình đòi hỏi cả tập luyện lẫn ăn uống. Thưởng cho gymer khi hoàn thành mục tiêu năng lượng và đạm trong ngày.
-- **Điều kiện**: Nhận sự kiện `DailyNutritionAchieved` xác nhận lượng Calo và Protein đạt mục tiêu trong dung sai cho phép ($\pm 10\%$).
+- **Điều kiện**: Nhận sự kiện `DailyNutritionGoalAchieved` xác nhận lượng Calo và Protein đạt mục tiêu trong dung sai cho phép ($\pm 10\%$).
 - **Mức thưởng**: **$+3$ FitCoins / ngày**.
 - **Trần khống chế gian lận (Daily Cap)**:
   - **Tối đa 1 lần / ngày** theo ngày địa phương `user_local_date`.
@@ -149,10 +149,12 @@ flowchart TD
 - **Bản chất**: Tôn vinh tính kiên trì dài hạn (chỉ thưởng coin ở các cột mốc lớn, ngày thường không thưởng coin để tránh lạm phát).
 - **Mức thưởng bậc thang**:
   - Cán mốc **7 ngày** (1 tuần): Thưởng **$+15$ FitCoins**.
+  - Cán mốc **14 ngày** (2 tuần): Thưởng **$+30$ FitCoins**.
   - Cán mốc **30 ngày** (1 tháng): Thưởng **$+50$ FitCoins**.
+  - Cán mốc **50 ngày**: Thưởng **$+75$ FitCoins**.
   - Cán mốc **100 ngày**: Thưởng **$+150$ FitCoins**.
   - Cán mốc **365 ngày** (1 năm): Thưởng **$+500$ FitCoins**.
-- **Điều kiện**: Gọi trực tiếp hoặc nhận sự kiện `StreakMilestoneReached`. Mỗi cột mốc chỉ nhận thưởng **duy nhất 1 lần trọn đời**.
+- **Điều kiện**: Gọi trực tiếp qua In-Process Port `WalletRewarder` hoặc nhận sự kiện `StreakMilestoneReached`. Mỗi cột mốc chỉ nhận thưởng **duy nhất 1 lần trọn đời**.
 - **Idempotency Key**: `earn:streak:<user_id>:<milestone_days>`.
 
 ---
@@ -189,7 +191,7 @@ flowchart TD
 | **2. Buổi tập hợp lệ** | Hàng ngày | **$+5$** | **Tối đa 1 lần / ngày** (5 coin/ngày) |
 | **3. Kỷ lục cá nhân (PR)** | Khi phá kỷ lục | **$+5$** | **Tối đa 1 lần / ngày** (5 coin/ngày) |
 | **4. Dinh dưỡng kỷ luật** | Hàng ngày | **$+3$** | **Tối đa 1 lần / ngày** (3 coin/ngày) |
-| **5. Cột mốc Streak** | Khi cán mốc 7, 30, 100, 365 ngày | **$+15$** $\rightarrow$ **$+500$** | 1 lần cho mỗi cột mốc trọn đời |
+| **5. Cột mốc Streak** | Khi cán mốc 7, 14, 30, 50, 100, 365 ngày | **$+15$** $\rightarrow$ **$+500$** | 1 lần cho mỗi cột mốc trọn đời |
 | **6. Khởi tạo hồ sơ** | 1 lần duy nhất | **$+20$** | 1 lần duy nhất trọn đời |
 | **7. Mở khóa thành tựu** | Khi đạt danh hiệu/thử thách | **$+10$** $\rightarrow$ **$+250$** (theo Tier) | 1 lần duy nhất cho mỗi thành tựu trọn đời |
 

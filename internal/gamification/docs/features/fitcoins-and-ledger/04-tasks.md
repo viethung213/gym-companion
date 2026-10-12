@@ -65,7 +65,7 @@
   3. `TestUserWallet_EarnFromWorkout_DailyCap`: Buổi tập thứ 1 trong ngày được $+5$; buổi thứ 2 cùng ngày trả về `ErrDailyCapExceeded`; sang ngày hôm sau được $+5$.
   4. `TestUserWallet_EarnFromPR_DailyCap`: Phá PR lần 1 trong ngày được $+5$; lần 2 cùng ngày trả về `ErrDailyCapExceeded`.
   5. `TestUserWallet_EarnFromNutrition_DailyCap`: Đạt dinh dưỡng lần 1 trong ngày được $+3$; lần 2 cùng ngày trả về `ErrDailyCapExceeded`.
-  6. `TestUserWallet_EarnFromStreakMilestone`: Đúng mức thưởng cho các mốc 7, 30, 100, 365 ngày.
+  6. `TestUserWallet_EarnFromStreakMilestone`: Đúng mức thưởng cho các mốc 7 (15 coin), 14 (30 coin), 30 (50 coin), 50 (75 coin), 100 (150 coin), 365 ngày (500 coin).
   7. `TestUserWallet_Spend_Success`: Số dư $100$, chi tiêu $60 \rightarrow$ số dư còn $40$.
   8. `TestUserWallet_Spend_InsufficientBalance`: Số dư $40$, chi tiêu $50 \rightarrow$ báo lỗi `ErrInsufficientBalance`, số dư không đổi.
   9. `TestUserWallet_Spend_NegativeAmount`: Chi tiêu số âm $\rightarrow$ báo lỗi `ErrNegativeSpendAmount`.
@@ -119,17 +119,15 @@
 
 ---
 
-### [T-FC-08] [TRANSPORT] Triển Khai ConnectRPC Server, Kafka Consumers & Module Wiring
+### [T-FC-08] [TRANSPORT] Triển Khai ConnectRPC Server & Module Wiring
 - **Mục tiêu**: Đấu nối API và các sự kiện hệ thống vào module.
 - **Tệp nguồn**:
   - `internal/gamification/transport/grpc/gamification_handler.go`
-  - `internal/gamification/transport/consumer/level_up_consumer.go`
-  - `internal/gamification/transport/consumer/workout_consumer.go`
   - `internal/gamification/module.go`
   - `cmd/api/main.go`
 - **Các bước thực hiện**:
   1. Hiện thực các phương thức RPC `GetWallet`, `ListTransactions`, `SpendCoins` ánh xạ từ Protobuf sang Use Cases.
-  2. Viết Kafka Consumers lắng nghe `DailyNutritionAchieved` ủy quyền sang `WalletRewarder.AwardCoins(...)`.
-  3. Khởi tạo các handlers và expose `WalletRewarder` trong `internal/gamification/module.go` để các service nội bộ sử dụng.
+  2. Expose `WalletRewarder` trong `internal/gamification/module.go` để `ActivityIngestionCoordinator` gọi trong Bước 3 của chu trình hoàn thành buổi tập.
+  3. Khởi tạo module trong `cmd/api/main.go` (không sử dụng Google Wire).
 - **Tiêu chí hoàn thành (DoD)**:
   - Gọi API ConnectRPC qua `buf curl` trả về đúng số dư và lịch sử giao dịch.

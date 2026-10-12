@@ -275,6 +275,8 @@ service GamificationService {
 
 ## 6. Tổ Chức Thư Mục Mã Nguồn Triển Khai (Package Tree)
 
+> Cấu trúc tổng thể của toàn module tuân thủ theo [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters). Các thành phần triển khai cho tính năng Tiền Tệ FitCoins & Sổ Cái:
+
 ```text
 internal/gamification/
 ├── domain/
@@ -282,41 +284,28 @@ internal/gamification/
 │   │   ├── user_wallet.go                # Aggregate Root: Balance, Daily Caps, Invariants
 │   │   └── user_wallet_test.go           # Unit Test TDD: Kiểm tra âm tiền, trần nạp
 │   ├── entity/
-│   │   ├── coin_ledger_entry.go          # Entity bản ghi sổ cái bất biến
+│   │   ├── coin_ledger_entry.go          # Entity bản ghi sổ cái bất biến (Append-only)
 │   │   └── coin_ledger_entry_test.go     # Unit Test kiểm toán cân bằng sổ cái
 │   └── vo/
 │       ├── coin_transaction_reason.go    # Reason Enum: EARN_*, SPEND_*
 │       └── transaction_idempotency_key.go# Value Object xác thực định dạng khóa
-│
 ├── application/
 │   ├── command/
 │   │   ├── award_coins.go                # Use Case thưởng coin (triển khai WalletRewarder)
-│   │   ├── spend_coins.go                # Use Case trừ coin (bọc TransactionManager)
-│   │   └── spend_coins_test.go           # Unit Test kiểm tra chi tiêu kép & rollback
+│   │   └── spend_coins.go                # Use Case trừ coin (bọc TransactionManager)
 │   ├── query/
 │   │   ├── get_wallet_balance.go         # Use Case đọc số dư tức thời
 │   │   └── list_ledger_transactions.go   # Use Case đọc lịch sử sổ cái phân trang
 │   └── port/
 │       ├── wallet_rewarder.go            # Input Port thưởng coin đồng bộ trong tiến trình
-│       ├── wallet_repository.go          # Output Port: GetWalletForUpdate, SaveWalletAndLedger
-│       └── tx.go                         # TransactionManager interface
-│
+│       └── wallet_repository.go          # Output Port: GetWalletForUpdate, SaveWalletAndLedger
 ├── infrastructure/
-│   ├── persistence/postgres/
-│   │   ├── wallet_repository.go          # Postgres implementation với SELECT FOR UPDATE
-│   │   ├── tx_manager.go                 # SQLTransactionManager (*gorm.DB)
-│   │   └── wallet_repository_test.go     # Integration test tương tranh PostgreSQL
-│   └── event/
-│       └── wallet_outbox_writer.go       # Đóng gói CloudEvents sang gamification.outbox
-│
-├── transport/
-│   ├── grpc/
-│   │   └── wallet_handler.go             # ConnectRPC Server Handler
-│   └── consumer/
-│       ├── level_up_consumer.go          # Lắng nghe UserLeveledUp
-│       └── workout_consumer.go           # Lắng nghe WorkoutCompleted
-│
-└── module.go                             # Khởi tạo module (Initialize func, không dùng Wire)
+│   └── persistence/postgres/
+│       └── wallet_repository.go          # Postgres implementation với SELECT FOR UPDATE
+└── transport/
+    ├── grpc/
+    │   └── wallet_handler.go             # ConnectRPC Server Handler
+    └── consumer/                         # Consumers cho các sự kiện độc lập
 ```
 
 ---
