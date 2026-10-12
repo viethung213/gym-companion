@@ -48,7 +48,7 @@ Cần lựa chọn phương án tích hợp để lấy thông tin hồ sơ củ
      }
      ```
   2. Tầng Infrastructure của Gamification hiện thực adapter gọi trực tiếp sang Application Service / Facade của module `profile` trong cùng một tiến trình (In-memory pointer call, độ trễ $0\text{ ms}$).
-  3. Module `profile` thực thi truy vấn nội bộ: `SELECT id, display_name, avatar_url FROM profile.users WHERE id = ANY($1)`.
+  3. Module `profile` thực thi truy vấn nội bộ: `SELECT id, display_name, avatar_url FROM profile.users WHERE id = ANY(\$1)`.
   4. Query Handler của Gamification gộp dữ liệu trong RAM và trả về response hoàn chỉnh cho Client.
 
 ## Decision Outcome

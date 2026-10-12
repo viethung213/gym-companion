@@ -68,7 +68,7 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
   3. Hệ thống xác định thông tin của người dùng gọi API:
      - Nếu người dùng nằm trong Top 50: Lấy trực tiếp vị trí index $+ 1$ làm `my_rank`.
      - Nếu người dùng nằm ngoài Top 50: Thực thi câu lệnh đếm số người có điểm cao hơn:
-       $$\text{rank} = \text{COUNT}(\text{users có } \texttt{xp} > \texttt{my\_xp}) + 1$$
+       $$\text{rank} = \text{COUNT}(\text{users with XP} > \text{myXP}) + 1$$
   4. Hệ thống gọi `ProfileReaderPort.BatchGetSummaries(ctx, userIDs)` để nạp `display_name` và `avatar_url` cho Top 50 và người dùng gọi API.
   5. Hệ thống đóng gói danh sách Top 50 (gồm `rank`, `user_id`, `display_name`, `avatar_url`, `xp`, `level`) kèm khối `my_standing` (gồm `rank`, `user_id`, `display_name`, `avatar_url`, `xp`, `level`).
   6. Trả về response `200 OK`.
@@ -141,7 +141,7 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 > Do nguyên tắc Modular Monolith cấm JOIN chéo sang schema `profile`, đồng thời loại bỏ việc sao chép dữ liệu thừa qua Kafka hay bắt client thực hiện nhiều lượt gọi mạng, hệ thống sử dụng **Port Nội Bộ (In-process Cross-Module Port - `ProfileReaderPort`)**:
 > - **Nguyên tắc Hexagonal**: Tầng Application của module Gamification khai báo interface `ProfileReaderPort` với phương thức `BatchGetSummaries(ctx, userIDs)`.
 > - **Triển khai Adapter**: Tầng Infrastructure của Gamification hiện thực adapter gọi trực tiếp sang Application Service / Facade của module `profile` trong cùng một tiến trình (In-memory call).
-> - **Thực thi Database**: Module `profile` thực hiện 1 câu query `SELECT id, display_name, avatar_url FROM profile.users WHERE id = ANY($1)` trên PK index ($< 2\text{ ms}$).
+> - **Thực thi Database**: Module `profile` thực hiện 1 câu query `SELECT id, display_name, avatar_url FROM profile.users WHERE id = ANY(\$1)` trên PK index ($< 2\text{ ms}$).
 > - **Kiểm soát ranh giới**: Gamification chỉ nhận DTO thuần túy (`ProfileSummary { DisplayName, AvatarURL }`), hoàn toàn không phụ thuộc hay import model/entity của `profile`.
 > - **Khả năng chịu lỗi (Resilience)**: Thiết lập timeout $500\text{ ms}$; nếu module profile gặp sự cố, hệ thống fallback hiển thị `user_id` và tên mặc định `"Gymer"` thay vì làm lỗi toàn bộ bảng xếp hạng.
 
