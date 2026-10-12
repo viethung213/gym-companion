@@ -92,13 +92,12 @@
 - **Mục tiêu**: Đấu nối API và các sự kiện hệ thống vào module.
 - **Tệp nguồn**:
   - `internal/gamification/transport/grpc/gamification_handler.go`
-  - `internal/gamification/transport/consumer/workout_streak_consumer.go`
   - `internal/gamification/transport/consumer/nutrition_streak_consumer.go`
   - `internal/gamification/module.go`
   - `cmd/api/main.go`
 - **Các bước thực hiện**:
   1. Hiện thực các phương thức RPC `GetStreak`, `GetStreakHistory` ánh xạ từ Protobuf sang Use Cases.
-  2. Viết Kafka Consumers lắng nghe `WorkoutSessionCompleted` và `MealLogged` gọi sang `MaintainStreakCommandHandler`.
+  2. Viết Kafka Consumer lắng nghe `DailyNutritionGoalAchieved` gọi sang `MaintainStreakCommandHandler`. Đối với hoạt động tập luyện (`WorkoutSessionCompleted`), việc duy trì streak được điều phối bởi `ActivityIngestionCoordinator` (xem [architecture.md#2](../../architecture.md#2-cấu-trúc-thư-mục-và-tổ-chức-mã-nguồn---hexagonal-modular-monolith)).
   3. Khởi tạo các handlers trong `internal/gamification/module.go` và đăng ký trong `cmd/api/main.go` (không sử dụng Google Wire).
 - **Tiêu chí hoàn thành (DoD)**:
   - Gọi API ConnectRPC qua `buf curl` trả về đúng trạng thái chuỗi và bản đồ nhiệt lịch sử.

@@ -30,7 +30,7 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
   * Tra cứu trạng thái chuỗi: số ngày hiện tại (`current_streak`), kỷ lục dài nhất (`longest_streak`), ngày hoạt động gần nhất (`last_active_date`), và trạng thái hoàn thành hôm nay (`is_active_today`).
 * **Kafka Consumers (Sự kiện kích hoạt chuỗi)**:
   * Sự kiện buổi tập: `WorkoutSessionCompleted` (`workout_execution.events`).
-  * Sự kiện dinh dưỡng: `MealLogged` (`nutrition.events`).
+  * Sự kiện dinh dưỡng: `DailyNutritionGoalAchieved` (`nutrition.events`).
 * **Transactional Outbox Worker**: Xuất bản các sự kiện: `StreakAdvanced`, `StreakReset`, `StreakMilestoneReached` sang Kafka topic `gamification.events`.
 
 ---
@@ -54,7 +54,7 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 ## 5. Yêu Cầu Chức Năng (Functional Requirements)
 
 * **FR-ST-01 [Ghi Nhận Chuỗi Qua Buổi Tập]**: Khi nhận sự kiện `WorkoutSessionCompleted` hợp lệ ($\ge 15$ phút, $\ge 3$ set, không anomalous), hệ thống kiểm tra và cập nhật chuỗi cho ngày địa phương tương ứng.
-* **FR-ST-02 [Ghi Nhận Chuỗi Qua Dinh Dưỡng]**: Khi nhận sự kiện `MealLogged` đạt chuẩn Calo (±10%) và Protein (≥90%), hệ thống kiểm tra và cập nhật chuỗi nếu ngày hôm đó chưa có hoạt động tập luyện.
+* **FR-ST-02 [Ghi Nhận Chuỗi Qua Dinh Dưỡng]**: Khi nhận sự kiện `DailyNutritionGoalAchieved` đạt chuẩn Calo (±10%) và Protein (≥90%), hệ thống kiểm tra và cập nhật chuỗi nếu ngày hôm đó chưa có hoạt động tập luyện.
 * **FR-ST-03 [Xử Lý Đứt Chuỗi Tự Động (Lazy Reset)]**: Khi phát hiện người dùng lỡ ít nhất 1 ngày không hoạt động ($\Delta = \text{DateDiff}($ `local_date`, `last_active_date` $) \ge 2$), chuỗi hiện tại bị đứt. Khi người dùng phát sinh hoạt động tiếp theo, `current_streak` bắt đầu lại từ `1` và phát sự kiện `StreakReset`.
 * **FR-ST-04 [Thưởng Cột Mốc Bền Bỉ]**: Khi `current_streak` chạm các mốc 7, 14, 30, 50, 100, 365 ngày, tự động phát sự kiện thưởng FitCoins tương ứng sang Outbox.
 
@@ -72,12 +72,12 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
   $$\text{LongestStreak} = \max(\text{LongestStreak}, \text{CurrentStreak})$$
   * Khi chuỗi bị reset về 1, `longest_streak` giữ nguyên giá trị cao nhất trọn đời của người dùng.
 * **BR-ST-04 [Mức Thưởng Cột Mốc FitCoins]**:
-  * Mốc 7 ngày: $+20$ FitCoins.
+  * Mốc 7 ngày: $+15$ FitCoins.
   * Mốc 14 ngày: $+30$ FitCoins.
   * Mốc 30 ngày: $+50$ FitCoins.
   * Mốc 50 ngày: $+75$ FitCoins.
-  * Mốc 100 ngày: $+100$ FitCoins.
-  * Mốc 365 ngày: $+365$ FitCoins.
+  * Mốc 100 ngày: $+150$ FitCoins.
+  * Mốc 365 ngày: $+500$ FitCoins.
   * Mỗi mốc chỉ được nhận thưởng 1 lần cho mỗi chuỗi liên tục (không nhận lặp lại trong cùng 1 chuỗi).
 
 ---
@@ -96,7 +96,7 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
   7. Commit transaction.
 
 ### UC-ST-02: Duy Trì Chuỗi Vào Ngày Nghỉ Cơ Qua Dinh Dưỡng
-* **Actor**: Kafka Consumer (`MealLogged`).
+* **Actor**: Kafka Consumer (`DailyNutritionGoalAchieved`).
 * **Luồng chính**:
   1. Consumer nhận sự kiện ăn uống đạt chuẩn Calo/Protein.
   2. Xác định `local_date`.

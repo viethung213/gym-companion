@@ -13,8 +13,8 @@ Phân hệ Chuỗi Ngày (Streaks) vận hành như một **Habit Tracking Engin
 ```mermaid
 flowchart TD
     subgraph DrivingAdapters["Transport Layer (Driving)"]
-        K_WORKOUT["WorkoutCompleted Consumer"]
-        K_NUTRI["MealLogged Consumer"]
+        COORD["ActivityIngestionCoordinator<br/>(WorkoutSessionCompleted)"]
+        K_NUTRI["DailyNutritionGoalAchieved Consumer"]
         GRPC["StreakGrpcHandler<br/>(ConnectRPC)"]
     end
 
@@ -47,7 +47,7 @@ flowchart TD
         EVT_BUS["Kafka Topic: gamification.events"]
     end
 
-    K_WORKOUT & K_NUTRI -->|Dispatch Activity| CMD_MAINTAIN
+    COORD & K_NUTRI -->|Dispatch Activity| CMD_MAINTAIN
     GRPC -->|Dispatch Query| QRY_STREAK & QRY_HIST
 
     CMD_MAINTAIN --> PORT_TX
@@ -73,7 +73,8 @@ flowchart TD
 3. **Infrastructure Layer**:
    - `PostgresStreakRepository`: Hiện thực hóa truy vấn với khóa dòng bi quan `SELECT ... FOR UPDATE` trên bảng `gamification.user_streak` và bảo vệ lũy đẳng qua unique index `uq_streak_history_user_date`.
 4. **Transport Layer**:
-   - Consumers lắng nghe `WorkoutSessionCompleted` và `MealLogged`.
+   - `ActivityIngestionCoordinator`: Điều phối bước ghi nhận Streak trong chuỗi xử lý sự kiện `WorkoutSessionCompleted`.
+   - `DailyNutritionGoalAchieved` Consumer: Lắng nghe sự kiện hoàn thành mục tiêu dinh dưỡng từ domain `nutrition`.
    - ConnectRPC Handlers cung cấp API `GetStreak` và `GetStreakHistory`.
 
 ---
@@ -313,6 +314,9 @@ message StreakMilestoneReached {
 
 ## 5. Cấu Trúc Mã Nguồn (Code Organization)
 
+> [!NOTE]
+> Cấu trúc module tổng thể và cơ chế điều phối dùng chung được quy định tại [architecture.md#2](../../architecture.md#2-cấu-trúc-thư-mục-và-tổ-chức-mã-nguồn---hexagonal-modular-monolith). Cây thư mục dưới đây chỉ thể hiện các thành phần thuộc Bounded Context Streaks.
+
 ```text
 internal/gamification/
 ├── domain/
@@ -346,8 +350,7 @@ internal/gamification/
 │   ├── grpc/
 │   │   └── streak_handler.go             # ConnectRPC Server Handler
 │   └── consumer/
-│       ├── workout_streak_consumer.go    # Consumer workout.events
-│       └── nutrition_streak_consumer.go  # Consumer nutrition.events
+│       └── nutrition_streak_consumer.go  # Consumer nutrition.events (buổi tập do ActivityIngestionCoordinator điều phối)
 │
 └── module.go                             # Khởi tạo module (Initialize func, không dùng Wire)
 ```
