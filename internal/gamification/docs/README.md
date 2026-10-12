@@ -14,7 +14,11 @@ internal/gamification/docs/
     │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0003)
     │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-12)
-    ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Roadmap)
+    ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Đang triển khai)
+    │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
+    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
+    │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
+    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-07)
     ├── streaks-and-habits/            # 3. Chuỗi Ngày & Đóng Băng Chuỗi (Streaks & Streak Freeze) (Roadmap)
     └── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Roadmap)
 ```
@@ -32,6 +36,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 * **Tích lũy & Trao thưởng tự do**: Tiền tệ ảo FitCoins (Gems) nhận được khi lên cấp hoặc hoàn thành chuỗi ngày; dùng để mua Streak Freeze, nhân đôi XP, hoặc đổi voucher đối tác.
 
 ### Trách nhiệm:
+* Lắng nghe sự kiện đăng ký tài khoản từ Auth để khởi tạo tức thì hồ sơ Game hóa cơ sở (0 XP, Level 1, 0 Streak, 0 FitCoins).
 * Quản lý điểm kinh nghiệm XP và cấp độ Level (`user_xp`, `xp_history`).
 * Cung cấp dữ liệu Bảng xếp hạng toàn hệ thống theo điểm XP (Top 50) và tra cứu thứ hạng cá nhân (`my_rank`).
 * Quản lý chuỗi ngày tập liên tục (Streak) và trạng thái Đóng Băng Chuỗi (Streak Freeze).
@@ -58,7 +63,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 
 ---
 
-### 2.2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderboard)
+### 2.2. [Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderboard)](./features/leaderboards/01-spec.md)
 * **Thước đo duy nhất**: Toàn bộ thứ hạng được tính toán dựa trên **Điểm Kinh Nghiệm Trọn Đời (`xp`)**.
 * **Tối giản & Trực quan**: Loại bỏ sự phức tạp của việc chia phòng đấu hay reset tuần; ai tích lũy nỗ lực nhiều hơn sẽ đứng cao hơn.
 * **Bảng vàng danh dự**:
@@ -67,7 +72,7 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 * **Hiệu năng & Thời gian thực (The 3 AM Test)**:
   * Không sử dụng cron job ngầm hay worker chốt giải đấu; thứ hạng cập nhật tức thì theo thời gian thực mỗi khi có buổi tập mới.
   * Tối ưu hóa bằng index B-tree `(xp DESC, updated_at ASC)` trên bảng `gamification.user_xp`, đảm bảo thời gian truy vấn $< 5\text{ ms}$.
-* Chi tiết đặc tả: Phân tách thành lớp tính năng độc lập (Stack PR) kế tiếp.
+* Chi tiết đặc tả: xem [features/leaderboards/01-spec.md](./features/leaderboards/01-spec.md).
 
 ---
 
