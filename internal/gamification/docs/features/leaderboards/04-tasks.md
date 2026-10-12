@@ -24,19 +24,19 @@
 
 ---
 
-### [T-LB-02] [MIGRATION] Migration Chỉ Mục B-Tree Composite Index
-- **Mục tiêu**: Tạo index tối ưu hóa cho câu lệnh `ORDER BY xp DESC, updated_at ASC`.
+### [T-LB-02] [VERIFICATION] Xác Thực Chỉ Mục B-Tree Composite Index
+- **Mục tiêu**: Xác thực chỉ mục `idx_user_xp_leaderboard (xp DESC, updated_at ASC)` (đã khởi tạo trong migration DDL cơ sở tại `xp-and-levels`) phục vụ tối ưu câu lệnh `ORDER BY xp DESC, updated_at ASC`.
 - **Tệp nguồn**:
   - `internal/shared/database/migrations/13-create-gamification-tables.sql`
 - **Các bước thực hiện**:
-  1. Khai báo chỉ mục trong migration DDL của module:
+  1. Kiểm tra DDL đã có chỉ mục:
      ```sql
      CREATE INDEX IF NOT EXISTS idx_user_xp_leaderboard 
      ON gamification.user_xp (xp DESC, updated_at ASC);
      ```
+  2. Chạy `EXPLAIN ANALYZE` trên PostgreSQL với query Top 50.
 - **Tiêu chí hoàn thành (DoD)**:
-  - Migration chạy thành công không lỗi cú pháp.
-  - Kiểm tra `EXPLAIN ANALYZE` xác nhận câu lệnh `LIMIT 50` sử dụng `Index Scan`.
+  - Kiểm tra `EXPLAIN ANALYZE` xác nhận câu lệnh `LIMIT 50` sử dụng `Index Scan` trên `idx_user_xp_leaderboard`.
 
 ---
 

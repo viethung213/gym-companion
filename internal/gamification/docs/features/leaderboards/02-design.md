@@ -211,25 +211,23 @@ message GetGlobalLeaderboardResponse {
 
 ## 5. Cấu Trúc Mã Nguồn (Code Organization)
 
+> Leaderboard là một **CQRS Read Model / Query Service** của phân hệ XP, truy vấn trực tiếp trên bảng `gamification.user_xp`. Cấu trúc tổng thể của toàn module xem tại [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters).
+
 ```text
 internal/gamification/
 ├── application/
 │   ├── port/
-│   │   ├── leaderboard_repository.go     # Output Port truy vấn DB bảng xếp hạng
+│   │   ├── leaderboard_repository.go     # Output Port truy vấn DB bảng user_xp
 │   │   └── profile_reader.go             # Output Port nạp thông tin tên/avatar
 │   └── query/
 │       ├── get_global_leaderboard.go     # Query DTO & Handler chính
 │       └── get_global_leaderboard_test.go# Unit tests với mock repository & port
-│
 ├── infrastructure/
 │   ├── persistence/
-│   │   └── leaderboard_repository.go     # GORM implementation của LeaderboardRepository
+│   │   └── leaderboard_repository.go     # GORM implementation đọc user_xp qua index B-tree
 │   └── adapter/
-│       └── profile_adapter.go            # In-process adapter gọi sang module profile
-│
-├── transport/
-│   └── grpc/
-│       └── leaderboard_handler.go        # ConnectRPC Server Handler
-│
-└── module.go                             # Khởi tạo module (Initialize func, không dùng Wire)
+│       └── profile_adapter.go            # In-process adapter gọi sang module profile (kèm timeout & fallback)
+└── transport/
+    └── grpc/
+        └── leaderboard_handler.go        # ConnectRPC Server Handler
 ```
