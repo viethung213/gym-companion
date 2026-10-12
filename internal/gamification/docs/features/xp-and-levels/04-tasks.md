@@ -43,25 +43,21 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
   - **GREEN**: Hiện thực hóa thuật toán tại `internal/gamification/domain/service/xp_calculator.go` để test **PASS**.
   - **REFACTOR**: Tối ưu hằng số cấu hình.
 
-- [ ] **T-06 [TDD, FR-XP-01, FR-XP-04, BR-XP-01, ADR-0001]**: Vòng đời Aggregate và sự kiện thăng cấp (Aggregate Root).
+- [ ] **T-06 [TDD, FR-XP-01, FR-XP-04, BR-XP-01, ADR-0001]**: Vòng đời Aggregate, Repository Port và sự kiện thăng cấp (Aggregate Root).
   - **RED**: Viết test trước tại `internal/gamification/domain/aggregate/user_xp_test.go` kiểm thử:
     - Khởi tạo `NewUserXp(userID)`: 0 XP, Level 1.
     - `ApplyWorkoutResult`: Cộng dồn XP, tự động thăng cấp và phát `UserLeveledUp` khi vượt ngưỡng.
     - `ApplyNutritionBonus`: Nhận lần 1 thành công $+30$ XP (chuỗi ngày format `"2006-01-02"`); nhận lần 2 cùng ngày trả lỗi `ErrNutritionRewardAlreadyClaimedToday`.
     - `PopDomainEvents`: Trả về bản sao phòng vệ (defensive copy slice) và reset danh sách.
     - Khẳng định test **FAIL**.
-  - **GREEN**: Hiện thực hóa Aggregate tại `internal/gamification/domain/aggregate/user_xp.go` và domain events tại `internal/gamification/domain/event/xp_events.go` để test **PASS**.
+  - **GREEN**: Hiện thực hóa Aggregate tại `internal/gamification/domain/aggregate/user_xp.go`, repository port tại `internal/gamification/domain/repository/user_xp_repository.go` và domain events tại `internal/gamification/domain/event/xp_events.go` để test **PASS**.
   - **REFACTOR**: Đảm bảo đóng gói bất biến tuyệt đối (zero ORM tags, zero external imports).
-
-- [ ] **T-07 [Domain Repository Port]**: Định nghĩa Interface Port cho tầng lưu trữ dữ liệu.
-  - **Đường dẫn**: `internal/gamification/domain/repository/user_xp_repository.go`
-  - **Yêu cầu**: Khai báo `FindByID`, `GetForUpdate`, `Save`.
 
 ---
 
 ## Phase 3: Persistence Layer & Concurrency Integration Tests
 
-- [ ] **T-08 [TDD Integration, BR-XP-05, ADR-0002]**: TransactionManager, Khóa dòng bi quan và chặn trùng lặp buổi tập (PostgreSQL).
+- [ ] **T-07 [TDD Integration, BR-XP-05, ADR-0002]**: TransactionManager, Khóa dòng bi quan và chặn trùng lặp buổi tập (PostgreSQL).
   - **RED**: Viết integration test tại `internal/gamification/infrastructure/persistence/postgres/repository_test.go`:
     - **The 3 AM Test**: Khởi tạo user. Bắn đồng thời **10 Goroutines** cùng gọi `TransactionManager.WithTransaction` + `GetForUpdate` và cộng $+50$ XP $\rightarrow$ Khẳng định **0% Lost Update**, điểm cuối cùng đúng $500$ XP.
     - **Idempotency Guard**: Ghi 2 lần cùng một `session_id` $\rightarrow$ Lần 2 bị từ chối vi phạm unique constraint `uq_xp_history_workout_session`, transaction rollback an toàn.
@@ -73,25 +69,29 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
 
 ## Phase 4: Application CQRS & Transport Wiring (Ráp Nối Hệ Thống)
 
-- [ ] **T-09 [Application Commands, UC-XP-01, UC-XP-02]**: Điều phối nghiệp vụ và ranh giới giao dịch qua TransactionManager.
+- [ ] **T-08 [Application Commands, UC-XP-01, UC-XP-02]**: Điều phối nghiệp vụ XP trong transaction context cục bộ.
   - **Đường dẫn**:
-    - `internal/gamification/application/command/process_workout_xp.go` (Bọc trong `txManager.WithTransaction`: Khóa bi quan `user_xp` $\rightarrow$ Tính XP $\rightarrow$ Ghi `xp_history` kèm `session_id` $\rightarrow$ Ghi Outbox).
-    - `internal/gamification/application/command/process_nutrition_xp.go` (Bọc trong `txManager.WithTransaction`: Cộng thưởng dinh dưỡng $+30$ XP hàng ngày).
+    - `internal/gamification/application/command/process_workout_xp.go` (Khóa bi quan `user_xp` $\rightarrow$ Tính XP $\rightarrow$ Ghi `xp_history` kèm `session_id` $\rightarrow$ Ghi Outbox `xpEarned`).
+    - `internal/gamification/application/command/process_nutrition_xp.go` (Cộng thưởng dinh dưỡng $+30$ XP hàng ngày).
 
-- [ ] **T-10 [Application Queries, UC-XP-03]**: Đọc thông tin XP và lịch sử.
+- [ ] **T-09 [Application Queries, UC-XP-03]**: Đọc thông tin XP và lịch sử.
   - **Đường dẫn**:
     - `internal/gamification/application/query/get_my_xp.go` (Lấy XP và tính `xp_to_next_level`).
     - `internal/gamification/application/query/get_xp_history.go` (Lấy lịch sử phân trang).
 
+- [ ] **T-10 [Application Coordinator, Architecture #5]**: Bộ điều phối hoạt động đa aggregate (3 Atomic Steps).
+  - **Đường dẫn**: `internal/gamification/application/service/activity_ingestion_coordinator.go`
+  - **Nhiệm vụ**: Tiếp nhận buổi tập từ Consumer, thực thi 3 atomic local transactions độc lập tuần tự (`user_xp` $\rightarrow$ `user_streak` $\rightarrow$ `user_wallet`), mỗi bước commit trong $< 2\text{ ms}$ triệt tiêu 100% Deadlock.
+
 - [ ] **T-11 [Transport Consumers & ConnectRPC API, UC-XP-01, UC-XP-02, UC-XP-03]**: Cổng giao tiếp ngoại vi.
   - **Đường dẫn**:
-    - `internal/gamification/transport/consumer/workout_event_consumer.go` (Lắng nghe `WorkoutSessionCompleted`).
-    - `internal/gamification/transport/consumer/nutrition_event_consumer.go` (Lắng nghe `MealLogged`).
+    - `internal/gamification/transport/consumer/workout_event_consumer.go` (1 Consumer duy nhất lắng nghe `WorkoutSessionCompleted`, ủy quyền sang `ActivityIngestionCoordinator`).
+    - `internal/gamification/transport/consumer/nutrition_event_consumer.go` (Lắng nghe `DailyNutritionGoalAchieved`).
     - `internal/gamification/transport/grpc/gamification_handler.go` (Phục vụ gRPC API theo Protobuf stubs).
 
 - [ ] **T-12 [Transactional Outbox Worker & Module Wiring]**: Quét xuất bản CloudEvents và khởi tạo module.
   - **Đường dẫn**:
-    - `internal/gamification/infrastructure/worker/outbox_worker.go` (Background worker định kỳ đọc `gamification.outbox` bằng `SELECT ... FOR UPDATE SKIP LOCKED` và publish tới Kafka topic `gamification.events`).
+    - `internal/gamification/infrastructure/worker/outbox_worker.go` (Background worker định kỳ đọc `gamification.outbox` bằng `SELECT ... FOR UPDATE SKIP LOCKED`, hỗ trợ xử lý Poison Pill qua `DEAD_LETTER` và publish Kafka).
     - `internal/gamification/module.go` (Cung cấp `Initialize(ctx context.Context, deps ModuleDeps) (*Module, error)` và đấu nối vào `cmd/api/main.go`, không dùng Google Wire).
 
 ---

@@ -13,6 +13,7 @@
 | 3 | Workout Execution & Motion | "Tôi tập thế nào? Tư thế đúng/sai và lịch sử tập?" | Core |
 | 4 | Nutrition | "Tôi ăn gì hôm nay?" | Core |
 | 5 | Exercise | "Danh mục bài tập chuẩn gồm những gì?" | Supporting |
+| 6 | Gamification | "Tôi tích lũy được bao nhiêu nỗ lực, cấp độ và chuỗi ngày?" | Supporting |
 
 > Notification và Auth là Shared Infrastructure Services, không phải Bounded Context nghiệp vụ.
 
@@ -98,6 +99,17 @@
 
 ---
 
+### 6. Gamification Context
+- **Trách nhiệm**: Quản lý điểm kinh nghiệm XP, cấp độ trọn đời (`UserXp`), chuỗi ngày tập liên tục (`UserStreak`), ví tiền thể thao FitCoins (`UserWallet`, `coin_ledger`), và cung cấp Bảng xếp hạng toàn hệ thống theo điểm XP (XP Leaderboard Read Model). 100% củng cố tích cực (Positive Reinforcement, Zero Penalties).
+- **Không trách nhiệm**: Không đếm rep/set hay chấm điểm tư thế (thuộc `Workout Execution`), không tính macro calo hay sinh thực đơn (thuộc `Nutrition`), không quản lý phòng đấu real-time hay đồ thị bạn bè (thuộc `Social`).
+- **Aggregates**: `UserXp`, `UserStreak`, `UserWallet`
+- **Context liên quan**:
+  - Lắng nghe sự kiện hoàn thành buổi tập `WorkoutSessionCompleted` và kỷ lục mới `NewPersonalRecordAchieved` từ `Workout Execution`.
+  - Lắng nghe sự kiện đạt mục tiêu ngày `DailyNutritionGoalAchieved` từ `Nutrition`.
+  - Phát CloudEvents ra bus: `xpEarned`, `userLeveledUp`, `streakAdvanced`, `streakReset`, `coinsEarned`, `coinsSpent`.
+
+---
+
 ## 3. Context Map
 
 ```mermaid
@@ -107,6 +119,7 @@ graph TD
     WEM["Workout Execution & Motion"]
     NU["Nutrition"]
     EX["Exercise"]
+    GA["Gamification"]
 
     UP -- "BiologicalMetrics, Injury" --> CP
     UP -- "BiologicalMetrics" --> NU
@@ -118,10 +131,13 @@ graph TD
 
     WEM -- "WorkoutSessionCompleted" --> CP
     WEM -- "BodyMetricUpdated" --> UP
+    WEM -- "WorkoutSessionCompleted, NewPersonalRecordAchieved" --> GA
+    NU -- "DailyNutritionGoalAchieved" --> GA
 
     style CP fill:#e6f3ff,stroke:#4a90d9
     style WEM fill:#e6ffe6,stroke:#4a9d4a
     style NU fill:#fff3e6,stroke:#d9904a
     style UP fill:#ffe6e6,stroke:#d94a4a
     style EX fill:#f9f9f9,stroke:#999
+    style GA fill:#f5eeff,stroke:#8e44ad
 ```

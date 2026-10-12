@@ -13,8 +13,7 @@ internal/gamification/docs/
     │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
     │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0003)
     │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
-    │   ├── 03-plan.md                 # Chiến lược triển khai theo pha
-    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-13)
+    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-12)
     ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Roadmap)
     ├── streaks-and-habits/            # 3. Chuỗi Ngày & Đóng Băng Chuỗi (Streaks & Streak Freeze) (Roadmap)
     └── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Roadmap)

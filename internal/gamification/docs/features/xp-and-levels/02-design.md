@@ -70,51 +70,23 @@ flowchart TD
     DB_OUTBOX --> WORKER --> EVT_BUS
 ```
 
-### 1.2 Cấu Trúc Thư Mục Triển Khai (`internal/gamification/`)
+### 1.2 Cấu Trúc Thành Phần Tính Năng
+> Cấu trúc tổng thể của toàn module tuân thủ theo [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters). Các thành phần triển khai cho tính năng XP & Cấp Độ:
+
 ```text
 internal/gamification/
 ├── domain/
-│   ├── aggregate/
-│   │   └── user_xp.go             # Aggregate root quản lý xp, level
-│   ├── entity/
-│   │   └── xp_history.go          # Entity dòng lịch sử biến động điểm
-│   ├── vo/
-│   │   └── level_calculator.go    # Value object tính toán Level 1..100
-│   ├── service/
-│   │   └── xp_calculator.go       # Domain service tính delta XP buổi tập
-│   ├── event/
-│   │   ├── xp_earned.go           # Event phát sinh khi cộng XP
-│   │   └── user_leveled_up.go     # Event phát sinh khi thăng cấp
-│   └── repository/
-│       ├── user_xp_repository.go  # Interface port thao tác user_xp
-│       └── xp_history_repository.go
+│   ├── aggregate/user_xp.go             # Aggregate root quản lý xp, level
+│   ├── entity/xp_history.go             # Entity dòng lịch sử biến động điểm
+│   ├── vo/level_calculator.go           # Value object tính toán Level 1..100
+│   ├── service/xp_calculator.go         # Domain service tính delta XP buổi tập
+│   ├── event/                           # Domain events nội bộ (XpEarned, UserLeveledUp)
+│   └── repository/                      # UserXpRepository, XpHistoryRepository
 ├── application/
-│   ├── command/
-│   │   ├── process_workout_xp.go  # Use case nhận XP buổi tập
-│   │   └── process_nutrition_xp.go# Use case nhận XP dinh dưỡng
-│   ├── query/
-│   │   ├── get_my_xp.go           # Truy vấn XP và tiến trình cấp độ
-│   │   └── get_xp_history.go      # Truy vấn lịch sử điểm phân trang
-│   ├── port/
-│   │   └── tx.go                  # TransactionManager interface port
-│   └── dto/
-│       └── xp_dto.go
-├── infrastructure/
-│   ├── persistence/
-│   │   ├── postgres/
-│   │   │   ├── model.go           # GORM models (UserXpModel, XpHistoryModel)
-│   │   │   ├── user_xp_repo.go    # Hiện thực hóa khóa dòng FOR UPDATE
-│   │   │   └── xp_history_repo.go # Hiện thực hóa ghi log & chặn trùng lặp
-│   │   └── tx_manager.go          # Hiện thực SQLTransactionManager (*gorm.DB)
-│   └── outbox/
-│       └── outbox_repository.go
-├── transport/
-│   ├── consumer/
-│   │   ├── workout_consumer.go    # Consumer workout.events
-│   │   └── nutrition_consumer.go  # Consumer nutrition.events
-│   └── grpc/
-│       └── gamification_handler.go# ConnectRPC Handlers
-└── module.go                      # Khởi tạo module (Initialize func, không dùng Wire)
+│   ├── command/                         # ProcessWorkoutXpCommandHandler, ProcessNutritionXpCommandHandler
+│   └── query/                           # GetMyXpQueryHandler, GetXpHistoryQueryHandler
+└── infrastructure/
+    └── persistence/postgres/            # GORM repositories cho user_xp và xp_history
 ```
 
 ---
@@ -122,6 +94,8 @@ internal/gamification/
 ## 2. Database & Data Model Design
 
 ### 2.1 Entity Relationship Diagram (ERD)
+
+> Bảng hạ tầng Transactional Outbox (`gamification.outbox`) được dùng chung toàn module theo chuẩn SSOT tại [architecture.md#4](../../architecture.md#4-chuẩn-transactional-outbox-dùng-chung-module-wide-outbox---ssot).
 
 ```mermaid
 erDiagram
@@ -146,20 +120,6 @@ erDiagram
         varchar source_event_id
         jsonb metadata
         timestamp created_at
-    }
-
-    OUTBOX {
-        uuid id PK
-        uuid event_id UK
-        varchar aggregate_type
-        varchar aggregate_id
-        varchar event_type
-        jsonb payload
-        varchar partition_key
-        boolean published
-        varchar status
-        timestamptz created_at
-        timestamptz locked_until
     }
 ```
 
