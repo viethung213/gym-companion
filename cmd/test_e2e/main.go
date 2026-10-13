@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -127,7 +128,7 @@ func run() error {
 
 	fmt.Printf("🔍 [DB Check 1] user_xp: %d, user_streak: %d, user_snapshots: %d\n", xpCount, streakCount, snapshotCount)
 	if xpCount == 0 || streakCount == 0 || snapshotCount == 0 {
-		return fmt.Errorf("user not created in db")
+		return errors.New("user not created in db")
 	}
 	log.Println("✅ [BƯỚC 1 THÀNH CÔNG] User đã được eager initialize trong Gamification DB!")
 
@@ -172,7 +173,7 @@ func run() error {
 
 	fmt.Printf("🔍 [DB Check 2] XP: %d, Level: %d, Current Streak: %d, Badge FIRST_WORKOUT: %d\n", currentXp, currentLevel, currentStreak, firstWorkoutBadgeCount)
 	if currentXp == 0 || currentStreak != 1 || firstWorkoutBadgeCount != 1 {
-		return fmt.Errorf("unexpected workout completion state in db")
+		return errors.New("unexpected workout completion state in db")
 	}
 	log.Println("✅ [BƯỚC 2 THÀNH CÔNG] XP đã được cộng, Streak = 1, Huy hiệu FIRST_WORKOUT đã mở khóa!")
 
@@ -205,7 +206,7 @@ func run() error {
 
 	fmt.Printf("🔍 [DB Check 3] XP mới: %d (trước đó: %d), Badge PR_BREAKER: %d\n", prXp, currentXp, prBadgeCount)
 	if prXp != currentXp+25 || prBadgeCount != 1 {
-		return fmt.Errorf("unexpected personal record state in db")
+		return errors.New("unexpected personal record state in db")
 	}
 	log.Println("✅ [BƯỚC 3 THÀNH CÔNG] Đã cộng đúng +25 XP và mở khóa huy hiệu PR_BREAKER!")
 
@@ -238,7 +239,7 @@ func run() error {
 
 	fmt.Printf("🔍 [DB Check 4] XP mới: %d (trước đó: %d)\n", nutritionXp, prXp)
 	if nutritionXp != prXp+30 {
-		return fmt.Errorf("unexpected nutrition xp state in db")
+		return errors.New("unexpected nutrition xp state in db")
 	}
 	log.Println("✅ [BƯỚC 4 THÀNH CÔNG] Đã cộng đúng +30 XP cho dinh dưỡng!")
 
