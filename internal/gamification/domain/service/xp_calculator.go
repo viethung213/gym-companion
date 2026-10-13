@@ -46,11 +46,12 @@ func CalculateWorkoutXp(input WorkoutXpInput) (int32, error) {
 	if input.VolumeRatio != nil {
 		ratio := *input.VolumeRatio
 		scaled := int32(math.Round(25.0 * ratio))
-		if scaled < 10 {
+		switch {
+		case scaled < 10:
 			volume = 10
-		} else if scaled > 30 {
+		case scaled > 30:
 			volume = 30
-		} else {
+		default:
 			volume = scaled
 		}
 	} else {
@@ -66,7 +67,7 @@ func CalculateWorkoutXp(input WorkoutXpInput) (int32, error) {
 	if input.AverageFormScore != nil {
 		score := float64(*input.AverageFormScore)
 		if score > 1.0 {
-			score = score / 100.0 // Normalize 0..100 to 0.0..1.0
+			score /= 100.0 // Normalize 0..100 to 0.0..1.0
 		}
 		if score < 0.0 {
 			score = 0.0

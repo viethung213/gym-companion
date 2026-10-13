@@ -217,7 +217,7 @@ func (r *GormOutboxRepository) ProcessBatch(
 
 	if pubErr := publishFn(ctx, records); pubErr != nil {
 		if failErr := r.MarkAsFailed(ctx, ids, pubErr); failErr != nil {
-			return fmt.Errorf("publish outbox batch failed: %w; also failed to mark failed records: %v", pubErr, failErr)
+			return fmt.Errorf("publish outbox batch failed: %w; also failed to mark failed records: %w", pubErr, failErr)
 		}
 		return fmt.Errorf("publish outbox batch: %w", pubErr)
 	}

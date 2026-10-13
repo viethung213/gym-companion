@@ -64,6 +64,8 @@ func (c *UserIdentityUpdatedConsumer) Start(ctx context.Context) {
 }
 
 // ProcessMessage deserializes event, verifies idempotency, and updates snapshot.
+//
+//nolint:gocritic // kafka.Message parameter matches signature
 func (c *UserIdentityUpdatedConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {

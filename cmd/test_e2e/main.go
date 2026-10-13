@@ -54,11 +54,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("❌ Lỗi mở kết nối DB: %v", err)
 	}
-	defer db.Close()
-
-	if err := db.Ping(); err != nil {
-		log.Fatalf("❌ Lỗi ping DB (hãy chắc chắn container fitai-postgres-test đang chạy): %v", err)
+	if pingErr := db.Ping(); pingErr != nil {
+		_ = db.Close()
+		log.Fatalf("❌ Lỗi ping DB (hãy chắc chắn container fitai-postgres-test đang chạy): %v", pingErr)
 	}
+	defer db.Close()
 	log.Println("✅ Kết nối PostgreSQL thành công!")
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -72,6 +72,8 @@ func (c *NutritionEventConsumer) Start(ctx context.Context) {
 }
 
 // ProcessMessage processes inbound nutrition goal achievement events.
+//
+//nolint:gocritic // kafka.Message parameter matches signature
 func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {

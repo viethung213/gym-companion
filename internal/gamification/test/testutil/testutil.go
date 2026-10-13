@@ -188,8 +188,8 @@ func NewTestDB(t *testing.T) (*gorm.DB, *Repositories) {
 	}
 
 	for _, ddl := range ddls {
-		if _, err := rawDB.Exec(ddl); err != nil {
-			t.Fatalf("failed to execute DDL on test db: %v\nDDL: %s", err, ddl)
+		if _, execErr := rawDB.Exec(ddl); execErr != nil {
+			t.Fatalf("failed to execute DDL on test db: %v\nDDL: %s", execErr, ddl)
 		}
 	}
 

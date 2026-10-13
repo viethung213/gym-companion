@@ -56,6 +56,8 @@ func NewProcessWorkoutXpHandler(
 }
 
 // Handle executes the command inside a pessimistic locking transaction.
+//
+//nolint:gocritic // Command value object passed by value for immutability
 func (h *ProcessWorkoutXpHandler) Handle(
 	ctx context.Context,
 	cmd ProcessWorkoutXpCommand,
@@ -96,21 +98,22 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			}
 		}
 
-		userXp, err := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
-		if err != nil {
-			return fmt.Errorf("find user_xp for update: %w", err)
+		userXp, findErr := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
+		if findErr != nil {
+			return fmt.Errorf("find user_xp for update: %w", findErr)
 		}
 		if userXp == nil {
-			userXp, err = aggregate.NewUserXp(cmd.UserID)
-			if err != nil {
-				return fmt.Errorf("initialize user_xp aggregate: %w", err)
+			var initErr error
+			userXp, initErr = aggregate.NewUserXp(cmd.UserID)
+			if initErr != nil {
+				return fmt.Errorf("initialize user_xp aggregate: %w", initErr)
 			}
 		}
 
 		oldLevel := userXp.Level()
-		events, err := userXp.EarnXp(deltaXp, "WORKOUT", cmd.CompletedAt)
-		if err != nil {
-			return fmt.Errorf("earn xp: %w", err)
+		events, earnErr := userXp.EarnXp(deltaXp, "WORKOUT", cmd.CompletedAt)
+		if earnErr != nil {
+			return fmt.Errorf("earn xp: %w", earnErr)
 		}
 
 		if err := h.userXpRepo.Save(txCtx, userXp); err != nil {

@@ -45,6 +45,8 @@ func NewActivityIngestionCoordinator(
 }
 
 // IngestWorkoutSession coordinates Step 1 (Streak), Step 2 (XP with up-to-date multiplier), and Step 3 (Badges) sequentially.
+//
+//nolint:gocritic // Command value object passed by value for immutability
 func (c *ActivityIngestionCoordinator) IngestWorkoutSession(
 	ctx context.Context,
 	cmd command.ProcessWorkoutXpCommand,
@@ -135,8 +137,8 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 		}
 	}
 
-	var badgesToUnlock []*aggregate.UserBadge
-	var outboxEvents []any
+	badgesToUnlock := make([]*aggregate.UserBadge, 0, len(candidateCodes))
+	outboxEvents := make([]any, 0, len(candidateCodes))
 
 	for _, code := range candidateCodes {
 		has, err := c.badgeRepo.HasBadge(ctx, userID, code)

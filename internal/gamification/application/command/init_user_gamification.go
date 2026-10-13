@@ -43,32 +43,32 @@ func NewInitUserGamificationHandler(
 
 // Handle sets up initial UserXp, UserStreak, and UserSnapshot records.
 func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGamificationCommand) error {
-	err := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		existingXp, err := h.userXpRepo.FindByID(txCtx, cmd.UserID)
-		if err != nil {
-			return err
+	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		existingXp, findXpErr := h.userXpRepo.FindByID(txCtx, cmd.UserID)
+		if findXpErr != nil {
+			return findXpErr
 		}
 		if existingXp == nil {
-			newXp, err := aggregate.NewUserXp(cmd.UserID)
-			if err != nil {
-				return err
+			newXp, createXpErr := aggregate.NewUserXp(cmd.UserID)
+			if createXpErr != nil {
+				return createXpErr
 			}
-			if err := h.userXpRepo.Save(txCtx, newXp); err != nil {
-				return err
+			if saveXpErr := h.userXpRepo.Save(txCtx, newXp); saveXpErr != nil {
+				return saveXpErr
 			}
 		}
 
-		existingStreak, err := h.userStreakRepo.FindByID(txCtx, cmd.UserID)
-		if err != nil {
-			return err
+		existingStreak, findStreakErr := h.userStreakRepo.FindByID(txCtx, cmd.UserID)
+		if findStreakErr != nil {
+			return findStreakErr
 		}
 		if existingStreak == nil {
-			newStreak, err := aggregate.NewUserStreak(cmd.UserID)
-			if err != nil {
-				return err
+			newStreak, createStreakErr := aggregate.NewUserStreak(cmd.UserID)
+			if createStreakErr != nil {
+				return createStreakErr
 			}
-			if err := h.userStreakRepo.Save(txCtx, newStreak); err != nil {
-				return err
+			if saveStreakErr := h.userStreakRepo.Save(txCtx, newStreak); saveStreakErr != nil {
+				return saveStreakErr
 			}
 		}
 
@@ -77,15 +77,11 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 			displayName = "Gymer"
 		}
 		snapshot := entity.NewUserSnapshot(cmd.UserID, displayName, cmd.AvatarURL, time.Now().UTC())
-		if err := h.leaderboardRepo.SaveSnapshot(txCtx, snapshot); err != nil {
-			return err
-		}
-
-		return nil
+		return h.leaderboardRepo.SaveSnapshot(txCtx, snapshot)
 	})
 
-	if err != nil {
-		return fmt.Errorf("init user gamification: %w", err)
+	if txErr != nil {
+		return fmt.Errorf("init user gamification: %w", txErr)
 	}
 
 	return nil

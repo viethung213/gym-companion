@@ -88,7 +88,7 @@ func (s *UserStreak) RecordActivity(
 ) ([]event.Event, error) {
 	parsedActivity, err := time.Parse("2006-01-02", activityDate)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidDateFormat, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidDateFormat, err)
 	}
 
 	// Reject activity dates more than 1 day in the future (allowing +1 day for timezone transitions)

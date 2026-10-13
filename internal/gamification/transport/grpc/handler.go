@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// GRPCHandler implements GamificationServiceHandler ConnectRPC interface.
+//nolint:revive // GRPCHandler name is consistent across bounded contexts
 type GRPCHandler struct {
 	getMyXpHandler              *query.GetMyXpHandler
 	getXpHistoryHandler         *query.GetXpHistoryHandler

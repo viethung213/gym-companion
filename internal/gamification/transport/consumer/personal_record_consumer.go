@@ -5,18 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
-	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
-	"google.golang.org/protobuf/encoding/protojson"
+	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
 )
 
 // PersonalRecordConsumer listens to contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved
@@ -79,6 +81,8 @@ func (c *PersonalRecordConsumer) Start(ctx context.Context) {
 }
 
 // ProcessMessage handles the PR achieved event.
+//
+//nolint:gocritic // kafka.Message parameter matches signature
 func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {
@@ -92,8 +96,8 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 
 	// Idempotency check via outbox_log
 	if c.outboxLogRepo != nil && ce.ID != "" {
-		processed, err := c.outboxLogRepo.IsProcessed(ctx, ce.ID)
-		if err == nil && processed {
+		processed, pErr := c.outboxLogRepo.IsProcessed(ctx, ce.ID)
+		if pErr == nil && processed {
 			return nil
 		}
 	}
@@ -112,25 +116,26 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 
 	// Execute inside local transaction: +25 XP & Unlock PR_BREAKER Badge
 	err := c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		userXp, err := c.userXpRepo.FindByIDForUpdate(txCtx, userID)
-		if err != nil {
-			return fmt.Errorf("find user_xp for update: %w", err)
+		userXp, findErr := c.userXpRepo.FindByIDForUpdate(txCtx, userID)
+		if findErr != nil {
+			return fmt.Errorf("find user_xp for update: %w", findErr)
 		}
 		if userXp == nil {
-			userXp, err = aggregate.NewUserXp(userID)
-			if err != nil {
-				return fmt.Errorf("create user_xp: %w", err)
+			var createErr error
+			userXp, createErr = aggregate.NewUserXp(userID)
+			if createErr != nil {
+				return fmt.Errorf("create user_xp: %w", createErr)
 			}
 		}
 
 		// Award +25 XP for PR
-		xpEvents, err := userXp.EarnXp(25, "PERSONAL_RECORD", achievedAt)
-		if err != nil {
-			return fmt.Errorf("earn pr xp: %w", err)
+		xpEvents, earnErr := userXp.EarnXp(25, "PERSONAL_RECORD", achievedAt)
+		if earnErr != nil {
+			return fmt.Errorf("earn pr xp: %w", earnErr)
 		}
 
-		if err := c.userXpRepo.Save(txCtx, userXp); err != nil {
-			return fmt.Errorf("save user_xp: %w", err)
+		if saveXpErr := c.userXpRepo.Save(txCtx, userXp); saveXpErr != nil {
+			return fmt.Errorf("save user_xp: %w", saveXpErr)
 		}
 
 		history := entity.NewXpHistoryEntry(
@@ -142,8 +147,8 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 			activityDate,
 			achievedAt,
 		)
-		if err := c.userXpRepo.SaveHistory(txCtx, history); err != nil {
-			return fmt.Errorf("save pr xp_history: %w", err)
+		if saveHistErr := c.userXpRepo.SaveHistory(txCtx, history); saveHistErr != nil {
+			return fmt.Errorf("save pr xp_history: %w", saveHistErr)
 		}
 
 		outboxEvents := make([]any, len(xpEvents))
@@ -152,13 +157,13 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 		}
 
 		// Check and unlock PR_BREAKER badge
-		has, err := c.badgeRepo.HasBadge(txCtx, userID, "PR_BREAKER")
-		if err == nil && !has {
+		has, hasBadgeErr := c.badgeRepo.HasBadge(txCtx, userID, "PR_BREAKER")
+		if hasBadgeErr == nil && !has {
 			def, _ := vo.GetBadgeDefinition("PR_BREAKER")
 			meta := map[string]string{
 				"exerciseId": protoEv.GetExerciseId(),
 				"weight":     fmt.Sprintf("%.1f", protoEv.GetWeight()),
-				"reps":       fmt.Sprintf("%d", protoEv.GetReps()),
+				"reps":       strconv.Itoa(int(protoEv.GetReps())),
 			}
 			badge, badgeEv, bErr := aggregate.UnlockBadge(
 				uuid.NewString(),
@@ -170,7 +175,7 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 				achievedAt,
 			)
 			if bErr == nil {
-				if err := c.badgeRepo.Save(txCtx, badge); err == nil {
+				if saveBadgeErr := c.badgeRepo.Save(txCtx, badge); saveBadgeErr == nil {
 					outboxEvents = append(outboxEvents, badgeEv)
 				}
 			}

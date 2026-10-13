@@ -10,6 +10,8 @@ type BadgeDefinition struct {
 }
 
 // MasterBadgeCatalog is the Single Source of Truth for system achievement badges.
+//
+//nolint:gochecknoglobals // MasterBadgeCatalog is a read-only domain catalog
 var MasterBadgeCatalog = []BadgeDefinition{
 	{
 		Code:        "FIRST_WORKOUT",
