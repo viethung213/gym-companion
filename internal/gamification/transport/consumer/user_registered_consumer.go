@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	authv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event"
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
+	authv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -64,6 +64,8 @@ func (c *UserRegisteredConsumer) Start(ctx context.Context) {
 }
 
 // ProcessMessage handles deserialization, idempotency, and command dispatch.
+//
+//nolint:gocritic // kafka.Message parameter matches signature
 func (c *UserRegisteredConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {

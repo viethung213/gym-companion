@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
-	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
+	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
+	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -66,6 +66,8 @@ func (c *WorkoutEventConsumer) Start(ctx context.Context) {
 }
 
 // ProcessMessage deserializes event, verifies idempotency, and delegates to coordinator.
+//
+//nolint:gocritic // kafka.Message parameter matches signature
 func (c *WorkoutEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {

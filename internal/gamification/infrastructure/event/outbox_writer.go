@@ -7,13 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	domainEvent "github.com/viethung213/gym-companion/internal/gamification/domain/event"
 	gamificationv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // NameProvider is implemented by events that provide their event type name.

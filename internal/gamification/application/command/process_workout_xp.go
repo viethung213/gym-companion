@@ -116,8 +116,8 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			return fmt.Errorf("earn xp: %w", earnErr)
 		}
 
-		if err := h.userXpRepo.Save(txCtx, userXp); err != nil {
-			return fmt.Errorf("save user_xp: %w", err)
+		if saveErr := h.userXpRepo.Save(txCtx, userXp); saveErr != nil {
+			return fmt.Errorf("save user_xp: %w", saveErr)
 		}
 
 		sessionID := cmd.SessionID
@@ -130,8 +130,8 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			cmd.ActivityDate,
 			cmd.CompletedAt,
 		)
-		if err := h.userXpRepo.SaveHistory(txCtx, history); err != nil {
-			return fmt.Errorf("save xp_history: %w", err)
+		if histErr := h.userXpRepo.SaveHistory(txCtx, history); histErr != nil {
+			return fmt.Errorf("save xp_history: %w", histErr)
 		}
 
 		evAnys := make([]any, len(events))
@@ -139,8 +139,8 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			evAnys[i] = ev
 		}
 
-		if err := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, evAnys); err != nil {
-			return fmt.Errorf("write outbox events: %w", err)
+		if outboxErr := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, evAnys); outboxErr != nil {
+			return fmt.Errorf("write outbox events: %w", outboxErr)
 		}
 
 		result = ProcessWorkoutXpResult{

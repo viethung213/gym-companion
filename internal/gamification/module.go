@@ -105,11 +105,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*gamificationGRPC.GRPCHan
 
 	// 6. Kafka & Workers Setup
 	var (
-		kafkaPub                     *infraKafka.Publisher
-		userRegisteredConsumer       *consumer.UserRegisteredConsumer
-		workoutEventConsumer         *consumer.WorkoutEventConsumer
-		personalRecordConsumer       *consumer.PersonalRecordConsumer
-		nutritionEventConsumer       *consumer.NutritionEventConsumer
+		kafkaPub                    *infraKafka.Publisher
+		userRegisteredConsumer      *consumer.UserRegisteredConsumer
+		workoutEventConsumer        *consumer.WorkoutEventConsumer
+		personalRecordConsumer      *consumer.PersonalRecordConsumer
+		nutritionEventConsumer      *consumer.NutritionEventConsumer
 		userIdentityUpdatedConsumer *consumer.UserIdentityUpdatedConsumer
 	)
 

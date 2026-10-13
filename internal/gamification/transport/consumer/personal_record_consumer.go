@@ -11,14 +11,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
-	"google.golang.org/protobuf/encoding/protojson"
-
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // PersonalRecordConsumer listens to contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved

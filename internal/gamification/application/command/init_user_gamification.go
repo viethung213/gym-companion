@@ -35,8 +35,8 @@ func NewInitUserGamificationHandler(
 ) *InitUserGamificationHandler {
 	return &InitUserGamificationHandler{
 		userXpRepo:      userXpRepo,
-		userStreakRepo:   userStreakRepo,
-		leaderboardRepo:  leaderboardRepo,
+		userStreakRepo:  userStreakRepo,
+		leaderboardRepo: leaderboardRepo,
 		txManager:       txManager,
 	}
 }

@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	gamificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message"
-	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
+	gamificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

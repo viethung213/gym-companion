@@ -175,7 +175,7 @@ func TestGetGlobalLeaderboardHandler(t *testing.T) {
 		topUsers: []*entity.LeaderboardUser{
 			{Rank: 1, UserID: "u-top", DisplayName: "Top Gymer", Xp: 9999, Level: 15},
 		},
-		rank: 1,
+		rank:  1,
 		entry: &entity.LeaderboardUser{Rank: 1, UserID: "u-top", DisplayName: "Top Gymer", Xp: 9999, Level: 15},
 	}
 	handler := query.NewGetGlobalLeaderboardHandler(repo)

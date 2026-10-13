@@ -34,6 +34,12 @@ type CloudEventEnvelope struct {
 }
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("fatal error: %v", err) //nolint:forbidigo // allowed in main
+	}
+}
+
+func run() error {
 	log.Println("🚀 === BẮT ĐẦU CHẠY KIỂM THỬ E2E GAMIFICATION TRÊN LOCAL DOCKER ===")
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -52,13 +58,13 @@ func main() {
 	// 1. Kết nối DB
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
-		log.Fatalf("❌ Lỗi mở kết nối DB: %v", err)
-	}
-	if pingErr := db.Ping(); pingErr != nil {
-		_ = db.Close()
-		log.Fatalf("❌ Lỗi ping DB (hãy chắc chắn container fitai-postgres-test đang chạy): %v", pingErr)
+		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
+
+	if pingErr := db.Ping(); pingErr != nil {
+		return fmt.Errorf("ping database: %w", pingErr)
+	}
 	log.Println("✅ Kết nối PostgreSQL thành công!")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,7 +79,7 @@ func main() {
 		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
-		log.Fatalf("❌ Khởi tạo Gamification Module thất bại: %v", err)
+		return fmt.Errorf("initialize gamification: %w", err)
 	}
 	defer shutdown()
 	log.Println("✅ Gamification Module và 5 Kafka Consumers đã sẵn sàng lắng nghe!")
@@ -120,11 +126,10 @@ func main() {
 	}
 
 	fmt.Printf("🔍 [DB Check 1] user_xp: %d, user_streak: %d, user_snapshots: %d\n", xpCount, streakCount, snapshotCount)
-	if xpCount > 0 && streakCount > 0 && snapshotCount > 0 {
-		log.Println("✅ [BƯỚC 1 THÀNH CÔNG] User đã được eager initialize trong Gamification DB!")
-	} else {
-		log.Fatalf("❌ [BƯỚC 1 THẤT BẠI] User chưa được tạo trong DB!")
+	if xpCount == 0 || streakCount == 0 || snapshotCount == 0 {
+		return fmt.Errorf("user not created in db")
 	}
+	log.Println("✅ [BƯỚC 1 THÀNH CÔNG] User đã được eager initialize trong Gamification DB!")
 
 	// 5. Bắn Event 2: Workout Session Completed
 	log.Println("\n--- [BƯỚC 2] BẮN EVENT WORKOUT SESSION COMPLETED (workout_execution.events) ---")
@@ -166,11 +171,10 @@ func main() {
 	}
 
 	fmt.Printf("🔍 [DB Check 2] XP: %d, Level: %d, Current Streak: %d, Badge FIRST_WORKOUT: %d\n", currentXp, currentLevel, currentStreak, firstWorkoutBadgeCount)
-	if currentXp > 0 && currentStreak == 1 && firstWorkoutBadgeCount == 1 {
-		log.Println("✅ [BƯỚC 2 THÀNH CÔNG] XP đã được cộng, Streak = 1, Huy hiệu FIRST_WORKOUT đã mở khóa!")
-	} else {
-		log.Fatalf("❌ [BƯỚC 2 THẤT BẠI] Dữ liệu sau buổi tập không đúng kỳ vọng!")
+	if currentXp == 0 || currentStreak != 1 || firstWorkoutBadgeCount != 1 {
+		return fmt.Errorf("unexpected workout completion state in db")
 	}
+	log.Println("✅ [BƯỚC 2 THÀNH CÔNG] XP đã được cộng, Streak = 1, Huy hiệu FIRST_WORKOUT đã mở khóa!")
 
 	// 6. Bắn Event 3: Personal Record Achieved
 	log.Println("\n--- [BƯỚC 3] BẮN EVENT PERSONAL RECORD ACHIEVED (workout_execution.events) ---")
@@ -200,11 +204,10 @@ func main() {
 	}
 
 	fmt.Printf("🔍 [DB Check 3] XP mới: %d (trước đó: %d), Badge PR_BREAKER: %d\n", prXp, currentXp, prBadgeCount)
-	if prXp == currentXp+25 && prBadgeCount == 1 {
-		log.Println("✅ [BƯỚC 3 THÀNH CÔNG] Đã cộng đúng +25 XP và mở khóa huy hiệu PR_BREAKER!")
-	} else {
-		log.Fatalf("❌ [BƯỚC 3 THẤT BẠI] Dữ liệu sau khi đạt PR không đúng kỳ vọng!")
+	if prXp != currentXp+25 || prBadgeCount != 1 {
+		return fmt.Errorf("unexpected personal record state in db")
 	}
+	log.Println("✅ [BƯỚC 3 THÀNH CÔNG] Đã cộng đúng +25 XP và mở khóa huy hiệu PR_BREAKER!")
 
 	// 7. Bắn Event 4: Nutrition Goal Achieved
 	log.Println("\n--- [BƯỚC 4] BẮN EVENT NUTRITION GOAL ACHIEVED (nutrition.events) ---")
@@ -234,11 +237,10 @@ func main() {
 	}
 
 	fmt.Printf("🔍 [DB Check 4] XP mới: %d (trước đó: %d)\n", nutritionXp, prXp)
-	if nutritionXp == prXp+30 {
-		log.Println("✅ [BƯỚC 4 THÀNH CÔNG] Đã cộng đúng +30 XP cho dinh dưỡng!")
-	} else {
-		log.Fatalf("❌ [BƯỚC 4 THẤT BẠI] XP dinh dưỡng không khớp!")
+	if nutritionXp != prXp+30 {
+		return fmt.Errorf("unexpected nutrition xp state in db")
 	}
+	log.Println("✅ [BƯỚC 4 THÀNH CÔNG] Đã cộng đúng +30 XP cho dinh dưỡng!")
 
 	// 8. Kiểm tra Outbox Table
 	log.Println("\n--- [BƯỚC 5] KIỂM TRA TRANSACTIONAL OUTBOX TABLE ---")
@@ -246,8 +248,8 @@ func main() {
 	_ = db.QueryRow("SELECT COUNT(*) FROM gamification.outbox WHERE aggregate_id = $1", testUserID).Scan(&outboxCount)
 	fmt.Printf("🔍 [DB Check 5] Tổng số sự kiện Outbox đã sinh ra: %d\n", outboxCount)
 
-	rows, err := db.Query("SELECT event_type, status, created_at FROM gamification.outbox WHERE aggregate_id = $1 ORDER BY created_at ASC", testUserID)
-	if err == nil {
+	rows, rErr := db.Query("SELECT event_type, status, created_at FROM gamification.outbox WHERE aggregate_id = $1 ORDER BY created_at ASC", testUserID)
+	if rErr == nil {
 		for rows.Next() {
 			var evType, status string
 			var createdAt time.Time
@@ -315,6 +317,7 @@ func main() {
 	}
 
 	log.Println("\n🎉🎉🎉 === TẤT CẢ CÁC BƯỚC KIỂM THỬ E2E GAMIFICATION ĐÃ HOÀN TOÀN THÀNH CÔNG! ===")
+	return nil
 }
 
 func sendCloudEvent(ctx context.Context, writer *kafka.Writer, partitionKey, eventType string, data []byte) {
