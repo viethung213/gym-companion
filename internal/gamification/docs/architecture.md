@@ -8,7 +8,7 @@ Tài liệu này đặc tả kiến trúc tổng thể, ranh giới Bounded Cont
 
 FITAI được xây dựng theo mô hình **Domain-Encapsulated Modular Monolith**. Mỗi Bounded Context được cô lập thành một thư mục độc lập dưới `/internal/<module_name>/`.
 
-Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting Domain**), tiếp nhận các sự kiện nghiệp vụ từ hệ thống để vận hành cơ chế tích lũy kinh nghiệm (XP & Cấp độ), chuỗi ngày tập luyện (Streaks), bảng xếp hạng (Leaderboards) và quản lý tiền tệ thể thao (FitCoins):
+Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting Domain**), tiếp nhận các sự kiện nghiệp vụ từ hệ thống để vận hành cơ chế tích lũy kinh nghiệm (XP & Cấp độ), chuỗi ngày tập luyện (Streaks), bảng xếp hạng toàn hệ thống (Leaderboards), và hệ thống huy hiệu/thành tựu (Badges & Achievements):
 
 ```mermaid
 flowchart TD
@@ -29,7 +29,7 @@ flowchart TD
         direction TB
         G_CONSUMER["Kafka Consumers"]
         G_APP["Application CQRS"]
-        G_DOMAIN["Domain Layer<br/>(XP, Streaks, FitCoins)"]
+        G_DOMAIN["Domain Layer<br/>(XP, Streaks, Badges)"]
         G_REPO["Persistence<br/>(Schema: gamification.*)"]
         G_OUTBOX["Transactional Outbox"]
     end
@@ -49,28 +49,27 @@ Module Gamification tuân thủ mô hình **Ports & Adapters**, giữ tầng Dom
 ```text
 internal/gamification/
 ├── domain/                      # LÕI NGHIỆP VỤ (Pure Go - Không phụ thuộc DB, Framework)
-│   ├── aggregate/               # Quản lý trạng thái và quy tắc nghiệp vụ XP, Streak, Ví tiền
-│   ├── entity/                  # Các thực thể nghiệp vụ (Dòng sổ cái, Lịch sử điểm)
-│   ├── vo/                      # Value Objects (Bậc hạng, Loại giao dịch, Danh mục)
+│   ├── aggregate/               # Quản lý trạng thái và quy tắc nghiệp vụ XP, Streak, Badges
+│   ├── entity/                  # Các thực thể nghiệp vụ (Lịch sử điểm, Lịch sử chuỗi)
+│   ├── vo/                      # Value Objects (Cấp độ, Điểm thưởng, Loại hoạt động)
 │   ├── event/                   # Domain Events nội bộ
 │   └── repository/              # Port Interfaces (Định nghĩa hợp đồng lưu trữ)
 │
 ├── application/                 # TẦNG ĐIỀU PHỐI (Use Cases)
-│   ├── command/                 # Xử lý các tác vụ ghi (Cộng XP, Điểm danh Streak, Đổi quà)
-│   ├── query/                   # Xử lý các tác vụ đọc (Thông tin ví, Bảng xếp hạng)
-│   └── port/                    # Output Ports giao tiếp ngoài (Transaction, Cross-module reader)
+│   ├── command/                 # Xử lý các tác vụ ghi (Cộng XP, Cập nhật Streak, Lưu snapshot)
+│   ├── query/                   # Xử lý các tác vụ đọc (Thông tin XP, Chuỗi ngày, Bảng xếp hạng)
+│   └── port/                    # Output Ports giao tiếp ngoài (Transaction, Outbox)
 │
 ├── infrastructure/              # TẦNG KỸ THUẬT (Driven Adapters)
 │   ├── persistence/             # Hiện thực hóa lưu trữ (PostgreSQL GORM)
-│   ├── event/                   # Outbox Writer (Đóng gói CloudEvents)
 │   └── worker/                  # Outbox Worker quét đẩy sự kiện ra Kafka
 │
 └── transport/                   # TẦNG GIAO DIỆN (Driving Adapters)
     ├── grpc/                    # ConnectRPC Service Handlers
     └── consumer/                # Kafka Message Consumers
         ├── user_registered_consumer.go        # Khởi tạo tức thì hồ sơ game hóa khi đăng ký
-        ├── activity_ingestion_coordinator.go   # Điều phối tuần tự sự kiện buổi tập
-        └── nutrition_streak_consumer.go       # Consumer đạt mục tiêu dinh dưỡng
+        ├── activity_ingestion_coordinator.go   # Điều phối tuần tự sự kiện buổi tập (XP -> Streak)
+        └── nutrition_event_consumer.go        # Consumer đạt mục tiêu dinh dưỡng
 ```
 
 ---
@@ -79,7 +78,7 @@ internal/gamification/
 
 * **Schema Isolation**: Toàn bộ dữ liệu của Gamification được cô lập trong PostgreSQL schema riêng (`gamification.*`). Không thực hiện truy vấn `JOIN` chéo sang schema của các module khác.
 * **Transactional Outbox Pattern**: Mọi sự kiện phát sinh từ Gamification đều được lưu trữ cùng transaction với dữ liệu nghiệp vụ và đẩy bất đồng bộ ra Kafka topic `gamification.events`.
-* **Idempotency**: Các Consumer phía tiếp nhận dữ liệu luôn kiểm tra tính lũy đẳng (Idempotent Consumer qua khóa duy nhất nghiệp vụ hoặc Ledger Guard) để đảm bảo không xử lý lặp lại sự kiện.
+* **Idempotency**: Các Consumer phía tiếp nhận dữ liệu luôn kiểm tra tính lũy đẳng (Idempotent Consumer qua khóa duy nhất nghiệp vụ hoặc Outbox Log Guard) để đảm bảo không xử lý lặp lại sự kiện.
 
 ---
 
@@ -177,23 +176,23 @@ Mọi bản ghi `payload` trong `gamification.outbox` đều đóng gói chuẩn
 ### 4.4 Danh Mục Sự Kiện
 
 #### Sự Kiện Module Gamification Phát Sinh (`gamification.events`)
-Tất cả các sự kiện bên dưới được định nghĩa trong contract tập trung duy nhất: `proto/contracts/supporting/gamification/v1/event/gamification_events.proto` (tuân thủ quy chuẩn camelCase theo `docs/04_event_driven_standards.md`):
+Tất cả các sự kiện bên dưới được định nghĩa tách riêng theo chuẩn CloudEvents 1.0 trong `proto/contracts/supporting/gamification/v1/event/` (tuân thủ quy chuẩn camelCase theo `docs/04_event_driven_standards.md`):
 
 | Tên Sự Kiện (`event_type`) | Bounded Context Phát Sinh | Mục Đích & Module Lắng Nghe |
 | :--- | :--- | :--- |
 | `contracts.supporting.gamification.v1.xpEarned` | `xp-and-levels` | Ghi nhận tích lũy XP. `analytics`, `notification`. |
 | `contracts.supporting.gamification.v1.userLeveledUp` | `xp-and-levels` | Người dùng thăng cấp. `notification` (Push/Popup), `profile` (Cập nhật huy hiệu), `social` (Đăng bài tự động). |
-| `contracts.supporting.gamification.v1.coinsEarned` | `fitcoins-and-ledger` | Biến động nạp coin. `notification`, `analytics` (Giám sát lạm phát). |
-| `contracts.supporting.gamification.v1.coinsSpent` | `fitcoins-and-ledger` | Biến động tiêu coin. `notification`, `analytics`. |
 | `contracts.supporting.gamification.v1.streakAdvanced` | `streaks-and-habits` | Tăng chuỗi ngày. `notification`. |
 | `contracts.supporting.gamification.v1.streakReset` | `streaks-and-habits` | Đứt chuỗi ngày sau ngày nghỉ. `notification`. |
+| `contracts.supporting.gamification.v1.streakMilestoneReached` | `streaks-and-habits` | Chạm mốc chuỗi kỷ luật (7, 14, 30, 50, 100, 365 ngày). `notification`, `social`. |
+| `contracts.supporting.gamification.v1.badgeUnlocked` | `badges` | Người dùng mở khóa huy hiệu mới. `notification` (Push/Popup vinh danh), `social` (Khoe bài). |
 
 #### Sự Kiện Ngoại Vi Lắng Nghe (Inbound Events)
 | Tên Sự Kiện | Module Phát | Xử Lý Phía Gamification |
 | :--- | :--- | :--- |
-| `contracts.generic.auth.v1.userRegistered` | `auth` | Khởi tạo tức thì bộ ba hồ sơ Gamification (`user_xp = 0, level = 1`, `user_streak = 0`, `user_wallet = 0`). |
+| `contracts.generic.auth.v1.userRegistered` | `auth` | Khởi tạo tức thì bộ đôi hồ sơ Gamification (`user_xp = 0, level = 1`, `user_streak = 0`) và snapshot (`display_name`, `avatar_url`). |
 | `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted` | `workout_execution` | Điều phối qua `ActivityIngestionCoordinator` để cộng XP và tăng chuỗi Streak. |
-| `contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved` | `workout_execution` | Thưởng thêm XP và FitCoins khi lập kỷ lục mới. |
+| `contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved` | `workout_execution` | Thưởng thêm PR Bonus (+25 XP) khi lập kỷ lục mới. |
 | `contracts.core.nutrition.v1.event.DailyNutritionGoalAchieved` | `nutrition` | Thưởng $+30$ XP và duy trì Streak dinh dưỡng trong ngày nghỉ. |
 
 ---
@@ -201,49 +200,51 @@ Tất cả các sự kiện bên dưới được định nghĩa trong contract 
 ## 5. Chuẩn Hóa Xử Lý Bất Đồng Bộ Đa Aggregate & Khử Deadlock (Activity Ingestion Coordinator)
 
 ### 5.1 Vấn Đề Khi Nhận Sự Kiện Hoàn Thành Buổi Tập (`WorkoutSessionCompleted`)
-Khi một buổi tập kết thúc, hệ thống phát ra CloudEvent `contracts.core.workout_execution.v1.WorkoutSessionCompleted`. Trong module Gamification, sự kiện này tác động đồng thời lên **3 Aggregate độc lập**:
+Khi một buổi tập kết thúc, hệ thống phát ra CloudEvent `contracts.core.workout_execution.v1.WorkoutSessionCompleted`. Trong module Gamification, sự kiện này tác động đồng thời lên **2 Aggregate độc lập**:
 1. `UserXp`: Tính toán và cộng điểm kinh nghiệm XP, nâng cấp level.
 2. `UserStreak`: Cập nhật chuỗi ngày kỷ luật tập luyện liên tục.
-3. `UserWallet`: Thưởng FitCoins tương ứng cho nỗ lực tập luyện.
 
-### 5.2 Khử Triệt Để Deadlock: 1 Coordinator Duy Nhất Với 3 Atomic Steps Tuần Tự
-- **Rủi ro của Mega-Transaction đơn (Ôm cả 3 bảng trong 1 transaction)**:
-  Nếu mở 1 Database Transaction duy nhất giữ khóa tuần tự `user_xp -> user_streak -> user_wallet`:
+### 5.2 Khử Triệt Để Deadlock & Tối Ưu Hệ Số Thưởng: 3 Bước Tuần Tự
+- **Rủi ro của Mega-Transaction đơn (Ôm cả 2 bảng trong 1 transaction)**:
+  Nếu mở 1 Database Transaction duy nhất giữ khóa tuần tự `user_xp -> user_streak`:
   - Chiếm dụng kết nối database pool qua nhiều round-trips SQL, gây nghẽn pool ở giờ cao điểm (The 3 AM Test).
-  - Xảy ra Deadlock kinh điển khi luồng dinh dưỡng hoặc shop đồng thời cập nhật `user_streak` hoặc `user_wallet`.
-  - Nếu bước thưởng ví thất bại, toàn bộ transaction rollback khiến gymer bị mất oan điểm XP và đứt chuỗi Streak.
-- **Giải Pháp Chuẩn Hóa (3 Atomic Local Steps)**:
+  - Xảy ra Deadlock kinh điển khi luồng dinh dưỡng đồng thời cập nhật `user_streak` hoặc `user_xp`.
+- **Giải Pháp Chuẩn Hóa (Causal Consistency & Atomic Steps)**:
   - Gamification triển khai **1 Kafka Consumer duy nhất** lắng nghe `WorkoutSessionCompleted`.
-  - Consumer chuyển giao payload vào **`ActivityIngestionCoordinator`** (Application Service).
-  - Coordinator thực thi **3 Giao dịch Độc lập, Cực ngắn (Atomic Local Transactions)** chạy nối tiếp nhau trong cùng tiến trình Go:
+  - Consumer đọc `duration_seconds` trực tiếp từ Proto Contract và chuyển giao payload vào **`ActivityIngestionCoordinator`** (Application Service).
+  - Coordinator thực thi theo thứ tự nhân quả tối ưu:
 
 ```text
-BƯỚC 1: ATOMIC XP TRANSACTION (< 2 ms)
-  BEGIN;
-    SELECT * FROM gamification.user_xp WHERE user_id = $1 FOR UPDATE;
-    --> Cập nhật điểm XP, kiểm tra Level Up (Domain Aggregate UserXp)
-    --> Ghi nhận Outbox xpEarned (và userLeveledUp nếu thăng cấp)
-  COMMIT;  -- Nhả khóa user_xp, trả kết nối về pool ngay lập tức.
-
-BƯỚC 2: ATOMIC STREAK TRANSACTION (< 2 ms)
+BƯỚC 1: ATOMIC STREAK TRANSACTION (< 2 ms)
   BEGIN;
     SELECT * FROM gamification.user_streak WHERE user_id = $1 FOR UPDATE;
-    --> Cập nhật chuỗi ngày liên tục (Domain Aggregate UserStreak)
-    --> Ghi nhận Outbox streakAdvanced
-  COMMIT;  -- Nhả khóa user_streak, trả kết nối về pool ngay lập tức.
+    --> Cập nhật chuỗi ngày liên tục theo giờ địa phương (UserStreak)
+    --> Ghi nhận Outbox streakAdvanced (và streakMilestoneReached nếu chạm mốc)
+  COMMIT;  -- Nhả khóa user_streak ngay lập tức. Lấy streak mới nhất vừa cập nhật.
 
-BƯỚC 3: ATOMIC WALLET TRANSACTION (< 2 ms)
+BƯỚC 2: ATOMIC XP TRANSACTION (< 2 ms)
   BEGIN;
-    SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE;
-    --> Cộng FitCoins thưởng (Domain Aggregate UserWallet qua WalletRewarder Port)
-    --> Ghi nhận Outbox coinsEarned
-  COMMIT;  -- Nhả khóa user_wallet.
+    --> Kiểm tra Idempotency phiên tập: HasSession(user_id, session_id)
+    --> Áp dụng hệ số Streak Multiplier chuẩn xác cho chính buổi tập hôm nay (1.1x nếu streak >= 3, 1.2x nếu streak >= 7)
+    SELECT * FROM gamification.user_xp WHERE user_id = $1 FOR UPDATE;
+    --> Cập nhật điểm XP, kiểm tra Level Up (UserXp)
+    --> Ghi nhận Outbox xpEarned (và userLeveledUp nếu thăng cấp)
+  COMMIT;  -- Nhả khóa user_xp ngay lập tức.
+
+BƯỚC 3: BATCH BADGES TRANSACTION (Nếu có huy hiệu đủ điều kiện)
+  BEGIN;
+    --> Gom tất cả huy hiệu hợp lệ (FIRST_WORKOUT, PR_BREAKER, STREAK_*, LEVEL_*)
+    --> Kiểm tra khoảng thăng cấp (oldLevel < X && newLevel >= X) để không bị sót khi nhảy cấp
+    --> INSERT INTO gamification.user_badges BATCH ON CONFLICT DO NOTHING;
+    --> Ghi nhận Outbox badgeUnlocked BATCH
+  COMMIT;
 ```
 
-### 5.3 Tính Ưu Việt Của Kiến Trúc 3 Atomic Steps
-1. **0% Nguy Cơ Deadlock:** Tại bất kỳ thời điểm nào, tiến trình không bao giờ giữ 2 khóa dòng cùng lúc. Triệt tiêu hoàn toàn điều kiện chờ vòng (circular wait condition) với bất kỳ luồng Dinh dưỡng hay Cửa hàng nào.
+### 5.3 Tính Ưu Việt Của Kiến Trúc 3 Bước Tuần Tự
+1. **0% Nguy Cơ Deadlock:** Tại bất kỳ thời điểm nào, tiến trình không bao giờ giữ 2 khóa dòng cùng lúc. Triệt tiêu hoàn toàn điều kiện chờ vòng (circular wait condition) với bất kỳ luồng Dinh dưỡng nào.
 2. **Giải Phóng DB Connection Pool:** Mỗi bước chỉ chiếm kết nối pool trong tích tắc ($< 2\text{ ms}$) rồi nhả ngay, bảo vệ pool an toàn tuyệt đối dưới tải cao lúc 3 AM.
-3. **Cô Lập Lỗi (Failure Isolation):** Nỗ lực mồ hôi của gymer tại phòng tập luôn được ghi nhận trọn vẹn (XP và Streak được commit chắc chắn). Bất kỳ trục trặc nào ở bước thưởng tiền ảo FitCoins đều được cách ly xử lý riêng mà không bao giờ xóa mất thành quả tập luyện của người dùng.
+3. **Phần Thưởng Công Bằng & Nhất Quán:** Chuỗi kỷ luật tăng trước giúp buổi tập hôm nay được hưởng ngay lập tức hệ số nhân XP tương ứng.
+4. **Batch Upsert Huy Hiệu:** Toàn bộ huy hiệu đạt được trong phiên tập được ghi nhận trong 1 transaction duy nhất, không mở nhiều transaction lẻ tẻ.
 
 ---
 
@@ -251,15 +252,15 @@ BƯỚC 3: ATOMIC WALLET TRANSACTION (< 2 ms)
 
 ### 6.1 Vấn Đề Của Khởi Tạo Lười (Lazy Initialization Anti-Pattern)
 Nếu chỉ tạo bản ghi khi người dùng hoàn thành buổi tập đầu tiên (Lazy Initialization):
-- Khi user vừa đăng ký tài khoản, mở app vào tab Bảng Xếp Hạng (Leaderboards) hoặc Ví FitCoins (Wallet), database chưa hề có bản ghi của user đó.
+- Khi user vừa đăng ký tài khoản, mở app vào tab Bảng Xếp Hạng (Leaderboards) hoặc Chuỗi Ngày (Streaks), database chưa hề có bản ghi của user đó.
 - Truy vấn tính thứ hạng cá nhân (`SELECT COUNT(*) + 1 FROM gamification.user_xp WHERE xp > :my_xp`) bị lỗi hoặc trả về kết quả sai do `:my_xp = NULL`.
-- Truy vấn ví hoặc chuỗi phải xử lý các ngoại lệ `RecordNotFound`, làm tăng độ phức tạp của code tầng Query và nguy cơ crash ứng dụng lúc 3 AM.
+- Truy vấn chuỗi phải xử lý các ngoại lệ `RecordNotFound`, làm tăng độ phức tạp của code tầng Query và nguy cơ crash ứng dụng lúc 3 AM.
 
 ### 6.2 Giải Pháp: Eager Initialization Với UserRegistered Consumer
 Gamification triển khai `UserRegisteredConsumer` lắng nghe sự kiện `contracts.generic.auth.v1.userRegistered` từ topic `auth.events` (Consumer Group: `gamification-user-registered-group`):
-- Ngay khi tài khoản được tạo ở Auth, Gamification thực thi 1 Local Database Transaction khởi tạo đồng thời bộ ba cơ sở với tính lũy đẳng (`ON CONFLICT (user_id) DO NOTHING`):
+- Ngay khi tài khoản được tạo ở Auth, Gamification thực thi 1 Local Database Transaction khởi tạo đồng thời với tính lũy đẳng (`ON CONFLICT (user_id) DO NOTHING`):
   1. `gamification.user_xp`: `xp = 0`, `level = 1`
   2. `gamification.user_streak`: `current_streak = 0`, `longest_streak = 0`
-  3. `gamification.user_wallet`: `balance = 0`, `total_earned = 0`, `total_spent = 0`
-- **Kết quả**: 100% gymer tồn tại trong hệ thống đều có sẵn trạng thái Game hóa từ giây đầu tiên. Các API tra cứu (`GetStreak`, `GetWallet`, `GetGlobalLeaderboard`) hoạt động mượt mà, nhất quán tuyệt đối, loại bỏ hoàn toàn các nhánh code xử lý dữ liệu khuyết thiếu.
+  3. `gamification.user_snapshots`: `display_name = full_name`, `avatar_url = avatar_url`
+- **Kết quả**: 100% gymer tồn tại trong hệ thống đều có sẵn trạng thái Game hóa từ giây đầu tiên. Các API tra cứu (`GetStreak`, `GetMyXp`, `GetGlobalLeaderboard`) hoạt động mượt mà, nhất quán tuyệt đối, loại bỏ hoàn toàn các nhánh code xử lý dữ liệu khuyết thiếu.
 

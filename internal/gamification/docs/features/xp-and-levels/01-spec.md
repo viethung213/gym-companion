@@ -141,7 +141,7 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
 ## Error and boundary scenarios
 - **Duplicate Workout Event**: Sự kiện trùng lặp `session_id` bị chặn bởi unique index trên `xp_history`, transaction rollback an toàn và commit offset bỏ qua.
 - **Max Level 100 Reached**: Khi người dùng đạt Level 100, `xp` vẫn tiếp tục tăng bình thường, nhưng `level` giữ nguyên ở 100 và `xp_to_next_level = 0`.
-- **Anomalous Session**: Buổi tập thời lượng $< 15$ phút hoặc hiệp $< 3$ bị coi là chưa đạt chuẩn, không cộng XP.
+- **Anomalous Session**: Gamification áp dụng mô hình Boundary Trust (ADR-0004), tin tưởng tuyệt đối vào sự kiện `WorkoutSessionCompleted` do `workout_execution` phát ra. Nếu buổi tập hoàn thành có số hiệp $< 3$, buổi tập bị coi là chưa đạt chuẩn và không cộng XP. Thời lượng buổi tập do `workout_execution` làm chủ quản kiểm soát tại nguồn.
 
 ---
 

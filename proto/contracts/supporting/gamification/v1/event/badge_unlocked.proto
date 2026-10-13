@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event;gamificationv1event";
+
+message BadgeUnlocked {
+  string user_id = 1;
+  string badge_code = 2;
+  string badge_name = 3;
+  string category = 4;
+  google.protobuf.Timestamp unlocked_at = 5;
+}

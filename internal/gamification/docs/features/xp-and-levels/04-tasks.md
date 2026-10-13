@@ -79,9 +79,9 @@ Danh sách công việc kỹ thuật tinh gọn theo chuẩn **Test-Driven Devel
     - `internal/gamification/application/query/get_my_xp.go` (Lấy XP và tính `xp_to_next_level`).
     - `internal/gamification/application/query/get_xp_history.go` (Lấy lịch sử phân trang).
 
-- [ ] **T-10 [Application Coordinator, Architecture #5]**: Bộ điều phối hoạt động đa aggregate (3 Atomic Steps).
+- [ ] **T-10 [Application Coordinator, Architecture #5]**: Bộ điều phối hoạt động đa aggregate (2 Atomic Steps).
   - **Đường dẫn**: `internal/gamification/application/service/activity_ingestion_coordinator.go`
-  - **Nhiệm vụ**: Tiếp nhận buổi tập từ Consumer, thực thi 3 atomic local transactions độc lập tuần tự (`user_xp` $\rightarrow$ `user_streak` $\rightarrow$ `user_wallet`), mỗi bước commit trong $< 2\text{ ms}$ triệt tiêu 100% Deadlock.
+  - **Nhiệm vụ**: Tiếp nhận buổi tập từ Consumer, thực thi 2 atomic local transactions độc lập tuần tự (`user_xp` $\rightarrow$ `user_streak`), mỗi bước commit trong $< 2\text{ ms}$ triệt tiêu 100% Deadlock.
 
 - [ ] **T-11 [Transport Consumers & ConnectRPC API, UC-XP-01, UC-XP-02, UC-XP-03]**: Cổng giao tiếp ngoại vi.
   - **Đường dẫn**:

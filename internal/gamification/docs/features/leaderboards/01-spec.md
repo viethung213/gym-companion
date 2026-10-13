@@ -45,7 +45,6 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 ### Out of scope & Explicitly Deferred
 - **Phòng đấu nhóm (Cohorts/Rooms) [DEFERRED]**: Tạm thời loại bỏ theo yêu cầu của Maintainer để đơn giản hóa hệ thống.
 - **Chu kỳ xếp hạng theo tuần (Weekly Leagues & Demotion) [DEFERRED]**: Bỏ qua chu kỳ tuần; toàn bộ bảng xếp hạng tính theo `xp` trọn đời.
-- **Thưởng FitCoins [DEFERRED]**: Không tích hợp trả thưởng coin cho bảng xếp hạng; giao dịch coin do module `fitcoins-and-ledger` phụ trách.
 - **Bảng xếp hạng bạn bè (Friend Leaderboard) [DEFERRED]**: Lọc theo đồ thị bạn bè thuộc phân hệ `social`.
 
 ---

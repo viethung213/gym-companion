@@ -1,0 +1,207 @@
+package consumer
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/segmentio/kafka-go"
+	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
+	"github.com/viethung213/gym-companion/internal/gamification/application/port"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
+	"google.golang.org/protobuf/encoding/protojson"
+)
+
+// PersonalRecordConsumer listens to contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved
+// and awards +25 PR Bonus XP and unlocks PR_BREAKER badge.
+type PersonalRecordConsumer struct {
+	reader        *kafka.Reader
+	userXpRepo    repository.UserXpRepository
+	badgeRepo     repository.BadgeRepository
+	txManager     port.TransactionManager
+	outboxWriter  port.OutboxWriter
+	outboxLogRepo port.OutboxLogRepository
+}
+
+// NewPersonalRecordConsumer constructs PersonalRecordConsumer.
+func NewPersonalRecordConsumer(
+	reader *kafka.Reader,
+	userXpRepo repository.UserXpRepository,
+	badgeRepo repository.BadgeRepository,
+	txManager port.TransactionManager,
+	outboxWriter port.OutboxWriter,
+	outboxLogRepo port.OutboxLogRepository,
+) *PersonalRecordConsumer {
+	return &PersonalRecordConsumer{
+		reader:        reader,
+		userXpRepo:    userXpRepo,
+		badgeRepo:     badgeRepo,
+		txManager:     txManager,
+		outboxWriter:  outboxWriter,
+		outboxLogRepo: outboxLogRepo,
+	}
+}
+
+// Start polls Kafka for PR events until context cancellation.
+func (c *PersonalRecordConsumer) Start(ctx context.Context) {
+	if c.reader == nil {
+		return
+	}
+	log.Println("[Gamification] Starting PersonalRecord Kafka Consumer...")
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("[Gamification] Stopping PersonalRecord Kafka Consumer due to context cancellation.")
+			return
+		default:
+			msg, err := c.reader.ReadMessage(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				log.Printf("[Gamification] PersonalRecord consumer read error: %v", err)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			if err := c.ProcessMessage(ctx, msg); err != nil {
+				log.Printf("[Gamification] PersonalRecord consumer process error: %v", err)
+			}
+		}
+	}
+}
+
+// ProcessMessage handles the PR achieved event.
+func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
+	var ce CloudEvent
+	if err := json.Unmarshal(msg.Value, &ce); err != nil {
+		return fmt.Errorf("unmarshal cloudevent envelope: %w", err)
+	}
+
+	if !strings.Contains(ce.Type, "newPersonalRecordAchieved") &&
+		!strings.Contains(ce.Type, "NewPersonalRecordAchieved") {
+		return nil
+	}
+
+	// Idempotency check via outbox_log
+	if c.outboxLogRepo != nil && ce.ID != "" {
+		processed, err := c.outboxLogRepo.IsProcessed(ctx, ce.ID)
+		if err == nil && processed {
+			return nil
+		}
+	}
+
+	var protoEv workoutexecutionv1event.NewPersonalRecordAchieved
+	if err := protojson.Unmarshal(ce.Data, &protoEv); err != nil {
+		return fmt.Errorf("unmarshal proto NewPersonalRecordAchieved: %w", err)
+	}
+
+	userID := protoEv.GetUserId()
+	achievedAt := time.Now().UTC()
+	if protoEv.AchievedAt != nil {
+		achievedAt = protoEv.AchievedAt.AsTime()
+	}
+	activityDate := ResolveLocalDate(achievedAt)
+
+	// Execute inside local transaction: +25 XP & Unlock PR_BREAKER Badge
+	err := c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		userXp, err := c.userXpRepo.FindByIDForUpdate(txCtx, userID)
+		if err != nil {
+			return fmt.Errorf("find user_xp for update: %w", err)
+		}
+		if userXp == nil {
+			userXp, err = aggregate.NewUserXp(userID)
+			if err != nil {
+				return fmt.Errorf("create user_xp: %w", err)
+			}
+		}
+
+		// Award +25 XP for PR
+		xpEvents, err := userXp.EarnXp(25, "PERSONAL_RECORD", achievedAt)
+		if err != nil {
+			return fmt.Errorf("earn pr xp: %w", err)
+		}
+
+		if err := c.userXpRepo.Save(txCtx, userXp); err != nil {
+			return fmt.Errorf("save user_xp: %w", err)
+		}
+
+		history := entity.NewXpHistoryEntry(
+			uuid.NewString(),
+			userID,
+			25,
+			"PERSONAL_RECORD",
+			nil,
+			activityDate,
+			achievedAt,
+		)
+		if err := c.userXpRepo.SaveHistory(txCtx, history); err != nil {
+			return fmt.Errorf("save pr xp_history: %w", err)
+		}
+
+		outboxEvents := make([]any, len(xpEvents))
+		for i, ev := range xpEvents {
+			outboxEvents[i] = ev
+		}
+
+		// Check and unlock PR_BREAKER badge
+		has, err := c.badgeRepo.HasBadge(txCtx, userID, "PR_BREAKER")
+		if err == nil && !has {
+			def, _ := vo.GetBadgeDefinition("PR_BREAKER")
+			meta := map[string]string{
+				"exerciseId": protoEv.GetExerciseId(),
+				"weight":     fmt.Sprintf("%.1f", protoEv.GetWeight()),
+				"reps":       fmt.Sprintf("%d", protoEv.GetReps()),
+			}
+			badge, badgeEv, bErr := aggregate.UnlockBadge(
+				uuid.NewString(),
+				userID,
+				"PR_BREAKER",
+				def.Name,
+				def.Category,
+				meta,
+				achievedAt,
+			)
+			if bErr == nil {
+				if err := c.badgeRepo.Save(txCtx, badge); err == nil {
+					outboxEvents = append(outboxEvents, badgeEv)
+				}
+			}
+		}
+
+		return c.outboxWriter.WriteEvents(txCtx, "user_xp", userID, outboxEvents)
+	})
+
+	if err != nil {
+		if c.outboxLogRepo != nil && ce.ID != "" {
+			_ = c.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+				EventID:      ce.ID,
+				EventType:    ce.Type,
+				Payload:      msg.Value,
+				PartitionKey: string(msg.Key),
+				Status:       "FAILED",
+				ErrorMessage: err.Error(),
+			})
+		}
+		return err
+	}
+
+	if c.outboxLogRepo != nil && ce.ID != "" {
+		_ = c.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+			EventID:      ce.ID,
+			EventType:    ce.Type,
+			Payload:      msg.Value,
+			PartitionKey: string(msg.Key),
+			Status:       "PROCESSED",
+		})
+	}
+
+	return nil
+}
