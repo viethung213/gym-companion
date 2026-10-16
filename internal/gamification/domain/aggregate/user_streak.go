@@ -105,7 +105,7 @@ func (s *UserStreak) RecordActivity(
 		s.updatedAt = recordedAt
 
 		return []event.Event{
-			event.StreakAdvanced{
+			&event.StreakAdvanced{
 				UserID:        s.userID,
 				NewStreak:     1,
 				LongestStreak: 1,
@@ -138,7 +138,7 @@ func (s *UserStreak) RecordActivity(
 		s.updatedAt = recordedAt
 
 		events := []event.Event{
-			event.StreakAdvanced{
+			&event.StreakAdvanced{
 				UserID:        s.userID,
 				NewStreak:     s.currentStreak,
 				LongestStreak: s.longestStreak,
@@ -149,7 +149,7 @@ func (s *UserStreak) RecordActivity(
 		}
 
 		if isMilestone(s.currentStreak) {
-			events = append(events, event.StreakMilestoneReached{
+			events = append(events, &event.StreakMilestoneReached{
 				UserID:        s.userID,
 				MilestoneDays: s.currentStreak,
 				ReachedAt:     recordedAt,
@@ -166,13 +166,13 @@ func (s *UserStreak) RecordActivity(
 	s.updatedAt = recordedAt
 
 	return []event.Event{
-		event.StreakReset{
+		&event.StreakReset{
 			UserID:         s.userID,
 			PreviousStreak: oldStreak,
 			ResetDate:      activityDate,
 			ResetAt:        recordedAt,
 		},
-		event.StreakAdvanced{
+		&event.StreakAdvanced{
 			UserID:        s.userID,
 			NewStreak:     1,
 			LongestStreak: s.longestStreak,

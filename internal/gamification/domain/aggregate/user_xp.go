@@ -104,7 +104,7 @@ func (u *UserXp) EarnXp(delta int32, source string, earnedAt time.Time) ([]event
 	newLevel := vo.CalculateLevel(u.xp)
 
 	events := make([]event.Event, 0, 2)
-	events = append(events, event.XpEarned{
+	events = append(events, &event.XpEarned{
 		UserID:   u.userID,
 		DeltaXp:  delta,
 		NewXp:    u.xp,
@@ -114,7 +114,7 @@ func (u *UserXp) EarnXp(delta int32, source string, earnedAt time.Time) ([]event
 	})
 
 	if newLevel > u.level {
-		events = append(events, event.UserLeveledUp{
+		events = append(events, &event.UserLeveledUp{
 			UserID:      u.userID,
 			OldLevel:    u.level,
 			NewLevel:    newLevel,

@@ -36,7 +36,7 @@ func TestUserStreak_RecordActivity_SequentialDays(t *testing.T) {
 	if got := len(events); got != 1 {
 		t.Fatalf("Day 1 emitted %d events, want 1", got)
 	}
-	advEv, ok := events[0].(event.StreakAdvanced)
+	advEv, ok := events[0].(*event.StreakAdvanced)
 	if !ok || advEv.NewStreak != 1 || advEv.LongestStreak != 1 {
 		t.Errorf("Day 1 unexpected event: %+v", events[0])
 	}
@@ -98,12 +98,12 @@ func TestUserStreak_RecordActivity_BrokenStreak(t *testing.T) {
 		t.Fatalf("Broken streak should emit 2 events (StreakReset + StreakAdvanced), got %d", got)
 	}
 
-	resetEv, ok := events[0].(event.StreakReset)
+	resetEv, ok := events[0].(*event.StreakReset)
 	if !ok || resetEv.PreviousStreak != 3 || resetEv.ResetDate != "2026-10-14" {
 		t.Errorf("StreakReset unexpected values: %+v", resetEv)
 	}
 
-	advEv, ok := events[1].(event.StreakAdvanced)
+	advEv, ok := events[1].(*event.StreakAdvanced)
 	if !ok || advEv.NewStreak != 1 || advEv.LongestStreak != 3 {
 		t.Errorf("StreakAdvanced unexpected values: %+v", advEv)
 	}
@@ -131,7 +131,7 @@ func TestUserStreak_RecordActivity_MilestoneTrigger(t *testing.T) {
 		t.Fatalf("Day 7 should emit 2 events (StreakAdvanced + StreakMilestoneReached), got %d", got)
 	}
 
-	msEv, ok := events[1].(event.StreakMilestoneReached)
+	msEv, ok := events[1].(*event.StreakMilestoneReached)
 	if !ok || msEv.MilestoneDays != 7 {
 		t.Errorf("StreakMilestoneReached unexpected values: %+v", msEv)
 	}

@@ -42,8 +42,26 @@ func (r *GormUserStreakRepository) FindByID(ctx context.Context, userID string) 
 }
 
 // FindByIDForUpdate retrieves a UserStreak aggregate with pessimistic lock (SELECT ... FOR UPDATE).
+// To prevent lost updates on brand-new users, it seeds a baseline row (ON CONFLICT DO NOTHING)
+// ensuring SELECT ... FOR UPDATE always locks a physical row.
 func (r *GormUserStreakRepository) FindByIDForUpdate(ctx context.Context, userID string) (*aggregate.UserStreak, error) {
 	db := GetDB(ctx, r.db)
+
+	now := time.Now().UTC()
+	initModel := &UserStreakModel{
+		UserID:        userID,
+		CurrentStreak: 0,
+		LongestStreak: 0,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}},
+		DoNothing: true,
+	}).Create(initModel).Error; err != nil {
+		return nil, fmt.Errorf("seed user_streak baseline for update: %w", err)
+	}
+
 	var model UserStreakModel
 	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ?", userID).

@@ -56,12 +56,13 @@ func NewProcessWorkoutXpHandler(
 }
 
 // Handle executes the command inside a pessimistic locking transaction.
-//
-//nolint:gocritic // Command value object passed by value for immutability
 func (h *ProcessWorkoutXpHandler) Handle(
 	ctx context.Context,
-	cmd ProcessWorkoutXpCommand,
+	cmd *ProcessWorkoutXpCommand,
 ) (*ProcessWorkoutXpResult, error) {
+	if cmd == nil {
+		return nil, fmt.Errorf("process workout xp command is nil")
+	}
 	deltaXp, err := service.CalculateWorkoutXp(service.WorkoutXpInput{
 		TotalSets:        cmd.TotalSets,
 		TotalVolumeKg:    cmd.TotalVolumeKg,

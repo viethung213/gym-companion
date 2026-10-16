@@ -44,7 +44,7 @@ func TestWorkoutEventConsumer_ProcessMessage_InvalidJSON(t *testing.T) {
 		Value: []byte("not-valid-json"),
 	}
 
-	err := c.ProcessMessage(context.Background(), msg)
+	err := c.ProcessMessage(context.Background(), &msg)
 	assert.Error(t, err)
 }
 
@@ -58,7 +58,7 @@ func TestWorkoutEventConsumer_ProcessMessage_UnrelatedEventIgnored(t *testing.T)
 	}
 	bytes, _ := json.Marshal(envelope)
 
-	err := c.ProcessMessage(context.Background(), kafka.Message{Value: bytes})
+	err := c.ProcessMessage(context.Background(), &kafka.Message{Value: bytes})
 	assert.NoError(t, err)
 }
 
@@ -74,7 +74,7 @@ func TestWorkoutEventConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T) {
 	}
 	bytes, _ := json.Marshal(envelope)
 
-	err := c.ProcessMessage(context.Background(), kafka.Message{Value: bytes})
+	err := c.ProcessMessage(context.Background(), &kafka.Message{Value: bytes})
 	assert.NoError(t, err)
 }
 
@@ -90,7 +90,7 @@ func TestNutritionEventConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	}
 	bytes, _ := json.Marshal(envelope)
 
-	err := c.ProcessMessage(context.Background(), kafka.Message{Value: bytes})
+	err := c.ProcessMessage(context.Background(), &kafka.Message{Value: bytes})
 	assert.NoError(t, err)
 }
 
@@ -106,7 +106,7 @@ func TestUserRegisteredConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	}
 	bytes, _ := json.Marshal(envelope)
 
-	err := c.ProcessMessage(context.Background(), kafka.Message{Value: bytes})
+	err := c.ProcessMessage(context.Background(), &kafka.Message{Value: bytes})
 	assert.NoError(t, err)
 }
 
@@ -139,7 +139,7 @@ func TestUserIdentityUpdatedConsumer_ProcessMessage_IdempotentDuplicate(t *testi
 	}
 	bytes, _ := json.Marshal(envelope)
 
-	err := c.ProcessMessage(context.Background(), kafka.Message{Value: bytes})
+	err := c.ProcessMessage(context.Background(), &kafka.Message{Value: bytes})
 	assert.NoError(t, err)
 }
 
@@ -155,7 +155,7 @@ func TestPersonalRecordConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	}
 	bytes, _ := json.Marshal(envelope)
 
-	err := c.ProcessMessage(context.Background(), kafka.Message{Value: bytes})
+	err := c.ProcessMessage(context.Background(), &kafka.Message{Value: bytes})
 	assert.NoError(t, err)
 }
 

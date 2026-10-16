@@ -42,8 +42,26 @@ func (r *GormUserXpRepository) FindByID(ctx context.Context, userID string) (*ag
 }
 
 // FindByIDForUpdate retrieves a UserXp aggregate with pessimistic row lock (SELECT ... FOR UPDATE).
+// To prevent lost updates on brand-new users, it seeds a baseline row (ON CONFLICT DO NOTHING)
+// ensuring SELECT ... FOR UPDATE always locks a physical row.
 func (r *GormUserXpRepository) FindByIDForUpdate(ctx context.Context, userID string) (*aggregate.UserXp, error) {
 	db := GetDB(ctx, r.db)
+
+	now := time.Now().UTC()
+	initModel := &UserXpModel{
+		UserID:    userID,
+		Xp:        0,
+		Level:     1,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}},
+		DoNothing: true,
+	}).Create(initModel).Error; err != nil {
+		return nil, fmt.Errorf("seed user_xp baseline for update: %w", err)
+	}
+
 	var model UserXpModel
 	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ?", userID).

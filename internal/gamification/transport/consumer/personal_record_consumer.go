@@ -62,27 +62,44 @@ func (c *PersonalRecordConsumer) Start(ctx context.Context) {
 			log.Println("[Gamification] Stopping PersonalRecord Kafka Consumer due to context cancellation.")
 			return
 		default:
-			msg, err := c.reader.ReadMessage(ctx)
+			msg, err := c.reader.FetchMessage(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("[Gamification] PersonalRecord consumer read error: %v", err)
+				log.Printf("[Gamification] PersonalRecord consumer fetch error: %v", err)
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 
-			if err := c.ProcessMessage(ctx, msg); err != nil {
-				log.Printf("[Gamification] PersonalRecord consumer process error: %v", err)
+			var processErr error
+			for attempt := 0; attempt < 3; attempt++ {
+				processErr = c.ProcessMessage(ctx, &msg)
+				if processErr == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
+			}
+
+			if processErr != nil {
+				log.Printf("[Gamification] PersonalRecord consumer process error after retries: %v", processErr)
+			}
+
+			if err := c.reader.CommitMessages(ctx, msg); err != nil {
+				log.Printf("[Gamification] PersonalRecord consumer commit error: %v", err)
 			}
 		}
 	}
 }
 
 // ProcessMessage handles the PR achieved event.
-//
-//nolint:gocritic // kafka.Message parameter matches signature
-func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
+func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {
+	if msg == nil {
+		return fmt.Errorf("kafka message is nil")
+	}
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {
 		return fmt.Errorf("unmarshal cloudevent envelope: %w", err)
@@ -155,6 +172,10 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 			outboxEvents[i] = ev
 		}
 
+		if err := c.outboxWriter.WriteEvents(txCtx, "user_xp", userID, outboxEvents); err != nil {
+			return err
+		}
+
 		// Check and unlock PR_BREAKER badge
 		has, hasBadgeErr := c.badgeRepo.HasBadge(txCtx, userID, "PR_BREAKER")
 		if hasBadgeErr == nil && !has {
@@ -175,12 +196,14 @@ func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 			)
 			if bErr == nil {
 				if saveBadgeErr := c.badgeRepo.Save(txCtx, badge); saveBadgeErr == nil {
-					outboxEvents = append(outboxEvents, badgeEv)
+					if err := c.outboxWriter.WriteEvents(txCtx, "user_badges", userID, []any{badgeEv}); err != nil {
+						return err
+					}
 				}
 			}
 		}
 
-		return c.outboxWriter.WriteEvents(txCtx, "user_xp", userID, outboxEvents)
+		return nil
 	})
 
 	if err != nil {

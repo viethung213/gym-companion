@@ -139,7 +139,7 @@ func TestProcessWorkoutXpHandler(t *testing.T) {
 	now := time.Now().UTC()
 
 	// 1. Proof of Workout failure (sets < 3)
-	_, err := handler.Handle(ctx, command.ProcessWorkoutXpCommand{
+	_, err := handler.Handle(ctx, &command.ProcessWorkoutXpCommand{
 		UserID:       "u-1",
 		SessionID:    "s-1",
 		ActivityDate: "2026-10-13",
@@ -151,7 +151,7 @@ func TestProcessWorkoutXpHandler(t *testing.T) {
 	}
 
 	// 2. Successful workout
-	res, err := handler.Handle(ctx, command.ProcessWorkoutXpCommand{
+	res, err := handler.Handle(ctx, &command.ProcessWorkoutXpCommand{
 		UserID:        "u-1",
 		SessionID:     "s-1",
 		ActivityDate:  "2026-10-13",
@@ -178,7 +178,7 @@ func TestProcessWorkoutXpHandler(t *testing.T) {
 
 	// 3. Repeat workout with same session ID (Kafka retry simulation -> Idempotent Early Return)
 	eventsCountBefore := len(writer.events)
-	resRetry, err := handler.Handle(ctx, command.ProcessWorkoutXpCommand{
+	resRetry, err := handler.Handle(ctx, &command.ProcessWorkoutXpCommand{
 		UserID:        "u-1",
 		SessionID:     "s-1",
 		ActivityDate:  "2026-10-13",

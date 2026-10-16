@@ -10,9 +10,8 @@ type BadgeDefinition struct {
 }
 
 // MasterBadgeCatalog is the Single Source of Truth for system achievement badges.
-//
-//nolint:gochecknoglobals // MasterBadgeCatalog is a read-only domain catalog
-var MasterBadgeCatalog = []BadgeDefinition{
+func MasterBadgeCatalog() []BadgeDefinition {
+	return []BadgeDefinition{
 	{
 		Code:        "FIRST_WORKOUT",
 		Name:        "Khởi Đầu Mới",
@@ -98,10 +97,11 @@ var MasterBadgeCatalog = []BadgeDefinition{
 		IconURL:     "/assets/badges/pr_breaker.svg",
 	},
 }
+}
 
 // GetBadgeDefinition returns badge metadata for a given badge code.
 func GetBadgeDefinition(code string) (BadgeDefinition, bool) {
-	for _, b := range MasterBadgeCatalog {
+	for _, b := range MasterBadgeCatalog() {
 		if b.Code == code {
 			return b, true
 		}

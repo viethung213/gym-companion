@@ -14,8 +14,9 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 )
 
-// ActivityIngestionCoordinator orchestrates sequential multi-aggregate ingestion (Architecture #5).
-// It runs 2 separate, short atomic local transactions (user_xp -> user_streak) to eliminate deadlocks.
+// ActivityIngestionCoordinator orchestrates atomic multi-aggregate ingestion (Architecture #5).
+// It executes Step 1 (Streak) -> Step 2 (XP) -> Step 3 (Badges) within a single atomic database transaction.
+// Strict lock acquisition order (user_streak -> user_xp -> user_badges) eliminates deadlocks while guaranteeing 100% ACID consistency.
 type ActivityIngestionCoordinator struct {
 	xpHandler      *command.ProcessWorkoutXpHandler
 	streakHandler  *command.RecordStreakActivityHandler
@@ -44,39 +45,45 @@ func NewActivityIngestionCoordinator(
 	}
 }
 
-// IngestWorkoutSession coordinates Step 1 (Streak), Step 2 (XP with up-to-date multiplier), and Step 3 (Badges) sequentially.
-//
-//nolint:gocritic // Command value object passed by value for immutability
+// IngestWorkoutSession coordinates Step 1 (Streak), Step 2 (XP with up-to-date multiplier), and Step 3 (Badges)
+// atomically inside a single database transaction. If any step fails, all changes are rolled back.
 func (c *ActivityIngestionCoordinator) IngestWorkoutSession(
 	ctx context.Context,
-	cmd command.ProcessWorkoutXpCommand,
+	cmd *command.ProcessWorkoutXpCommand,
 ) error {
-	// --- Step 1: Atomic Streak Evaluation ---
-	// Update streak first so today's session advances the streak count immediately.
-	streakCmd := command.RecordStreakActivityCommand{
-		UserID:       cmd.UserID,
-		ActivityDate: cmd.ActivityDate,
-		ActivityType: "WORKOUT",
-		RecordedAt:   cmd.CompletedAt,
+	if cmd == nil {
+		return fmt.Errorf("process workout xp command is nil")
 	}
-	streakResult, err := c.streakHandler.Handle(ctx, streakCmd)
-	if err != nil {
-		return fmt.Errorf("coordinator step 1 (streak): %w", err)
-	}
+	return c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		// --- Step 1: Streak Evaluation ---
+		// Update streak first so today's session advances the streak count immediately.
+		streakCmd := command.RecordStreakActivityCommand{
+			UserID:       cmd.UserID,
+			ActivityDate: cmd.ActivityDate,
+			ActivityType: "WORKOUT",
+			RecordedAt:   cmd.CompletedAt,
+		}
+		streakResult, err := c.streakHandler.Handle(txCtx, streakCmd)
+		if err != nil {
+			return fmt.Errorf("coordinator step 1 (streak): %w", err)
+		}
 
-	// Use updated streak to calculate XP with the proper multiplier
-	cmd.CurrentStreak = streakResult.CurrentStreak
+		// Use updated streak to calculate XP with the proper multiplier
+		cmd.CurrentStreak = streakResult.CurrentStreak
 
-	// --- Step 2: Atomic XP Progression ---
-	xpResult, err := c.xpHandler.Handle(ctx, cmd)
-	if err != nil {
-		return fmt.Errorf("coordinator step 2 (xp): %w", err)
-	}
+		// --- Step 2: XP Progression ---
+		xpResult, err := c.xpHandler.Handle(txCtx, cmd)
+		if err != nil {
+			return fmt.Errorf("coordinator step 2 (xp): %w", err)
+		}
 
-	// --- Step 3: Badges Evaluation ---
-	c.evaluateBadges(ctx, cmd.UserID, xpResult, streakResult, cmd.HasNewPR, cmd.CompletedAt)
+		// --- Step 3: Badges Evaluation ---
+		if err := c.evaluateBadges(txCtx, cmd.UserID, xpResult, streakResult, cmd.HasNewPR, cmd.CompletedAt); err != nil {
+			return fmt.Errorf("coordinator step 3 (badges): %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (c *ActivityIngestionCoordinator) evaluateBadges(
@@ -86,9 +93,9 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 	streakRes *command.RecordStreakActivityResult,
 	hasNewPR bool,
 	now time.Time,
-) {
+) error {
 	if c.badgeRepo == nil || c.txManager == nil || c.outboxWriter == nil {
-		return
+		return nil
 	}
 
 	var candidateCodes []string
@@ -166,10 +173,10 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 	}
 
 	if len(badgesToUnlock) == 0 {
-		return
+		return nil
 	}
 
-	// Execute all unlocked badges in a single, atomic local transaction
+	// Execute all unlocked badges in the active transaction
 	err := c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := c.badgeRepo.SaveBatch(txCtx, badgesToUnlock); err != nil {
 			return fmt.Errorf("batch save badges: %w", err)
@@ -180,6 +187,8 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 		return nil
 	})
 	if err != nil {
-		log.Printf("[Gamification] Failed to batch unlock badges for user %s: %v", userID, err)
+		return fmt.Errorf("save and write badge events: %w", err)
 	}
+
+	return nil
 }

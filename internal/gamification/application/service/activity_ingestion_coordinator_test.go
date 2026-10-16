@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -90,7 +91,8 @@ func (m *mockUserStreakRepo) GetHistory(ctx context.Context, userID string, limi
 }
 
 type mockBadgeRepo struct {
-	badges map[string][]*aggregate.UserBadge
+	badges       map[string][]*aggregate.UserBadge
+	saveBatchErr error
 }
 
 func (m *mockBadgeRepo) FindByUserID(ctx context.Context, userID string) ([]*aggregate.UserBadge, error) {
@@ -112,6 +114,9 @@ func (m *mockBadgeRepo) Save(ctx context.Context, badge *aggregate.UserBadge) er
 }
 
 func (m *mockBadgeRepo) SaveBatch(ctx context.Context, badges []*aggregate.UserBadge) error {
+	if m.saveBatchErr != nil {
+		return m.saveBatchErr
+	}
 	for _, b := range badges {
 		m.badges[b.UserID()] = append(m.badges[b.UserID()], b)
 	}
@@ -141,7 +146,7 @@ func TestActivityIngestionCoordinator_IngestWorkoutSession(t *testing.T) {
 	now := time.Now().UTC()
 
 	// Ingest session
-	err := coordinator.IngestWorkoutSession(ctx, command.ProcessWorkoutXpCommand{
+	err := coordinator.IngestWorkoutSession(ctx, &command.ProcessWorkoutXpCommand{
 		UserID:        "user-hero",
 		SessionID:     "sess-1",
 		ActivityDate:  "2026-10-13",
@@ -208,7 +213,7 @@ func TestActivityIngestionCoordinator_StreakAdvancesMultiplierImmediately(t *tes
 	// Base: 50 + Volume: 20 (3000kg) = 70 raw XP.
 	// With streak advancing to 7 first: multiplier is 1.20 -> 70 * 1.20 = 84 XP!
 	// (If streak was evaluated after: multiplier would only be 1.10 -> 70 * 1.10 = 77 XP).
-	err := coordinator.IngestWorkoutSession(ctx, command.ProcessWorkoutXpCommand{
+	err := coordinator.IngestWorkoutSession(ctx, &command.ProcessWorkoutXpCommand{
 		UserID:        "user-streak-6",
 		SessionID:     "sess-streak-7",
 		ActivityDate:  "2026-10-13",
@@ -233,5 +238,40 @@ func TestActivityIngestionCoordinator_StreakAdvancesMultiplierImmediately(t *tes
 	// 70 * 1.20 = 84 XP
 	if userXp.Xp() != 84 {
 		t.Errorf("expected 84 XP with 1.2x streak multiplier applied immediately, got %d", userXp.Xp())
+	}
+}
+
+func TestActivityIngestionCoordinator_BadgeErrorFailsAtomicTransaction(t *testing.T) {
+	xpRepo := &mockUserXpRepo{users: make(map[string]*aggregate.UserXp)}
+	streakRepo := &mockUserStreakRepo{streaks: make(map[string]*aggregate.UserStreak)}
+	badgeRepo := &mockBadgeRepo{
+		badges:       make(map[string][]*aggregate.UserBadge),
+		saveBatchErr: fmt.Errorf("simulated db connection timeout"),
+	}
+	tx := &mockTxManager{}
+	writer := &mockOutboxWriter{}
+
+	coordinator := appService.NewActivityIngestionCoordinator(
+		command.NewProcessWorkoutXpHandler(xpRepo, tx, writer),
+		command.NewRecordStreakActivityHandler(streakRepo, tx, writer),
+		streakRepo,
+		badgeRepo,
+		tx,
+		writer,
+	)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	err := coordinator.IngestWorkoutSession(ctx, &command.ProcessWorkoutXpCommand{
+		UserID:        "user-fail",
+		SessionID:     "sess-fail",
+		ActivityDate:  "2026-10-13",
+		TotalSets:     10,
+		TotalVolumeKg: 3000,
+		CompletedAt:   now,
+	})
+	if err == nil {
+		t.Fatalf("expected IngestWorkoutSession to fail when evaluateBadges fails, got nil")
 	}
 }

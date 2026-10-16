@@ -42,9 +42,9 @@ func TestUnlockBadge(t *testing.T) {
 		t.Errorf("badge state mismatch: %+v", badge)
 	}
 
-	badgeEv, ok := ev.(event.BadgeUnlocked)
+	badgeEv, ok := ev.(*event.BadgeUnlocked)
 	if !ok {
-		t.Fatalf("emitted event is not BadgeUnlocked: %T", ev)
+		t.Fatalf("emitted event is not *BadgeUnlocked: %T", ev)
 	}
 	if badgeEv.BadgeCode != "STREAK_7_DAYS" || badgeEv.UserID != "user-1" {
 		t.Errorf("event state mismatch: %+v", badgeEv)

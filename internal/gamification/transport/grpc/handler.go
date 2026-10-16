@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-//nolint:revive // GRPCHandler name is consistent across bounded contexts
-type GRPCHandler struct {
+// Handler implements the Gamification gRPC/Connect service.
+type Handler struct {
 	getMyXpHandler              *query.GetMyXpHandler
 	getXpHistoryHandler         *query.GetXpHistoryHandler
 	getStreakHandler            *query.GetStreakHandler
@@ -23,10 +23,32 @@ type GRPCHandler struct {
 	getMyBadgesHandler          *query.GetMyBadgesHandler
 }
 
-// Compile-time interface check.
-var _ gamificationv1serviceconnect.GamificationServiceHandler = (*GRPCHandler)(nil)
+// GRPCHandler is an alias for Handler maintaining cross-module naming conventions.
+type GRPCHandler = Handler
 
-// NewGRPCHandler constructs a new GRPCHandler.
+// Compile-time interface check.
+var _ gamificationv1serviceconnect.GamificationServiceHandler = (*Handler)(nil)
+
+// NewHandler constructs a new Handler.
+func NewHandler(
+	getMyXpHandler *query.GetMyXpHandler,
+	getXpHistoryHandler *query.GetXpHistoryHandler,
+	getStreakHandler *query.GetStreakHandler,
+	getStreakHistoryHandler *query.GetStreakHistoryHandler,
+	getGlobalLeaderboardHandler *query.GetGlobalLeaderboardHandler,
+	getMyBadgesHandler *query.GetMyBadgesHandler,
+) *Handler {
+	return &Handler{
+		getMyXpHandler:              getMyXpHandler,
+		getXpHistoryHandler:         getXpHistoryHandler,
+		getStreakHandler:            getStreakHandler,
+		getStreakHistoryHandler:     getStreakHistoryHandler,
+		getGlobalLeaderboardHandler: getGlobalLeaderboardHandler,
+		getMyBadgesHandler:          getMyBadgesHandler,
+	}
+}
+
+// NewGRPCHandler constructs a new GRPCHandler for compatibility.
 func NewGRPCHandler(
 	getMyXpHandler *query.GetMyXpHandler,
 	getXpHistoryHandler *query.GetXpHistoryHandler,
@@ -35,14 +57,14 @@ func NewGRPCHandler(
 	getGlobalLeaderboardHandler *query.GetGlobalLeaderboardHandler,
 	getMyBadgesHandler *query.GetMyBadgesHandler,
 ) *GRPCHandler {
-	return &GRPCHandler{
-		getMyXpHandler:              getMyXpHandler,
-		getXpHistoryHandler:         getXpHistoryHandler,
-		getStreakHandler:            getStreakHandler,
-		getStreakHistoryHandler:     getStreakHistoryHandler,
-		getGlobalLeaderboardHandler: getGlobalLeaderboardHandler,
-		getMyBadgesHandler:          getMyBadgesHandler,
-	}
+	return NewHandler(
+		getMyXpHandler,
+		getXpHistoryHandler,
+		getStreakHandler,
+		getStreakHistoryHandler,
+		getGlobalLeaderboardHandler,
+		getMyBadgesHandler,
+	)
 }
 
 // GetMyXp fetches current XP, level, and next-level progress.
@@ -269,8 +291,9 @@ func (h *GRPCHandler) GetMyBadges(
 		unlockedMap[b.BadgeCode()] = b.UnlockedAt()
 	}
 
-	badges := make([]*gamificationv1message.BadgeItem, 0, len(vo.MasterBadgeCatalog))
-	for _, def := range vo.MasterBadgeCatalog {
+	catalog := vo.MasterBadgeCatalog()
+	badges := make([]*gamificationv1message.BadgeItem, 0, len(catalog))
+	for _, def := range catalog {
 		unlockedAtTime, isUnlocked := unlockedMap[def.Code]
 		var pbUnlockedAt *timestamppb.Timestamp
 		if isUnlocked {
@@ -291,7 +314,7 @@ func (h *GRPCHandler) GetMyBadges(
 	return connect.NewResponse(&gamificationv1message.GetMyBadgesResponse{
 		Badges:         badges,
 		TotalUnlocked:  int32(len(res.Badges)),
-		TotalAvailable: int32(len(vo.MasterBadgeCatalog)),
+		TotalAvailable: int32(len(catalog)),
 	}), nil
 }
 

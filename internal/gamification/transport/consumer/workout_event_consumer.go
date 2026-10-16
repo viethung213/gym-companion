@@ -48,27 +48,44 @@ func (c *WorkoutEventConsumer) Start(ctx context.Context) {
 			log.Println("[Gamification] Stopping WorkoutEvent Kafka Consumer due to context cancellation.")
 			return
 		default:
-			msg, err := c.reader.ReadMessage(ctx)
+			msg, err := c.reader.FetchMessage(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("[Gamification] WorkoutEvent consumer read error: %v", err)
+				log.Printf("[Gamification] WorkoutEvent consumer fetch error: %v", err)
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 
-			if err := c.ProcessMessage(ctx, msg); err != nil {
-				log.Printf("[Gamification] WorkoutEvent consumer process error: %v", err)
+			var processErr error
+			for attempt := 0; attempt < 3; attempt++ {
+				processErr = c.ProcessMessage(ctx, &msg)
+				if processErr == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
+			}
+
+			if processErr != nil {
+				log.Printf("[Gamification] WorkoutEvent consumer process error after retries: %v", processErr)
+			}
+
+			if err := c.reader.CommitMessages(ctx, msg); err != nil {
+				log.Printf("[Gamification] WorkoutEvent consumer commit error: %v", err)
 			}
 		}
 	}
 }
 
 // ProcessMessage deserializes event, verifies idempotency, and delegates to coordinator.
-//
-//nolint:gocritic // kafka.Message parameter matches signature
-func (c *WorkoutEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Message) error {
+func (c *WorkoutEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {
+	if msg == nil {
+		return fmt.Errorf("kafka message is nil")
+	}
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {
 		return fmt.Errorf("unmarshal cloudevent envelope: %w", err)
@@ -98,7 +115,7 @@ func (c *WorkoutEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 	}
 	activityDate := ResolveLocalDate(completedAt)
 
-	cmd := command.ProcessWorkoutXpCommand{
+	cmd := &command.ProcessWorkoutXpCommand{
 		UserID:           protoEv.GetUserId(),
 		SessionID:        protoEv.GetSessionId(),
 		ActivityDate:     activityDate,

@@ -55,7 +55,7 @@ func UnlockBadge(
 		metadata:   metaCopy,
 	}
 
-	ev := event.BadgeUnlocked{
+	ev := &event.BadgeUnlocked{
 		UserID:     userID,
 		BadgeCode:  badgeCode,
 		BadgeName:  badgeName,

@@ -26,6 +26,10 @@ func (m *SQLTransactionManager) WithTransaction(
 	ctx context.Context,
 	fn func(txCtx context.Context) error,
 ) error {
+	if existingTx := GetTx(ctx); existingTx != nil {
+		return fn(ctx)
+	}
+
 	tx := m.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return fmt.Errorf("begin transaction: %w", tx.Error)

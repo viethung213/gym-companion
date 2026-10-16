@@ -24,8 +24,7 @@ func (XpEarned) EventName() string {
 	return "contracts.supporting.gamification.v1.xpEarned"
 }
 
-//nolint:gocritic // value receiver keeps domain event immutable
-func (e XpEarned) PartitionKey() string {
+func (e *XpEarned) PartitionKey() string {
 	return e.UserID
 }
 
@@ -42,8 +41,7 @@ func (UserLeveledUp) EventName() string {
 	return "contracts.supporting.gamification.v1.userLeveledUp"
 }
 
-//nolint:gocritic // value receiver keeps domain event immutable
-func (e UserLeveledUp) PartitionKey() string {
+func (e *UserLeveledUp) PartitionKey() string {
 	return e.UserID
 }
 
@@ -61,8 +59,7 @@ func (StreakAdvanced) EventName() string {
 	return "contracts.supporting.gamification.v1.streakAdvanced"
 }
 
-//nolint:gocritic // value receiver keeps domain event immutable
-func (e StreakAdvanced) PartitionKey() string {
+func (e *StreakAdvanced) PartitionKey() string {
 	return e.UserID
 }
 
@@ -78,7 +75,7 @@ func (StreakReset) EventName() string {
 	return "contracts.supporting.gamification.v1.streakReset"
 }
 
-func (e StreakReset) PartitionKey() string {
+func (e *StreakReset) PartitionKey() string {
 	return e.UserID
 }
 
@@ -93,8 +90,7 @@ func (StreakMilestoneReached) EventName() string {
 	return "contracts.supporting.gamification.v1.streakMilestoneReached"
 }
 
-//nolint:gocritic // value receiver keeps domain event immutable
-func (e StreakMilestoneReached) PartitionKey() string {
+func (e *StreakMilestoneReached) PartitionKey() string {
 	return e.UserID
 }
 
@@ -111,7 +107,6 @@ func (BadgeUnlocked) EventName() string {
 	return "contracts.supporting.gamification.v1.badgeUnlocked"
 }
 
-//nolint:gocritic // value receiver keeps domain event immutable
-func (e BadgeUnlocked) PartitionKey() string {
+func (e *BadgeUnlocked) PartitionKey() string {
 	return e.UserID
 }

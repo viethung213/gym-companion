@@ -51,9 +51,9 @@ func TestUserXp_EarnXp(t *testing.T) {
 	if got := len(events); got != 1 {
 		t.Fatalf("EarnXp(30) emitted %d events, want 1", got)
 	}
-	earnedEv, ok := events[0].(event.XpEarned)
+	earnedEv, ok := events[0].(*event.XpEarned)
 	if !ok {
-		t.Fatalf("event[0] is not event.XpEarned")
+		t.Fatalf("event[0] is not *event.XpEarned")
 	}
 	if earnedEv.DeltaXp != 30 || earnedEv.NewXp != 30 || earnedEv.NewLevel != 1 {
 		t.Errorf("XpEarned unexpected values: %+v", earnedEv)
@@ -70,9 +70,9 @@ func TestUserXp_EarnXp(t *testing.T) {
 	if got := len(events); got != 2 {
 		t.Fatalf("EarnXp(30) second time emitted %d events, want 2 (XpEarned + UserLeveledUp)", got)
 	}
-	leveledUpEv, ok := events[1].(event.UserLeveledUp)
+	leveledUpEv, ok := events[1].(*event.UserLeveledUp)
 	if !ok {
-		t.Fatalf("event[1] is not event.UserLeveledUp")
+		t.Fatalf("event[1] is not *event.UserLeveledUp")
 	}
 	if leveledUpEv.OldLevel != 1 || leveledUpEv.NewLevel != 2 || leveledUpEv.TotalXp != 60 {
 		t.Errorf("UserLeveledUp unexpected values: %+v", leveledUpEv)
