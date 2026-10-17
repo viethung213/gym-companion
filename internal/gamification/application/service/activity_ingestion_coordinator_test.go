@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -246,7 +246,7 @@ func TestActivityIngestionCoordinator_BadgeErrorFailsAtomicTransaction(t *testin
 	streakRepo := &mockUserStreakRepo{streaks: make(map[string]*aggregate.UserStreak)}
 	badgeRepo := &mockBadgeRepo{
 		badges:       make(map[string][]*aggregate.UserBadge),
-		saveBatchErr: fmt.Errorf("simulated db connection timeout"),
+		saveBatchErr: errors.New("simulated db connection timeout"),
 	}
 	tx := &mockTxManager{}
 	writer := &mockOutboxWriter{}
