@@ -141,16 +141,16 @@ Module gamification đang trong giai đoạn hoàn thiện tài liệu đặc t�
 ## Error and boundary scenarios
 - **Duplicate Workout Event**: Sự kiện trùng lặp `session_id` bị chặn bởi unique index trên `xp_history`, transaction rollback an toàn và commit offset bỏ qua.
 - **Max Level 100 Reached**: Khi người dùng đạt Level 100, `xp` vẫn tiếp tục tăng bình thường, nhưng `level` giữ nguyên ở 100 và `xp_to_next_level = 0`.
-- **Anomalous Session**: Buổi tập thời lượng $< 15$ phút hoặc hiệp $< 3$ bị coi là chưa đạt chuẩn, không cộng XP.
+- **Anomalous Session**: Gamification áp dụng mô hình Boundary Trust (ADR-0004), tin tưởng tuyệt đối vào sự kiện `WorkoutSessionCompleted` do `workout_execution` phát ra. Nếu buổi tập hoàn thành có số hiệp $< 3$, buổi tập bị coi là chưa đạt chuẩn và không cộng XP. Thời lượng buổi tập do `workout_execution` làm chủ quản kiểm soát tại nguồn.
 
 ---
 
 ## Acceptance criteria
-- [ ] GIVEN user mới (0 XP, Level 1) WHEN ghi nhận dinh dưỡng đạt chuẩn lần 1 trong ngày nhận $+30$ XP THEN `xp = 30`, `level = 1`, `xp_to_next_level = 20`.
-- [ ] GIVEN user 30 XP (Level 1, mốc Level 2 là 50 XP) WHEN hoàn thành buổi tập nhận 70 XP THEN `xp = 100`, `level = 2`, `xp_to_next_level = 100` và phát sự kiện `UserLeveledUp`.
-- [ ] GIVEN CloudEvent `WorkoutSessionCompleted` gửi lại lần 2 THEN hệ thống bỏ qua và không cộng lặp XP.
-- [ ] GIVEN user ghi nhận dinh dưỡng đạt chuẩn lần 1 trong ngày THEN nhận đúng $+30$ XP; gửi lần 2 trong cùng ngày THEN bỏ qua an toàn.
-- [ ] GIVEN hai sự kiện cộng XP gửi đến đồng thời trên 1 user THEN thực thi tuần tự qua khóa dòng, 0% Lost Update.
+- [x] GIVEN user mới (0 XP, Level 1) WHEN ghi nhận dinh dưỡng đạt chuẩn lần 1 trong ngày nhận $+30$ XP THEN `xp = 30`, `level = 1`, `xp_to_next_level = 20`.
+- [x] GIVEN user 30 XP (Level 1, mốc Level 2 là 50 XP) WHEN hoàn thành buổi tập nhận 70 XP THEN `xp = 100`, `level = 2`, `xp_to_next_level = 100` và phát sự kiện `UserLeveledUp`.
+- [x] GIVEN CloudEvent `WorkoutSessionCompleted` gửi lại lần 2 THEN hệ thống bỏ qua và không cộng lặp XP.
+- [x] GIVEN user ghi nhận dinh dưỡng đạt chuẩn lần 1 trong ngày THEN nhận đúng $+30$ XP; gửi lần 2 trong cùng ngày THEN bỏ qua an toàn.
+- [x] GIVEN hai sự kiện cộng XP gửi đến đồng thời trên 1 user THEN thực thi tuần tự qua khóa dòng, 0% Lost Update.
 
 ---
 

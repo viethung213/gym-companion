@@ -305,8 +305,7 @@ message StreakReset {
 message StreakMilestoneReached {
   string user_id = 1;
   int32 milestone_days = 2; // 7, 14, 30, 50, 100, 365
-  int64 bonus_coins = 3;
-  google.protobuf.Timestamp occurred_at = 4;
+  google.protobuf.Timestamp reached_at = 3;
 }
 ```
 

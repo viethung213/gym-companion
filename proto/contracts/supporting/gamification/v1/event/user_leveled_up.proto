@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event;gamificationv1event";
+
+message UserLeveledUp {
+  string user_id = 1;
+  int32 old_level = 2;
+  int32 new_level = 3;
+  int64 total_xp = 4;
+  google.protobuf.Timestamp leveled_up_at = 5;
+}
