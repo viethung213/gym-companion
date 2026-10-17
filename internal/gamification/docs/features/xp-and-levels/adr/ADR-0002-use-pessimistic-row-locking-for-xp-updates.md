@@ -58,6 +58,7 @@ Chosen: **Option 4 (Pessimistic Row Locking - `SELECT ... FOR UPDATE`)**.
 ### Consequences
 - **Positive:**
   - **Triệt tiêu 100% rủi ro Lost Update**: Đảm bảo tính nhất quán tuyệt đối của điểm số `xp` và tính toán `level`.
+  - **Bảo vệ người dùng mới (Zero Lost Updates on Brand New Users)**: Trong trường hợp người dùng mới chưa có bản ghi (hoặc sự kiện hoàn thành buổi tập đến trước sự kiện đăng ký), `FindByIDForUpdate` tự động chèn bản ghi cơ sở bằng `INSERT INTO gamification.user_xp (...) VALUES (...) ON CONFLICT (user_id) DO NOTHING` trước khi thực thi `SELECT ... FOR UPDATE`. Điều này đảm bảo PostgreSQL luôn tìm thấy một hàng vật lý để áp dụng khóa hàng, loại bỏ 100% rủi ro race condition ghi đè giữa hai sự kiện đầu tiên.
   - **Đơn giản hóa mã nguồn tối đa**: Loại bỏ hoàn toàn Retry Interceptor, Exponential Backoff và cấu hình Dead Letter Queue phức tạp cho nghiệp vụ tính điểm.
   - **Hiệu năng xuất sắc**: Khóa chỉ áp dụng trên **đúng 1 dòng** của chính `user_id` đang xử lý (Row-level lock qua Primary Key index), không khóa bảng, không ảnh hưởng đến bất kỳ người dùng nào khác. Thời gian giữ khóa cực ngắn ($< 3\text{ ms}$) trong transaction cục bộ.
 - **Negative / Trade-offs:**
