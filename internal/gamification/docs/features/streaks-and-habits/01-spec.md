@@ -6,7 +6,7 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 * **Tôn vinh sự kỷ luật thực chất**: Đếm số ngày liên tục gymer có nỗ lực thực chất (tập luyện hoặc dinh dưỡng).
 * **Thói quen kép (Workout & Nutrition)**: Ngày tập nâng tạ giữ chuỗi, ngày nghỉ cơ bắp thì log ăn uống đạt chuẩn Calo/Protein để giữ chuỗi, giúp gymer duy trì kỷ luật thể hình mà không lo tập quá tải (Overtraining).
 * **Đánh giá lười không cron (Lazy Evaluation $O(1)$)**: Hệ thống tự động xác định tính liên tục của chuỗi ngay khi có sự kiện hoạt động mới, không cần chạy cron job quét database nửa đêm.
-* **Thưởng mốc bền bỉ**: Tự động phát sự kiện thưởng FitCoins khi chạm các mốc chuỗi lớn (7, 14, 30, 50, 100, 365 ngày).
+* **Vinh danh mốc bền bỉ**: Tự động phát sự kiện `StreakMilestoneReached` khi chạm các mốc chuỗi lớn (7, 14, 30, 50, 100, 365 ngày).
 
 ---
 
@@ -41,7 +41,7 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 * Theo dõi chuỗi ngày liên tiếp theo múi giờ địa phương của người dùng (`user_timezone`).
 * Ghi nhận hoàn thành ngày từ 2 nguồn: Buổi tập hợp lệ HOẶC Dinh dưỡng đạt chuẩn Calo/Protein.
 * Đánh giá lười (Lazy Evaluation $O(1)$): Tự động phát hiện ngày kế tiếp để tăng chuỗi (`current_streak += 1`) hoặc đứt chuỗi để reset về 1 khi có khoảng trống ngày nghỉ.
-* Thưởng FitCoins khi đạt các cột mốc chuỗi: 7, 14, 30, 50, 100, 365 ngày liên tục.
+* Ghi nhận cột mốc chuỗi: 7, 14, 30, 50, 100, 365 ngày liên tục qua domain event `StreakMilestoneReached`.
 * Lưu vết lịch sử hoạt động chuỗi (`streak_history`) để hiển thị bản đồ nhiệt (Activity Heatmap) 365 ngày.
 
 ### Ngoài Phạm Vi (Non-Goals)
@@ -56,7 +56,7 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 * **FR-ST-01 [Ghi Nhận Chuỗi Qua Buổi Tập]**: Khi nhận sự kiện `WorkoutSessionCompleted` hợp lệ ($\ge 15$ phút, $\ge 3$ set, không anomalous), hệ thống kiểm tra và cập nhật chuỗi cho ngày địa phương tương ứng.
 * **FR-ST-02 [Ghi Nhận Chuỗi Qua Dinh Dưỡng]**: Khi nhận sự kiện `DailyNutritionGoalAchieved` đạt chuẩn Calo (±10%) và Protein (≥90%), hệ thống kiểm tra và cập nhật chuỗi nếu ngày hôm đó chưa có hoạt động tập luyện.
 * **FR-ST-03 [Xử Lý Đứt Chuỗi Tự Động (Lazy Reset)]**: Khi phát hiện người dùng lỡ ít nhất 1 ngày không hoạt động ($\Delta = \text{DateDiff}($ `local_date`, `last_active_date` $) \ge 2$), chuỗi hiện tại bị đứt. Khi người dùng phát sinh hoạt động tiếp theo, `current_streak` bắt đầu lại từ `1` và phát sự kiện `StreakReset`.
-* **FR-ST-04 [Thưởng Cột Mốc Bền Bỉ]**: Khi `current_streak` chạm các mốc 7, 14, 30, 50, 100, 365 ngày, tự động phát sự kiện thưởng FitCoins tương ứng sang Outbox.
+* **FR-ST-04 [Vinh Danh Cột Mốc Bền Bỉ]**: Khi `current_streak` chạm các mốc 7, 14, 30, 50, 100, 365 ngày, tự động phát sự kiện `StreakMilestoneReached` sang Outbox.
 
 ---
 
@@ -71,14 +71,10 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 * **BR-ST-03 [Bảo Toàn Kỷ Lục Dài Nhất]**:
   $$\text{LongestStreak} = \max(\text{LongestStreak}, \text{CurrentStreak})$$
   * Khi chuỗi bị reset về 1, `longest_streak` giữ nguyên giá trị cao nhất trọn đời của người dùng.
-* **BR-ST-04 [Mức Thưởng Cột Mốc FitCoins]**:
-  * Mốc 7 ngày: $+15$ FitCoins.
-  * Mốc 14 ngày: $+30$ FitCoins.
-  * Mốc 30 ngày: $+50$ FitCoins.
-  * Mốc 50 ngày: $+75$ FitCoins.
-  * Mốc 100 ngày: $+150$ FitCoins.
-  * Mốc 365 ngày: $+500$ FitCoins.
-  * Mỗi mốc chỉ được nhận thưởng 1 lần cho mỗi chuỗi liên tục (không nhận lặp lại trong cùng 1 chuỗi).
+* **BR-ST-04 [Cột Mốc Chuỗi Kỷ Luật (Streak Milestones)]**:
+  * Các mốc ghi nhận: 7, 14, 30, 50, 100, 365 ngày.
+  * Khi chạm mốc, phát sự kiện `StreakMilestoneReached` (chứa `user_id`, `milestone_days`) để các hệ thống thông báo (`notification`) hoặc mạng xã hội (`social`) xử lý vinh danh.
+  * Mỗi mốc chỉ được kích hoạt 1 lần cho mỗi chuỗi liên tục (không phát lặp lại trong cùng 1 chuỗi).
 
 ---
 
@@ -127,8 +123,8 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 
 ## 8. Tiêu Chí Nghiệm Thu (Acceptance Criteria)
 
-* **AC-ST-01 [Tăng Chuỗi Tuần Tự]**: Tập luyện 3 ngày liên tiếp (`D`, `D+1`, `D+2`) $\rightarrow$ Chuỗi tăng chính xác $1 \rightarrow 2 \rightarrow 3$.
-* **AC-ST-02 [Nhiều Hoạt Động Cùng Ngày]**: Trong cùng ngày `D`, tập 2 buổi và log 3 bữa ăn $\rightarrow$ Chuỗi chỉ tăng đúng 1 lần cho ngày `D`.
-* **AC-ST-03 [Mở App Không Tăng Chuỗi]**: User mở app 10 lần trong ngày nhưng không tập và không log ăn $\rightarrow$ `current_streak` giữ nguyên, không được tăng.
-* **AC-ST-04 [Đứt Chuỗi Khi Nghỉ Ngày]**: Tập ngày `D`, nghỉ ngày `D+1`, quay lại tập ngày `D+2` ($\Delta = 2$) $\rightarrow$ Chuỗi bị reset về 1, `longest_streak` vẫn bảo toàn kỷ lục cũ.
-* **AC-ST-05 [Nghỉ Nhiều Ngày Liên Tiếp]**: Tập ngày `D`, nghỉ cả tuần, quay lại tập ngày `D+8` ($\Delta = 8$) $\rightarrow$ Chuỗi bắt đầu lại từ 1, phát sự kiện `StreakReset`.
+- [x] **AC-ST-01 [Tăng Chuỗi Tuần Tự]**: Tập luyện 3 ngày liên tiếp (`D`, `D+1`, `D+2`) $\rightarrow$ Chuỗi tăng chính xác $1 \rightarrow 2 \rightarrow 3$.
+- [x] **AC-ST-02 [Nhiều Hoạt Động Cùng Ngày]**: Trong cùng ngày `D`, tập 2 buổi và log 3 bữa ăn $\rightarrow$ Chuỗi chỉ tăng đúng 1 lần cho ngày `D`.
+- [x] **AC-ST-03 [Mở App Không Tăng Chuỗi]**: User mở app 10 lần trong ngày nhưng không tập và không log ăn $\rightarrow$ `current_streak` giữ nguyên, không được tăng.
+- [x] **AC-ST-04 [Đứt Chuỗi Khi Nghỉ Ngày]**: Tập ngày `D`, nghỉ ngày `D+1`, quay lại tập ngày `D+2` ($\Delta = 2$) $\rightarrow$ Chuỗi bị reset về 1, `longest_streak` vẫn bảo toàn kỷ lục cũ.
+- [x] **AC-ST-05 [Nghỉ Nhiều Ngày Liên Tiếp]**: Tập ngày `D`, nghỉ cả tuần, quay lại tập ngày `D+8` ($\Delta = 8$) $\rightarrow$ Chuỗi bắt đầu lại từ 1, phát sự kiện `StreakReset`.
