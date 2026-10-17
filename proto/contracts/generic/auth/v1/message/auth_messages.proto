@@ -71,11 +71,17 @@ message LoginWithOAuthResponse {
   string user_id = 3;
 }
 
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  GENDER_MALE = 1;
+  GENDER_FEMALE = 2;
+}
+
 message RegisterRequest {
   string identifier = 1;    // Email address or Domestic/E.164 Phone
   string password = 2;
   string full_name = 3;
-  string gender = 4;        // "MALE", "FEMALE", "OTHER"
+  Gender gender = 4;
   string date_of_birth = 5; // Format: "YYYY-MM-DD"
 }
 
