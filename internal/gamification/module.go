@@ -35,7 +35,7 @@ type ModuleDeps struct {
 }
 
 // Initialize wires domain, application, infrastructure, and transport components.
-func Initialize(ctx context.Context, deps ModuleDeps) (*gamificationGRPC.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC.Handler, shutdown func(), err error) {
 	gormLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
@@ -199,7 +199,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*gamificationGRPC.GRPCHan
 		}()
 	}
 
-	shutdown := func() {
+	shutdown = func() {
 		log.Println("[Gamification] Shutting down background workers...")
 		cancelWorkers()
 		wg.Wait()
@@ -210,7 +210,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*gamificationGRPC.GRPCHan
 }
 
 // RegisterConnectHandler mounts the Gamification service on the provided HTTP multiplexer.
-func RegisterConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.GRPCHandler, opts ...connect.HandlerOption) {
+func RegisterConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.Handler, opts ...connect.HandlerOption) {
 	path, connectHandler := gamificationv1serviceconnect.NewGamificationServiceHandler(handler, opts...)
 	mux.Handle(path, connectHandler)
 }

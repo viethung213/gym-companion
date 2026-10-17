@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -82,7 +83,7 @@ func (c *UserRegisteredConsumer) Start(ctx context.Context) {
 // ProcessMessage handles deserialization, idempotency, and command dispatch.
 func (c *UserRegisteredConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {
 	if msg == nil {
-		return fmt.Errorf("kafka message is nil")
+		return errors.New("kafka message is nil")
 	}
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {

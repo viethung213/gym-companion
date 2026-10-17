@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -52,7 +53,7 @@ func (c *ActivityIngestionCoordinator) IngestWorkoutSession(
 	cmd *command.ProcessWorkoutXpCommand,
 ) error {
 	if cmd == nil {
-		return fmt.Errorf("process workout xp command is nil")
+		return errors.New("process workout xp command is nil")
 	}
 	return c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		// --- Step 1: Streak Evaluation ---

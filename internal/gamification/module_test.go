@@ -11,7 +11,7 @@ import (
 
 func TestRegisterConnectHandler(t *testing.T) {
 	mux := http.NewServeMux()
-	handler := &gamificationGRPC.GRPCHandler{}
+	handler := &gamificationGRPC.Handler{}
 
 	// Should not panic when registering handler on multiplexer
 	assert.NotPanics(t, func() {

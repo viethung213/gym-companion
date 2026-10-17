@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -61,7 +62,7 @@ func (h *ProcessWorkoutXpHandler) Handle(
 	cmd *ProcessWorkoutXpCommand,
 ) (*ProcessWorkoutXpResult, error) {
 	if cmd == nil {
-		return nil, fmt.Errorf("process workout xp command is nil")
+		return nil, errors.New("process workout xp command is nil")
 	}
 	deltaXp, err := service.CalculateWorkoutXp(service.WorkoutXpInput{
 		TotalSets:        cmd.TotalSets,

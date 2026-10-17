@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -90,7 +91,7 @@ func (c *NutritionEventConsumer) Start(ctx context.Context) {
 // ProcessMessage processes inbound nutrition goal achievement events.
 func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {
 	if msg == nil {
-		return fmt.Errorf("kafka message is nil")
+		return errors.New("kafka message is nil")
 	}
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {

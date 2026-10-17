@@ -23,9 +23,6 @@ type Handler struct {
 	getMyBadgesHandler          *query.GetMyBadgesHandler
 }
 
-// GRPCHandler is an alias for Handler maintaining cross-module naming conventions.
-type GRPCHandler = Handler
-
 // Compile-time interface check.
 var _ gamificationv1serviceconnect.GamificationServiceHandler = (*Handler)(nil)
 
@@ -56,7 +53,7 @@ func NewGRPCHandler(
 	getStreakHistoryHandler *query.GetStreakHistoryHandler,
 	getGlobalLeaderboardHandler *query.GetGlobalLeaderboardHandler,
 	getMyBadgesHandler *query.GetMyBadgesHandler,
-) *GRPCHandler {
+) *Handler {
 	return NewHandler(
 		getMyXpHandler,
 		getXpHistoryHandler,
@@ -68,7 +65,7 @@ func NewGRPCHandler(
 }
 
 // GetMyXp fetches current XP, level, and next-level progress.
-func (h *GRPCHandler) GetMyXp(
+func (h *Handler) GetMyXp(
 	ctx context.Context,
 	_ *connect.Request[gamificationv1message.GetMyXpRequest],
 ) (*connect.Response[gamificationv1message.GetMyXpResponse], error) {
@@ -95,7 +92,7 @@ func (h *GRPCHandler) GetMyXp(
 }
 
 // GetXpHistory returns paginated XP history entries.
-func (h *GRPCHandler) GetXpHistory(
+func (h *Handler) GetXpHistory(
 	ctx context.Context,
 	req *connect.Request[gamificationv1message.GetXpHistoryRequest],
 ) (*connect.Response[gamificationv1message.GetXpHistoryResponse], error) {
@@ -145,7 +142,7 @@ func (h *GRPCHandler) GetXpHistory(
 }
 
 // GetStreak returns the user's active streak status.
-func (h *GRPCHandler) GetStreak(
+func (h *Handler) GetStreak(
 	ctx context.Context,
 	_ *connect.Request[gamificationv1message.GetStreakRequest],
 ) (*connect.Response[gamificationv1message.GetStreakResponse], error) {
@@ -176,7 +173,7 @@ func (h *GRPCHandler) GetStreak(
 }
 
 // GetStreakHistory returns the recorded activity dates (heatmap).
-func (h *GRPCHandler) GetStreakHistory(
+func (h *Handler) GetStreakHistory(
 	ctx context.Context,
 	req *connect.Request[gamificationv1message.GetStreakHistoryRequest],
 ) (*connect.Response[gamificationv1message.GetStreakHistoryResponse], error) {
@@ -216,7 +213,7 @@ func (h *GRPCHandler) GetStreakHistory(
 }
 
 // GetGlobalLeaderboard returns Top 50 and caller's standing.
-func (h *GRPCHandler) GetGlobalLeaderboard(
+func (h *Handler) GetGlobalLeaderboard(
 	ctx context.Context,
 	req *connect.Request[gamificationv1message.GetGlobalLeaderboardRequest],
 ) (*connect.Response[gamificationv1message.GetGlobalLeaderboardResponse], error) {
@@ -272,7 +269,7 @@ func (h *GRPCHandler) GetGlobalLeaderboard(
 }
 
 // GetMyBadges returns all badges from the system catalog along with caller unlock status.
-func (h *GRPCHandler) GetMyBadges(
+func (h *Handler) GetMyBadges(
 	ctx context.Context,
 	_ *connect.Request[gamificationv1message.GetMyBadgesRequest],
 ) (*connect.Response[gamificationv1message.GetMyBadgesResponse], error) {
