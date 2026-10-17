@@ -123,8 +123,8 @@ Tính năng **Chuỗi Ngày Kỷ Luật (Streaks Engine)** là động cơ duy t
 
 ## 8. Tiêu Chí Nghiệm Thu (Acceptance Criteria)
 
-* **AC-ST-01 [Tăng Chuỗi Tuần Tự]**: Tập luyện 3 ngày liên tiếp (`D`, `D+1`, `D+2`) $\rightarrow$ Chuỗi tăng chính xác $1 \rightarrow 2 \rightarrow 3$.
-* **AC-ST-02 [Nhiều Hoạt Động Cùng Ngày]**: Trong cùng ngày `D`, tập 2 buổi và log 3 bữa ăn $\rightarrow$ Chuỗi chỉ tăng đúng 1 lần cho ngày `D`.
-* **AC-ST-03 [Mở App Không Tăng Chuỗi]**: User mở app 10 lần trong ngày nhưng không tập và không log ăn $\rightarrow$ `current_streak` giữ nguyên, không được tăng.
-* **AC-ST-04 [Đứt Chuỗi Khi Nghỉ Ngày]**: Tập ngày `D`, nghỉ ngày `D+1`, quay lại tập ngày `D+2` ($\Delta = 2$) $\rightarrow$ Chuỗi bị reset về 1, `longest_streak` vẫn bảo toàn kỷ lục cũ.
-* **AC-ST-05 [Nghỉ Nhiều Ngày Liên Tiếp]**: Tập ngày `D`, nghỉ cả tuần, quay lại tập ngày `D+8` ($\Delta = 8$) $\rightarrow$ Chuỗi bắt đầu lại từ 1, phát sự kiện `StreakReset`.
+- [x] **AC-ST-01 [Tăng Chuỗi Tuần Tự]**: Tập luyện 3 ngày liên tiếp (`D`, `D+1`, `D+2`) $\rightarrow$ Chuỗi tăng chính xác $1 \rightarrow 2 \rightarrow 3$.
+- [x] **AC-ST-02 [Nhiều Hoạt Động Cùng Ngày]**: Trong cùng ngày `D`, tập 2 buổi và log 3 bữa ăn $\rightarrow$ Chuỗi chỉ tăng đúng 1 lần cho ngày `D`.
+- [x] **AC-ST-03 [Mở App Không Tăng Chuỗi]**: User mở app 10 lần trong ngày nhưng không tập và không log ăn $\rightarrow$ `current_streak` giữ nguyên, không được tăng.
+- [x] **AC-ST-04 [Đứt Chuỗi Khi Nghỉ Ngày]**: Tập ngày `D`, nghỉ ngày `D+1`, quay lại tập ngày `D+2` ($\Delta = 2$) $\rightarrow$ Chuỗi bị reset về 1, `longest_streak` vẫn bảo toàn kỷ lục cũ.
+- [x] **AC-ST-05 [Nghỉ Nhiều Ngày Liên Tiếp]**: Tập ngày `D`, nghỉ cả tuần, quay lại tập ngày `D+8` ($\Delta = 8$) $\rightarrow$ Chuỗi bắt đầu lại từ 1, phát sự kiện `StreakReset`.

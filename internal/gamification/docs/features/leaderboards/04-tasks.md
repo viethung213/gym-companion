@@ -9,7 +9,18 @@
 
 ## Danh Sách Task Chi Tiết
 
-### [T-LB-01] [RED/GREEN] Hợp đồng API Protobuf & Sinh Mã Stubs
+- [x] **[T-LB-01] [RED/GREEN]**: Hợp đồng API Protobuf & Sinh Mã Stubs
+- [x] **[T-LB-02] [MIGRATION]**: Migration Bảng User Snapshots & Chỉ Mục B-Tree
+- [x] **[T-LB-03] [PORTS]**: Định Nghĩa Các Cổng Giao Tiếp (Output Ports)
+- [x] **[T-LB-04] [RED]**: Viết Unit Tests Cho GetGlobalLeaderboardHandler
+- [x] **[T-LB-05] [GREEN]**: Triển Khai Logic GetGlobalLeaderboardHandler
+- [x] **[T-LB-06] [INFRA]**: Hiện Thực Hóa Postgres Repositories & Consumer Đồng Bộ Snapshot
+- [x] **[T-LB-07] [TEST]**: Integration Test Với PostgreSQL Thật
+- [x] **[T-LB-08] [TRANSPORT]**: Triển Khai ConnectRPC Server Handler & Module Wiring
+
+---
+
+### [x] [T-LB-01] [RED/GREEN] Hợp đồng API Protobuf & Sinh Mã Stubs
 - **Mục tiêu**: Bổ sung API ConnectRPC `GetGlobalLeaderboard` vào hợp đồng `GamificationService` theo chuẩn Contract-First (SSOT).
 - **Tệp nguồn**:
   - `proto/contracts/supporting/gamification/v1/service/gamification_service.proto`
@@ -24,7 +35,7 @@
 
 ---
 
-### [T-LB-02] [MIGRATION] Migration Bảng User Snapshots & Chỉ Mục B-Tree
+### [x] [T-LB-02] [MIGRATION] Migration Bảng User Snapshots & Chỉ Mục B-Tree
 - **Mục tiêu**: Bổ sung bảng `gamification.user_snapshots` và xác thực chỉ mục `idx_user_xp_leaderboard (xp DESC, updated_at ASC)`.
 - **Tệp nguồn**:
   - `internal/shared/database/migrations/13-create-gamification-tables.sql`
@@ -36,7 +47,7 @@
 
 ---
 
-### [T-LB-03] [PORTS] Định Nghĩa Các Cổng Giao Tiếp (Output Ports)
+### [x] [T-LB-03] [PORTS] Định Nghĩa Các Cổng Giao Tiếp (Output Ports)
 - **Mục tiêu**: Khai báo các interface tại tầng Application theo nguyên tắc Đảo ngược phụ thuộc (DIP).
 - **Tệp nguồn**:
   - `internal/gamification/application/port/leaderboard_repository.go`
@@ -49,7 +60,7 @@
 
 ---
 
-### [T-LB-04] [RED] Viết Unit Tests Cho GetGlobalLeaderboardHandler
+### [x] [T-LB-04] [RED] Viết Unit Tests Cho GetGlobalLeaderboardHandler
 - **Mục tiêu**: Thiết lập các kịch bản kiểm thử tự động thất bại trước khi viết code logic (Chu trình RED).
 - **Tệp nguồn**:
   - `internal/gamification/application/query/get_global_leaderboard_test.go`
@@ -64,7 +75,7 @@
 
 ---
 
-### [T-LB-05] [GREEN] Triển Khai Logic GetGlobalLeaderboardHandler
+### [x] [T-LB-05] [GREEN] Triển Khai Logic GetGlobalLeaderboardHandler
 - **Mục tiêu**: Viết code tối giản vừa đủ để toàn bộ test trong `T-LB-04` chuyển sang màu xanh (Chu trình GREEN).
 - **Tệp nguồn**:
   - `internal/gamification/application/query/get_global_leaderboard.go`
@@ -78,7 +89,7 @@
 
 ---
 
-### [T-LB-06] [INFRA] Hiện Thực Hóa Postgres Repositories & Consumer Đồng Bộ Snapshot
+### [x] [T-LB-06] [INFRA] Hiện Thực Hóa Postgres Repositories & Consumer Đồng Bộ Snapshot
 - **Mục tiêu**: Triển khai tầng lưu trữ PostgreSQL và Consumer đồng bộ tên/avatar qua Kafka.
 - **Tệp nguồn**:
   - `internal/gamification/infrastructure/persistence/leaderboard_repository.go`
@@ -93,7 +104,7 @@
 
 ---
 
-### [T-LB-07] [TEST] Integration Test Với PostgreSQL Thật
+### [x] [T-LB-07] [TEST] Integration Test Với PostgreSQL Thật
 - **Mục tiêu**: Xác thực hiệu năng truy vấn `user_xp LEFT JOIN user_snapshots` trên database thực tế.
 - **Tệp nguồn**:
   - `internal/gamification/infrastructure/persistence/leaderboard_repository_test.go`
@@ -107,7 +118,7 @@
 
 ---
 
-### [T-LB-08] [TRANSPORT] Triển Khai ConnectRPC Server Handler & Module Wiring
+### [x] [T-LB-08] [TRANSPORT] Triển Khai ConnectRPC Server Handler & Module Wiring
 - **Mục tiêu**: Đấu nối API endpoint ra ngoài tầng giao diện và hoàn tất dependency injection.
 - **Tệp nguồn**:
   - `internal/gamification/transport/grpc/gamification_handler.go`
