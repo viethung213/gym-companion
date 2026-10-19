@@ -123,3 +123,53 @@ message GetMyBadgesResponse {
   int32 total_available = 3;
 }
 
+// =====================================================================
+// Admin Messages
+// =====================================================================
+
+// AdminUserGamificationSummary chứa thông tin tổng hợp để hiển thị trên Admin User Detail.
+message AdminUserGamificationSummary {
+  string user_id = 1;
+  int64 xp = 2;
+  int32 level = 3;
+  int32 current_streak = 4;
+  int32 longest_streak = 5;
+  int64 coin_balance = 6;
+  string last_active_date = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message GetAdminUserGamificationRequest {
+  string user_id = 1;
+}
+
+message GetAdminUserGamificationResponse {
+  AdminUserGamificationSummary summary = 1;
+}
+
+// AdminAdjustCoinsRequest dùng để điều chỉnh số dư FitCoins trực tiếp.
+message AdminAdjustCoinsRequest {
+  string user_id = 1;
+  int64 amount = 2; // Số dương để cộng thêm, số âm để trừ bớt
+  string reason = 3; // Lý do điều chỉnh hoặc mã ticket hỗ trợ
+}
+
+message AdminAdjustCoinsResponse {
+  string user_id = 1;
+  int64 balance_after = 2;
+}
+
+// AdminRepairStreakRequest dùng để sửa trực tiếp chuỗi ngày tập luyện cho người dùng.
+message AdminRepairStreakRequest {
+  string user_id = 1;
+  int32 target_streak = 2; // Số ngày chuỗi mới
+  string reason = 3; // Lý do can thiệp/khôi phục chuỗi
+  string effective_date = 4; // Ngày tính chuỗi (YYYY-MM-DD), để trống sẽ mặc định là ngày hôm qua
+}
+
+message AdminRepairStreakResponse {
+  string user_id = 1;
+  int32 current_streak = 2;
+  int32 longest_streak = 3;
+}
+

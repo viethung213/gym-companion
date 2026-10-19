@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service;gamificationv1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/supporting/gamification/v1/message/gamification_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Gamification Admin API"
+    version: "1.0"
+    description: "API quản trị Gamification dành cho Admin (tra cứu trạng thái người dùng, bồi thường FitCoins có kiểm toán, khôi phục chuỗi ngày)."
+  }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
+};
+
+service GamificationAdminService {
+  // Lấy thông tin tổng hợp trạng thái Gamification của người dùng cho Admin Dashboard
+  rpc GetAdminUserGamification (contracts.supporting.gamification.v1.message.GetAdminUserGamificationRequest) returns (contracts.supporting.gamification.v1.message.GetAdminUserGamificationResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/admin/users/{user_id}/gamification"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Gamification / Admin"
+    };
+  }
+
+  // Điều chỉnh (bồi thường hoặc thu hồi) FitCoins của người dùng qua sổ cái kiểm toán bất biến
+  rpc AdminAdjustCoins (contracts.supporting.gamification.v1.message.AdminAdjustCoinsRequest) returns (contracts.supporting.gamification.v1.message.AdminAdjustCoinsResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/users/{user_id}/gamification/adjust-coins"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Gamification / Admin"
+    };
+  }
+
+  // Khôi phục hoặc điều chỉnh chuỗi ngày kỷ luật (Streak) của người dùng khi có khiếu nại/sự cố
+  rpc AdminRepairStreak (contracts.supporting.gamification.v1.message.AdminRepairStreakRequest) returns (contracts.supporting.gamification.v1.message.AdminRepairStreakResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/users/{user_id}/gamification/repair-streak"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Gamification / Admin"
+    };
+  }
+}
