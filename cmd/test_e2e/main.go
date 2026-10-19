@@ -355,8 +355,8 @@ func run() error {
 
 	// Query DB trực tiếp kiểm tra bảng user_wallet và coin_ledger
 	var walletBal int64
-	if err := db.QueryRow("SELECT balance FROM gamification.user_wallet WHERE user_id = $1", testUserID).Scan(&walletBal); err != nil {
-		return fmt.Errorf("query user_wallet: %w", err)
+	if scanErr := db.QueryRow("SELECT balance FROM gamification.user_wallet WHERE user_id = $1", testUserID).Scan(&walletBal); scanErr != nil {
+		return fmt.Errorf("query user_wallet: %w", scanErr)
 	}
 	if walletBal != 150 {
 		return fmt.Errorf("DB user_wallet balance mismatch: got %d, want 150", walletBal)
@@ -364,9 +364,11 @@ func run() error {
 
 	var ledgerAmount, ledgerBalAfter int64
 	var ledgerReason, ledgerAdminID string
-	if err := db.QueryRow("SELECT amount, balance_after, reason, COALESCE(admin_id::text, '') FROM gamification.coin_ledger WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1", testUserID).
-		Scan(&ledgerAmount, &ledgerBalAfter, &ledgerReason, &ledgerAdminID); err != nil {
-		return fmt.Errorf("query coin_ledger: %w", err)
+	queryLedger := "SELECT amount, balance_after, reason, COALESCE(admin_id::text, '') " +
+		"FROM gamification.coin_ledger WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1"
+	if scanErr := db.QueryRow(queryLedger, testUserID).
+		Scan(&ledgerAmount, &ledgerBalAfter, &ledgerReason, &ledgerAdminID); scanErr != nil {
+		return fmt.Errorf("query coin_ledger: %w", scanErr)
 	}
 	fmt.Printf("🔍 [DB Check Wallet & Ledger 1] Wallet Balance: %d | Ledger Amount: %+d | Bal After: %d | Reason: %s | Admin: %s\n",
 		walletBal, ledgerAmount, ledgerBalAfter, ledgerReason, ledgerAdminID)
@@ -408,9 +410,11 @@ func run() error {
 
 	var currentStreakDB, longestStreakDB int
 	var lastActiveDateDB string
-	if err := db.QueryRow("SELECT current_streak, longest_streak, TO_CHAR(last_active_date, 'YYYY-MM-DD') FROM gamification.user_streak WHERE user_id = $1", testUserID).
-		Scan(&currentStreakDB, &longestStreakDB, &lastActiveDateDB); err != nil {
-		return fmt.Errorf("query user_streak: %w", err)
+	queryStreak := "SELECT current_streak, longest_streak, TO_CHAR(last_active_date, 'YYYY-MM-DD') " +
+		"FROM gamification.user_streak WHERE user_id = $1"
+	if scanErr := db.QueryRow(queryStreak, testUserID).
+		Scan(&currentStreakDB, &longestStreakDB, &lastActiveDateDB); scanErr != nil {
+		return fmt.Errorf("query user_streak: %w", scanErr)
 	}
 	fmt.Printf("🔍 [DB Check User Streak] Current: %d | Longest: %d | Last Active Date: %s\n",
 		currentStreakDB, longestStreakDB, lastActiveDateDB)
@@ -419,7 +423,9 @@ func run() error {
 	}
 
 	var streakHistoryRepairCount int
-	_ = db.QueryRow("SELECT COUNT(*) FROM gamification.streak_history WHERE user_id = $1 AND activity_type = 'ADMIN_REPAIR'", testUserID).Scan(&streakHistoryRepairCount)
+	historyQuery := "SELECT COUNT(*) FROM gamification.streak_history " +
+		"WHERE user_id = $1 AND activity_type = 'ADMIN_REPAIR'"
+	_ = db.QueryRow(historyQuery, testUserID).Scan(&streakHistoryRepairCount)
 	if streakHistoryRepairCount == 0 {
 		return errors.New("expected ADMIN_REPAIR in streak_history, found none")
 	}
@@ -457,7 +463,13 @@ func run() error {
 	finalAdminGet, _ := adminHandler.GetAdminUserGamification(adminCtx, adminGetReq)
 	finalSummary := finalAdminGet.Msg.GetSummary()
 	fmt.Printf("👤 [Admin Tổng hợp cuối] User %s: Level %d | XP %d | Streak %d | Balance %d FitCoins | Last Active: %s\n",
-		finalSummary.GetUserId(), finalSummary.GetLevel(), finalSummary.GetXp(), finalSummary.GetCurrentStreak(), finalSummary.GetCoinBalance(), finalSummary.GetLastActiveDate())
+		finalSummary.GetUserId(),
+		finalSummary.GetLevel(),
+		finalSummary.GetXp(),
+		finalSummary.GetCurrentStreak(),
+		finalSummary.GetCoinBalance(),
+		finalSummary.GetLastActiveDate(),
+	)
 
 	log.Println("\n🎉🎉🎉 === TẤT CẢ CÁC BƯỚC KIỂM THỬ E2E GAMIFICATION ĐÃ HOÀN TOÀN THÀNH CÔNG! ===")
 	return nil
