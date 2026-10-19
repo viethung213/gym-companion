@@ -214,7 +214,7 @@ func run() error {
 		log.Println("Warning: gamification database pool not found, falling back to auth pool.")
 		gamificationDB = db
 	}
-	gamificationGRPCHandler, shutdownGamification, err := gamification.Initialize(ctx, gamification.ModuleDeps{
+	gamificationGRPCHandler, gamificationAdminHandler, shutdownGamification, err := gamification.Initialize(ctx, gamification.ModuleDeps{
 		DB:            gamificationDB,
 		KafkaRegistry: kafkaRegistry,
 	})
@@ -243,6 +243,7 @@ func run() error {
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
 	social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors)
 	gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors)
+	gamification.RegisterAdminConnectHandler(mux, gamificationAdminHandler, connectInterceptors)
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 

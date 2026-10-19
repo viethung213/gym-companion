@@ -12,6 +12,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
@@ -23,9 +27,6 @@ import (
 	gamificationGRPC "github.com/viethung213/gym-companion/internal/gamification/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // ModuleDeps contains external dependencies required to boot the Gamification module.
@@ -35,7 +36,12 @@ type ModuleDeps struct {
 }
 
 // Initialize wires domain, application, infrastructure, and transport components.
-func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC.Handler, shutdown func(), err error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (
+	handler *gamificationGRPC.Handler,
+	adminHandler *gamificationGRPC.AdminHandler,
+	shutdown func(),
+	err error,
+) {
 	gormLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
@@ -54,7 +60,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("open gorm db for gamification: %w", err)
+		return nil, nil, nil, fmt.Errorf("open gorm db for gamification: %w", err)
 	}
 
 	// 1. Persistence Layer
@@ -63,6 +69,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	outboxLogRepo := persistence.NewGormOutboxLogRepository(gormDB)
 	userXpRepo := persistence.NewGormUserXpRepository(gormDB)
 	userStreakRepo := persistence.NewGormUserStreakRepository(gormDB)
+	userWalletRepo := persistence.NewGormUserWalletRepository(gormDB)
 	leaderboardRepo := persistence.NewGormLeaderboardRepository(gormDB)
 	badgeRepo := persistence.NewGormBadgeRepository(gormDB)
 
@@ -74,6 +81,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	recordStreakHandler := command.NewRecordStreakActivityHandler(userStreakRepo, txManager, outboxWriter)
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(leaderboardRepo)
 	initUserGamificationHandler := command.NewInitUserGamificationHandler(userXpRepo, userStreakRepo, leaderboardRepo, txManager)
+
+	adminAdjustCoinsHandler := command.NewAdminAdjustCoinsHandler(userWalletRepo, txManager)
+	adminRepairStreakHandler := command.NewAdminRepairStreakHandler(userStreakRepo, txManager)
 
 	// 3. Coordinator
 	coordinator := appService.NewActivityIngestionCoordinator(
@@ -93,7 +103,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	getGlobalLeaderboardHandler := query.NewGetGlobalLeaderboardHandler(leaderboardRepo)
 	getMyBadgesHandler := query.NewGetMyBadgesHandler(badgeRepo)
 
-	// 5. Transport gRPC Handler
+	getAdminUserGamificationHandler := query.NewGetAdminUserGamificationHandler(userXpRepo, userStreakRepo, userWalletRepo)
+
+	// 5. Transport Handlers (User & Admin)
 	grpcHandler := gamificationGRPC.NewGRPCHandler(
 		getMyXpHandler,
 		getXpHistoryHandler,
@@ -101,6 +113,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		getStreakHistoryHandler,
 		getGlobalLeaderboardHandler,
 		getMyBadgesHandler,
+	)
+
+	adminGRPCHandler := gamificationGRPC.NewAdminHandler(
+		getAdminUserGamificationHandler,
+		adminAdjustCoinsHandler,
+		adminRepairStreakHandler,
 	)
 
 	// 6. Kafka & Workers Setup
@@ -206,11 +224,17 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		log.Println("[Gamification] Background workers shutdown complete.")
 	}
 
-	return grpcHandler, shutdown, nil
+	return grpcHandler, adminGRPCHandler, shutdown, nil
 }
 
 // RegisterConnectHandler mounts the Gamification service on the provided HTTP multiplexer.
 func RegisterConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.Handler, opts ...connect.HandlerOption) {
 	path, connectHandler := gamificationv1serviceconnect.NewGamificationServiceHandler(handler, opts...)
+	mux.Handle(path, connectHandler)
+}
+
+// RegisterAdminConnectHandler mounts the Gamification Admin service on the provided HTTP multiplexer.
+func RegisterAdminConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.AdminHandler, opts ...connect.HandlerOption) {
+	path, connectHandler := gamificationv1serviceconnect.NewGamificationAdminServiceHandler(handler, opts...)
 	mux.Handle(path, connectHandler)
 }
