@@ -204,4 +204,3 @@ func TestIntegration_UserWallet_Persistence(t *testing.T) {
 	err = repos.UserWalletRepo.SaveLedgerEntry(ctx, ledgerEntry)
 	require.NoError(t, err)
 }
-
