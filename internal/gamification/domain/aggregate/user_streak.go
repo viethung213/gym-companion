@@ -13,6 +13,12 @@ var (
 	ErrInvalidDateFormat = errors.New("invalid activity date format, must be YYYY-MM-DD")
 	// ErrFutureActivityDate indicates an activity date in the future.
 	ErrFutureActivityDate = errors.New("activity date cannot be in the future")
+
+	// ErrNegativeStreak indicates an attempt to set a negative streak value.
+	ErrNegativeStreak = errors.New("target streak cannot be negative")
+
+	// ErrStreakExceedsLimit indicates a streak target exceeding safety bounds.
+	ErrStreakExceedsLimit = errors.New("target streak cannot exceed 3650 days")
 )
 
 // UserStreak is the aggregate root managing the user's consecutive active days.
@@ -196,4 +202,42 @@ func isMilestone(days int32) bool {
 	default:
 		return false
 	}
+}
+
+// RepairStreakByAdmin allows an administrator to directly set a user's streak.
+// If effectiveDate is empty and targetStreak > 0, it defaults to yesterday relative to now,
+// ensuring the user's workout today can still advance the streak.
+func (s *UserStreak) RepairStreakByAdmin(targetStreak int32, effectiveDate string, now time.Time) error {
+	if targetStreak < 0 {
+		return ErrNegativeStreak
+	}
+	if targetStreak > 3650 {
+		return ErrStreakExceedsLimit
+	}
+
+	s.currentStreak = targetStreak
+	if s.currentStreak > s.longestStreak {
+		s.longestStreak = s.currentStreak
+	}
+
+	if targetStreak > 0 {
+		if effectiveDate == "" {
+			s.lastActivityDate = now.UTC().AddDate(0, 0, -1).Format("2006-01-02")
+		} else {
+			actTime, err := time.Parse("2006-01-02", effectiveDate)
+			if err != nil {
+				return ErrInvalidDateFormat
+			}
+			today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+			if actTime.After(today) {
+				return ErrFutureActivityDate
+			}
+			s.lastActivityDate = effectiveDate
+		}
+	} else {
+		s.lastActivityDate = ""
+	}
+
+	s.updatedAt = now
+	return nil
 }

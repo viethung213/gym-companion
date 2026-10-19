@@ -144,3 +144,133 @@ func TestUserStreak_RecordActivity_InvalidDateFormat(t *testing.T) {
 		t.Errorf("RecordActivity('invalid-date') err = %v, want %v", err, aggregate.ErrInvalidDateFormat)
 	}
 }
+
+func TestUserStreak_RepairStreakByAdmin(t *testing.T) {
+	now := time.Now().UTC()
+
+	t.Run("repairs streak and updates longest streak when exceeded", func(t *testing.T) {
+		streak := aggregate.ReconstituteUserStreak("user-1", 5, 10, "2026-10-10", now)
+
+		err := streak.RepairStreakByAdmin(15, "", now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := streak.CurrentStreak(); got != 15 {
+			t.Errorf("current streak = %d, want 15", got)
+		}
+		if got := streak.LongestStreak(); got != 15 {
+			t.Errorf("longest streak = %d, want 15", got)
+		}
+	})
+
+	t.Run("repairs streak without changing longest streak when below", func(t *testing.T) {
+		streak := aggregate.ReconstituteUserStreak("user-1", 2, 20, "2026-10-10", now)
+
+		err := streak.RepairStreakByAdmin(8, "", now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := streak.CurrentStreak(); got != 8 {
+			t.Errorf("current streak = %d, want 8", got)
+		}
+		if got := streak.LongestStreak(); got != 20 {
+			t.Errorf("longest streak = %d, want 20", got)
+		}
+	})
+
+	t.Run("resets streak to 0 and clears last activity date", func(t *testing.T) {
+		streak := aggregate.ReconstituteUserStreak("user-1", 5, 10, "2026-10-10", now)
+
+		err := streak.RepairStreakByAdmin(0, "", now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := streak.CurrentStreak(); got != 0 {
+			t.Errorf("current streak = %d, want 0", got)
+		}
+		if got := streak.LastActivityDate(); got != "" {
+			t.Errorf("last activity date = %q, want empty", got)
+		}
+		if got := streak.LongestStreak(); got != 10 {
+			t.Errorf("longest streak = %d, want 10 (preserved)", got)
+		}
+	})
+
+	t.Run("default effective date sets yesterday allowing today workout to advance streak", func(t *testing.T) {
+		streak, _ := aggregate.NewUserStreak("user-fresh")
+		todayDate := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC)
+
+		// Admin repairs streak at 10:00 today without specifying effective date
+		err := streak.RepairStreakByAdmin(7, "", todayDate)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if streak.LastActivityDate() != "2026-10-14" {
+			t.Fatalf("last activity date = %q, want 2026-10-14 (yesterday)", streak.LastActivityDate())
+		}
+
+		// User works out at 18:00 today (2026-10-15)
+		events, err := streak.RecordActivity("2026-10-15", "WORKOUT", todayDate.Add(8*time.Hour))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if streak.CurrentStreak() != 8 {
+			t.Errorf("current streak = %d, want 8 (continued today)", streak.CurrentStreak())
+		}
+		if streak.LongestStreak() != 8 {
+			t.Errorf("longest streak = %d, want 8", streak.LongestStreak())
+		}
+		if len(events) == 0 {
+			t.Fatal("expected StreakAdvanced event, got none")
+		}
+	})
+
+	t.Run("supports explicit valid effective date", func(t *testing.T) {
+		streak, _ := aggregate.NewUserStreak("user-1")
+		err := streak.RepairStreakByAdmin(10, "2026-10-10", now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if streak.LastActivityDate() != "2026-10-10" {
+			t.Errorf("last activity date = %q, want 2026-10-10", streak.LastActivityDate())
+		}
+	})
+
+	t.Run("rejects future effective date", func(t *testing.T) {
+		streak, _ := aggregate.NewUserStreak("user-1")
+		futureDate := now.AddDate(0, 0, 2).Format("2006-01-02")
+		err := streak.RepairStreakByAdmin(10, futureDate, now)
+		if !errors.Is(err, aggregate.ErrFutureActivityDate) {
+			t.Errorf("err = %v, want %v", err, aggregate.ErrFutureActivityDate)
+		}
+	})
+
+	t.Run("rejects invalid date format", func(t *testing.T) {
+		streak, _ := aggregate.NewUserStreak("user-1")
+		err := streak.RepairStreakByAdmin(10, "invalid-date", now)
+		if !errors.Is(err, aggregate.ErrInvalidDateFormat) {
+			t.Errorf("err = %v, want %v", err, aggregate.ErrInvalidDateFormat)
+		}
+	})
+
+	t.Run("rejects negative target streak", func(t *testing.T) {
+		streak, _ := aggregate.NewUserStreak("user-1")
+		err := streak.RepairStreakByAdmin(-1, "", now)
+		if !errors.Is(err, aggregate.ErrNegativeStreak) {
+			t.Errorf("err = %v, want %v", err, aggregate.ErrNegativeStreak)
+		}
+	})
+
+	t.Run("rejects target streak exceeding 3650 days", func(t *testing.T) {
+		streak, _ := aggregate.NewUserStreak("user-1")
+		err := streak.RepairStreakByAdmin(5000, "", now)
+		if !errors.Is(err, aggregate.ErrStreakExceedsLimit) {
+			t.Errorf("err = %v, want %v", err, aggregate.ErrStreakExceedsLimit)
+		}
+	})
+}
