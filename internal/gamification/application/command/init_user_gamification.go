@@ -44,20 +44,7 @@ func NewInitUserGamificationHandler(
 // Handle sets up initial UserXp, UserStreak, and UserSnapshot records.
 func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGamificationCommand) error {
 	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		existingXp, findXpErr := h.userXpRepo.FindByID(txCtx, cmd.UserID)
-		if findXpErr != nil {
-			return findXpErr
-		}
-		if existingXp == nil {
-			newXp, createXpErr := aggregate.NewUserXp(cmd.UserID)
-			if createXpErr != nil {
-				return createXpErr
-			}
-			if saveXpErr := h.userXpRepo.Save(txCtx, newXp); saveXpErr != nil {
-				return saveXpErr
-			}
-		}
-
+		// Order: user_streak -> user_xp (consistent with ActivityIngestionCoordinator lock acquisition)
 		existingStreak, findStreakErr := h.userStreakRepo.FindByID(txCtx, cmd.UserID)
 		if findStreakErr != nil {
 			return findStreakErr
@@ -69,6 +56,20 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 			}
 			if saveStreakErr := h.userStreakRepo.Save(txCtx, newStreak); saveStreakErr != nil {
 				return saveStreakErr
+			}
+		}
+
+		existingXp, findXpErr := h.userXpRepo.FindByID(txCtx, cmd.UserID)
+		if findXpErr != nil {
+			return findXpErr
+		}
+		if existingXp == nil {
+			newXp, createXpErr := aggregate.NewUserXp(cmd.UserID)
+			if createXpErr != nil {
+				return createXpErr
+			}
+			if saveXpErr := h.userXpRepo.Save(txCtx, newXp); saveXpErr != nil {
+				return saveXpErr
 			}
 		}
 
