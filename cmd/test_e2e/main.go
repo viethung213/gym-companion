@@ -18,6 +18,7 @@ import (
 	workoutv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
 	authv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event"
 	gamificationv1msg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -71,11 +72,17 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Chạy auto migration để chắc chắn các bảng gamification (kể cả wallet, ledger) đều tồn tại
+	if migErr := database.RunAutoMigrations(ctx, db); migErr != nil {
+		return fmt.Errorf("run auto migrations: %w", migErr)
+	}
+	log.Println("✅ Đã kiểm tra và chạy Auto Migrations thành công!")
+
 	// 2. Khởi tạo Kafka Registry & Gamification Module
 	kafkaRegistry := sharedKafka.GetRegistry()
 	defer kafkaRegistry.CloseAll()
 
-	grpcHandler, shutdown, err := gamification.Initialize(ctx, gamification.ModuleDeps{
+	grpcHandler, adminHandler, shutdown, err := gamification.Initialize(ctx, gamification.ModuleDeps{
 		DB:            db,
 		KafkaRegistry: kafkaRegistry,
 	})
@@ -316,6 +323,141 @@ func run() error {
 			fmt.Printf("   👉 Thứ hạng của bạn: #%d (%s) - Level %d - %d XP\n", my.GetRank(), my.GetDisplayName(), my.GetLevel(), my.GetXp())
 		}
 	}
+
+	// 10. KIỂM THỬ PHÂN HỆ QUẢN TRỊ ADMIN (FitCoins Wallet, Coin Ledger, Streak Repair)
+	log.Println("\n--- [BƯỚC 7] KIỂM THỬ ADMIN OPERATIONS (FitCoins, Sổ cái Ledger, Sửa Streak) ---")
+	adminID := "00000000-0000-0000-0000-000000000001"
+	adminCtx := context.WithValue(ctx, middleware.UserIDKey, adminID)
+	adminCtx = context.WithValue(adminCtx, middleware.UserRoleKey, "Admin")
+
+	// 7.1. GetAdminUserGamification ban đầu
+	adminGetReq := connect.NewRequest(&gamificationv1msg.GetAdminUserGamificationRequest{UserId: testUserID})
+	adminGetResp, err := adminHandler.GetAdminUserGamification(adminCtx, adminGetReq)
+	if err != nil {
+		return fmt.Errorf("admin GetAdminUserGamification error: %w", err)
+	}
+	summary := adminGetResp.Msg.GetSummary()
+	fmt.Printf("👤 [Admin Tra cứu] User %s: Level %d | XP %d | Streak %d | Balance %d FitCoins\n",
+		summary.GetUserId(), summary.GetLevel(), summary.GetXp(), summary.GetCurrentStreak(), summary.GetCoinBalance())
+
+	// 7.2. AdminAdjustCoins (+150 FitCoins)
+	adjustReason1 := "Bồi thường sự cố gián đoạn dịch vụ - CS Ticket #101"
+	adjReq1 := connect.NewRequest(&gamificationv1msg.AdminAdjustCoinsRequest{
+		UserId: testUserID,
+		Amount: 150,
+		Reason: adjustReason1,
+	})
+	adjResp1, err := adminHandler.AdminAdjustCoins(adminCtx, adjReq1)
+	if err != nil {
+		return fmt.Errorf("admin adjust coins +150 error: %w", err)
+	}
+	fmt.Printf("💰 [Admin Adjust Coins +150] Balance sau điều chỉnh: %d FitCoins\n", adjResp1.Msg.GetBalanceAfter())
+
+	// Query DB trực tiếp kiểm tra bảng user_wallet và coin_ledger
+	var walletBal int64
+	if err := db.QueryRow("SELECT balance FROM gamification.user_wallet WHERE user_id = $1", testUserID).Scan(&walletBal); err != nil {
+		return fmt.Errorf("query user_wallet: %w", err)
+	}
+	if walletBal != 150 {
+		return fmt.Errorf("DB user_wallet balance mismatch: got %d, want 150", walletBal)
+	}
+
+	var ledgerAmount, ledgerBalAfter int64
+	var ledgerReason, ledgerAdminID string
+	if err := db.QueryRow("SELECT amount, balance_after, reason, COALESCE(admin_id::text, '') FROM gamification.coin_ledger WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1", testUserID).
+		Scan(&ledgerAmount, &ledgerBalAfter, &ledgerReason, &ledgerAdminID); err != nil {
+		return fmt.Errorf("query coin_ledger: %w", err)
+	}
+	fmt.Printf("🔍 [DB Check Wallet & Ledger 1] Wallet Balance: %d | Ledger Amount: %+d | Bal After: %d | Reason: %s | Admin: %s\n",
+		walletBal, ledgerAmount, ledgerBalAfter, ledgerReason, ledgerAdminID)
+	if ledgerAmount != 150 || ledgerBalAfter != 150 || ledgerReason != adjustReason1 || ledgerAdminID != adminID {
+		return errors.New("coin_ledger verification failed for first adjustment")
+	}
+
+	// 7.3. AdminAdjustCoins (-50 FitCoins)
+	adjReq2 := connect.NewRequest(&gamificationv1msg.AdminAdjustCoinsRequest{
+		UserId: testUserID,
+		Amount: -50,
+		Reason: "Thu hồi 50 coins do tính nhầm",
+	})
+	adjResp2, err := adminHandler.AdminAdjustCoins(adminCtx, adjReq2)
+	if err != nil {
+		return fmt.Errorf("admin adjust coins -50 error: %w", err)
+	}
+	fmt.Printf("💰 [Admin Adjust Coins -50] Balance sau điều chỉnh: %d FitCoins\n", adjResp2.Msg.GetBalanceAfter())
+
+	_ = db.QueryRow("SELECT balance FROM gamification.user_wallet WHERE user_id = $1", testUserID).Scan(&walletBal)
+	if walletBal != 100 {
+		return fmt.Errorf("DB user_wallet balance mismatch: got %d, want 100", walletBal)
+	}
+
+	// 7.4. AdminRepairStreak (Khôi phục streak lên 14 ngày, effective_date = hôm qua)
+	yesterdayStr := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	repairReq := connect.NewRequest(&gamificationv1msg.AdminRepairStreakRequest{
+		UserId:        testUserID,
+		TargetStreak:  14,
+		Reason:        "Khôi phục chuỗi 14 ngày theo khiếu nại CS #202",
+		EffectiveDate: yesterdayStr,
+	})
+	repairResp, err := adminHandler.AdminRepairStreak(adminCtx, repairReq)
+	if err != nil {
+		return fmt.Errorf("admin repair streak error: %w", err)
+	}
+	fmt.Printf("🔥 [Admin Repair Streak] Current Streak: %d | Longest Streak: %d (Effective Date: %s)\n",
+		repairResp.Msg.GetCurrentStreak(), repairResp.Msg.GetLongestStreak(), yesterdayStr)
+
+	var currentStreakDB, longestStreakDB int
+	var lastActiveDateDB string
+	if err := db.QueryRow("SELECT current_streak, longest_streak, TO_CHAR(last_active_date, 'YYYY-MM-DD') FROM gamification.user_streak WHERE user_id = $1", testUserID).
+		Scan(&currentStreakDB, &longestStreakDB, &lastActiveDateDB); err != nil {
+		return fmt.Errorf("query user_streak: %w", err)
+	}
+	fmt.Printf("🔍 [DB Check User Streak] Current: %d | Longest: %d | Last Active Date: %s\n",
+		currentStreakDB, longestStreakDB, lastActiveDateDB)
+	if currentStreakDB != 14 || longestStreakDB != 14 || lastActiveDateDB != yesterdayStr {
+		return errors.New("user_streak DB state mismatch after repair")
+	}
+
+	var streakHistoryRepairCount int
+	_ = db.QueryRow("SELECT COUNT(*) FROM gamification.streak_history WHERE user_id = $1 AND activity_type = 'ADMIN_REPAIR'", testUserID).Scan(&streakHistoryRepairCount)
+	if streakHistoryRepairCount == 0 {
+		return errors.New("expected ADMIN_REPAIR in streak_history, found none")
+	}
+	log.Println("✅ [DB Check Streak History] Đã tìm thấy bản ghi ADMIN_REPAIR trong streak_history!")
+
+	// 7.5. KIỂM CHỨNG BUG 1 KHÔNG TÁI DIỄN: User tập luyện hôm nay -> Streak phải tăng lên 15!
+	log.Println("\n--- [KIỂM CHỨNG BUG 1] USER TẬP LUYỆN HÔM NAY SAU KHI ĐƯỢC ADMIN REPAIR ---")
+	sessionID2 := uuid.New().String()
+	workoutProto2 := &workoutv1event.WorkoutSessionCompleted{
+		SessionId:   sessionID2,
+		UserId:      testUserID,
+		TotalSets:   3,
+		TotalVolume: 1500.0,
+		CompletedAt: timestamppb.Now(),
+	}
+	workoutData2, _ := protojson.Marshal(workoutProto2)
+	sendCloudEvent(ctx, workoutWriter, testUserID, "contracts.core.workout_execution.v1.event.WorkoutSessionCompleted", workoutData2)
+	log.Println("📤 Đã bắn WorkoutSessionCompleted mới cho ngày hôm nay...")
+
+	var streakAfterWorkout int
+	for i := 0; i < 20; i++ {
+		time.Sleep(500 * time.Millisecond)
+		_ = db.QueryRow("SELECT current_streak FROM gamification.user_streak WHERE user_id = $1", testUserID).Scan(&streakAfterWorkout)
+		if streakAfterWorkout == 15 {
+			break
+		}
+	}
+	fmt.Printf("🔍 [DB Check Streak After Workout Today] Current Streak: %d (Kỳ vọng: 15)\n", streakAfterWorkout)
+	if streakAfterWorkout != 15 {
+		return fmt.Errorf("streak did not advance after admin repair! got %d, want 15 (Bug 1 still present)", streakAfterWorkout)
+	}
+	log.Println("🎯 [TUYỆT VỜI] Bug 1 đã được khắc phục hoàn toàn: User tập luyện hôm nay đã tăng tiếp Streak lên 15!")
+
+	// 7.6. Tra cứu lại GetAdminUserGamification
+	finalAdminGet, _ := adminHandler.GetAdminUserGamification(adminCtx, adminGetReq)
+	finalSummary := finalAdminGet.Msg.GetSummary()
+	fmt.Printf("👤 [Admin Tổng hợp cuối] User %s: Level %d | XP %d | Streak %d | Balance %d FitCoins | Last Active: %s\n",
+		finalSummary.GetUserId(), finalSummary.GetLevel(), finalSummary.GetXp(), finalSummary.GetCurrentStreak(), finalSummary.GetCoinBalance(), finalSummary.GetLastActiveDate())
 
 	log.Println("\n🎉🎉🎉 === TẤT CẢ CÁC BƯỚC KIỂM THỬ E2E GAMIFICATION ĐÃ HOÀN TOÀN THÀNH CÔNG! ===")
 	return nil
