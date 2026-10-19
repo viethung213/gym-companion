@@ -5,14 +5,13 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	gamificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // AdminHandler implements gamificationv1serviceconnect.GamificationAdminServiceHandler.

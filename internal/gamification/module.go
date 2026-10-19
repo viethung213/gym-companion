@@ -12,10 +12,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
@@ -27,6 +23,9 @@ import (
 	gamificationGRPC "github.com/viethung213/gym-companion/internal/gamification/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // ModuleDeps contains external dependencies required to boot the Gamification module.

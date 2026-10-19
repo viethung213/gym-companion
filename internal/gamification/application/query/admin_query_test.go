@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"

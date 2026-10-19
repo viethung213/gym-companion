@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // GormUserWalletRepository implements repository.UserWalletRepository.

@@ -160,4 +160,3 @@ type CoinLedgerModel struct {
 func (CoinLedgerModel) TableName() string {
 	return "gamification.coin_ledger"
 }
-

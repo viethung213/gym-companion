@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 )
 
@@ -66,4 +65,3 @@ func TestUserWallet_AdjustBalance(t *testing.T) {
 		assert.ErrorIs(t, err, aggregate.ErrCoinAmountOutOfRange)
 	})
 }
-
