@@ -164,3 +164,44 @@ func TestIntegration_BadgeRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, allBadges, 3)
 }
+
+func TestIntegration_UserWallet_Persistence(t *testing.T) {
+	_, repos := testutil.NewTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	uid := "user-wallet-test"
+
+	// 1. FindByIDForUpdate initializes baseline when row does not exist
+	wallet, err := repos.UserWalletRepo.FindByIDForUpdate(ctx, uid)
+	require.NoError(t, err)
+	require.NotNil(t, wallet)
+	assert.Equal(t, uid, wallet.UserID())
+	assert.Equal(t, int64(0), wallet.Balance())
+
+	// 2. Adjust Balance and Save
+	err = wallet.AdjustBalance(250, now)
+	require.NoError(t, err)
+	err = repos.UserWalletRepo.Save(ctx, wallet)
+	require.NoError(t, err)
+
+	// 3. FindByID retrieves updated balance
+	fetched, err := repos.UserWalletRepo.FindByID(ctx, uid)
+	require.NoError(t, err)
+	require.NotNil(t, fetched)
+	assert.Equal(t, int64(250), fetched.Balance())
+
+	// 4. Save and verify Coin Ledger Entry
+	adminID := "admin-master"
+	ledgerEntry := entity.NewCoinLedgerEntry(
+		"ledger-1",
+		uid,
+		&adminID,
+		250,
+		250,
+		"CS Ticket #555",
+		now,
+	)
+	err = repos.UserWalletRepo.SaveLedgerEntry(ctx, ledgerEntry)
+	require.NoError(t, err)
+}
+

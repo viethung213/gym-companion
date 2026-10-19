@@ -91,6 +91,7 @@ type Repositories struct {
 	DB              *gorm.DB
 	UserXpRepo      repository.UserXpRepository
 	UserStreakRepo  repository.UserStreakRepository
+	UserWalletRepo  repository.UserWalletRepository
 	LeaderboardRepo repository.LeaderboardRepository
 	BadgeRepo       repository.BadgeRepository
 	OutboxRepo      port.OutboxRepository
@@ -185,6 +186,21 @@ func NewTestDB(t *testing.T) (*gorm.DB, *Repositories) {
 			error_message TEXT,
 			processed_at DATETIME NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS user_wallet (
+			user_id TEXT PRIMARY KEY,
+			balance INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS coin_ledger (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			admin_id TEXT,
+			amount INTEGER NOT NULL,
+			balance_after INTEGER NOT NULL,
+			reason TEXT NOT NULL,
+			created_at DATETIME NOT NULL
+		);`,
 	}
 
 	for _, ddl := range ddls {
@@ -206,6 +222,7 @@ func NewTestDB(t *testing.T) (*gorm.DB, *Repositories) {
 		DB:              gormDB,
 		UserXpRepo:      persistence.NewGormUserXpRepository(gormDB),
 		UserStreakRepo:  persistence.NewGormUserStreakRepository(gormDB),
+		UserWalletRepo:  persistence.NewGormUserWalletRepository(gormDB),
 		LeaderboardRepo: persistence.NewGormLeaderboardRepository(gormDB),
 		BadgeRepo:       persistence.NewGormBadgeRepository(gormDB),
 		OutboxRepo:      persistence.NewGormOutboxRepository(gormDB),
