@@ -275,7 +275,36 @@ CREATE TABLE IF NOT EXISTS social.outbox_log (
 );
 
 -- ------------------------------------------
--- 10. OUTBOX PUBLISHED INDEXES (For polling optimization)
+-- 10. SCHEMA: solo_match
+-- ------------------------------------------
+CREATE SCHEMA IF NOT EXISTS solo_match;
+
+CREATE TABLE IF NOT EXISTS solo_match.outbox (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS solo_match.outbox_log (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT
+);
+
+-- ------------------------------------------
+-- 11. OUTBOX PUBLISHED INDEXES (For polling optimization)
 -- ------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_auth_outbox_published_created ON auth.outbox (published, created_at);
 CREATE INDEX IF NOT EXISTS idx_profile_outbox_published_created ON profile.outbox (published, created_at);
@@ -286,6 +315,7 @@ CREATE INDEX IF NOT EXISTS idx_notification_outbox_published_created ON notifica
 CREATE INDEX IF NOT EXISTS idx_audio_outbox_published_created ON audio.outbox (published, created_at);
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_published_created ON exercise.outbox (published, created_at);
 CREATE INDEX IF NOT EXISTS idx_social_outbox_published_created ON social.outbox (published, created_at);
+CREATE INDEX IF NOT EXISTS idx_solo_match_outbox_published_created ON solo_match.outbox (published, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_auth_outbox_claim ON auth.outbox (published, status, locked_until, created_at);
 CREATE INDEX IF NOT EXISTS idx_profile_outbox_claim ON profile.outbox (published, status, locked_until, created_at);
@@ -293,9 +323,10 @@ CREATE INDEX IF NOT EXISTS idx_coaching_outbox_claim ON coaching.outbox (publish
 CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_claim ON workout_execution.outbox (published, status, locked_until, created_at);
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_claim ON exercise.outbox (published, status, locked_until, created_at);
 CREATE INDEX IF NOT EXISTS idx_social_outbox_claim ON social.outbox (published, status, locked_until, created_at);
+CREATE INDEX IF NOT EXISTS idx_solo_match_outbox_claim ON solo_match.outbox (published, status, locked_until, created_at);
 
 -- ------------------------------------------
--- 11. OUTBOX LOG IDEMPOTENCY INDEXES
+-- 12. OUTBOX LOG IDEMPOTENCY INDEXES
 -- ------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_auth_outbox_log_event_status ON auth.outbox_log (event_id, status);
 CREATE INDEX IF NOT EXISTS idx_profile_outbox_log_event_status ON profile.outbox_log (event_id, status);
@@ -306,3 +337,4 @@ CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_event_status ON notificat
 CREATE INDEX IF NOT EXISTS idx_audio_outbox_log_event_status ON audio.outbox_log (event_id, status);
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_log_event_status ON exercise.outbox_log (event_id, status);
 CREATE INDEX IF NOT EXISTS idx_social_outbox_log_event_status ON social.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_solo_match_outbox_log_event_status ON solo_match.outbox_log (event_id, status);

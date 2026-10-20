@@ -10,10 +10,8 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"connectrpc.com/connect"
-	"github.com/redis/go-redis/v9"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
@@ -25,8 +23,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"github.com/viethung213/gym-companion/internal/shared/seeder"
 	"github.com/viethung213/gym-companion/internal/social"
+	solomatch "github.com/viethung213/gym-companion/internal/solo_match"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -73,26 +73,14 @@ func run() error {
 	kafkaRegistry := sharedKafka.GetRegistry()
 	defer kafkaRegistry.CloseAll()
 
-	// Initialize Redis Client for real-time services
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
+	// Initialize Redis Registry
+	redisRegistry := sharedRedis.GetRegistry()
+	defer redisRegistry.CloseAll()
+
+	redisClient, rErr := redisRegistry.GetClient()
+	if rErr != nil {
+		log.Printf("Warning: Redis connection failed: %v. Modules requiring Redis may operate in degraded mode.", rErr)
 	}
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
-	})
-	pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	if pingErr := redisClient.Ping(pingCtx).Err(); pingErr != nil {
-		log.Printf("Warning: Redis at %s is unreachable: %v. Live sync will operate in standalone mode.\n", redisAddr, pingErr)
-	} else {
-		log.Println("Initialized Redis Client successfully at", redisAddr)
-	}
-	pingCancel()
-	defer func() {
-		if closeErr := redisClient.Close(); closeErr != nil {
-			log.Printf("Warning: failed to close Redis client: %v\n", closeErr)
-		}
-	}()
 
 	db, err := dbRegistry.GetPool("auth")
 	if err != nil {
@@ -237,6 +225,24 @@ func run() error {
 	}
 	defer shutdownSocial()
 
+	// Initialize Solo Match Module
+	soloMatchDB, err := dbRegistry.GetPool("solo_match")
+	if err != nil {
+		log.Println("Warning: solo_match database pool not found, falling back to auth pool.")
+		soloMatchDB = db
+	} else {
+		log.Println("Initialized isolated Solo Match Database Pool successfully.")
+	}
+	soloMatchGRPCHandler, shutdownSoloMatch, err := solomatch.Initialize(ctx, solomatch.ModuleDeps{
+		DB:            soloMatchDB,
+		RedisClient:   redisClient,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize solo_match module: %w", err)
+	}
+	defer shutdownSoloMatch()
+
 	// 2. Start Unified HTTP Server with ConnectRPC, h2c, and CORS on Port 8080
 	log.Printf("🚀 Starting Unified API Server (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
@@ -256,6 +262,7 @@ func run() error {
 	nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors)
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
 	social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors)
+	solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors)
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 

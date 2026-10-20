@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package contracts.core.solo_match.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/event;solomatchv1event";
+
+message SoloMatchStarted {
+  string match_id = 1;
+  string exercise_id = 2;
+  string exercise_name = 3;
+  string challenge_type = 4;
+  string player1_id = 5;
+  string player2_id = 6;
+  string bot_user_id = 7;
+  google.protobuf.Timestamp started_at = 8;
+}
