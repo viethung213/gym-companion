@@ -46,4 +46,3 @@ func StreamLoggingInterceptor() grpc.StreamServerInterceptor {
 		return err
 	}
 }
-

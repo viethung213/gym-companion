@@ -536,13 +536,13 @@ type mockStreamingHandlerConn struct {
 	respTrailer http.Header
 }
 
-func (m *mockStreamingHandlerConn) Spec() connect.Spec             { return m.spec }
-func (m *mockStreamingHandlerConn) Peer() connect.Peer             { return m.peer }
-func (m *mockStreamingHandlerConn) Receive(any) error              { return nil }
-func (m *mockStreamingHandlerConn) RequestHeader() http.Header     { return m.reqHeader }
-func (m *mockStreamingHandlerConn) ResponseHeader() http.Header    { return m.respHeader }
-func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header   { return m.respTrailer }
-func (m *mockStreamingHandlerConn) Send(any) error                 { return nil }
+func (m *mockStreamingHandlerConn) Spec() connect.Spec           { return m.spec }
+func (m *mockStreamingHandlerConn) Peer() connect.Peer           { return m.peer }
+func (m *mockStreamingHandlerConn) Receive(any) error            { return nil }
+func (m *mockStreamingHandlerConn) RequestHeader() http.Header   { return m.reqHeader }
+func (m *mockStreamingHandlerConn) ResponseHeader() http.Header  { return m.respHeader }
+func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header { return m.respTrailer }
+func (m *mockStreamingHandlerConn) Send(any) error               { return nil }
 
 func TestConnectStreamingAuthInterceptor(t *testing.T) {
 	t.Parallel()
