@@ -27,3 +27,23 @@ func UnaryLoggingInterceptor() grpc.UnaryServerInterceptor {
 		return resp, err
 	}
 }
+
+// StreamLoggingInterceptor logs information about streaming gRPC calls (including bidirectional streams).
+func StreamLoggingInterceptor() grpc.StreamServerInterceptor {
+	return func(
+		srv any,
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		start := time.Now()
+		err := handler(srv, ss)
+		duration := time.Since(start)
+
+		st, _ := status.FromError(err)
+		log.Printf("gRPC Stream | Method: %s | Duration: %v | Code: %s | Message: %s",
+			info.FullMethod, duration, st.Code(), st.Message())
+		return err
+	}
+}
+

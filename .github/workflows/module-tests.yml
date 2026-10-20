@@ -155,7 +155,7 @@ jobs:
       - name: Load Test Image
         run: docker load -i test-image.tar
 
-      - name: Start Test Infrastructure (Postgres & Kafka)
+      - name: Start Test Infrastructure (Postgres, Kafka & Redis)
         run: |
           make test-env-up
           sleep 5

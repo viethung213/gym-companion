@@ -61,12 +61,13 @@ build-test:
 	docker build --target tester -t fitai-app:test .
 
 
-# Khởi chạy toàn bộ môi trường hạ tầng kiểm thử (Postgres + Kafka) dưới Docker
+# Khởi chạy toàn bộ môi trường hạ tầng kiểm thử (Postgres + Kafka + Redis) dưới Docker
 test-env-up:
 	@-docker network create fitai-network 2>/dev/null
 	@-cp -n .env.example .env 2>/dev/null
 	docker compose -f infra/db/postgres/docker-compose.yml up -d
 	docker compose -f infra/kafka/docker-compose.yml up -d
+	docker compose -f infra/redis/docker-compose.yml up -d
 
 # Dừng toàn bộ môi trường hạ tầng kiểm thử và xóa toàn bộ dữ liệu rác (volumes) để tránh đầy bộ nhớ
 test-env-down:
@@ -74,6 +75,8 @@ test-env-down:
 	docker compose -f infra/db/postgres/docker-compose.yml down -v || true
 	@echo "Stopping kafka container..."
 	docker compose -f infra/kafka/docker-compose.yml down -v || true
+	@echo "Stopping redis container..."
+	docker compose -f infra/redis/docker-compose.yml down -v || true
 	@echo "Removing shared network..."
 	docker network rm fitai-network || true
 

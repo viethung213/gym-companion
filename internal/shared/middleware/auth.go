@@ -161,6 +161,52 @@ func UnaryAuthInterceptor(kp KeyProvider) grpc.UnaryServerInterceptor {
 	}
 }
 
+// StreamAuthInterceptor intercepts streaming gRPC requests (including bidirectional streams)
+// to validate JWT tokens and inject actor identity into stream context.
+func StreamAuthInterceptor(kp KeyProvider) grpc.StreamServerInterceptor {
+	keyCache := newRSAKeyCache(kp)
+
+	return func(
+		srv any,
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		required := isAuthRequired(info.FullMethod)
+		ctx := ss.Context()
+
+		tokenStr, err := extractToken(ctx)
+		if err != nil {
+			if errors.Is(err, errMissingMetadata) || errors.Is(err, errMissingAuthHeader) {
+				if required {
+					return status.Errorf(codes.Unauthenticated, "authentication required: %v", err)
+				}
+				return handler(srv, ss)
+			}
+			return status.Errorf(codes.Unauthenticated, "invalid authorization header format: %v", err)
+		}
+
+		userID, role, err := parseAndValidateToken(ctx, tokenStr, keyCache)
+		if err != nil {
+			return status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
+		}
+
+		ctx = context.WithValue(ctx, UserIDKey, userID)
+		ctx = context.WithValue(ctx, UserRoleKey, role)
+
+		return handler(srv, &wrappedServerStream{ServerStream: ss, ctx: ctx})
+	}
+}
+
+type wrappedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedServerStream) Context() context.Context {
+	return w.ctx
+}
+
 func parseAndValidateToken(
 	ctx context.Context,
 	tokenStr string,
