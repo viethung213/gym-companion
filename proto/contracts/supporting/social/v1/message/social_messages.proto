@@ -251,3 +251,20 @@ message SearchUsersResponse {
   int32 total_count = 3;
 }
 
+
+message SearchPostsRequest {
+  // Từ khóa tìm kiếm trong caption
+  string query = 1;
+  // Lọc theo tác giả cụ thể (bỏ trống để tìm kiếm toàn mạng xã hội)
+  optional string user_id = 2;
+  // Lọc theo loại bài: FEED_ITEM_TYPE_UNSPECIFIED (tất cả), FEED_ITEM_TYPE_POST, FEED_ITEM_TYPE_WORKOUT_ACTIVITY
+  FeedItemType item_type = 3;
+  int32 page_size = 4;
+  string cursor = 5;
+}
+
+message SearchPostsResponse {
+  repeated FeedItem items = 1;
+  string next_cursor = 2;
+  int32 total_count = 3;
+}

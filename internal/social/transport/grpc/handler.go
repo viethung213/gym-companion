@@ -10,6 +10,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
 	"github.com/viethung213/gym-companion/internal/social/application/query"
+	"github.com/viethung213/gym-companion/internal/social/domain/derror"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -30,6 +31,7 @@ type GRPCHandler struct {
 	listCommentsHandler       *query.ListCommentsHandler
 	listReactionsHandler      *query.ListReactionsHandler
 	searchUsersHandler        *query.SearchUsersHandler
+	searchPostsHandler        *query.SearchPostsHandler
 }
 
 var _ socialv1serviceconnect.SocialServiceHandler = (*GRPCHandler)(nil)
@@ -50,6 +52,7 @@ func NewGRPCHandler(
 	listCommentsHandler *query.ListCommentsHandler,
 	listReactionsHandler *query.ListReactionsHandler,
 	searchUsersHandler *query.SearchUsersHandler,
+	searchPostsHandler *query.SearchPostsHandler,
 ) *GRPCHandler {
 	return &GRPCHandler{
 		followUserHandler:         followUserHandler,
@@ -67,6 +70,7 @@ func NewGRPCHandler(
 		listCommentsHandler:       listCommentsHandler,
 		listReactionsHandler:      listReactionsHandler,
 		searchUsersHandler:        searchUsersHandler,
+		searchPostsHandler:        searchPostsHandler,
 	}
 }
 
@@ -120,12 +124,11 @@ func (h *GRPCHandler) GetFollowers(
 	ctx context.Context,
 	req *connect.Request[socialv1message.GetFollowersRequest],
 ) (*connect.Response[socialv1message.GetFollowersResponse], error) {
+	targetUserID := req.Msg.GetUserId()
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
 	}
-
-	targetUserID := req.Msg.GetUserId()
 	if targetUserID == "" {
 		targetUserID = currentUserID
 	}
@@ -143,14 +146,14 @@ func (h *GRPCHandler) GetFollowers(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	pbFollowers := make([]*socialv1message.UserSocialSummary, 0, len(res.Followers))
-	for _, f := range res.Followers {
-		pbFollowers = append(pbFollowers, &socialv1message.UserSocialSummary{
+	pbFollowers := make([]*socialv1message.UserSocialSummary, len(res.Followers))
+	for i, f := range res.Followers {
+		pbFollowers[i] = &socialv1message.UserSocialSummary{
 			UserId:      f.UserID,
 			FullName:    f.FullName,
 			AvatarUrl:   f.AvatarURL,
 			IsFollowing: f.IsFollowing,
-		})
+		}
 	}
 
 	return connect.NewResponse(&socialv1message.GetFollowersResponse{
@@ -164,12 +167,11 @@ func (h *GRPCHandler) GetFollowing(
 	ctx context.Context,
 	req *connect.Request[socialv1message.GetFollowingRequest],
 ) (*connect.Response[socialv1message.GetFollowingResponse], error) {
+	targetUserID := req.Msg.GetUserId()
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
 	}
-
-	targetUserID := req.Msg.GetUserId()
 	if targetUserID == "" {
 		targetUserID = currentUserID
 	}
@@ -187,14 +189,14 @@ func (h *GRPCHandler) GetFollowing(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	pbFollowing := make([]*socialv1message.UserSocialSummary, 0, len(res.Following))
-	for _, f := range res.Following {
-		pbFollowing = append(pbFollowing, &socialv1message.UserSocialSummary{
+	pbFollowing := make([]*socialv1message.UserSocialSummary, len(res.Following))
+	for i, f := range res.Following {
+		pbFollowing[i] = &socialv1message.UserSocialSummary{
 			UserId:      f.UserID,
 			FullName:    f.FullName,
 			AvatarUrl:   f.AvatarURL,
 			IsFollowing: f.IsFollowing,
-		})
+		}
 	}
 
 	return connect.NewResponse(&socialv1message.GetFollowingResponse{
@@ -208,17 +210,16 @@ func (h *GRPCHandler) GetSocialSummary(
 	ctx context.Context,
 	req *connect.Request[socialv1message.GetSocialSummaryRequest],
 ) (*connect.Response[socialv1message.GetSocialSummaryResponse], error) {
+	targetUserID := req.Msg.GetUserId()
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
 	}
-
-	targetUserID := req.Msg.GetUserId()
 	if targetUserID == "" {
 		targetUserID = currentUserID
 	}
 	if targetUserID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user_id required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user_id required or authentication required"))
 	}
 
 	res, err := h.getSocialSummaryHandler.Handle(ctx, query.GetSocialSummaryQuery{
@@ -307,6 +308,7 @@ func (h *GRPCHandler) CreatePost(
 			Visibility:    item.Visibility().String(),
 			ReactionCount: item.ReactionCount(),
 			CommentCount:  item.CommentCount(),
+			UserReaction:  "",
 			CreatedAt:     timestamppb.New(item.CreatedAt()),
 			UpdatedAt:     timestamppb.New(item.UpdatedAt()),
 		},
@@ -433,6 +435,57 @@ func (h *GRPCHandler) GetUserProfileFeed(
 	return connect.NewResponse(&socialv1message.GetUserProfileFeedResponse{
 		Items:      pbItems,
 		NextCursor: res.NextCursor,
+	}), nil
+}
+
+func (h *GRPCHandler) SearchPosts(
+	ctx context.Context,
+	req *connect.Request[socialv1message.SearchPostsRequest],
+) (*connect.Response[socialv1message.SearchPostsResponse], error) {
+	currentUserID := ""
+	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
+		currentUserID = actor.UserID
+	}
+
+	itemTypeStr := ""
+	switch req.Msg.GetItemType() {
+	case socialv1message.FeedItemType_FEED_ITEM_TYPE_POST:
+		itemTypeStr = "POST"
+	case socialv1message.FeedItemType_FEED_ITEM_TYPE_WORKOUT_ACTIVITY:
+		itemTypeStr = "WORKOUT_ACTIVITY"
+	}
+
+	authorID := ""
+	if req.Msg.UserId != nil {
+		authorID = req.Msg.GetUserId()
+	}
+
+	res, err := h.searchPostsHandler.Handle(ctx, query.SearchPostsQuery{
+		ViewerID: currentUserID,
+		AuthorID: authorID,
+		Query:    req.Msg.GetQuery(),
+		ItemType: itemTypeStr,
+		PageSize: int(req.Msg.GetPageSize()),
+		Cursor:   req.Msg.GetCursor(),
+	})
+	if err != nil {
+		if errors.Is(err, derror.ErrEmptySearchQuery) ||
+			errors.Is(err, derror.ErrSearchQueryTooShort) ||
+			errors.Is(err, derror.ErrInvalidUserID) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	items := make([]*socialv1message.FeedItem, 0, len(res.Items))
+	for _, it := range res.Items {
+		items = append(items, mapFeedItemDTOToProto(it))
+	}
+
+	return connect.NewResponse(&socialv1message.SearchPostsResponse{
+		Items:      items,
+		NextCursor: res.NextCursor,
+		TotalCount: res.TotalCount,
 	}), nil
 }
 

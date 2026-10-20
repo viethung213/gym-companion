@@ -131,6 +131,17 @@ service SocialService {
     };
   }
 
+  // Tìm kiếm bài viết theo từ khóa nội dung và người dùng
+  rpc SearchPosts (contracts.supporting.social.v1.message.SearchPostsRequest) returns (contracts.supporting.social.v1.message.SearchPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/social/posts/search"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Social / Community"
+      security: {} // Public bypass (khách chưa đăng nhập vẫn tìm được bài viết PUBLIC)
+    };
+  }
+
   // --- Reactions & Comments ---
 
   // Thả cảm xúc hoặc toggle hủy cảm xúc trên Feed Item
