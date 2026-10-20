@@ -113,7 +113,8 @@ func (r *GORMOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 	}
 
 	records := make([]*port.OutboxRecord, 0, len(models))
-	for _, m := range models {
+	for i := range models {
+		m := &models[i]
 		records = append(records, &port.OutboxRecord{
 			ID:           m.ID,
 			EventID:      m.EventID,
@@ -159,8 +160,8 @@ func (r *GORMOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDu
 		}
 
 		ids := make([]string, len(models))
-		for i, m := range models {
-			ids[i] = m.ID
+		for i := range models {
+			ids[i] = models[i].ID
 		}
 
 		// Đánh dấu trạng thái PROCESSING và gia hạn locked_until
@@ -181,7 +182,8 @@ func (r *GORMOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDu
 	}
 
 	records := make([]*port.OutboxRecord, 0, len(claimedModels))
-	for _, m := range claimedModels {
+	for i := range claimedModels {
+		m := &claimedModels[i]
 		records = append(records, &port.OutboxRecord{
 			ID:           m.ID,
 			EventID:      m.EventID,

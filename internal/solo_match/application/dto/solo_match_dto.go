@@ -41,7 +41,7 @@ func ToSoloMatchDTO(m *aggregate.SoloMatch, snapshots map[string]*entity.UserSna
 		botMap = botFlags[0]
 	}
 
-	var participants []ParticipantDTO
+	participants := make([]ParticipantDTO, 0, len(m.Participants()))
 	for _, p := range m.Participants() {
 		snap := snapshots[p.UserID()]
 		snapDTO := UserSnapshotDTO{

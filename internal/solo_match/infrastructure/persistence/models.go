@@ -66,7 +66,7 @@ func (m *SoloMatchModel) ToDomain() (*aggregate.SoloMatch, error) {
 }
 
 func FromDomainSoloMatch(m *aggregate.SoloMatch) *SoloMatchModel {
-	var participants []ParticipantModel
+	participants := make([]ParticipantModel, 0, len(m.Participants()))
 	for _, p := range m.Participants() {
 		participants = append(participants, *FromDomainParticipant(p))
 	}

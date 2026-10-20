@@ -2,6 +2,7 @@ package event
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,9 +22,9 @@ type CloudEventEnvelope struct {
 }
 
 // PackCloudEvent đóng gói một Domain Event thành CloudEvents 1.0 JSON kèm partition key
-func PackCloudEvent(ev domainEvent.DomainEvent) (eventID string, eventType string, payload []byte, partitionKey string, err error) {
+func PackCloudEvent(ev domainEvent.DomainEvent) (eventID, eventType string, payload []byte, partitionKey string, err error) {
 	if ev == nil {
-		return "", "", nil, "", fmt.Errorf("nil domain event")
+		return "", "", nil, "", errors.New("nil domain event")
 	}
 
 	eventID = uuid.New().String()

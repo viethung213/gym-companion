@@ -39,8 +39,8 @@ func (r *GORMSoloMatchRepository) Save(ctx context.Context, match *aggregate.Sol
 	}
 
 	// Lưu các bản ghi Participants
-	for _, p := range model.Participants {
-		pCopy := p
+	for i := range model.Participants {
+		pCopy := model.Participants[i]
 		err = db.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
@@ -48,7 +48,7 @@ func (r *GORMSoloMatchRepository) Save(ctx context.Context, match *aggregate.Sol
 			}),
 		}).Create(&pCopy).Error
 		if err != nil {
-			return fmt.Errorf("save match participant model %s: %w", p.ID, err)
+			return fmt.Errorf("save match participant model %s: %w", pCopy.ID, err)
 		}
 	}
 

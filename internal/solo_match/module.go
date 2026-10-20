@@ -23,10 +23,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/service"
 	infraEvent "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/event"
 	exerciseclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/exercise_client"
-	workoutclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/workout_client"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/matchmaker"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/publisher"
+	workoutclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/workout_client"
 	"github.com/viethung213/gym-companion/internal/solo_match/transport/consumer"
 	"github.com/viethung213/gym-companion/internal/solo_match/transport/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -44,7 +44,7 @@ type ModuleDeps struct {
 }
 
 // Initialize wires dependencies, registers services, and starts background workers.
-func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.GRPCHandler, func(), error) {
+func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), error) {
 	gormLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
@@ -121,7 +121,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.GRPCHandler, func()
 	getHistoryHandler := query.NewGetUserMatchHistoryHandler(matchRepo, snapshotRepo)
 
 	// Transport Handlers
-	grpcHandler := grpc.NewGRPCHandler(
+	grpcHandler := grpc.NewHandler(
 		joinQueueHandler,
 		cancelQueueHandler,
 		getMatchHandler,
@@ -343,7 +343,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.GRPCHandler, func()
 // RegisterConnectHandler mounts the ConnectRPC handlers for the Solo Match module on an http.ServeMux.
 func RegisterConnectHandler(
 	mux *http.ServeMux,
-	grpcHandler *grpc.GRPCHandler,
+	grpcHandler *grpc.Handler,
 	opts ...connect.HandlerOption,
 ) {
 	connectHandler := grpc.NewConnectSoloMatchHandler(grpcHandler)

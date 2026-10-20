@@ -24,53 +24,55 @@ type BotProfileSeed struct {
 	DifficultyLevel string // BEGINNER, INTERMEDIATE, ADVANCED
 }
 
-// DefaultBotProfiles contains predefined system bot profiles for Solo Match matchmaking.
-var DefaultBotProfiles = []BotProfileSeed{
-	{
-		Email:           "bot.alex@fitai.bot",
-		Password:        "FitAIBot@2026!",
-		FullName:        "Alex Vance (AI Beast)",
-		Gender:          "MALE",
-		DateOfBirth:     "1995-04-12",
-		AvatarURL:       "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-		DifficultyLevel: "ADVANCED",
-	},
-	{
-		Email:           "bot.sarah@fitai.bot",
-		Password:        "FitAIBot@2026!",
-		FullName:        "Sarah Jenkins (AI Pro)",
-		Gender:          "FEMALE",
-		DateOfBirth:     "1998-08-23",
-		AvatarURL:       "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=300&q=80",
-		DifficultyLevel: "INTERMEDIATE",
-	},
-	{
-		Email:           "bot.leo@fitai.bot",
-		Password:        "FitAIBot@2026!",
-		FullName:        "Leo Martinez (AI Rookie)",
-		Gender:          "MALE",
-		DateOfBirth:     "2001-01-15",
-		AvatarURL:       "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
-		DifficultyLevel: "BEGINNER",
-	},
-	{
-		Email:           "bot.maya@fitai.bot",
-		Password:        "FitAIBot@2026!",
-		FullName:        "Maya Lin (AI Athletic)",
-		Gender:          "FEMALE",
-		DateOfBirth:     "1997-11-30",
-		AvatarURL:       "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
-		DifficultyLevel: "INTERMEDIATE",
-	},
-	{
-		Email:           "bot.marcus@fitai.bot",
-		Password:        "FitAIBot@2026!",
-		FullName:        "Marcus Stone (AI Titan)",
-		Gender:          "MALE",
-		DateOfBirth:     "1993-06-19",
-		AvatarURL:       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
-		DifficultyLevel: "ADVANCED",
-	},
+// DefaultBotProfiles returns predefined system bot profiles for Solo Match matchmaking.
+func DefaultBotProfiles() []BotProfileSeed {
+	return []BotProfileSeed{
+		{
+			Email:           "bot.alex@fitai.bot",
+			Password:        "FitAIBot@2026!",
+			FullName:        "Alex Vance (AI Beast)",
+			Gender:          "MALE",
+			DateOfBirth:     "1995-04-12",
+			AvatarURL:       "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+			DifficultyLevel: "ADVANCED",
+		},
+		{
+			Email:           "bot.sarah@fitai.bot",
+			Password:        "FitAIBot@2026!",
+			FullName:        "Sarah Jenkins (AI Pro)",
+			Gender:          "FEMALE",
+			DateOfBirth:     "1998-08-23",
+			AvatarURL:       "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=300&q=80",
+			DifficultyLevel: "INTERMEDIATE",
+		},
+		{
+			Email:           "bot.leo@fitai.bot",
+			Password:        "FitAIBot@2026!",
+			FullName:        "Leo Martinez (AI Rookie)",
+			Gender:          "MALE",
+			DateOfBirth:     "2001-01-15",
+			AvatarURL:       "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+			DifficultyLevel: "BEGINNER",
+		},
+		{
+			Email:           "bot.maya@fitai.bot",
+			Password:        "FitAIBot@2026!",
+			FullName:        "Maya Lin (AI Athletic)",
+			Gender:          "FEMALE",
+			DateOfBirth:     "1997-11-30",
+			AvatarURL:       "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
+			DifficultyLevel: "INTERMEDIATE",
+		},
+		{
+			Email:           "bot.marcus@fitai.bot",
+			Password:        "FitAIBot@2026!",
+			FullName:        "Marcus Stone (AI Titan)",
+			Gender:          "MALE",
+			DateOfBirth:     "1993-06-19",
+			AvatarURL:       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
+			DifficultyLevel: "ADVANCED",
+		},
+	}
 }
 
 // AuthRegistrar defines the API contract required to register user accounts.
@@ -88,10 +90,12 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 		return errors.New("authService cannot be nil")
 	}
 
+	profiles := DefaultBotProfiles()
+
 	// 1. Kiểm tra nếu tất cả bot đã được tạo rùi thì không cần chạy lại
 	if db != nil {
 		allSeeded := true
-		for _, bot := range DefaultBotProfiles {
+		for _, bot := range profiles {
 			var exists bool
 			err := db.QueryRowContext(ctx, `
 				SELECT EXISTS (
@@ -107,14 +111,14 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 		}
 
 		if allSeeded {
-			log.Printf("🤖 System bots already created (%d bots exist). Skipping bot seeder.", len(DefaultBotProfiles))
+			log.Printf("🤖 System bots already created (%d bots exist). Skipping bot seeder.", len(profiles))
 			return nil
 		}
 	}
 
-	log.Printf("🤖 Starting API-driven System Bot seeding (%d bots)...", len(DefaultBotProfiles))
+	log.Printf("🤖 Starting API-driven System Bot seeding (%d bots)...", len(profiles))
 
-	for _, bot := range DefaultBotProfiles {
+	for _, bot := range profiles {
 		req := &authv1message.RegisterRequest{
 			Identifier:  bot.Email,
 			Password:    bot.Password,
@@ -137,6 +141,6 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 		log.Printf("  ✅ Bot registered via Auth API: %s (%s)", bot.FullName, bot.Email)
 	}
 
-	log.Printf("🎉 Successfully seeded %d System Bots via Auth API.", len(DefaultBotProfiles))
+	log.Printf("🎉 Successfully seeded %d System Bots via Auth API.", len(profiles))
 	return nil
 }

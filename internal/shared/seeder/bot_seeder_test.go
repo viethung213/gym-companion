@@ -113,7 +113,7 @@ func TestSeedSystemBots(t *testing.T) {
 		t.Fatalf("SeedSystemBots failed on initial run: %v", err)
 	}
 
-	expectedCount := len(seeder.DefaultBotProfiles)
+	expectedCount := len(seeder.DefaultBotProfiles())
 
 	// Verify Auth: Users created
 	var authUsersCount int

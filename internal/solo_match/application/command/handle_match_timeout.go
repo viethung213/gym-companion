@@ -54,13 +54,13 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 
 	processedCount := 0
 	for _, match := range expiredMatches {
-		if err := match.Timeout(now); err != nil {
+		if tErr := match.Timeout(now); tErr != nil {
 			continue
 		}
 
-		err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-			if err := h.matchRepo.Save(txCtx, match); err != nil {
-				return err
+		txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+			if sErr := h.matchRepo.Save(txCtx, match); sErr != nil {
+				return sErr
 			}
 
 			if match.Status() == valueobject.MatchStatusForfeited || match.Status() == valueobject.MatchStatusCompleted {
@@ -99,14 +99,14 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 					CompletedAt:   endedAt,
 				}
 
-				if err := h.eventPub.PublishEvents(txCtx, []any{ev}); err != nil {
-					return err
+				if pErr := h.eventPub.PublishEvents(txCtx, []any{ev}); pErr != nil {
+					return pErr
 				}
 			}
 
 			return nil
 		})
-		if err == nil {
+		if txErr == nil {
 			processedCount++
 		}
 	}

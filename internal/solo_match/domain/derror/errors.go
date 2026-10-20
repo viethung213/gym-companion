@@ -5,17 +5,17 @@ import "errors"
 // Domain Business Errors for Solo Match Bounded Context.
 var (
 	// Solo Match Aggregate Errors
-	ErrMatchNotActive          = errors.New("match is not active")
-	ErrParticipantNotFound     = errors.New("participant not found in match")
-	ErrMatchNotTimedOutYet     = errors.New("match has not timed out yet")
-	ErrInvalidParticipantCount = errors.New("solo match must have exactly two participants")
-	ErrSoloMatchNotFound       = errors.New("solo match not found")
-	ErrActiveMatchNotFound     = errors.New("active match not found")
+	ErrMatchNotActive           = errors.New("match is not active")
+	ErrParticipantNotFound      = errors.New("participant not found in match")
+	ErrMatchNotTimedOutYet      = errors.New("match has not timed out yet")
+	ErrInvalidParticipantCount  = errors.New("solo match must have exactly two participants")
+	ErrSoloMatchNotFound        = errors.New("solo match not found")
+	ErrActiveMatchNotFound      = errors.New("active match not found")
 	ErrActiveMatchAlreadyExists = errors.New("user already has an active match in progress")
-	ErrEmptyMatchID            = errors.New("match id cannot be empty")
+	ErrEmptyMatchID             = errors.New("match id cannot be empty")
 
 	// Matchmaking Ticket Errors
-	ErrEmptyTicketID    = errors.New("ticket id cannot be empty")
+	ErrEmptyTicketID = errors.New("ticket id cannot be empty")
 
 	// Participant & User Snapshot Errors
 	ErrEmptyParticipantID  = errors.New("participant id cannot be empty")

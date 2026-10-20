@@ -220,4 +220,3 @@ func TestRedisMatchmakerAdapter_BotFallback_WithPR(t *testing.T) {
 		t.Fatalf("timeout waiting for bot match fallback")
 	}
 }
-

@@ -129,7 +129,7 @@ func TestGRPCHandler(t *testing.T) {
 	getMatchHandler := query.NewGetSoloMatchByIDHandler(matchRepo, snapshotRepo)
 	getHistoryHandler := query.NewGetUserMatchHistoryHandler(matchRepo, snapshotRepo)
 
-	handler := transportgrpc.NewGRPCHandler(
+	handler := transportgrpc.NewHandler(
 		joinQueueHandler,
 		cancelQueueHandler,
 		getMatchHandler,

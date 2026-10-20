@@ -9,12 +9,12 @@ import (
 )
 
 type ConnectSoloMatchHandler struct {
-	grpcHandler *GRPCHandler
+	grpcHandler *Handler
 }
 
 var _ solomatchv1serviceconnect.SoloMatchServiceHandler = (*ConnectSoloMatchHandler)(nil)
 
-func NewConnectSoloMatchHandler(grpcHandler *GRPCHandler) *ConnectSoloMatchHandler {
+func NewConnectSoloMatchHandler(grpcHandler *Handler) *ConnectSoloMatchHandler {
 	return &ConnectSoloMatchHandler{grpcHandler: grpcHandler}
 }
 
