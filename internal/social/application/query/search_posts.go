@@ -46,6 +46,7 @@ func NewSearchPostsHandler(
 	}
 }
 
+//nolint:gocritic // q parameter struct passed by value per CQRS query handler design
 func (h *SearchPostsHandler) Handle(ctx context.Context, q SearchPostsQuery) (*SearchPostsResult, error) {
 	queryText := strings.TrimSpace(q.Query)
 	authorID := strings.TrimSpace(q.AuthorID)

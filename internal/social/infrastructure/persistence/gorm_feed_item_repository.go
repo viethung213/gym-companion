@@ -149,6 +149,7 @@ func escapeLikePattern(s string) string {
 	return strings.ReplaceAll(s, "_", "\\_")
 }
 
+//nolint:gocritic // filter parameter struct passed by value matching repository port
 func (r *GormFeedItemRepository) SearchPosts(
 	ctx context.Context,
 	filter repository.SearchPostsFilter,
@@ -189,7 +190,9 @@ func (r *GormFeedItemRepository) SearchPosts(
 		db = db.Where("visibility = ?", "PUBLIC")
 	} else {
 		// Đã đăng nhập: thấy bài PUBLIC, bài của chính mình, hoặc bài FOLLOWERS_ONLY của người mình đang follow
-		subQuery := "visibility = 'PUBLIC' OR user_id = ? OR (visibility = 'FOLLOWERS_ONLY' AND EXISTS (SELECT 1 FROM social.follows f WHERE f.follower_id = ? AND f.following_id = social.feed_items.user_id))"
+		subQuery := "visibility = 'PUBLIC' OR user_id = ? OR " +
+			"(visibility = 'FOLLOWERS_ONLY' AND EXISTS " +
+			"(SELECT 1 FROM social.follows f WHERE f.follower_id = ? AND f.following_id = social.feed_items.user_id))"
 		db = db.Where(subQuery, filter.ViewerID, filter.ViewerID)
 	}
 

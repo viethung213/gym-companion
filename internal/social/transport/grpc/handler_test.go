@@ -2,6 +2,7 @@ package grpc_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/domain/entity"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 	socialGRPC "github.com/viethung213/gym-companion/internal/social/transport/grpc"
-	"strings"
 )
 
 type mockTx struct{}
@@ -104,7 +104,7 @@ func (r *testFeedItemRepo) UpdateCommentCount(ctx context.Context, id string, de
 	return nil
 }
 func (r *testFeedItemRepo) SearchPosts(ctx context.Context, filter repository.SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error) {
-	var list []*aggregate.FeedItem
+	list := make([]*aggregate.FeedItem, 0, len(r.items))
 	for _, item := range r.items {
 		if filter.AuthorID != "" && item.UserID() != filter.AuthorID {
 			continue

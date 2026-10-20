@@ -73,7 +73,11 @@ func (r *GormInteractionRepository) GetReactionsByFeedItem(ctx context.Context, 
 	return res, nil
 }
 
-func (r *GormInteractionRepository) GetReactionsByUserAndFeedItemIDs(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
+func (r *GormInteractionRepository) GetReactionsByUserAndFeedItemIDs(
+	ctx context.Context,
+	userID string,
+	feedItemIDs []string,
+) (map[string]*entity.Reaction, error) {
 	if len(feedItemIDs) == 0 || userID == "" {
 		return make(map[string]*entity.Reaction), nil
 	}
