@@ -20,7 +20,7 @@ func NewStubExerciseClient() *StubExerciseClient {
 }
 
 // GetRandomChallenge returns an exercise challenge configuration.
-func (c *StubExerciseClient) GetRandomChallenge(ctx context.Context) (*port.ExerciseChallenge, error) {
+func (c *StubExerciseClient) GetRandomChallenge(_ context.Context) (*port.ExerciseChallenge, error) {
 	return &port.ExerciseChallenge{
 		ExerciseID:    "ex_pushup",
 		ExerciseName:  "Push-Up",

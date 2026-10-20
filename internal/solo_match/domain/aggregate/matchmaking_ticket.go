@@ -15,7 +15,7 @@ type MatchmakingTicket struct {
 }
 
 // NewMatchmakingTicket khởi tạo vé chờ ghép trận mới.
-func NewMatchmakingTicket(id string, userID string, joinedAt time.Time) (*MatchmakingTicket, error) {
+func NewMatchmakingTicket(id, userID string, joinedAt time.Time) (*MatchmakingTicket, error) {
 	trimmedID := strings.TrimSpace(id)
 	if trimmedID == "" {
 		return nil, derror.ErrEmptyTicketID

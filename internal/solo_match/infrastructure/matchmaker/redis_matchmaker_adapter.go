@@ -69,7 +69,7 @@ func NewRedisMatchmakerAdapter(
 		pollInterval:     pollInterval,
 		botTimeout:       botTimeout,
 		triggerCh:        make(chan struct{}, 10),
-		closeCh:      make(chan struct{}),
+		closeCh:          make(chan struct{}),
 	}
 
 	adapter.wg.Add(1)
@@ -98,7 +98,7 @@ func (a *RedisMatchmakerAdapter) Enqueue(ctx context.Context, ticket *aggregate.
 	return nil
 }
 
-func (a *RedisMatchmakerAdapter) Cancel(ctx context.Context, ticketID string, userID string) error {
+func (a *RedisMatchmakerAdapter) Cancel(ctx context.Context, ticketID, userID string) error {
 	member := ticketID + ":" + userID
 	err := a.redisClient.ZRem(ctx, RedisQueueKey, member).Err()
 	if err != nil {

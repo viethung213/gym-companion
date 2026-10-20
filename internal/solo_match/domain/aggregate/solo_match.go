@@ -24,7 +24,7 @@ type SoloMatch struct {
 	startedAt     time.Time
 	timeoutAt     time.Time
 	endedAt       *time.Time
-	domainEvents []event.DomainEvent
+	domainEvents  []event.DomainEvent
 }
 
 func NewSoloMatch(
@@ -212,7 +212,7 @@ func (m *SoloMatch) RecordParticipantResult(
 }
 
 // ForfeitParticipant xử thua ngay lập tức cho người chơi bỏ cuộc hoặc ngắt kết nối (Fast Forfeit)
-func (m *SoloMatch) ForfeitParticipant(forfeitedUserID string, reason string) error {
+func (m *SoloMatch) ForfeitParticipant(forfeitedUserID, _ string) error {
 	if m.status != valueobject.MatchStatusInProgress {
 		return derror.ErrMatchNotActive
 	}

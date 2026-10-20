@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type GRPCHandler struct {
+type Handler struct {
 	solomatchv1service.UnimplementedSoloMatchServiceServer
 	joinQueueHandler   *command.JoinMatchmakingQueueHandler
 	cancelQueueHandler *command.CancelMatchmakingHandler
@@ -28,16 +28,16 @@ type GRPCHandler struct {
 	snapshotRepo       repository.UserSnapshotRepository
 }
 
-var _ solomatchv1service.SoloMatchServiceServer = (*GRPCHandler)(nil)
+var _ solomatchv1service.SoloMatchServiceServer = (*Handler)(nil)
 
-func NewGRPCHandler(
+func NewHandler(
 	joinQueueHandler *command.JoinMatchmakingQueueHandler,
 	cancelQueueHandler *command.CancelMatchmakingHandler,
 	getMatchHandler *query.GetSoloMatchByIDHandler,
 	getHistoryHandler *query.GetUserMatchHistoryHandler,
 	snapshotRepo repository.UserSnapshotRepository,
-) *GRPCHandler {
-	return &GRPCHandler{
+) *Handler {
+	return &Handler{
 		joinQueueHandler:   joinQueueHandler,
 		cancelQueueHandler: cancelQueueHandler,
 		getMatchHandler:    getMatchHandler,
@@ -46,14 +46,14 @@ func NewGRPCHandler(
 	}
 }
 
-func (h *GRPCHandler) JoinQueue(
+func (h *Handler) JoinQueue(
 	req *solomatchv1message.JoinQueueRequest,
 	stream grpc.ServerStreamingServer[solomatchv1message.JoinQueueResponse],
 ) error {
 	return h.handleJoinQueue(stream.Context(), req, stream.Send)
 }
 
-func (h *GRPCHandler) handleJoinQueue(
+func (h *Handler) handleJoinQueue(
 	ctx context.Context,
 	_ *solomatchv1message.JoinQueueRequest,
 	send func(*solomatchv1message.JoinQueueResponse) error,
@@ -138,7 +138,7 @@ func (h *GRPCHandler) handleJoinQueue(
 	}
 }
 
-func (h *GRPCHandler) CancelQueue(
+func (h *Handler) CancelQueue(
 	ctx context.Context,
 	req *solomatchv1message.CancelQueueRequest,
 ) (*solomatchv1message.CancelQueueResponse, error) {
@@ -158,7 +158,7 @@ func (h *GRPCHandler) CancelQueue(
 	return &solomatchv1message.CancelQueueResponse{Success: true}, nil
 }
 
-func (h *GRPCHandler) GetMatch(
+func (h *Handler) GetMatch(
 	ctx context.Context,
 	req *solomatchv1message.GetMatchRequest,
 ) (*solomatchv1message.GetMatchResponse, error) {
@@ -177,7 +177,7 @@ func (h *GRPCHandler) GetMatch(
 	}, nil
 }
 
-func (h *GRPCHandler) GetMatchHistory(
+func (h *Handler) GetMatchHistory(
 	ctx context.Context,
 	req *solomatchv1message.GetMatchHistoryRequest,
 ) (*solomatchv1message.GetMatchHistoryResponse, error) {

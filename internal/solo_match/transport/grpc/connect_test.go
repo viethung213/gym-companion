@@ -33,7 +33,7 @@ func TestConnectSoloMatchHandler(t *testing.T) {
 	getMatchHandler := query.NewGetSoloMatchByIDHandler(mockMatchRepo, mockSnapshotRepo)
 	getHistoryHandler := query.NewGetUserMatchHistoryHandler(mockMatchRepo, mockSnapshotRepo)
 
-	grpcHandler := transportgrpc.NewGRPCHandler(
+	grpcHandler := transportgrpc.NewHandler(
 		joinHandler,
 		cancelHandler,
 		getMatchHandler,

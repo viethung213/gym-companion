@@ -18,6 +18,6 @@ func NewStubWorkoutClient() *StubWorkoutClient {
 }
 
 // GetBestPR returns nil PR to trigger default bot score fallback until integrated with workout_execution service.
-func (c *StubWorkoutClient) GetBestPR(ctx context.Context, userID, exerciseID string) (*float64, error) {
+func (c *StubWorkoutClient) GetBestPR(_ context.Context, _, _ string) (*float64, error) {
 	return nil, nil
 }

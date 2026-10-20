@@ -101,7 +101,7 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 		t.Fatalf("solomatch.Initialize failed: %v", err)
 	}
 	if handler == nil {
-		t.Fatal("expected non-nil GRPCHandler")
+		t.Fatal("expected non-nil Handler")
 	}
 
 	// Mount on HTTP mux
