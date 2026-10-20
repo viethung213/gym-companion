@@ -70,4 +70,3 @@ func TestGRPCHandler_Register_GenderValidation(t *testing.T) {
 		})
 	}
 }
-
