@@ -45,7 +45,6 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 ### Out of scope & Explicitly Deferred
 - **Phòng đấu nhóm (Cohorts/Rooms) [DEFERRED]**: Tạm thời loại bỏ theo yêu cầu của Maintainer để đơn giản hóa hệ thống.
 - **Chu kỳ xếp hạng theo tuần (Weekly Leagues & Demotion) [DEFERRED]**: Bỏ qua chu kỳ tuần; toàn bộ bảng xếp hạng tính theo `xp` trọn đời.
-- **Thưởng FitCoins [DEFERRED]**: Không tích hợp trả thưởng coin cho bảng xếp hạng; giao dịch coin do module `fitcoins-and-ledger` phụ trách.
 - **Bảng xếp hạng bạn bè (Friend Leaderboard) [DEFERRED]**: Lọc theo đồ thị bạn bè thuộc phân hệ `social`.
 
 ---
@@ -114,11 +113,11 @@ Tính năng **Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderb
 ---
 
 ## Acceptance Criteria
-- [ ] **AC-LB-01**: GIVEN hệ thống có 100 người dùng có XP khác nhau WHEN gọi `GetGlobalLeaderboard(limit = 50)` THEN trả về đúng 50 người có `xp` cao nhất, sắp xếp giảm dần từ hạng 1 đến 50.
-- [ ] **AC-LB-02**: GIVEN User A có 1,000 XP lúc 10:00 và User B có 1,000 XP lúc 11:00 WHEN truy vấn bảng xếp hạng THEN User A đứng trước User B.
-- [ ] **AC-LB-03**: GIVEN User C đang đứng thứ 75 toàn hệ thống WHEN User C gọi API THEN danh sách trả về Top 50, và `my_standing.rank = 75`.
-- [ ] **AC-LB-04**: GIVEN User D đang đứng thứ 3 toàn hệ thống WHEN User D gọi API THEN `my_standing.rank = 3` và User D xuất hiện ở phần tử thứ 3 trong danh sách Top 50.
-- [ ] **AC-LB-05**: GIVEN user vừa hoàn thành bài tập nhận 100 XP giúp điểm tăng từ 950 lên 1,050 XP WHEN gọi lại API ngay sau đó THEN thứ hạng được cập nhật phản ánh đúng điểm số mới tức thì (Real-time).
+- [x] **AC-LB-01**: GIVEN hệ thống có 100 người dùng có XP khác nhau WHEN gọi `GetGlobalLeaderboard(limit = 50)` THEN trả về đúng 50 người có `xp` cao nhất, sắp xếp giảm dần từ hạng 1 đến 50.
+- [x] **AC-LB-02**: GIVEN User A có 1,000 XP lúc 10:00 và User B có 1,000 XP lúc 11:00 WHEN truy vấn bảng xếp hạng THEN User A đứng trước User B.
+- [x] **AC-LB-03**: GIVEN User C đang đứng thứ 75 toàn hệ thống WHEN User C gọi API THEN danh sách trả về Top 50, và `my_standing.rank = 75`.
+- [x] **AC-LB-04**: GIVEN User D đang đứng thứ 3 toàn hệ thống WHEN User D gọi API THEN `my_standing.rank = 3` và User D xuất hiện ở phần tử thứ 3 trong danh sách Top 50.
+- [x] **AC-LB-05**: GIVEN user vừa hoàn thành bài tập nhận 100 XP giúp điểm tăng từ 950 lên 1,050 XP WHEN gọi lại API ngay sau đó THEN thứ hạng được cập nhật phản ánh đúng điểm số mới tức thì (Real-time).
 
 ---
 

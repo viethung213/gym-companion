@@ -23,11 +23,8 @@ internal/gamification/docs/
     │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
     │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-ST-01 -> T-ST-06)
-    └── fitcoins-and-ledger/           # 4. Tiền Tệ Ảo FitCoins / Gems & Sổ Cái Bất Biến (Đang triển khai)
-        ├── 01-spec.md                 # Đặc tả nghiệp vụ & 6 trường hợp tích lũy coin
-        ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 -> ADR-0004)
-        ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
-        └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-FC-01 -> T-FC-07)
+    └── badges-and-achievements/       # 4. Huy Hiệu & Thành Tựu (Badges & Achievements) (Đang triển khai)
+        └── 01-spec.md                 # Đặc tả vinh danh cột mốc (Milestones, Streak, Level, Workouts)
 ```
 
 ---
@@ -39,17 +36,17 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 * **Tích lũy dài hạn & Vinh danh minh bạch**:
   * **Cấp độ trọn đời**: **XP & Level 1–100** vinh danh tổng khối lượng công sức và thời gian gắn bó trọn đời.
   * **Bảng xếp hạng toàn hệ thống**: **XP Leaderboard** hiển thị Top 50 gymer bền bỉ nhất nền tảng và vị trí cá nhân theo thời gian thực.
-* **Hình thành thói quen kỷ luật**: Duy trì Chuỗi Ngày (Streak) hàng ngày kết hợp cơ chế Đóng Băng Chuỗi (Streak Freeze) bảo vệ gymer vào ngày nghỉ giáo án hoặc sự cố bận đột xuất.
-* **Tích lũy & Trao thưởng tự do**: Tiền tệ ảo FitCoins (Gems) nhận được khi lên cấp hoặc hoàn thành chuỗi ngày; dùng để mua Streak Freeze, nhân đôi XP, hoặc đổi voucher đối tác.
+* **Hình thành thói quen kỷ luật**: Duy trì Chuỗi Ngày (Streak) hàng ngày kết hợp thói quen kép (Workout & Nutrition).
 
 ### Trách nhiệm:
-* Lắng nghe sự kiện đăng ký tài khoản từ Auth để khởi tạo tức thì hồ sơ Game hóa cơ sở (0 XP, Level 1, 0 Streak, 0 FitCoins).
+* Lắng nghe sự kiện đăng ký tài khoản từ Auth để khởi tạo tức thì hồ sơ Game hóa cơ sở (0 XP, Level 1, 0 Streak) và snapshot thông tin hiển thị.
 * Quản lý điểm kinh nghiệm XP và cấp độ Level (`user_xp`, `xp_history`).
 * Cung cấp dữ liệu Bảng xếp hạng toàn hệ thống theo điểm XP (Top 50) và tra cứu thứ hạng cá nhân (`my_rank`).
-* Quản lý chuỗi ngày tập liên tục (Streak) và trạng thái Đóng Băng Chuỗi (Streak Freeze).
-* Quản lý số dư FitCoins và lịch sử sổ cái kiểm toán bất biến (`coin_ledger`).
+* Quản lý chuỗi ngày tập liên tục (Streak) và lịch sử hoạt động (`user_streak`, `streak_history`).
+* Quản lý danh hiệu, huy hiệu và thành tựu cá nhân (`user_badges`).
 
 ### Không thuộc trách nhiệm:
+* Không quản lý tiền tệ ảo, ví hay thanh toán mua sắm.
 * Không theo dõi chuyển động camera hay đếm rep (thuộc `workout_execution`).
 * Không quản lý phòng đấu real-time qua WebSocket hay ghép trận đối kháng trực tiếp (thuộc `competition`).
 * Không quản lý đồ thị bạn bè follow/following (thuộc `social`).
@@ -86,18 +83,15 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
 ### 2.3. [Chuỗi Ngày Kỷ Luật (Streaks Engine)](./features/streaks-and-habits/01-spec.md)
 * **Động cơ giữ chân cốt lõi (Habit Engine)**: Đếm số ngày liên tục người dùng hoàn thành ít nhất 1 buổi tập hoặc đạt mục tiêu dinh dưỡng.
 * **Kỷ luật thực chất (Workout & Nutrition)**: Ngày tập thì nâng tạ, ngày nghỉ thì log ăn uống đúng chuẩn Calo/Protein để giữ chuỗi liên tục.
-* **Cột mốc Chuỗi (Streak Milestones)**: Thưởng FitCoins khi cán mốc 7, 14, 30, 50, 100, 365 ngày liên tục.
+* **Cột mốc Chuỗi (Streak Milestones)**: Vinh danh khi cán mốc 7, 14, 30, 50, 100, 365 ngày liên tục qua domain event `StreakMilestoneReached`.
 * Chi tiết đặc tả: xem [features/streaks-and-habits/01-spec.md](./features/streaks-and-habits/01-spec.md).
 
 ---
 
-### 2.4. [Tiền Tệ Ảo FitCoins / Gems & Cửa Hàng (FitCoins & Shop Ledger)](./features/fitcoins-and-ledger/01-spec.md)
-* **Cơ chế thu nhập (Earning)**: Thưởng FitCoins khi lên Cấp độ mới, đạt cột mốc Streak, hoặc đạt thứ hạng cao trên Bảng xếp hạng.
-* **Cửa Hàng Vật Phẩm (Shop Roadmap)**:
-  * Mua **Tăng Tốc XP (Double XP Boost 15 phút)** trước buổi tập để tăng tốc thăng cấp và leo hạng.
-  * Đổi lấy các voucher giảm giá đồ tập, whey protein từ các thương hiệu đối tác.
-* **Kiểm soát & Sổ cái bất biến (`coin_ledger`)**: Ghi nhận toàn bộ giao dịch nạp/tiêu coin theo mô hình append-only, chống chi tiêu kép (Double Spending) và kiểm toán $100\%$ giao dịch.
-* Chi tiết đặc tả: xem [features/fitcoins-and-ledger/01-spec.md](./features/fitcoins-and-ledger/01-spec.md).
+### 2.4. Huy Hiệu & Thành Tựu (Badges & Achievements)
+* **Vinh danh thành tựu (Milestones & Trophies)**: Mở khóa các huy hiệu biểu tượng khi gymer vượt qua các giới hạn bản thân (Buổi tập đầu tiên, Mốc chuỗi 7/30/100 ngày, Đạt Cấp độ 10/25/50/100, Khối lượng tạ ấn tượng).
+* **Mở khóa vĩnh viễn (Immutable Unlocks)**: Huy hiệu một khi đã đạt được sẽ được lưu trữ vĩnh viễn trong `user_badges` (`badge_code`, `unlocked_at`, `metadata`).
+* **Sự kiện phát hành**: Phát tán `BadgeUnlocked` qua Kafka Outbox khi có huy hiệu mới được mở khóa.
 
 ---
 
@@ -107,7 +101,7 @@ Xem chi tiết tại: **[architecture.md](./architecture.md)**
 * **Mô hình Hexagonal (Ports & Adapters)**: Bóc tách 4 tầng Domain, Application, Infrastructure, Transport.
 * **PostgreSQL Schema cô lập**: Schema riêng `gamification.*`, không JOIN chéo module khác.
 * **Kafka Event Bus & Outbox**: Giao tiếp bất đồng bộ qua CloudEvents 1.0 JSON và Outbox Pattern.
-* **Tính lũy đẳng (Idempotency)**: Enforce qua khóa duy nhất nghiệp vụ (`uq_xp_history_workout_session` trên bảng `xp_history`), loại bỏ hoàn toàn nguy cơ cộng điểm trùng lặp.
+* **Tính lũy đẳng (Idempotency)**: Enforce qua khóa duy nhất nghiệp vụ (`uq_xp_history_workout_session` và `uq_xp_history_nutrition_daily` trên bảng `xp_history`), loại bỏ hoàn toàn nguy cơ cộng điểm trùng lặp.
 
 ---
 
@@ -118,7 +112,5 @@ Xem chi tiết tại: **[architecture.md](./architecture.md)**
 | **XP (`xp`)** | Điểm Kinh Nghiệm | Thước đo tích lũy nỗ lực vĩnh viễn, 100% củng cố tích cực, không bao giờ bị trừ hay suy giảm theo thời gian. |
 | **Level (`level`)** | Cấp Độ Trọn Đời | Cấp độ từ 1 đến 100, xác định động theo căn bậc hai của XP: $\lfloor \sqrt{X / 50} \rfloor + 1$ (với $X$ là `xp`). Cấp độ chỉ tăng không giảm. |
 | **Leaderboard** | Bảng Xếp Hạng Toàn Hệ Thống | Bảng vinh danh Top 50 gymer có số điểm `xp` cao nhất nền tảng và vị trí cá nhân theo thời gian thực. |
-| **Streak** | Chuỗi Ngày Tập Luyện | Số ngày liên tiếp người dùng hoàn thành buổi tập hoặc đạt mục tiêu dinh dưỡng theo múi giờ địa phương (`user_local_date`). |
-| **FitCoins (Gems)** | Tiền Tệ Thể Thao Ảo | Đơn vị tiền tệ thưởng khi lên cấp, hoàn thành chuỗi streak; dùng tại Cửa hàng để mua XP Boost hoặc voucher. |
-| **Coin Ledger (`coin_ledger`)** | Sổ Cái Kiểm Toán Bất Biến | Bảng lưu trữ append-only ghi nhận $100\%$ các giao dịch thu/chi coin kèm số dư lũy kế (`running_balance`). Nghiêm cấm sửa hoặc xóa bản ghi cũ. |
-| **Proof of Workout** | Tiêu Chuẩn Buổi Tập Hợp Lệ | Điều kiện tối thiểu để buổi tập được xét thưởng XP và FitCoins: thời lượng $\ge 15$ phút, số hiệp $\ge 3$, và không bị cờ `Anomalous Session`. |
+| **Streak** | Chuỗi Ngày Kỷ Luật | Số ngày liên tiếp người dùng hoàn thành buổi tập hoặc đạt mục tiêu dinh dưỡng theo múi giờ địa phương (`user_local_date`). |
+| **Proof of Workout** | Tiêu Chuẩn Buổi Tập Hợp Lệ | Điều kiện tối thiểu để buổi tập được xét thưởng XP và duy trì Streak: thời lượng $\ge 15$ phút, số hiệp $\ge 3$, và không bị cờ `Anomalous Session`. |

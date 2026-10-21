@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event;gamificationv1event";
+
+// StreakMilestone định danh các mốc chuỗi ngày kỷ luật chuẩn của hệ thống.
+enum StreakMilestone {
+  STREAK_MILESTONE_UNSPECIFIED = 0;
+  STREAK_MILESTONE_7_DAYS = 1;
+  STREAK_MILESTONE_14_DAYS = 2;
+  STREAK_MILESTONE_30_DAYS = 3;
+  STREAK_MILESTONE_50_DAYS = 4;
+  STREAK_MILESTONE_100_DAYS = 5;
+  STREAK_MILESTONE_365_DAYS = 6;
+}
+
+message StreakMilestoneReached {
+  string user_id = 1;
+  StreakMilestone milestone = 2;
+  int32 milestone_days = 3;
+  google.protobuf.Timestamp reached_at = 4;
+}

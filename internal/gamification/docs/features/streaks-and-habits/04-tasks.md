@@ -2,14 +2,22 @@
 
 ## Quy Ước Triển Khai
 - Áp dụng nghiêm ngặt chu trình **TDD (RED $\rightarrow$ GREEN $\rightarrow$ REFACTOR)**.
-- Mọi logic nghiệp vụ tại tầng Domain & Application phải đạt độ bao phủ kiểm thử (Test Coverage) $\ge 90\%$.
 - Kiểm tra tính toàn vẹn và thực thi lệnh test sau mỗi task.
 
 ---
 
 ## Danh Sách Task Chi Tiết
 
-### [T-ST-01] [CONTRACT] Hợp Đồng API Protobuf & Sinh Mã Go Stubs
+- [x] **[T-ST-01] [CONTRACT]**: Hợp Đồng API Protobuf & Sinh Mã Go Stubs
+- [x] **[T-ST-02] [MIGRATION]**: Migration Cơ Sở Dữ Liệu Chuỗi Ngày
+- [x] **[T-ST-03] [DOMAIN TDD]**: Triển Khai UserStreak Aggregate (RED -> GREEN -> REFACTOR)
+- [x] **[T-ST-04] [APP TDD]**: Triển Khai Use Cases & Command Handlers
+- [x] **[T-ST-05] [INFRA]**: Hiện Thực Hóa PostgresStreakRepository & Integration Tests
+- [x] **[T-ST-06] [TRANSPORT]**: Triển Khai ConnectRPC Server, Kafka Consumers & Module Wiring
+
+---
+
+### [x] [T-ST-01] [CONTRACT] Hợp Đồng API Protobuf & Sinh Mã Go Stubs
 - **Mục tiêu**: Bổ sung API ConnectRPC quản lý chuỗi ngày vào hợp đồng `GamificationService` theo chuẩn Contract-First (SSOT).
 - **Tệp nguồn**:
   - `proto/contracts/supporting/gamification/v1/service/gamification_service.proto` (kèm `google.api.http` và `BearerAuth`)
@@ -26,7 +34,7 @@
 
 ---
 
-### [T-ST-02] [MIGRATION] Migration Cơ Sở Dữ Liệu Chuỗi Ngày
+### [x] [T-ST-02] [MIGRATION] Migration Cơ Sở Dữ Liệu Chuỗi Ngày
 - **Mục tiêu**: Tạo các bảng `user_streak`, `streak_history` với đầy đủ ràng buộc và khóa duy nhất trong migration chuẩn.
 - **Tệp nguồn**:
   - `internal/shared/database/migrations/13-create-gamification-tables.sql`
@@ -40,7 +48,7 @@
 
 ---
 
-### [T-ST-03] [DOMAIN TDD] Triển Khai UserStreak Aggregate (RED -> GREEN -> REFACTOR)
+### [x] [T-ST-03] [DOMAIN TDD] Triển Khai UserStreak Aggregate (RED -> GREEN -> REFACTOR)
 - **Mục tiêu**: Xây dựng nghiệp vụ chuỗi ngày, cơ chế Lazy Evaluation duy trì kỷ luật và bảo toàn kỷ lục chuỗi dài nhất (`longest_streak`).
 - **Tệp nguồn**:
   - `internal/gamification/domain/aggregate/user_streak.go`
@@ -59,7 +67,7 @@
 
 ---
 
-### [T-ST-04] [APP TDD] Triển Khai Use Cases & Command Handlers
+### [x] [T-ST-04] [APP TDD] Triển Khai Use Cases & Command Handlers
 - **Mục tiêu**: Xây dựng Use Cases duy trì chuỗi và tra cứu trạng thái chuỗi qua `TransactionManager`.
 - **Tệp nguồn**:
   - `internal/gamification/application/port/streak_repository.go`
@@ -76,7 +84,7 @@
 
 ---
 
-### [T-ST-05] [INFRA] Hiện Thực Hóa PostgresStreakRepository & Integration Tests
+### [x] [T-ST-05] [INFRA] Hiện Thực Hóa PostgresStreakRepository & Integration Tests
 - **Mục tiêu**: Triển khai tầng lưu trữ với khóa dòng bi quan `SELECT ... FOR UPDATE` và kiểm thử tương tranh trên PostgreSQL thật.
 - **Tệp nguồn**:
   - `internal/gamification/infrastructure/persistence/streak_repository.go`
@@ -88,7 +96,7 @@
 
 ---
 
-### [T-ST-06] [TRANSPORT] Triển Khai ConnectRPC Server, Kafka Consumers & Module Wiring
+### [x] [T-ST-06] [TRANSPORT] Triển Khai ConnectRPC Server, Kafka Consumers & Module Wiring
 - **Mục tiêu**: Đấu nối API và các sự kiện hệ thống vào module.
 - **Tệp nguồn**:
   - `internal/gamification/transport/grpc/gamification_handler.go`

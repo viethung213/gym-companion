@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.service;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service;gamificationv1service";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "contracts/supporting/gamification/v1/message/gamification_messages.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Gamification Engine API"
+    version: "1.0"
+    description: "API quản lý điểm kinh nghiệm (XP), cấp độ (Levels), chuỗi ngày (Streaks) và Bảng xếp hạng (Leaderboards)."
+  }
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Bearer access token (Format: Bearer <token>)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "BearerAuth"
+      value: {}
+    }
+  }
+};
+
+service GamificationService {
+  // Lấy thông tin điểm kinh nghiệm và cấp độ của bản thân
+  rpc GetMyXp (contracts.supporting.gamification.v1.message.GetMyXpRequest) returns (contracts.supporting.gamification.v1.message.GetMyXpResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/xp/me"
+    };
+  }
+
+  // Tra cứu lịch sử biến động điểm kinh nghiệm (phân trang)
+  rpc GetXpHistory (contracts.supporting.gamification.v1.message.GetXpHistoryRequest) returns (contracts.supporting.gamification.v1.message.GetXpHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/xp/history"
+    };
+  }
+
+  // Lấy thông tin chuỗi ngày kỷ luật (Streak) hiện tại của bản thân
+  rpc GetStreak (contracts.supporting.gamification.v1.message.GetStreakRequest) returns (contracts.supporting.gamification.v1.message.GetStreakResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/streak/me"
+    };
+  }
+
+  // Tra cứu lịch sử chuỗi ngày theo ngày hoạt động
+  rpc GetStreakHistory (contracts.supporting.gamification.v1.message.GetStreakHistoryRequest) returns (contracts.supporting.gamification.v1.message.GetStreakHistoryResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/streak/history"
+    };
+  }
+
+  // Lấy bảng xếp hạng toàn hệ thống theo điểm XP (Top 50) kèm thứ hạng cá nhân
+  rpc GetGlobalLeaderboard (contracts.supporting.gamification.v1.message.GetGlobalLeaderboardRequest) returns (contracts.supporting.gamification.v1.message.GetGlobalLeaderboardResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/leaderboard"
+    };
+  }
+
+  // Lấy danh sách toàn bộ huy hiệu kèm trạng thái đã mở khóa của bản thân
+  rpc GetMyBadges (contracts.supporting.gamification.v1.message.GetMyBadgesRequest) returns (contracts.supporting.gamification.v1.message.GetMyBadgesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/badges/me"
+    };
+  }
+}

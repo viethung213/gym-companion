@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.message;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message;gamificationv1message";
+
+// UserXpSummary chứa thông tin tổng hợp về điểm kinh nghiệm và cấp độ của người dùng.
+message UserXpSummary {
+  string user_id = 1;
+  int64 xp = 2;
+  int32 level = 3;
+  int64 xp_to_next_level = 4;
+  float level_progress_percentage = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// XpHistoryEntry biểu diễn một bản ghi lịch sử biến động điểm kinh nghiệm.
+message XpHistoryEntry {
+  string id = 1;
+  string user_id = 2;
+  int32 amount = 3;
+  string source = 4; // "WORKOUT", "NUTRITION", "ONBOARDING"
+  optional string session_id = 5;
+  string activity_date = 6; // YYYY-MM-DD
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// StreakSummary chứa trạng thái chuỗi ngày kỷ luật hiện tại của người dùng.
+message StreakSummary {
+  string user_id = 1;
+  int32 current_streak = 2;
+  int32 longest_streak = 3;
+  string last_active_date = 4; // YYYY-MM-DD
+  bool is_active_today = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// StreakHistoryEntry biểu diễn một ngày hoạt động duy trì chuỗi thành công.
+message StreakHistoryEntry {
+  string id = 1;
+  string user_id = 2;
+  string activity_date = 3; // YYYY-MM-DD
+  string activity_type = 4; // "WORKOUT", "NUTRITION"
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// LeaderboardEntry biểu diễn một dòng trong Bảng Xếp Hạng.
+message LeaderboardEntry {
+  int32 rank = 1;
+  string user_id = 2;
+  string display_name = 3;
+  string avatar_url = 4;
+  int64 xp = 5;
+  int32 level = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// Request / Response cho API GetMyXp
+message GetMyXpRequest {}
+
+message GetMyXpResponse {
+  UserXpSummary xp_summary = 1;
+}
+
+// Request / Response cho API GetXpHistory
+message GetXpHistoryRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+message GetXpHistoryResponse {
+  repeated XpHistoryEntry entries = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Request / Response cho API GetStreak
+message GetStreakRequest {}
+
+message GetStreakResponse {
+  StreakSummary streak_summary = 1;
+}
+
+// Request / Response cho API GetStreakHistory
+message GetStreakHistoryRequest {
+  int32 limit_days = 1; // Số ngày tối đa cần lấy lịch sử (mặc định 30)
+}
+
+message GetStreakHistoryResponse {
+  repeated StreakHistoryEntry entries = 1;
+}
+
+// Request / Response cho API GetGlobalLeaderboard
+message GetGlobalLeaderboardRequest {
+  int32 limit = 1; // Mặc định 50
+}
+
+message GetGlobalLeaderboardResponse {
+  repeated LeaderboardEntry top_entries = 1;
+  LeaderboardEntry my_standing = 2;
+}
+
+// BadgeItem biểu diễn một huy hiệu thành tựu và trạng thái mở khóa của người dùng.
+message BadgeItem {
+  string badge_code = 1; // e.g. "STREAK_7", "LEVEL_10", "FIRST_PR"
+  string name = 2;       // Tên huy hiệu hiển thị
+  string description = 3;// Mô tả điều kiện đạt huy hiệu
+  string category = 4;   // "STREAK", "LEVEL", "WORKOUT", "PR", "NUTRITION"
+  string icon_url = 5;   // Đường dẫn ảnh huy hiệu
+  bool is_unlocked = 6;  // Trạng thái đã mở khóa hay chưa
+  optional google.protobuf.Timestamp unlocked_at = 7; // Thời điểm mở khóa
+}
+
+// Request / Response cho API GetMyBadges
+message GetMyBadgesRequest {}
+
+message GetMyBadgesResponse {
+  repeated BadgeItem badges = 1;
+  int32 total_unlocked = 2;
+  int32 total_available = 3;
+}
+
