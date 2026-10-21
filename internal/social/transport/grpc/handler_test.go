@@ -2,6 +2,7 @@ package grpc_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/application/query"
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/social/domain/entity"
+	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 	socialGRPC "github.com/viethung213/gym-companion/internal/social/transport/grpc"
 )
 
@@ -117,6 +119,19 @@ func (r *testFeedItemRepo) UpdateReactionCount(ctx context.Context, id string, d
 func (r *testFeedItemRepo) UpdateCommentCount(ctx context.Context, id string, delta int) error {
 	return nil
 }
+func (r *testFeedItemRepo) SearchPosts(ctx context.Context, filter repository.SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error) {
+	list := make([]*aggregate.FeedItem, 0, len(r.items))
+	for _, item := range r.items {
+		if filter.AuthorID != "" && item.UserID() != filter.AuthorID {
+			continue
+		}
+		if filter.Query != "" && !strings.Contains(strings.ToLower(item.Caption()), strings.ToLower(filter.Query)) {
+			continue
+		}
+		list = append(list, item)
+	}
+	return list, "", int32(len(list)), nil
+}
 
 type testInteractionRepo struct {
 	reactions map[string]*entity.Reaction
@@ -217,6 +232,7 @@ func setupTestHandler() *socialGRPC.GRPCHandler {
 		query.NewListCommentsHandler(iRepo, uRepo),
 		query.NewListReactionsHandler(iRepo, uRepo),
 		query.NewSearchUsersHandler(uRepo, fRepo),
+		query.NewSearchPostsHandler(feedRepo, iRepo, uRepo),
 	)
 }
 
@@ -586,5 +602,34 @@ func TestGRPCHandler_SearchUsers(t *testing.T) {
 	}
 	if res.Msg.GetUsers()[0].GetUserId() != "u-searched-1" {
 		t.Errorf("expected user id u-searched-1, got %s", res.Msg.GetUsers()[0].GetUserId())
+	}
+}
+
+func TestGRPCHandler_SearchPosts(t *testing.T) {
+	h := setupTestHandler()
+	authCtx := contextWithUser("user-1")
+
+	// 1. Create a post
+	_, err := h.CreatePost(authCtx, connect.NewRequest(&socialv1message.CreatePostRequest{
+		Caption:    "Testing squat search capability",
+		Visibility: "PUBLIC",
+	}))
+	if err != nil {
+		t.Fatalf("CreatePost failed: %v", err)
+	}
+
+	// 2. Search for squat
+	res, err := h.SearchPosts(authCtx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:    "squat",
+		PageSize: 10,
+	}))
+	if err != nil {
+		t.Fatalf("SearchPosts failed: %v", err)
+	}
+	if len(res.Msg.GetItems()) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(res.Msg.GetItems()))
+	}
+	if res.Msg.GetItems()[0].GetCaption() != "Testing squat search capability" {
+		t.Errorf("caption mismatch: %s", res.Msg.GetItems()[0].GetCaption())
 	}
 }

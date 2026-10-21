@@ -91,3 +91,20 @@ Thay vì chia tách bảng tin thành nhiều nguồn dữ liệu rời rạc, h
   - Số lượng người đang theo dõi (`followers_count`).
   - Số lượng người mình đang theo dõi (`following_count`).
   - Tổng số giờ/buổi tập luyện đã chia sẻ và tổng volume tạ đã hoàn thành.
+
+
+---
+
+### 2.7. Tìm Kiếm Bài Viết & Hoạt Động (Post & Activity Search)
+- **Mục tiêu**: Cho phép người dùng tìm kiếm bài viết hoặc nhật ký tập luyện trong cộng đồng theo từ khóa nội dung và người dùng.
+- **Quy tắc tìm kiếm theo từ khóa (`query`)**: Khớp theo cụm từ hoặc từ khóa xuất hiện trong trường `caption` của bài viết (hỗ trợ chuỗi con và tiếng Việt có dấu/không dấu qua Trigram index).
+- **Bộ lọc kết hợp**:
+  - *Lọc theo tác giả (`user_id`)*: Giới hạn phạm vi tìm kiếm trong các bài viết của một người dùng cụ thể. Bỏ trống để tìm kiếm trên toàn mạng xã hội.
+  - *Lọc theo loại nội dung (`item_type`)*: Lọc riêng bài viết thông thường (`POST`) hoặc bài tập hoàn thành (`WORKOUT_ACTIVITY`). Bỏ trống hoặc đặt unspecified để lấy tất cả.
+- **Quy tắc bảo mật & phân quyền hiển thị (Access Control)**:
+  - Bài viết `PUBLIC`: Mọi người dùng hợp lệ đều có thể tìm thấy.
+  - Bài viết `FOLLOWERS_ONLY`: Chỉ xuất hiện trong kết quả tìm kiếm nếu người tìm kiếm là tác giả hoặc đang theo dõi tác giả đó.
+  - Bài viết `PRIVATE`: Chỉ xuất hiện khi người tìm kiếm chính là tác giả bài viết.
+  - Kiểm tra quyền trực tiếp tại tầng truy vấn cơ sở dữ liệu để bảo vệ dữ liệu và bảo đảm phân trang chính xác.
+- **Phân trang dạng Cursor**:
+  - Hỗ trợ cuộn trang liên tục dựa trên cursor thời gian `created_at` giảm dần kết hợp định dạng ISO8601 UTC.

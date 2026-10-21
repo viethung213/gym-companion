@@ -5,6 +5,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/social/domain/entity"
+	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
 type mockUserSnapshotRepo struct {
@@ -140,6 +141,9 @@ func (m *queryMockFeedItemRepo) UpdateReactionCount(ctx context.Context, id stri
 }
 func (m *queryMockFeedItemRepo) UpdateCommentCount(ctx context.Context, id string, delta int) error {
 	return nil
+}
+func (m *queryMockFeedItemRepo) SearchPosts(ctx context.Context, filter repository.SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error) {
+	return m.items, "", int32(len(m.items)), nil
 }
 
 type queryMockInteractionRepo struct {

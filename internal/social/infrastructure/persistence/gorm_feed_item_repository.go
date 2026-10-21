@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
@@ -140,4 +141,106 @@ func (r *GormFeedItemRepository) UpdateCommentCount(ctx context.Context, id stri
 	return getDB(ctx, r.db).Model(&FeedItemModel{}).
 		Where("id = ?", id).
 		UpdateColumn("comment_count", gorm.Expr(expr, delta)).Error
+}
+
+func escapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	return strings.ReplaceAll(s, "_", "\\_")
+}
+
+//nolint:gocritic // filter parameter struct passed by value matching repository port
+func (r *GormFeedItemRepository) SearchPosts(
+	ctx context.Context,
+	filter repository.SearchPostsFilter,
+) ([]*aggregate.FeedItem, string, int32, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	db := getDB(ctx, r.db).Model(&FeedItemModel{})
+
+	// 1. Lọc theo từ khóa trong caption (sử dụng ILIKE để ăn GIN index trên Postgres)
+	if query := strings.TrimSpace(filter.Query); query != "" {
+		likeOp := "ILIKE"
+		if r.db != nil && r.db.Dialector != nil && r.db.Dialector.Name() == "sqlite" {
+			likeOp = "LIKE"
+		}
+		searchTerm := "%" + escapeLikePattern(query) + "%"
+		db = db.Where(fmt.Sprintf("caption %s ? ESCAPE '\\'", likeOp), searchTerm)
+	}
+
+	// 2. Lọc theo tác giả cụ thể nếu có
+	if authorID := strings.TrimSpace(filter.AuthorID); authorID != "" {
+		db = db.Where("user_id = ?", authorID)
+	}
+
+	// 3. Lọc theo loại bài viết (chỉ chấp nhận domain string đã chuẩn hóa)
+	if itemType := strings.TrimSpace(filter.ItemType); itemType != "" {
+		db = db.Where("item_type = ?", itemType)
+	}
+
+	// 4. Lọc quyền riêng tư (Visibility Access Control) - Dùng EXISTS thay vì IN để tối ưu hiệu năng
+	if filter.ViewerID == "" {
+		// Chưa đăng nhập chỉ thấy bài PUBLIC
+		db = db.Where("visibility = ?", "PUBLIC")
+	} else {
+		// Đã đăng nhập: thấy bài PUBLIC, bài của chính mình, hoặc bài FOLLOWERS_ONLY của người mình đang follow
+		subQuery := "visibility = 'PUBLIC' OR user_id = ? OR " +
+			"(visibility = 'FOLLOWERS_ONLY' AND EXISTS " +
+			"(SELECT 1 FROM social.follows f WHERE f.follower_id = ? AND f.following_id = social.feed_items.user_id))"
+		db = db.Where(subQuery, filter.ViewerID, filter.ViewerID)
+	}
+
+	// 5. Đếm tổng số kết quả phù hợp (tách Session để tránh bleed state sang Find)
+	countDB := db.Session(&gorm.Session{})
+	var total int64
+	if err := countDB.Count(&total).Error; err != nil {
+		return nil, "", 0, fmt.Errorf("count search posts: %w", err)
+	}
+
+	// 6. Phân trang theo Compound Cursor (created_at DESC, id DESC)
+	queryDB := db.Session(&gorm.Session{})
+	if filter.Cursor != "" {
+		if strings.Contains(filter.Cursor, "#") {
+			parts := strings.SplitN(filter.Cursor, "#", 2)
+			if t, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
+				queryDB = queryDB.Where("created_at < ? OR (created_at = ? AND id < ?)", t, t, parts[1])
+			}
+		} else {
+			if t, err := time.Parse("2006-01-02T15:04:05.000000Z07:00", filter.Cursor); err == nil {
+				queryDB = queryDB.Where("created_at < ?", t)
+			} else if t, err := time.Parse(time.RFC3339Nano, filter.Cursor); err == nil {
+				queryDB = queryDB.Where("created_at < ?", t)
+			} else if t, err := time.Parse(time.RFC3339, filter.Cursor); err == nil {
+				queryDB = queryDB.Where("created_at < ?", t)
+			}
+		}
+	}
+
+	var models []FeedItemModel
+	if err := queryDB.Order("created_at DESC, id DESC").Limit(limit).Find(&models).Error; err != nil {
+		return nil, "", 0, fmt.Errorf("find search posts: %w", err)
+	}
+
+	res := make([]*aggregate.FeedItem, 0, len(models))
+	for i := range models {
+		domainItem, err := ToDomainFeedItem(&models[i])
+		if err != nil {
+			return nil, "", 0, fmt.Errorf("corrupt feed item data %s: %w", models[i].ID, err)
+		}
+		res = append(res, domainItem)
+	}
+
+	nextCursor := ""
+	if len(models) == limit {
+		last := &models[len(models)-1]
+		nextCursor = fmt.Sprintf("%s#%s", last.CreatedAt.Format(time.RFC3339Nano), last.ID)
+	}
+
+	return res, nextCursor, int32(total), nil
 }

@@ -62,12 +62,37 @@ func (r *GormInteractionRepository) GetReactionsByFeedItem(ctx context.Context, 
 	if err != nil {
 		return nil, fmt.Errorf("find reactions by feed item: %w", err)
 	}
-	var res []*entity.Reaction
+	res := make([]*entity.Reaction, 0, len(models))
 	for i := range models {
 		item, err := ToDomainReaction(&models[i])
-		if err == nil {
-			res = append(res, item)
+		if err != nil {
+			return nil, fmt.Errorf("map reaction: %w", err)
 		}
+		res = append(res, item)
+	}
+	return res, nil
+}
+
+func (r *GormInteractionRepository) GetReactionsByUserAndFeedItemIDs(
+	ctx context.Context,
+	userID string,
+	feedItemIDs []string,
+) (map[string]*entity.Reaction, error) {
+	if len(feedItemIDs) == 0 || userID == "" {
+		return make(map[string]*entity.Reaction), nil
+	}
+	var models []ReactionModel
+	err := getDB(ctx, r.db).Where("user_id = ? AND feed_item_id IN ?", userID, feedItemIDs).Find(&models).Error
+	if err != nil {
+		return nil, fmt.Errorf("find reactions by items: %w", err)
+	}
+	res := make(map[string]*entity.Reaction, len(models))
+	for i := range models {
+		item, err := ToDomainReaction(&models[i])
+		if err != nil {
+			return nil, fmt.Errorf("map reaction: %w", err)
+		}
+		res[models[i].FeedItemID] = item
 	}
 	return res, nil
 }

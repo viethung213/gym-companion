@@ -6,6 +6,15 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
 )
 
+type SearchPostsFilter struct {
+	ViewerID string
+	AuthorID string
+	Query    string
+	ItemType string
+	Limit    int
+	Cursor   string
+}
+
 type FeedItemRepository interface {
 	Create(ctx context.Context, item *aggregate.FeedItem) error
 	GetByID(ctx context.Context, id string) (*aggregate.FeedItem, error)
@@ -15,4 +24,5 @@ type FeedItemRepository interface {
 	CountByUserID(ctx context.Context, userID string) (int32, error)
 	UpdateReactionCount(ctx context.Context, id string, delta int) error
 	UpdateCommentCount(ctx context.Context, id string, delta int) error
+	SearchPosts(ctx context.Context, filter SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error)
 }

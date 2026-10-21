@@ -77,6 +77,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	listCommentsHandler := query.NewListCommentsHandler(interactionRepo, userSnapshotRepo)
 	listReactionsHandler := query.NewListReactionsHandler(interactionRepo, userSnapshotRepo)
 	searchUsersHandler := query.NewSearchUsersHandler(userSnapshotRepo, followRepo)
+	searchPostsHandler := query.NewSearchPostsHandler(feedItemRepo, interactionRepo, userSnapshotRepo)
 
 	// Transport Handler
 	grpcHandler := socialGRPC.NewGRPCHandler(
@@ -95,6 +96,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 		listCommentsHandler,
 		listReactionsHandler,
 		searchUsersHandler,
+		searchPostsHandler,
 	)
 
 	// Background workers (Kafka publisher & consumers)

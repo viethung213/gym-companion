@@ -283,3 +283,27 @@ sequenceDiagram
         end
     end
 ```
+
+
+---
+
+### 4.9. Luồng Tìm Kiếm Bài Viết Theo Từ Khóa & Người Dùng (Search Posts Flow)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Web / Mobile Client
+    participant Handler as SocialService (gRPC/Connect)
+    participant QueryHandler as SearchPostsHandler
+    participant FeedRepo as FeedItemRepository (Postgres GIN Trgm)
+    participant UserRepo as UserSnapshotRepository
+
+    Client->>Handler: GET /api/v1/social/posts/search?query=...&user_id=...&item_type=...
+    Handler->>QueryHandler: Handle(SearchPostsQuery{ViewerID, AuthorID, Query, ItemType, PageSize, Cursor})
+    QueryHandler->>FeedRepo: Search(ctx, filter)
+    Note over FeedRepo: Truy vấn index GIN Trigram trên cột caption<br/>Subquery lọc quyền (PUBLIC, FOLLOWERS_ONLY, PRIVATE)
+    FeedRepo-->>QueryHandler: Danh sách FeedItem, NextCursor, TotalCount
+    QueryHandler->>UserRepo: Enrich tác giả (FullName, AvatarURL) từ UserSnapshot
+    QueryHandler-->>Handler: SearchPostsResult (FeedItemDTOs, NextCursor, TotalCount)
+    Handler-->>Client: SearchPostsResponse (HTTP 200 / Connect OK)
+```

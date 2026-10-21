@@ -47,6 +47,7 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
   - `query/get_following.go` & `query/get_following_test.go`: Truy vấn danh sách đang theo dõi kèm Snapshot.
   - `query/list_comments.go` & `query/list_comments_test.go`: Lấy danh sách bình luận (Cursor Pagination).
   - `query/list_reactions.go` & `query/list_reactions_test.go`: Lấy danh sách người thả cảm xúc trên bài viết.
+  - `query/search_posts.go` & `query/search_posts_test.go`: Tìm kiếm bài viết theo từ khóa nội dung, lọc theo tác giả, loại bài viết và phân quyền hiển thị.
   - `query/mocks_test.go`: Mock repository dùng chung cho các test suite query.
 - [x] **Application Ports**:
   - Tách rời riêng biệt:
@@ -86,6 +87,7 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
 ### 1.5. Cơ Sở Dữ Liệu & API Contracts
 - [x] **Database Migration**:
   - `12-create-social-tables.sql`: Tạo toàn bộ 7 bảng trong schema `social` kèm Foreign Keys, Indexes, Unique constraints và Cascading Delete.
+  - `13-add-social-feed-search-index.sql`: Bổ sung GIN Trigram index trên cột `caption` của bảng `social.feed_items` để tối ưu hóa tìm kiếm bài viết.
   - Khởi tạo schema `social` trong `01-init-schemas.sql`.
 - [x] **Protobuf Contracts**:
   - `proto/contracts/supporting/social/v1/message/social_messages.proto`: Khai báo thông điệp.
@@ -106,6 +108,8 @@ Tất cả các tầng kiến trúc và toàn bộ hành trình người dùng (
 --- PASS: TestE2E_FullSocialJourney (0.01s)
 === RUN   TestE2E_ValidationAndSecurityRules
 --- PASS: TestE2E_ValidationAndSecurityRules (0.00s)
+=== RUN   TestE2E_SearchPosts
+--- PASS: TestE2E_SearchPosts (0.00s)
 PASS
 ok      github.com/viethung213/gym-companion/internal/social/test   0.109s
 ```
