@@ -58,10 +58,12 @@ func (h *GetActivityFeedHandler) Handle(ctx context.Context, q GetActivityFeedQu
 		return nil, fmt.Errorf("fetch feed items: %w", fetchErr)
 	}
 
-	// Lấy thông tin user (Tên, Avatar) theo batch
+	// Lấy thông tin user (Tên, Avatar) và tương tác của current user theo batch
 	var distinctUserIDs []string
 	seen := make(map[string]bool)
+	feedItemIDs := make([]string, 0, len(feedItems))
 	for _, item := range feedItems {
+		feedItemIDs = append(feedItemIDs, item.ID())
 		if !seen[item.UserID()] {
 			seen[item.UserID()] = true
 			distinctUserIDs = append(distinctUserIDs, item.UserID())
@@ -69,6 +71,11 @@ func (h *GetActivityFeedHandler) Handle(ctx context.Context, q GetActivityFeedQu
 	}
 
 	userInfoMap, _ := h.userSnapshotRepo.GetByIDs(ctx, distinctUserIDs)
+
+	var userReactionMap map[string]*entity.Reaction
+	if q.CurrentUserID != "" && len(feedItemIDs) > 0 {
+		userReactionMap, _ = h.interactionRepo.GetUserReactions(ctx, q.CurrentUserID, feedItemIDs)
+	}
 
 	result := make([]*FeedItemDTO, 0, len(feedItems))
 	for _, item := range feedItems {
@@ -82,8 +89,8 @@ func (h *GetActivityFeedHandler) Handle(ctx context.Context, q GetActivityFeedQu
 		}
 
 		userReaction := ""
-		if q.CurrentUserID != "" {
-			if r, err := h.interactionRepo.GetReaction(ctx, q.CurrentUserID, item.ID()); err == nil && r != nil {
+		if userReactionMap != nil {
+			if r, ok := userReactionMap[item.ID()]; ok && r != nil {
 				userReaction = r.ReactionType().String()
 			}
 		}

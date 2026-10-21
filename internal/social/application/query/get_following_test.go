@@ -15,7 +15,8 @@ func TestGetFollowingHandler(t *testing.T) {
 	f2, _ := aggregate.NewFollow("f-2", "user-me", "user-following-2", now)
 
 	followRepo := &queryMockFollowRepo{
-		following: []*aggregate.Follow{f1, f2},
+		following:    []*aggregate.Follow{f1, f2},
+		followingIDs: []string{"user-following-1"},
 	}
 	userSnapshotRepo := &mockUserSnapshotRepo{
 		users: map[string]*entity.UserSnapshot{
@@ -27,7 +28,7 @@ func TestGetFollowingHandler(t *testing.T) {
 	handler := NewGetFollowingHandler(followRepo, userSnapshotRepo)
 
 	res, err := handler.Handle(context.Background(), GetFollowingQuery{
-		UserID:        "user-me",
+		UserID:        "user-target",
 		CurrentUserID: "user-me",
 		PageSize:      10,
 	})
@@ -41,7 +42,13 @@ func TestGetFollowingHandler(t *testing.T) {
 	if res.Following[0].UserID != "user-following-1" || res.Following[0].FullName != "Following One" {
 		t.Errorf("unexpected following 1 info: %+v", res.Following[0])
 	}
+	if !res.Following[0].IsFollowing {
+		t.Errorf("expected following 1 is_following = true")
+	}
 	if res.Following[1].UserID != "user-following-2" || res.Following[1].FullName != "Following Two" {
 		t.Errorf("unexpected following 2 info: %+v", res.Following[1])
+	}
+	if res.Following[1].IsFollowing {
+		t.Errorf("expected following 2 is_following = false")
 	}
 }

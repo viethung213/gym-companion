@@ -69,22 +69,28 @@ func (h *SearchUsersHandler) Handle(ctx context.Context, q SearchUsersQuery) (*S
 		return nil, err
 	}
 
-	followingSet := make(map[string]bool)
-	if q.CurrentUserID != "" {
-		followingIDs, err := h.followRepo.GetFollowingIDs(ctx, q.CurrentUserID)
-		if err == nil {
-			for _, id := range followingIDs {
-				followingSet[id] = true
-			}
-		}
+	targetUserIDs := make([]string, len(users))
+	for i, u := range users {
+		targetUserIDs[i] = u.ID()
 	}
+
+	var followingMap map[string]bool
+	if q.CurrentUserID != "" && len(targetUserIDs) > 0 {
+		followingMap, _ = h.followRepo.FilterFollowingIDs(ctx, q.CurrentUserID, targetUserIDs)
+	}
+
+	followerCountsMap, _ := h.followRepo.CountFollowersByIDs(ctx, targetUserIDs)
 
 	dtos := make([]*DiscoverUserDTO, len(users))
 	for i, u := range users {
-		followerCount, _ := h.followRepo.CountFollowers(ctx, u.ID())
+		var followerCount int32
+		if followerCountsMap != nil {
+			followerCount = followerCountsMap[u.ID()]
+		}
+
 		isFollowing := false
-		if q.CurrentUserID != "" && q.CurrentUserID != u.ID() {
-			isFollowing = followingSet[u.ID()]
+		if followingMap != nil && q.CurrentUserID != u.ID() {
+			isFollowing = followingMap[u.ID()]
 		}
 
 		dtos[i] = &DiscoverUserDTO{

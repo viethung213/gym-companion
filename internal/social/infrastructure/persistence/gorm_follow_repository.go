@@ -162,3 +162,56 @@ func (r *GormFollowRepository) CountFollowing(ctx context.Context, userID string
 	}
 	return int32(count), nil
 }
+
+func (r *GormFollowRepository) FilterFollowingIDs(
+	ctx context.Context,
+	followerID string,
+	targetUserIDs []string,
+) (map[string]bool, error) {
+	res := make(map[string]bool)
+	if len(targetUserIDs) == 0 || followerID == "" {
+		return res, nil
+	}
+
+	var followingIDs []string
+	err := getDB(ctx, r.db).Model(&FollowModel{}).
+		Where("follower_id = ? AND following_id IN ?", followerID, targetUserIDs).
+		Pluck("following_id", &followingIDs).Error
+	if err != nil {
+		return nil, fmt.Errorf("filter following ids: %w", err)
+	}
+
+	for _, id := range followingIDs {
+		res[id] = true
+	}
+	return res, nil
+}
+
+func (r *GormFollowRepository) CountFollowersByIDs(
+	ctx context.Context,
+	userIDs []string,
+) (map[string]int32, error) {
+	res := make(map[string]int32)
+	if len(userIDs) == 0 {
+		return res, nil
+	}
+
+	type countResult struct {
+		FollowingID string `gorm:"column:following_id"`
+		Count       int64  `gorm:"column:count"`
+	}
+	var rows []countResult
+	err := getDB(ctx, r.db).Model(&FollowModel{}).
+		Select("following_id, count(*) as count").
+		Where("following_id IN ?", userIDs).
+		Group("following_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("count batch followers: %w", err)
+	}
+
+	for _, row := range rows {
+		res[row.FollowingID] = int32(row.Count)
+	}
+	return res, nil
+}

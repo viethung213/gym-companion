@@ -58,6 +58,22 @@ func (r *testFollowRepo) CountFollowers(ctx context.Context, userID string) (int
 func (r *testFollowRepo) CountFollowing(ctx context.Context, userID string) (int32, error) {
 	return 2, nil
 }
+func (r *testFollowRepo) FilterFollowingIDs(ctx context.Context, followerID string, targetUserIDs []string) (map[string]bool, error) {
+	res := make(map[string]bool)
+	for _, targetID := range targetUserIDs {
+		if r.follows[followerID+":"+targetID] != nil {
+			res[targetID] = true
+		}
+	}
+	return res, nil
+}
+func (r *testFollowRepo) CountFollowersByIDs(ctx context.Context, userIDs []string) (map[string]int32, error) {
+	res := make(map[string]int32)
+	for _, id := range userIDs {
+		res[id] = 1
+	}
+	return res, nil
+}
 
 type testFeedItemRepo struct {
 	items map[string]*aggregate.FeedItem
@@ -123,6 +139,15 @@ func (r *testInteractionRepo) GetReactionsByFeedItem(ctx context.Context, feedIt
 	for _, reaction := range r.reactions {
 		if reaction.FeedItemID() == feedItemID {
 			res = append(res, reaction)
+		}
+	}
+	return res, nil
+}
+func (r *testInteractionRepo) GetUserReactions(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
+	res := make(map[string]*entity.Reaction)
+	for _, fid := range feedItemIDs {
+		if reaction, ok := r.reactions[userID+":"+fid]; ok {
+			res[fid] = reaction
 		}
 	}
 	return res, nil

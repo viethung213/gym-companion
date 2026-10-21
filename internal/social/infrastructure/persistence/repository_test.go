@@ -44,6 +44,16 @@ func TestRepositories_FollowAndFeed(t *testing.T) {
 		t.Fatalf("expected [user-2], got %v", followingIDs)
 	}
 
+	filtered, err := repos.FollowRepo.FilterFollowingIDs(ctx, "user-1", []string{"user-2", "user-non-existent"})
+	if err != nil || !filtered["user-2"] || filtered["user-non-existent"] {
+		t.Fatalf("FilterFollowingIDs failed: err=%v, filtered=%v", err, filtered)
+	}
+
+	batchFollowersCount, err := repos.FollowRepo.CountFollowersByIDs(ctx, []string{"user-2", "user-non-existent"})
+	if err != nil || batchFollowersCount["user-2"] != 1 {
+		t.Fatalf("CountFollowersByIDs failed: err=%v, counts=%v", err, batchFollowersCount)
+	}
+
 	// 2. Feed Item Repository
 	post, _ := aggregate.NewPostItem("p-1", "user-2", "Hello World", nil, vo.VisibilityPublic, 0, 0, now, now)
 	if err := repos.FeedItemRepo.Create(ctx, post); err != nil {
@@ -128,6 +138,11 @@ func TestRepositories_InteractionsAndUser(t *testing.T) {
 	reactions, err := repos.InteractionRepo.GetReactionsByFeedItem(ctx, "target-1")
 	if err != nil || len(reactions) != 1 {
 		t.Fatalf("GetReactionsByFeedItem failed: %v", err)
+	}
+
+	batchReactions, err := repos.InteractionRepo.GetUserReactions(ctx, "u-test-1", []string{"target-1", "non-existent"})
+	if err != nil || len(batchReactions) != 1 || batchReactions["target-1"] == nil || batchReactions["target-1"].ReactionType() != vo.ReactionTypeFire {
+		t.Fatalf("GetUserReactions failed: %v, len=%d", err, len(batchReactions))
 	}
 
 	c, _ := entity.NewComment("c-1", "u-test-1", "target-1", nil, "Awesome!", now, now)
