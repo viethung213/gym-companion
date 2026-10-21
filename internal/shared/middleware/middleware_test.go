@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"net"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -502,7 +503,7 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 	interceptor := NewConnectErrorMappingInterceptor()
 
 	// Case A: Handler returns nil error
-	noopHandler := interceptor(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+	noopHandler := interceptor.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		return nil, nil
 	})
 	resp, err := noopHandler(context.Background(), nil)
@@ -511,7 +512,7 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 	}
 
 	// Case B: Handler returns gRPC status error
-	errorHandler := interceptor(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+	errorHandler := interceptor.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		return nil, status.Error(codes.Unauthenticated, "invalid password")
 	})
 	_, err = errorHandler(context.Background(), nil)
@@ -524,5 +525,206 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 	}
 	if cErr.Code() != connect.CodeUnauthenticated {
 		t.Errorf("expected connect.CodeUnauthenticated, got %s", cErr.Code())
+	}
+}
+
+type mockStreamingHandlerConn struct {
+	spec        connect.Spec
+	peer        connect.Peer
+	reqHeader   http.Header
+	respHeader  http.Header
+	respTrailer http.Header
+}
+
+func (m *mockStreamingHandlerConn) Spec() connect.Spec           { return m.spec }
+func (m *mockStreamingHandlerConn) Peer() connect.Peer           { return m.peer }
+func (m *mockStreamingHandlerConn) Receive(any) error            { return nil }
+func (m *mockStreamingHandlerConn) RequestHeader() http.Header   { return m.reqHeader }
+func (m *mockStreamingHandlerConn) ResponseHeader() http.Header  { return m.respHeader }
+func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header { return m.respTrailer }
+func (m *mockStreamingHandlerConn) Send(any) error               { return nil }
+
+func TestConnectStreamingAuthInterceptor(t *testing.T) {
+	t.Parallel()
+	_, pubKeyPEM := getTestKeys(t)
+	kp := &mockKeyProvider{keyPEM: pubKeyPEM}
+	interceptor := NewConnectAuthInterceptor(kp)
+
+	// Case 1: Protected stream procedure with valid Bearer token
+	tokenStr := generateTestToken(t, "stream-user-123", "User", "test-kid")
+	header := make(http.Header)
+	header.Set("Authorization", "Bearer "+tokenStr)
+
+	conn := &mockStreamingHandlerConn{
+		spec: connect.Spec{
+			Procedure:  "/contracts.core.solo_match.v1.service.SoloMatchService/JoinQueue",
+			StreamType: connect.StreamTypeServer,
+		},
+		reqHeader: header,
+	}
+
+	var extractedUserID, extractedRole string
+	handler := interceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
+		if u, ok := ctx.Value(UserIDKey).(string); ok {
+			extractedUserID = u
+		}
+		if r, ok := ctx.Value(UserRoleKey).(string); ok {
+			extractedRole = r
+		}
+		return nil
+	})
+
+	err := handler(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("expected successful stream auth, got %v", err)
+	}
+	if extractedUserID != "stream-user-123" {
+		t.Errorf("expected userID stream-user-123, got %s", extractedUserID)
+	}
+	if extractedRole != "User" {
+		t.Errorf("expected role User, got %s", extractedRole)
+	}
+
+	// Case 2: Protected stream procedure with missing token
+	connNoAuth := &mockStreamingHandlerConn{
+		spec: connect.Spec{
+			Procedure:  "/contracts.core.solo_match.v1.service.SoloMatchService/JoinQueue",
+			StreamType: connect.StreamTypeServer,
+		},
+		reqHeader: make(http.Header),
+	}
+
+	err = handler(context.Background(), connNoAuth)
+	if err == nil {
+		t.Fatal("expected error for unauthenticated stream, got nil")
+	}
+	var cErr *connect.Error
+	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeUnauthenticated {
+		t.Fatalf("expected connect.CodeUnauthenticated, got %v", err)
+	}
+
+	// Case 3: Bidirectional stream (StreamTypeBidi) with valid Bearer token
+	bidiConn := &mockStreamingHandlerConn{
+		spec: connect.Spec{
+			Procedure:  "/contracts.core.solo_match.v1.service.SoloMatchService/BidiStream",
+			StreamType: connect.StreamTypeBidi,
+		},
+		reqHeader: header,
+	}
+
+	var bidiUserID string
+	bidiHandler := interceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
+		if u, ok := ctx.Value(UserIDKey).(string); ok {
+			bidiUserID = u
+		}
+		return nil
+	})
+
+	err = bidiHandler(context.Background(), bidiConn)
+	if err != nil {
+		t.Fatalf("expected successful bidi stream auth, got %v", err)
+	}
+	if bidiUserID != "stream-user-123" {
+		t.Errorf("expected bidiUserID stream-user-123, got %s", bidiUserID)
+	}
+}
+
+type mockServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (m *mockServerStream) Context() context.Context {
+	return m.ctx
+}
+
+func TestGRPCStreamInterceptors(t *testing.T) {
+	t.Parallel()
+	_, pubKeyPEM := getTestKeys(t)
+	kp := &mockKeyProvider{keyPEM: pubKeyPEM}
+
+	// 1. StreamAuthInterceptor
+	authInterceptor := StreamAuthInterceptor(kp)
+	tokenStr := generateTestToken(t, "grpc-bidi-user", "User", "test-kid")
+
+	md := metadata.Pairs("authorization", "Bearer "+tokenStr)
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	ss := &mockServerStream{ctx: ctx}
+	info := &grpc.StreamServerInfo{
+		FullMethod:     "/contracts.core.solo_match.v1.service.SoloMatchService/BidiStream",
+		IsClientStream: true,
+		IsServerStream: true, // Bidirectional stream
+	}
+
+	var authenticatedUserID string
+	err := authInterceptor(nil, ss, info, func(_ any, stream grpc.ServerStream) error {
+		if u, ok := stream.Context().Value(UserIDKey).(string); ok {
+			authenticatedUserID = u
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected successful gRPC bidi stream auth, got %v", err)
+	}
+	if authenticatedUserID != "grpc-bidi-user" {
+		t.Errorf("expected authenticatedUserID grpc-bidi-user, got %s", authenticatedUserID)
+	}
+
+	// 2. StreamRecoveryInterceptor
+	recInterceptor := StreamRecoveryInterceptor()
+	panicErr := recInterceptor(nil, ss, info, func(_ any, _ grpc.ServerStream) error {
+		panic("bidi stream explosion")
+	})
+	if panicErr == nil {
+		t.Fatal("expected error from recovered panic in bidi stream, got nil")
+	}
+	if status.Code(panicErr) != codes.Internal {
+		t.Errorf("expected codes.Internal, got %v", status.Code(panicErr))
+	}
+
+	// 3. StreamLoggingInterceptor
+	logInterceptor := StreamLoggingInterceptor()
+	logErr := logInterceptor(nil, ss, info, func(_ any, _ grpc.ServerStream) error {
+		return nil
+	})
+	if logErr != nil {
+		t.Fatalf("expected nil error from logging interceptor, got %v", logErr)
+	}
+}
+
+func TestConnectStreamingRecoveryAndErrorMapping(t *testing.T) {
+	t.Parallel()
+
+	// 1. Recovery
+	recInterceptor := NewConnectRecoveryInterceptor()
+	panicConn := &mockStreamingHandlerConn{
+		spec: connect.Spec{Procedure: "/test/PanicStream"},
+	}
+	panicHandler := recInterceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
+		panic("stream explosion")
+	})
+	err := panicHandler(context.Background(), panicConn)
+	if err == nil {
+		t.Fatal("expected error from recovered panic, got nil")
+	}
+	var cErr *connect.Error
+	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeInternal {
+		t.Fatalf("expected CodeInternal for panic, got %v", err)
+	}
+
+	// 2. Error Mapping
+	errInterceptor := NewConnectErrorMappingInterceptor()
+	grpcErrConn := &mockStreamingHandlerConn{
+		spec: connect.Spec{Procedure: "/test/ErrStream"},
+	}
+	grpcErrHandler := errInterceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
+		return status.Error(codes.NotFound, "stream resource missing")
+	})
+	err = grpcErrHandler(context.Background(), grpcErrConn)
+	if err == nil {
+		t.Fatal("expected mapped error, got nil")
+	}
+	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeNotFound {
+		t.Fatalf("expected CodeNotFound, got %v", err)
 	}
 }

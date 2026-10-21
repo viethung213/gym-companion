@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package contracts.core.solo_match.v1.message;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/message;solomatchv1message";
+
+message JoinQueueRequest {
+  // Token Bearer xác thực người dùng trong metadata gRPC
+}
+
+message CancelQueueRequest {
+  string ticket_id = 1;
+}
+
+message CancelQueueResponse {
+  bool success = 1;
+}
+
+enum MatchStreamEventType {
+  MATCH_STREAM_EVENT_TYPE_UNSPECIFIED = 0;
+  MATCH_STREAM_EVENT_TYPE_QUEUED = 1;       // Đang trong hàng đợi, báo thời gian đếm
+  MATCH_STREAM_EVENT_TYPE_MATCHED = 2;      // Ghép thành công đối thủ (người thật hoặc Bot)
+  MATCH_STREAM_EVENT_TYPE_CANCELLED = 3;    // Hàng đợi bị hủy
+  MATCH_STREAM_EVENT_TYPE_TIMEOUT = 4;      // Timeout lỗi hàng đợi
+}
+
+message JoinQueueResponse {
+  MatchStreamEventType type = 1;
+  string message = 2;
+  int32 elapsed_seconds = 3;                // Thời gian đã chờ (giây)
+  SoloMatchView match = 4;                  // Trả về khi type = MATCHED
+}
+
+message UserSnapshotView {
+  string user_id = 1;
+  string display_name = 2;
+  string avatar_url = 3;
+}
+
+message ParticipantView {
+  UserSnapshotView user = 1;
+  float score_value = 2;
+  bool is_completed = 3;
+  string result = 4; // PENDING, WIN, LOSE, DRAW, FORFEITED
+}
+
+message SoloMatchView {
+  string match_id = 1;
+  string exercise_id = 2;
+  string exercise_name = 3;
+  string challenge_type = 4; // REPS hoặc DURATION
+  string status = 5;         // IN_PROGRESS, COMPLETED, FORFEITED, CANCELLED
+  repeated ParticipantView participants = 6;
+  string winner_id = 7;
+  bool is_draw = 8;
+  google.protobuf.Timestamp started_at = 9;
+  google.protobuf.Timestamp timeout_at = 10;
+  google.protobuf.Timestamp ended_at = 11;
+}
+
+message GetMatchRequest {
+  string match_id = 1;
+}
+
+message GetMatchResponse {
+  SoloMatchView match = 1;
+}
+
+message GetMatchHistoryRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message GetMatchHistoryResponse {
+  repeated SoloMatchView matches = 1;
+  string next_page_token = 2;
+}
