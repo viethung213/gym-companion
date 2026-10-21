@@ -30,16 +30,6 @@ func TestRepositories_FollowAndFeed(t *testing.T) {
 		t.Fatalf("expected isFollowing true, got %v, err: %v", isFollow, err)
 	}
 
-	followersCount, _ := repos.FollowRepo.CountFollowers(ctx, "user-2")
-	if followersCount != 1 {
-		t.Fatalf("expected 1 follower, got %d", followersCount)
-	}
-
-	followingCount, _ := repos.FollowRepo.CountFollowing(ctx, "user-1")
-	if followingCount != 1 {
-		t.Fatalf("expected 1 following, got %d", followingCount)
-	}
-
 	followingIDs, _ := repos.FollowRepo.GetFollowingIDs(ctx, "user-1")
 	if len(followingIDs) != 1 || followingIDs[0] != "user-2" {
 		t.Fatalf("expected [user-2], got %v", followingIDs)
@@ -48,11 +38,6 @@ func TestRepositories_FollowAndFeed(t *testing.T) {
 	filtered, err := repos.FollowRepo.FilterFollowingIDs(ctx, "user-1", []string{"user-2", "user-non-existent"})
 	if err != nil || !filtered["user-2"] || filtered["user-non-existent"] {
 		t.Fatalf("FilterFollowingIDs failed: err=%v, filtered=%v", err, filtered)
-	}
-
-	batchFollowersCount, err := repos.FollowRepo.CountFollowersByIDs(ctx, []string{"user-2", "user-non-existent"})
-	if err != nil || batchFollowersCount["user-2"] != 1 {
-		t.Fatalf("CountFollowersByIDs failed: err=%v, counts=%v", err, batchFollowersCount)
 	}
 
 	// 2. Feed Item Repository
@@ -125,6 +110,41 @@ func TestRepositories_InteractionsAndUser(t *testing.T) {
 	searched, _, total, err := repos.UserSnapshotRepo.SearchUsers(ctx, "Test", "brand", 10, "")
 	if err != nil || len(searched) != 1 || total != 1 {
 		t.Fatalf("SearchUsers failed: len=%d, total=%d, err=%v", len(searched), total, err)
+	}
+
+	// Update Follow Counts
+	u2 := entity.NewUserSnapshot("u-test-2", "Followed User", "https://avatar2.png", "user", now)
+	if err := repos.UserSnapshotRepo.Upsert(ctx, u2); err != nil {
+		t.Fatalf("Upsert u2 failed: %v", err)
+	}
+	if err := repos.UserSnapshotRepo.UpdateFollowCounts(ctx, "u-test-1", "u-test-2", 1); err != nil {
+		t.Fatalf("UpdateFollowCounts +1 failed: %v", err)
+	}
+	u1Fetched, _ := repos.UserSnapshotRepo.GetByID(ctx, "u-test-1")
+	u2Fetched, _ := repos.UserSnapshotRepo.GetByID(ctx, "u-test-2")
+	if u1Fetched.FollowingCount() != 1 || u2Fetched.FollowerCount() != 1 {
+		t.Fatalf("expected u1 following=1, u2 follower=1; got following=%d, follower=%d",
+			u1Fetched.FollowingCount(), u2Fetched.FollowerCount())
+	}
+	// Decrement counts
+	if err := repos.UserSnapshotRepo.UpdateFollowCounts(ctx, "u-test-1", "u-test-2", -1); err != nil {
+		t.Fatalf("UpdateFollowCounts -1 failed: %v", err)
+	}
+	u1Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-1")
+	u2Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-2")
+	if u1Fetched.FollowingCount() != 0 || u2Fetched.FollowerCount() != 0 {
+		t.Fatalf("expected counts clamped to 0; got following=%d, follower=%d",
+			u1Fetched.FollowingCount(), u2Fetched.FollowerCount())
+	}
+	// Decrement again to verify clamp at 0
+	if err := repos.UserSnapshotRepo.UpdateFollowCounts(ctx, "u-test-1", "u-test-2", -1); err != nil {
+		t.Fatalf("UpdateFollowCounts clamp failed: %v", err)
+	}
+	u1Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-1")
+	u2Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-2")
+	if u1Fetched.FollowingCount() != 0 || u2Fetched.FollowerCount() != 0 {
+		t.Fatalf("expected counts clamped to 0 after extra decrement; got following=%d, follower=%d",
+			u1Fetched.FollowingCount(), u2Fetched.FollowerCount())
 	}
 
 	// 2. Interaction (Reactions & Comments)

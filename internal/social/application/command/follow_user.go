@@ -66,8 +66,22 @@ func (h *FollowUserHandler) Handle(ctx context.Context, cmd FollowUserCommand) e
 	}
 
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		isFollowing, err := h.followRepo.IsFollowing(txCtx, cmd.FollowerID, cmd.FollowingID)
+		if err != nil {
+			return fmt.Errorf("check is following: %w", err)
+		}
+		if isFollowing {
+			return nil
+		}
+
 		if err := h.followRepo.Follow(txCtx, follow); err != nil {
 			return fmt.Errorf("persist follow: %w", err)
+		}
+
+		if h.userSnapshotRepo != nil {
+			if err := h.userSnapshotRepo.UpdateFollowCounts(txCtx, cmd.FollowerID, cmd.FollowingID, 1); err != nil {
+				return fmt.Errorf("update follow counts: %w", err)
+			}
 		}
 
 		var followerName, followerAvatarURL string

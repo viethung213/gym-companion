@@ -48,6 +48,32 @@ func (m *mockUserSnapshotRepo) UpdateRole(ctx context.Context, userID, newRole s
 	return nil
 }
 
+func (m *mockUserSnapshotRepo) UpdateFollowCounts(ctx context.Context, followerID, followingID string, delta int) error {
+	if m.users != nil {
+		if u, ok := m.users[followerID]; ok {
+			newCount := u.FollowingCount() + int32(delta)
+			if newCount < 0 {
+				newCount = 0
+			}
+			m.users[followerID] = entity.NewUserSnapshotWithCounts(
+				u.ID(), u.FullName(), u.AvatarURL(), u.Role(),
+				u.FollowerCount(), newCount, u.UpdatedAt(),
+			)
+		}
+		if u, ok := m.users[followingID]; ok {
+			newCount := u.FollowerCount() + int32(delta)
+			if newCount < 0 {
+				newCount = 0
+			}
+			m.users[followingID] = entity.NewUserSnapshotWithCounts(
+				u.ID(), u.FullName(), u.AvatarURL(), u.Role(),
+				newCount, u.FollowingCount(), u.UpdatedAt(),
+			)
+		}
+	}
+	return nil
+}
+
 func (m *mockUserSnapshotRepo) SearchUsers(ctx context.Context, query string, role string, limit int, cursor string) ([]*entity.UserSnapshot, string, int32, error) {
 	list := make([]*entity.UserSnapshot, 0, len(m.users))
 	for _, u := range m.users {
@@ -90,12 +116,6 @@ func (m *queryMockFollowRepo) GetFollowing(ctx context.Context, userID string, l
 func (m *queryMockFollowRepo) GetFollowingIDs(ctx context.Context, followerID string) ([]string, error) {
 	return m.followingIDs, nil
 }
-func (m *queryMockFollowRepo) CountFollowers(ctx context.Context, userID string) (int32, error) {
-	return 10, nil
-}
-func (m *queryMockFollowRepo) CountFollowing(ctx context.Context, userID string) (int32, error) {
-	return 5, nil
-}
 func (m *queryMockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID string, targetUserIDs []string) (map[string]bool, error) {
 	res := make(map[string]bool)
 	for _, id := range m.followingIDs {
@@ -105,13 +125,6 @@ func (m *queryMockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID
 				break
 			}
 		}
-	}
-	return res, nil
-}
-func (m *queryMockFollowRepo) CountFollowersByIDs(ctx context.Context, userIDs []string) (map[string]int32, error) {
-	res := make(map[string]int32)
-	for _, id := range userIDs {
-		res[id] = 10
 	}
 	return res, nil
 }

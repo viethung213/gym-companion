@@ -52,7 +52,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 
 	// Command Handlers
 	followUserHandler := command.NewFollowUserHandler(followRepo, userSnapshotRepo, eventPub, txManager)
-	unfollowUserHandler := command.NewUnfollowUserHandler(followRepo, txManager)
+	unfollowUserHandler := command.NewUnfollowUserHandler(followRepo, userSnapshotRepo, txManager)
 	createPostHandler := command.NewCreatePostHandler(
 		feedItemRepo,
 		eventPub,
@@ -71,7 +71,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	// Query Handlers - using local social.users snapshot
 	getActivityFeedHandler := query.NewGetActivityFeedHandler(followRepo, feedItemRepo, interactionRepo, userSnapshotRepo)
 	getUserProfileFeedHandler := query.NewGetUserProfileFeedHandler(feedItemRepo, userSnapshotRepo)
-	getSocialSummaryHandler := query.NewGetSocialSummaryHandler(followRepo, feedItemRepo)
+	getSocialSummaryHandler := query.NewGetSocialSummaryHandler(followRepo, feedItemRepo, userSnapshotRepo)
 	getFollowersHandler := query.NewGetFollowersHandler(followRepo, userSnapshotRepo)
 	getFollowingHandler := query.NewGetFollowingHandler(followRepo, userSnapshotRepo)
 	listCommentsHandler := query.NewListCommentsHandler(interactionRepo, userSnapshotRepo)

@@ -74,11 +74,13 @@ func (r *GormUserSnapshotRepository) Upsert(ctx context.Context, user *entity.Us
 	}
 
 	m := &SocialUserModel{
-		ID:        user.ID(),
-		FullName:  user.FullName(),
-		AvatarURL: user.AvatarURL(),
-		Role:      role,
-		UpdatedAt: now,
+		ID:             user.ID(),
+		FullName:       user.FullName(),
+		AvatarURL:      user.AvatarURL(),
+		Role:           role,
+		FollowerCount:  user.FollowerCount(),
+		FollowingCount: user.FollowingCount(),
+		UpdatedAt:      now,
 	}
 
 	err := getDB(ctx, r.db).Clauses(clause.OnConflict{
@@ -112,6 +114,36 @@ func (r *GormUserSnapshotRepository) UpdateRole(ctx context.Context, userID, new
 	if err != nil {
 		return fmt.Errorf("update social user role: %w", err)
 	}
+	return nil
+}
+
+func (r *GormUserSnapshotRepository) UpdateFollowCounts(ctx context.Context, followerID, followingID string, delta int) error {
+	if followerID == "" || followingID == "" || delta == 0 {
+		return nil
+	}
+
+	exprFollowing := "following_count + ?"
+	if delta < 0 {
+		exprFollowing = "GREATEST(following_count + ?, 0)"
+	}
+	res := getDB(ctx, r.db).Model(&SocialUserModel{}).
+		Where("id = ?", followerID).
+		UpdateColumn("following_count", gorm.Expr(exprFollowing, delta))
+	if res.Error != nil {
+		return fmt.Errorf("update follower following_count: %w", res.Error)
+	}
+
+	exprFollower := "follower_count + ?"
+	if delta < 0 {
+		exprFollower = "GREATEST(follower_count + ?, 0)"
+	}
+	res = getDB(ctx, r.db).Model(&SocialUserModel{}).
+		Where("id = ?", followingID).
+		UpdateColumn("follower_count", gorm.Expr(exprFollower, delta))
+	if res.Error != nil {
+		return fmt.Errorf("update following follower_count: %w", res.Error)
+	}
+
 	return nil
 }
 

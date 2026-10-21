@@ -63,7 +63,7 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
   - `gorm_feed_item_repository.go`: Lưu trữ & truy vấn feed items (Cursor range scan `created_at < cursor`).
   - `gorm_follow_repository.go`: Lưu trữ & quản lý quan hệ bạn bè đồ thị xã hội.
   - `gorm_interaction_repository.go`: Quản lý toàn bộ Reaction và Comment trên bài viết.
-  - `gorm_user_snapshot_repository.go`: Lưu trữ bản sao danh tính người dùng cục bộ.
+  - `gorm_user_snapshot_repository.go`: Lưu trữ bản sao danh tính người dùng cục bộ kèm bộ đếm phi chuẩn hóa `follower_count` và `following_count` (Migration `12-create-social-tables.sql`).
   - `gorm_outbox_repository.go`: Khóa hàng đợi sự kiện đa worker song song qua `clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}`.
   - `gorm_outbox_log_repository.go`: Quản lý Inbox log kiểm tra Idempotency khi tiêu thụ Kafka event.
   - `models.go`, `mapper.go`, `tx_manager.go`: Ánh xạ cấu trúc dữ liệu GORM <-> Domain.

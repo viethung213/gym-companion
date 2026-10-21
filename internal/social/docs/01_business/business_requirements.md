@@ -77,10 +77,11 @@ Thay vì chia tách bảng tin thành nhiều nguồn dữ liệu rời rạc, h
 
 ### 2.5. Bản Sao Danh Tính Người Dùng (User Snapshot)
 - Do tuân thủ nguyên tắc **Schema Isolation** (mỗi module có cơ sở dữ liệu riêng, cấm JOIN chéo sang module Profile hay Auth):
-  - Module Social duy trì một bảng bản sao thông tin đại diện: `social.user_snapshots` (`id`, `full_name`, `avatar_url`, `updated_at`).
+  - Module Social duy trì một bảng bản sao thông tin đại diện: `social.user_snapshots` (`id`, `full_name`, `avatar_url`, `role`, `follower_count`, `following_count`, `updated_at`).
   - Dữ liệu này được tự động cập nhật bất đồng bộ thông qua Kafka khi:
     1. Người dùng đăng ký tài khoản thành công (`contracts.generic.auth.v1.userRegistered` trên topic `auth.events`).
     2. Người dùng thay đổi họ tên hoặc avatar ở hồ sơ cá nhân (`contracts.supporting.profile.v1.event.UserIdentityUpdated` trên topic `profile.events`).
+  - Các chỉ số `follower_count` và `following_count` được cập nhật nguyên tử ngay khi phát sinh hành động Follow/Unfollow, giúp truy vấn Social Summary và Discover/Search Users đạt hiệu năng cao tức thì mà không cần COUNT trên bảng `social.follows` kích thước lớn.
   - Giúp việc hiển thị Newfeed luôn kèm theo Avatar và Họ tên mới nhất với tốc độ tức thì, không gây nghẽn mạng liên module.
 
 ---

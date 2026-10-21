@@ -129,6 +129,8 @@ func NewTestDB(t *testing.T) (*gorm.DB, *Repositories) {
 			full_name TEXT,
 			avatar_url TEXT,
 			role TEXT DEFAULT 'user',
+			follower_count INTEGER DEFAULT 0,
+			following_count INTEGER DEFAULT 0,
 			updated_at DATETIME
 		);`,
 		`CREATE TABLE IF NOT EXISTS follows (

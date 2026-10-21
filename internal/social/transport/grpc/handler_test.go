@@ -54,25 +54,12 @@ func (r *testFollowRepo) GetFollowing(ctx context.Context, userID string, limit 
 func (r *testFollowRepo) GetFollowingIDs(ctx context.Context, followerID string) ([]string, error) {
 	return nil, nil
 }
-func (r *testFollowRepo) CountFollowers(ctx context.Context, userID string) (int32, error) {
-	return 1, nil
-}
-func (r *testFollowRepo) CountFollowing(ctx context.Context, userID string) (int32, error) {
-	return 2, nil
-}
 func (r *testFollowRepo) FilterFollowingIDs(ctx context.Context, followerID string, targetUserIDs []string) (map[string]bool, error) {
 	res := make(map[string]bool)
 	for _, targetID := range targetUserIDs {
 		if r.follows[followerID+":"+targetID] != nil {
 			res[targetID] = true
 		}
-	}
-	return res, nil
-}
-func (r *testFollowRepo) CountFollowersByIDs(ctx context.Context, userIDs []string) (map[string]int32, error) {
-	res := make(map[string]int32)
-	for _, id := range userIDs {
-		res[id] = 1
 	}
 	return res, nil
 }
@@ -191,7 +178,7 @@ func (r *testInteractionRepo) ListComments(ctx context.Context, feedItemID strin
 type testUserSnapshotRepo struct{}
 
 func (p *testUserSnapshotRepo) GetByID(ctx context.Context, id string) (*entity.UserSnapshot, error) {
-	return entity.NewUserSnapshot(id, "Test User", "", "user", time.Time{}), nil
+	return entity.NewUserSnapshotWithCounts(id, "Test User", "", "user", 1, 2, time.Time{}), nil
 }
 func (p *testUserSnapshotRepo) GetByIDs(ctx context.Context, ids []string) (map[string]*entity.UserSnapshot, error) {
 	return nil, nil
@@ -200,6 +187,9 @@ func (p *testUserSnapshotRepo) Upsert(ctx context.Context, user *entity.UserSnap
 	return nil
 }
 func (p *testUserSnapshotRepo) UpdateRole(ctx context.Context, userID, newRole string) error {
+	return nil
+}
+func (p *testUserSnapshotRepo) UpdateFollowCounts(ctx context.Context, followerID, followingID string, delta int) error {
 	return nil
 }
 func (p *testUserSnapshotRepo) SearchUsers(ctx context.Context, q string, role string, limit int, cursor string) ([]*entity.UserSnapshot, string, int32, error) {
@@ -218,7 +208,7 @@ func setupTestHandler() *socialGRPC.GRPCHandler {
 
 	return socialGRPC.NewGRPCHandler(
 		command.NewFollowUserHandler(fRepo, uRepo, pub, tx),
-		command.NewUnfollowUserHandler(fRepo, tx),
+		command.NewUnfollowUserHandler(fRepo, uRepo, tx),
 		command.NewCreatePostHandler(feedRepo, pub, tx),
 		command.NewDeleteFeedItemHandler(feedRepo, tx),
 		command.NewReactTargetHandler(iRepo, feedRepo, uRepo, pub, tx),
@@ -226,7 +216,7 @@ func setupTestHandler() *socialGRPC.GRPCHandler {
 		command.NewDeleteCommentHandler(iRepo, feedRepo, tx),
 		query.NewGetActivityFeedHandler(fRepo, feedRepo, iRepo, uRepo),
 		query.NewGetUserProfileFeedHandler(feedRepo, uRepo),
-		query.NewGetSocialSummaryHandler(fRepo, feedRepo),
+		query.NewGetSocialSummaryHandler(fRepo, feedRepo, uRepo),
 		query.NewGetFollowersHandler(fRepo, uRepo),
 		query.NewGetFollowingHandler(fRepo, uRepo),
 		query.NewListCommentsHandler(iRepo, uRepo),

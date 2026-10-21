@@ -39,6 +39,10 @@ func (m *mockSnapshotRepoForUserRoleUpdated) UpdateRole(ctx context.Context, use
 	return nil
 }
 
+func (m *mockSnapshotRepoForUserRoleUpdated) UpdateFollowCounts(ctx context.Context, followerID, followingID string, delta int) error {
+	return nil
+}
+
 func (m *mockSnapshotRepoForUserRoleUpdated) SearchUsers(ctx context.Context, query string, role string, limit int, cursor string) ([]*entity.UserSnapshot, string, int32, error) {
 	return nil, "", 0, nil
 }

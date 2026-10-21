@@ -13,29 +13,27 @@ type GetSocialSummaryQuery struct {
 }
 
 type GetSocialSummaryHandler struct {
-	followRepo   repository.FollowRepository
-	feedItemRepo repository.FeedItemRepository
+	followRepo       repository.FollowRepository
+	feedItemRepo     repository.FeedItemRepository
+	userSnapshotRepo repository.UserSnapshotRepository
 }
 
 func NewGetSocialSummaryHandler(
 	followRepo repository.FollowRepository,
 	feedItemRepo repository.FeedItemRepository,
+	userSnapshotRepo repository.UserSnapshotRepository,
 ) *GetSocialSummaryHandler {
 	return &GetSocialSummaryHandler{
-		followRepo:   followRepo,
-		feedItemRepo: feedItemRepo,
+		followRepo:       followRepo,
+		feedItemRepo:     feedItemRepo,
+		userSnapshotRepo: userSnapshotRepo,
 	}
 }
 
 func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummaryQuery) (*SocialSummaryDTO, error) {
-	followers, err := h.followRepo.CountFollowers(ctx, q.TargetUserID)
+	userInfo, err := h.userSnapshotRepo.GetByID(ctx, q.TargetUserID)
 	if err != nil {
-		return nil, fmt.Errorf("count followers: %w", err)
-	}
-
-	following, err := h.followRepo.CountFollowing(ctx, q.TargetUserID)
-	if err != nil {
-		return nil, fmt.Errorf("count following: %w", err)
+		return nil, fmt.Errorf("get user snapshot: %w", err)
 	}
 
 	feedCount, err := h.feedItemRepo.CountByUserID(ctx, q.TargetUserID)
@@ -50,8 +48,8 @@ func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummary
 
 	return &SocialSummaryDTO{
 		UserID:         q.TargetUserID,
-		FollowerCount:  followers,
-		FollowingCount: following,
+		FollowerCount:  userInfo.FollowerCount(),
+		FollowingCount: userInfo.FollowingCount(),
 		PostCount:      feedCount,
 		IsFollowing:    isFollowing,
 	}, nil
