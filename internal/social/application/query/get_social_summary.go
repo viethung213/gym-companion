@@ -31,23 +31,9 @@ func NewGetSocialSummaryHandler(
 }
 
 func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummaryQuery) (*SocialSummaryDTO, error) {
-	var followers, following int32
-	if h.userSnapshotRepo != nil {
-		if u, err := h.userSnapshotRepo.GetByID(ctx, q.TargetUserID); err == nil && u != nil {
-			followers = u.FollowerCount()
-			following = u.FollowingCount()
-		}
-	} else {
-		var err error
-		followers, err = h.followRepo.CountFollowers(ctx, q.TargetUserID)
-		if err != nil {
-			return nil, fmt.Errorf("count followers: %w", err)
-		}
-
-		following, err = h.followRepo.CountFollowing(ctx, q.TargetUserID)
-		if err != nil {
-			return nil, fmt.Errorf("count following: %w", err)
-		}
+	userInfo, err := h.userSnapshotRepo.GetByID(ctx, q.TargetUserID)
+	if err != nil {
+		return nil, fmt.Errorf("get user snapshot: %w", err)
 	}
 
 	feedCount, err := h.feedItemRepo.CountByUserID(ctx, q.TargetUserID)
@@ -62,8 +48,8 @@ func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummary
 
 	return &SocialSummaryDTO{
 		UserID:         q.TargetUserID,
-		FollowerCount:  followers,
-		FollowingCount: following,
+		FollowerCount:  userInfo.FollowerCount(),
+		FollowingCount: userInfo.FollowingCount(),
 		PostCount:      feedCount,
 		IsFollowing:    isFollowing,
 	}, nil

@@ -30,16 +30,6 @@ func TestRepositories_FollowAndFeed(t *testing.T) {
 		t.Fatalf("expected isFollowing true, got %v, err: %v", isFollow, err)
 	}
 
-	followersCount, _ := repos.FollowRepo.CountFollowers(ctx, "user-2")
-	if followersCount != 1 {
-		t.Fatalf("expected 1 follower, got %d", followersCount)
-	}
-
-	followingCount, _ := repos.FollowRepo.CountFollowing(ctx, "user-1")
-	if followingCount != 1 {
-		t.Fatalf("expected 1 following, got %d", followingCount)
-	}
-
 	followingIDs, _ := repos.FollowRepo.GetFollowingIDs(ctx, "user-1")
 	if len(followingIDs) != 1 || followingIDs[0] != "user-2" {
 		t.Fatalf("expected [user-2], got %v", followingIDs)
@@ -48,11 +38,6 @@ func TestRepositories_FollowAndFeed(t *testing.T) {
 	filtered, err := repos.FollowRepo.FilterFollowingIDs(ctx, "user-1", []string{"user-2", "user-non-existent"})
 	if err != nil || !filtered["user-2"] || filtered["user-non-existent"] {
 		t.Fatalf("FilterFollowingIDs failed: err=%v, filtered=%v", err, filtered)
-	}
-
-	batchFollowersCount, err := repos.FollowRepo.CountFollowersByIDs(ctx, []string{"user-2", "user-non-existent"})
-	if err != nil || batchFollowersCount["user-2"] != 1 {
-		t.Fatalf("CountFollowersByIDs failed: err=%v, counts=%v", err, batchFollowersCount)
 	}
 
 	// 2. Feed Item Repository

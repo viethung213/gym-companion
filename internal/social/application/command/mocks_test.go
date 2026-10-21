@@ -146,14 +146,6 @@ func (m *mockFollowRepo) GetFollowingIDs(ctx context.Context, followerID string)
 	return ids, nil
 }
 
-func (m *mockFollowRepo) CountFollowers(ctx context.Context, userID string) (int32, error) {
-	return 0, nil
-}
-
-func (m *mockFollowRepo) CountFollowing(ctx context.Context, userID string) (int32, error) {
-	return 0, nil
-}
-
 func (m *mockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID string, targetUserIDs []string) (map[string]bool, error) {
 	res := make(map[string]bool)
 	for _, f := range m.follows {
@@ -167,10 +159,6 @@ func (m *mockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID stri
 		}
 	}
 	return res, nil
-}
-
-func (m *mockFollowRepo) CountFollowersByIDs(ctx context.Context, userIDs []string) (map[string]int32, error) {
-	return make(map[string]int32), nil
 }
 
 type mockFeedItemRepo struct {

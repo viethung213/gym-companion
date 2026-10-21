@@ -18,7 +18,7 @@ func TestGetSocialSummaryHandler(t *testing.T) {
 		},
 	}
 
-	t.Run("with userSnapshotRepo takes precedence", func(t *testing.T) {
+	t.Run("retrieves counts directly from userSnapshotRepo", func(t *testing.T) {
 		handler := NewGetSocialSummaryHandler(followRepo, feedItemRepo, userRepo)
 		res, err := handler.Handle(context.Background(), GetSocialSummaryQuery{
 			TargetUserID:  "u-target",
@@ -29,21 +29,6 @@ func TestGetSocialSummaryHandler(t *testing.T) {
 		}
 
 		if res.FollowerCount != 42 || res.FollowingCount != 17 || res.PostCount != 2 || !res.IsFollowing {
-			t.Errorf("unexpected summary result: %+v", res)
-		}
-	})
-
-	t.Run("fallback without userSnapshotRepo queries followRepo", func(t *testing.T) {
-		handler := NewGetSocialSummaryHandler(followRepo, feedItemRepo, nil)
-		res, err := handler.Handle(context.Background(), GetSocialSummaryQuery{
-			TargetUserID:  "u-target",
-			CurrentUserID: "u-me",
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if res.FollowerCount != 10 || res.FollowingCount != 5 || res.PostCount != 2 || !res.IsFollowing {
 			t.Errorf("unexpected summary result: %+v", res)
 		}
 	})

@@ -116,12 +116,6 @@ func (m *queryMockFollowRepo) GetFollowing(ctx context.Context, userID string, l
 func (m *queryMockFollowRepo) GetFollowingIDs(ctx context.Context, followerID string) ([]string, error) {
 	return m.followingIDs, nil
 }
-func (m *queryMockFollowRepo) CountFollowers(ctx context.Context, userID string) (int32, error) {
-	return 10, nil
-}
-func (m *queryMockFollowRepo) CountFollowing(ctx context.Context, userID string) (int32, error) {
-	return 5, nil
-}
 func (m *queryMockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID string, targetUserIDs []string) (map[string]bool, error) {
 	res := make(map[string]bool)
 	for _, id := range m.followingIDs {
@@ -131,13 +125,6 @@ func (m *queryMockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID
 				break
 			}
 		}
-	}
-	return res, nil
-}
-func (m *queryMockFollowRepo) CountFollowersByIDs(ctx context.Context, userIDs []string) (map[string]int32, error) {
-	res := make(map[string]int32)
-	for _, id := range userIDs {
-		res[id] = 10
 	}
 	return res, nil
 }
