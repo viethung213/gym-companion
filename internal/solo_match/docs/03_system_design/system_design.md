@@ -211,7 +211,7 @@ classDiagram
 ```
 
 1. **Kho tài khoản Bot hệ thống (System Bot Pool)**:
-   - Các tài khoản Bot được đăng ký chính thức qua Auth API bởi [`bot_seeder.go`](../../../shared/seeder/bot_seeder.go) (`DefaultBotProfiles`: Alex Vance, Sarah Jenkins, Leo Martinez, Maya Lin, Marcus Stone...) và lưu trữ tại bảng `solo_match.system_bots` kèm bản ghi `solo_match.user_snapshots`.
+   - Các tài khoản Bot được cấu hình sẵn trong cơ sở dữ liệu (`solo_match.system_bots`) kèm thông tin hồ sơ `solo_match.user_snapshots`.
    - [`GORMBotRepository`](../../infrastructure/persistence/gorm_bot_repository.go) bốc ngẫu nhiên 1 `user_id` bot đang kích hoạt (`is_active = true`), đồng thời lưu đệm trên In-Memory Cache (TTL 1 tháng) để phục vụ với chi phí truy vấn $O(1)$ mà không tạo áp lực lên PostgreSQL.
 2. **Thuật toán tính điểm Bot (`BotBenchmarkCalculator`)**:
    - Được triển khai chuẩn xác theo mã nguồn tại [`bot_benchmark_calculator.go`](../../domain/service/bot_benchmark_calculator.go):

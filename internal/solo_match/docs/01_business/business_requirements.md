@@ -63,7 +63,6 @@ flowchart TD
 1. **Ngưỡng kích hoạt**: Nếu sau **5 phút** trong hàng đợi mà không tìm được người chơi thực, Worker sẽ tự động bốc vé của người dùng đó và kích hoạt cơ chế ghép với Bot.
 2. **Kho tài khoản Bot trong Database (System Bot Pool)**:
    - Bot không phải là chuỗi ngẫu nhiên sinh ra tức thời (on-the-fly), mà là **các tài khoản gymer thật được cấu hình sẵn trong Database** (bảng `solo_match.system_bots` liên kết khóa ngoại với `solo_match.user_snapshots`).
-   - Các tài khoản này được khởi tạo bởi `seeder.SeedSystemBots` qua Auth API như tài khoản người dùng bình thường, có avatar ảnh thật, họ tên gymer và cấp độ phù hợp (`DefaultBotProfiles`).
    - Repository [`GORMBotRepository`](../../infrastructure/persistence/gorm_bot_repository.go) bốc ngẫu nhiên 1 `user_id` của bot đang kích hoạt (`is_active = true`) thông qua **bộ nhớ đệm In-Memory (TTL 30 ngày)**, đạt độ trễ cực thấp $O(1)$ mà không gây tải cho PostgreSQL.
 3. **Ẩn danh tính AI (Secrecy Policy)**:
    - Người dùng **hoàn toàn không biết** mình đang thi đấu với Bot.

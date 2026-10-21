@@ -24,7 +24,6 @@ import (
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
-	"github.com/viethung213/gym-companion/internal/shared/seeder"
 	"github.com/viethung213/gym-companion/internal/social"
 	solomatch "github.com/viethung213/gym-companion/internal/solo_match"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
@@ -122,11 +121,6 @@ func run() error {
 		return fmt.Errorf("initialize auth module: %w", err)
 	}
 	defer shutdownAuth()
-
-	// Seed system bot profiles via Auth API (skipped automatically if already created)
-	if seedErr := seeder.SeedSystemBots(ctx, db, authGRPCHandler); seedErr != nil {
-		return fmt.Errorf("seed system bots: %w", seedErr)
-	}
 
 	// Initialize Exercise Module
 	exerciseServer, shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
