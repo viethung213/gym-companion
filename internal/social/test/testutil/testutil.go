@@ -33,7 +33,9 @@ func NewSchemaStripPool(db *sql.DB) *SchemaStripPool {
 
 func (p *SchemaStripPool) strip(query string) string {
 	res := p.re.ReplaceAllString(query, "$2")
-	return strings.ReplaceAll(res, "GREATEST(", "MAX(")
+	res = strings.ReplaceAll(res, "GREATEST(", "MAX(")
+	res = strings.ReplaceAll(res, " ILIKE ", " LIKE ")
+	return strings.ReplaceAll(res, " ilike ", " like ")
 }
 
 func (p *SchemaStripPool) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
@@ -67,7 +69,9 @@ type SchemaTxPool struct {
 
 func (p *SchemaTxPool) strip(query string) string {
 	res := p.re.ReplaceAllString(query, "$2")
-	return strings.ReplaceAll(res, "GREATEST(", "MAX(")
+	res = strings.ReplaceAll(res, "GREATEST(", "MAX(")
+	res = strings.ReplaceAll(res, " ILIKE ", " LIKE ")
+	return strings.ReplaceAll(res, " ilike ", " like ")
 }
 
 func (p *SchemaTxPool) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {

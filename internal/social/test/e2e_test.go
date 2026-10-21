@@ -53,6 +53,7 @@ func newE2EFixture(t *testing.T) *e2eFixture {
 	listReactionsHandler := query.NewListReactionsHandler(repos.InteractionRepo, repos.UserSnapshotRepo)
 
 	searchUsersHandler := query.NewSearchUsersHandler(repos.UserSnapshotRepo, repos.FollowRepo)
+	searchPostsHandler := query.NewSearchPostsHandler(repos.FeedItemRepo, repos.InteractionRepo, repos.UserSnapshotRepo)
 
 	h := socialGRPC.NewGRPCHandler(
 		followUserHandler,
@@ -70,6 +71,7 @@ func newE2EFixture(t *testing.T) *e2eFixture {
 		listCommentsHandler,
 		listReactionsHandler,
 		searchUsersHandler,
+		searchPostsHandler,
 	)
 
 	return &e2eFixture{
@@ -522,5 +524,183 @@ func TestE2E_SearchUsers_FilteringAndFollowStatus(t *testing.T) {
 	}
 	if len(resNikeAfter.Msg.GetUsers()) != 1 || !resNikeAfter.Msg.GetUsers()[0].GetIsFollowing() {
 		t.Fatalf("expected is_following to be true for Nike after follow")
+	}
+}
+
+// TestE2E_SearchPosts: Kiểm thử tìm kiếm bài viết kết hợp từ khóa, bộ lọc tác giả và phân quyền bảo mật.
+func TestE2E_SearchPosts(t *testing.T) {
+	f := newE2EFixture(t)
+	ctx := context.Background()
+
+	authorUUID1 := "00000000-0000-0000-0000-000000000001"
+	authorUUID2 := "00000000-0000-0000-0000-000000000002"
+	authorUUID3 := "00000000-0000-0000-0000-000000000003"
+	strangerUUID := "00000000-0000-0000-0000-000000000009"
+
+	// 1. Tạo snapshot 3 người dùng
+	_ = f.syncUser.Handle(ctx, command.SyncUserSnapshotCommand{
+		UserID:    authorUUID1,
+		FullName:  "User One",
+		AvatarURL: "https://avatar.png/1",
+		Role:      "user",
+	})
+	_ = f.syncUser.Handle(ctx, command.SyncUserSnapshotCommand{
+		UserID:    authorUUID2,
+		FullName:  "User Two Coach",
+		AvatarURL: "https://avatar.png/2",
+		Role:      "user",
+	})
+	_ = f.syncUser.Handle(ctx, command.SyncUserSnapshotCommand{
+		UserID:    authorUUID3,
+		FullName:  "User Three",
+		AvatarURL: "https://avatar.png/3",
+		Role:      "user",
+	})
+
+	u1Ctx := authContext(authorUUID1)
+	u2Ctx := authContext(authorUUID2)
+	u3Ctx := authContext(authorUUID3)
+	uStrangerCtx := authContext(strangerUUID)
+
+	// 2. User 1 follow User 2
+	_, err := f.handler.FollowUser(u1Ctx, connect.NewRequest(&socialv1message.FollowUserRequest{
+		FollowingId: authorUUID2,
+	}))
+	if err != nil {
+		t.Fatalf("User 1 follow User 2 failed: %v", err)
+	}
+
+	// 3. User 2 tạo 3 bài viết với 3 cấp độ hiển thị
+	_, err = f.handler.CreatePost(u2Ctx, connect.NewRequest(&socialv1message.CreatePostRequest{
+		Caption:    "Squat form basics for beginners",
+		Visibility: "PUBLIC",
+	}))
+	if err != nil {
+		t.Fatalf("create public squat failed: %v", err)
+	}
+
+	_, err = f.handler.CreatePost(u2Ctx, connect.NewRequest(&socialv1message.CreatePostRequest{
+		Caption:    "Advanced squat technique for champions",
+		Visibility: "FOLLOWERS_ONLY",
+	}))
+	if err != nil {
+		t.Fatalf("create followers_only squat failed: %v", err)
+	}
+
+	_, err = f.handler.CreatePost(u2Ctx, connect.NewRequest(&socialv1message.CreatePostRequest{
+		Caption:    "Personal squat injury private notes",
+		Visibility: "PRIVATE",
+	}))
+	if err != nil {
+		t.Fatalf("create private squat failed: %v", err)
+	}
+
+	// 4. User 3 tạo 1 bài viết public
+	_, err = f.handler.CreatePost(u3Ctx, connect.NewRequest(&socialv1message.CreatePostRequest{
+		Caption:    "Bench press and squat combo",
+		Visibility: "PUBLIC",
+	}))
+	if err != nil {
+		t.Fatalf("create user 3 squat failed: %v", err)
+	}
+
+	// Test Case 1: User 1 (Follower của User 2) tìm kiếm "squat"
+	// Kỳ vọng: 3 bài viết (User 2 Public + User 2 Followers-only + User 3 Public)
+	resU1, err := f.handler.SearchPosts(u1Ctx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:    "squat",
+		PageSize: 10,
+	}))
+	if err != nil {
+		t.Fatalf("User 1 search failed: %v", err)
+	}
+	if len(resU1.Msg.GetItems()) != 3 {
+		t.Fatalf("User 1 expected 3 posts, got %d", len(resU1.Msg.GetItems()))
+	}
+
+	// Test Case 2: Stranger (không follow User 2) tìm kiếm "squat"
+	// Kỳ vọng: 2 bài viết PUBLIC duy nhất (User 2 Public + User 3 Public)
+	resStranger, err := f.handler.SearchPosts(uStrangerCtx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:    "squat",
+		PageSize: 10,
+	}))
+	if err != nil {
+		t.Fatalf("Stranger search failed: %v", err)
+	}
+	if len(resStranger.Msg.GetItems()) != 2 {
+		t.Fatalf("Stranger expected 2 public posts, got %d", len(resStranger.Msg.GetItems()))
+	}
+	for _, item := range resStranger.Msg.GetItems() {
+		if item.GetVisibility() != "PUBLIC" {
+			t.Errorf("stranger must not see non-public post: %s", item.GetVisibility())
+		}
+	}
+
+	// Test Case 3: Tác giả User 2 tìm kiếm "squat"
+	// Kỳ vọng: Nhìn thấy cả 4 bài (bao gồm bài PRIVATE của chính mình)
+	resU2, err := f.handler.SearchPosts(u2Ctx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:    "squat",
+		PageSize: 10,
+	}))
+	if err != nil {
+		t.Fatalf("User 2 search failed: %v", err)
+	}
+	if len(resU2.Msg.GetItems()) != 4 {
+		t.Fatalf("User 2 author expected 4 posts, got %d", len(resU2.Msg.GetItems()))
+	}
+
+	// Test Case 4: Lọc theo tác giả cụ thể (User 3)
+	// Kỳ vọng: Chỉ 1 bài viết của User 3
+	resFilterAuthor, err := f.handler.SearchPosts(u1Ctx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:    "squat",
+		UserId:   &authorUUID3,
+		PageSize: 10,
+	}))
+	if err != nil {
+		t.Fatalf("Author filter search failed: %v", err)
+	}
+	if len(resFilterAuthor.Msg.GetItems()) != 1 {
+		t.Fatalf("expected 1 post from user 3, got %d", len(resFilterAuthor.Msg.GetItems()))
+	}
+	if resFilterAuthor.Msg.GetItems()[0].GetUserId() != authorUUID3 {
+		t.Errorf("expected post of user 3, got %s", resFilterAuthor.Msg.GetItems()[0].GetUserId())
+	}
+
+	// Test Case 5: Khách vãng lai chưa đăng nhập (unauthenticated - context.Background())
+	// Kỳ vọng: Public bypass hoạt động mượt mà, chỉ thấy 2 bài PUBLIC
+	resGuest, err := f.handler.SearchPosts(context.Background(), connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:    "squat",
+		PageSize: 10,
+	}))
+	if err != nil {
+		t.Fatalf("Guest search failed: %v", err)
+	}
+	if len(resGuest.Msg.GetItems()) != 2 {
+		t.Fatalf("Guest expected 2 public posts, got %d", len(resGuest.Msg.GetItems()))
+	}
+
+	// Test Case 6: Cả Query và UserId đều rỗng -> trả về CodeInvalidArgument
+	_, errInvalid := f.handler.SearchPosts(u1Ctx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query: "   ",
+	}))
+	if errInvalid == nil || connect.CodeOf(errInvalid) != connect.CodeInvalidArgument {
+		t.Fatalf("expected CodeInvalidArgument for empty search, got %v", errInvalid)
+	}
+
+	// Test Case 7: Query < 2 ký tự khi không có author_id -> trả về CodeInvalidArgument
+	_, errShort := f.handler.SearchPosts(u1Ctx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query: "s",
+	}))
+	if errShort == nil || connect.CodeOf(errShort) != connect.CodeInvalidArgument {
+		t.Fatalf("expected CodeInvalidArgument for search query too short, got %v", errShort)
+	}
+
+	// Test Case 8: UserId không phải UUID hợp lệ -> trả về CodeInvalidArgument
+	invalidUUID := "not-a-valid-uuid"
+	_, errInvalidUUID := f.handler.SearchPosts(u1Ctx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+		Query:  "squat",
+		UserId: &invalidUUID,
+	}))
+	if errInvalidUUID == nil || connect.CodeOf(errInvalidUUID) != connect.CodeInvalidArgument {
+		t.Fatalf("expected CodeInvalidArgument for invalid author_id UUID, got %v", errInvalidUUID)
 	}
 }

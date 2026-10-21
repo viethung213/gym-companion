@@ -5,6 +5,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/social/domain/entity"
+	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
 type mockUserSnapshotRepo struct {
@@ -122,6 +123,9 @@ func (m *queryMockFeedItemRepo) UpdateReactionCount(ctx context.Context, id stri
 func (m *queryMockFeedItemRepo) UpdateCommentCount(ctx context.Context, id string, delta int) error {
 	return nil
 }
+func (m *queryMockFeedItemRepo) SearchPosts(ctx context.Context, filter repository.SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error) {
+	return m.items, "", int32(len(m.items)), nil
+}
 
 type queryMockInteractionRepo struct {
 	comments  []*entity.Comment
@@ -139,6 +143,19 @@ func (m *queryMockInteractionRepo) GetReaction(ctx context.Context, userID, feed
 }
 func (m *queryMockInteractionRepo) GetReactionsByFeedItem(ctx context.Context, feedItemID string) ([]*entity.Reaction, error) {
 	return m.reactions, nil
+}
+func (m *queryMockInteractionRepo) GetReactionsByUserAndFeedItemIDs(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
+	res := make(map[string]*entity.Reaction)
+	for _, r := range m.reactions {
+		if r.UserID() == userID {
+			for _, id := range feedItemIDs {
+				if r.FeedItemID() == id {
+					res[id] = r
+				}
+			}
+		}
+	}
+	return res, nil
 }
 func (m *queryMockInteractionRepo) AddComment(ctx context.Context, comment *entity.Comment) error {
 	return nil

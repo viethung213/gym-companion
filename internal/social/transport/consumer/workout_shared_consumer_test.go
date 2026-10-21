@@ -10,6 +10,7 @@ import (
 	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 	socialConsumer "github.com/viethung213/gym-companion/internal/social/transport/consumer"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -51,6 +52,10 @@ func (m *mockFeedRepoForConsumer) UpdateReactionCount(ctx context.Context, id st
 
 func (m *mockFeedRepoForConsumer) UpdateCommentCount(ctx context.Context, id string, delta int) error {
 	return nil
+}
+
+func (m *mockFeedRepoForConsumer) SearchPosts(ctx context.Context, filter repository.SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error) {
+	return nil, "", 0, nil
 }
 
 type mockTxForWorkoutConsumer struct{}

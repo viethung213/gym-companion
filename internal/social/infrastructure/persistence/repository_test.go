@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/application/port"
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/social/domain/entity"
+	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 	"github.com/viethung213/gym-companion/internal/social/domain/vo"
 	"github.com/viethung213/gym-companion/internal/social/test/testutil"
 )
@@ -130,6 +131,11 @@ func TestRepositories_InteractionsAndUser(t *testing.T) {
 		t.Fatalf("GetReactionsByFeedItem failed: %v", err)
 	}
 
+	batchReactions, err := repos.InteractionRepo.GetReactionsByUserAndFeedItemIDs(ctx, "u-test-1", []string{"target-1", "non-existent"})
+	if err != nil || len(batchReactions) != 1 || batchReactions["target-1"] == nil {
+		t.Fatalf("GetReactionsByUserAndFeedItemIDs failed: %v, got: %v", err, batchReactions)
+	}
+
 	c, _ := entity.NewComment("c-1", "u-test-1", "target-1", nil, "Awesome!", now, now)
 	if err := repos.InteractionRepo.AddComment(ctx, c); err != nil {
 		t.Fatalf("AddComment failed: %v", err)
@@ -194,4 +200,165 @@ func TestRepositories_OutboxAndTxManager(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected rollback error")
 	}
+}
+
+func TestRepositories_SearchPosts(t *testing.T) {
+	_, repos := testutil.NewTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// user-1 follows user-2
+	f, _ := aggregate.NewFollow("f-10", "user-1", "user-2", now)
+	_ = repos.FollowRepo.Follow(ctx, f)
+
+	authorUUID3 := "00000000-0000-0000-0000-000000000003"
+
+	// Create posts with various visibilities and captions
+	// 1. user-2 public squat post
+	p1, _ := aggregate.NewPostItem("sp-1", "user-2", "Heavy squat session 140kg", nil, vo.VisibilityPublic, 0, 0, now.Add(-3*time.Minute), now)
+	_ = repos.FeedItemRepo.Create(ctx, p1)
+
+	// 2. user-2 followers-only bench post
+	p2, _ := aggregate.NewPostItem("sp-2", "user-2", "Bench press personal record", nil, vo.VisibilityFollowersOnly, 0, 0, now.Add(-2*time.Minute), now)
+	_ = repos.FeedItemRepo.Create(ctx, p2)
+
+	// 3. user-2 private deadlift post
+	p3, _ := aggregate.NewPostItem("sp-3", "user-2", "Deadlift form check", nil, vo.VisibilityPrivate, 0, 0, now.Add(-1*time.Minute), now)
+	_ = repos.FeedItemRepo.Create(ctx, p3)
+
+	// 4. user-3 public squat post
+	p4, _ := aggregate.NewPostItem("sp-4", authorUUID3, "Morning squat routine", nil, vo.VisibilityPublic, 0, 0, now, now)
+	_ = repos.FeedItemRepo.Create(ctx, p4)
+
+	t.Run("unauthenticated viewer only sees public posts", func(t *testing.T) {
+		items, _, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "",
+			Query:    "squat",
+		})
+		if err != nil {
+			t.Fatalf("search failed: %v", err)
+		}
+		if total != 2 || len(items) != 2 {
+			t.Fatalf("expected 2 public squat posts, got total=%d, len=%d", total, len(items))
+		}
+	})
+
+	t.Run("follower sees public and followers_only posts of followed user", func(t *testing.T) {
+		items, _, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "user-1",
+			Query:    "record",
+		})
+		if err != nil {
+			t.Fatalf("search failed: %v", err)
+		}
+		if total != 1 || len(items) != 1 {
+			t.Fatalf("expected 1 post, got total=%d", total)
+		}
+		if items[0].ID() != "sp-2" {
+			t.Errorf("expected sp-2, got %s", items[0].ID())
+		}
+	})
+
+	t.Run("stranger cannot see followers_only or private posts", func(t *testing.T) {
+		items, _, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "user-4",
+			Query:    "record",
+		})
+		if err != nil {
+			t.Fatalf("search failed: %v", err)
+		}
+		if total != 0 || len(items) != 0 {
+			t.Fatalf("expected 0 posts, got %d", total)
+		}
+	})
+
+	t.Run("author can see own private posts in search", func(t *testing.T) {
+		items, _, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "user-2",
+			Query:    "deadlift",
+		})
+		if err != nil {
+			t.Fatalf("search failed: %v", err)
+		}
+		if total != 1 || len(items) != 1 {
+			t.Fatalf("expected 1 post, got %d", total)
+		}
+		if items[0].ID() != "sp-3" {
+			t.Errorf("expected sp-3, got %s", items[0].ID())
+		}
+	})
+
+	t.Run("author_id filter limits results to specific author", func(t *testing.T) {
+		items, _, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "user-1",
+			AuthorID: authorUUID3,
+			Query:    "squat",
+		})
+		if err != nil {
+			t.Fatalf("search failed: %v", err)
+		}
+		if total != 1 || len(items) != 1 {
+			t.Fatalf("expected 1 post, got %d", total)
+		}
+		if items[0].UserID() != authorUUID3 {
+			t.Errorf("expected post from user-3, got %s", items[0].UserID())
+		}
+	})
+
+	t.Run("escapes special like characters percentage and underscore", func(t *testing.T) {
+		pWild, _ := aggregate.NewPostItem("sp-wild", "user-2", "100% pure effort_record", nil, vo.VisibilityPublic, 0, 0, now, now)
+		_ = repos.FeedItemRepo.Create(ctx, pWild)
+
+		items, _, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "",
+			Query:    "100%",
+		})
+		if err != nil {
+			t.Fatalf("search with %% failed: %v", err)
+		}
+		if total != 1 || len(items) != 1 || items[0].ID() != "sp-wild" {
+			t.Fatalf("expected 1 item with 100%%, got total=%d", total)
+		}
+
+		itemsUnderscore, _, totalU, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "",
+			Query:    "effort_record",
+		})
+		if err != nil {
+			t.Fatalf("search with _ failed: %v", err)
+		}
+		if totalU != 1 || len(itemsUnderscore) != 1 || itemsUnderscore[0].ID() != "sp-wild" {
+			t.Fatalf("expected 1 item with effort_record, got total=%d", totalU)
+		}
+	})
+
+	t.Run("compound cursor pagination works correctly", func(t *testing.T) {
+		pPage1, nextCur, total, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "user-2",
+			Limit:    2,
+			Query:    "squat",
+		})
+		if err != nil {
+			t.Fatalf("page 1 failed: %v", err)
+		}
+		if len(pPage1) != 2 || total != 2 {
+			t.Fatalf("expected 2 items on page 1, got len=%d total=%d", len(pPage1), total)
+		}
+		if nextCur == "" {
+			t.Fatalf("expected non-empty nextCursor")
+		}
+
+		pPage2, _, total2, err := repos.FeedItemRepo.SearchPosts(ctx, repository.SearchPostsFilter{
+			ViewerID: "user-2",
+			Limit:    2,
+			Query:    "squat",
+			Cursor:   nextCur,
+		})
+		if err != nil {
+			t.Fatalf("page 2 failed: %v", err)
+		}
+		if len(pPage2) != 0 || total2 != 2 {
+			t.Fatalf("expected 0 items on page 2, got %d", len(pPage2))
+		}
+	})
 }

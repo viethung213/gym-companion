@@ -201,3 +201,58 @@ Hệ thống được định nghĩa tại `proto/contracts/supporting/social/v1
 | `GET` | `/api/v1/social/users/{user_id}/feed` | `GetUserFeed` | Lấy Feed trang cá nhân bạn bè |
 | `GET` | `/api/v1/social/me/feed` | `GetMyFeed` | Lấy Feed trang cá nhân của tôi |
 | `GET` | `/api/v1/social/summary` | `GetSocialSummary` | Thống kê số lượng bài, follower, volume |
+
+| `GET` | `/api/v1/social/posts/search` | `SearchPosts` | Tìm kiếm bài viết theo từ khóa và người dùng |
+
+---
+
+## 5. Thiết Kế Cơ Chế Tìm Kiếm Bài Viết (Post Search Architecture)
+
+### 5.1. Tối Ưu Hóa Truy Vấn Cơ Sở Dữ Liệu
+Để phục vụ tìm kiếm chuỗi con trong văn bản tự nhiên không dấu và có dấu với độ trễ thấp, bảng `social.feed_items` bổ sung index GIN Trigram:
+```sql
+CREATE INDEX IF NOT EXISTS idx_social_feed_items_caption_trgm 
+    ON social.feed_items USING gin (caption gin_trgm_ops);
+```
+
+### 5.2. Truy Vấn Phân Quyền Bảo Mật (Visibility SQL Boundary)
+Truy vấn bảo đảm quyền riêng tư trực tiếp tại cơ sở dữ liệu:
+```sql
+SELECT * FROM social.feed_items
+WHERE (
+    caption ILIKE '%' || :query || '%'
+)
+AND (:author_id IS NULL OR user_id = :author_id)
+AND (:item_type IS NULL OR item_type = :item_type)
+AND (
+    visibility = 'PUBLIC'
+    OR user_id = :viewer_id
+    OR (visibility = 'FOLLOWERS_ONLY' AND EXISTS (
+        SELECT 1 FROM social.follows f
+        WHERE f.follower_id = :viewer_id AND f.following_id = social.feed_items.user_id
+    ))
+)
+AND (:cursor_time IS NULL OR created_at < :cursor_time OR (created_at = :cursor_time AND id < :cursor_id))
+ORDER BY created_at DESC, id DESC
+LIMIT :limit;
+```
+
+### 5.3. Phân Tầng Hexagonal cho Search Use Case
+1. **Domain Port** (`internal/social/domain/repository/feed_item_repository.go`):
+   - Phương thức: `SearchPosts(ctx context.Context, filter SearchPostsFilter) ([]*aggregate.FeedItem, string, int32, error)`.
+   - `SearchPostsFilter` đóng gói: `ViewerID`, `AuthorID`, `Query`, `ItemType`, `Limit`, `Cursor`.
+2. **Application Query Handler** (`internal/social/application/query/search_posts.go`):
+   - Nhận `SearchPostsQuery`, validate bắt buộc phải có `Query` hoặc `AuthorID`.
+   - Điều phối gọi `FeedItemRepository.SearchPosts`.
+   - Nạp thông tin người dùng batch qua `UserSnapshotRepository.GetByIDs`.
+   - Nạp cảm xúc của viewer batch qua `InteractionRepository.GetReactionsByUserAndFeedItemIDs` (loại bỏ N+1 query).
+   - Trả về `SearchPostsResult` chuẩn hóa cho Transport.
+3. **Infrastructure Adapter** (`internal/social/infrastructure/persistence/gorm_feed_item_repository.go`):
+   - Triển khai câu lệnh GORM với subquery `EXISTS` kiểm tra quan hệ `social.follows`, escape ký tự đặc biệt (`%`, `_`), và tận dụng index GIN (`ILIKE`).
+   - Clone GORM session (`db.Session(&gorm.Session{})`) giữa `Count` và `Find` tránh bleed state.
+   - Phân trang compound cursor (`created_at DESC, id DESC`).
+4. **Transport Adapter** (`internal/social/transport/grpc/handler.go`):
+   - Khai báo Public bypass trong `.proto` (`security: {}`) để khách chưa đăng nhập vẫn tra cứu được bài PUBLIC.
+   - Trích xuất `viewer_id` nếu có token Bearer hợp lệ.
+   - Chuẩn hóa enum Protobuf sang Domain VO trước khi truyền vào Application layer.
+   - Gọi `searchPostsHandler.Handle(...)` và chuyển đổi sang `SearchPostsResponse`.
