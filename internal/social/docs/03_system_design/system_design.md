@@ -107,6 +107,9 @@ erDiagram
         varchar id PK "User ID"
         varchar full_name
         text avatar_url
+        varchar role
+        int follower_count
+        int following_count
         timestamp updated_at
     }
 

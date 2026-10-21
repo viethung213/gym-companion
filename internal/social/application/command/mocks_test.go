@@ -63,6 +63,32 @@ func (m *mockUserSnapshotRepo) UpdateRole(ctx context.Context, userID, newRole s
 	return nil
 }
 
+func (m *mockUserSnapshotRepo) UpdateFollowCounts(ctx context.Context, followerID, followingID string, delta int) error {
+	if m.users != nil {
+		if u, ok := m.users[followerID]; ok {
+			newCount := u.FollowingCount() + int32(delta)
+			if newCount < 0 {
+				newCount = 0
+			}
+			m.users[followerID] = entity.NewUserSnapshotWithCounts(
+				u.ID(), u.FullName(), u.AvatarURL(), u.Role(),
+				u.FollowerCount(), newCount, u.UpdatedAt(),
+			)
+		}
+		if u, ok := m.users[followingID]; ok {
+			newCount := u.FollowerCount() + int32(delta)
+			if newCount < 0 {
+				newCount = 0
+			}
+			m.users[followingID] = entity.NewUserSnapshotWithCounts(
+				u.ID(), u.FullName(), u.AvatarURL(), u.Role(),
+				newCount, u.FollowingCount(), u.UpdatedAt(),
+			)
+		}
+	}
+	return nil
+}
+
 func (m *mockUserSnapshotRepo) SearchUsers(ctx context.Context, query string, role string, limit int, cursor string) ([]*entity.UserSnapshot, string, int32, error) {
 	list := make([]*entity.UserSnapshot, 0, len(m.users))
 	for _, u := range m.users {

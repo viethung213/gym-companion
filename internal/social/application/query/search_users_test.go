@@ -12,7 +12,7 @@ func TestSearchUsersHandler(t *testing.T) {
 	userRepo := &mockUserSnapshotRepo{
 		users: map[string]*entity.UserSnapshot{
 			"u-1": entity.NewUserSnapshot("u-1", "Alice Athlete", "https://avatar.com/1.png", "user", time.Now()),
-			"u-2": entity.NewUserSnapshot("u-2", "Gymshark Store", "https://avatar.com/2.png", "brand", time.Now()),
+			"u-2": entity.NewUserSnapshotWithCounts("u-2", "Gymshark Store", "https://avatar.com/2.png", "brand", 50, 10, time.Now()),
 			"u-3": entity.NewUserSnapshot("u-3", "Root Admin", "https://avatar.com/3.png", "admin", time.Now()),
 		},
 	}
@@ -41,6 +41,9 @@ func TestSearchUsersHandler(t *testing.T) {
 			if u.UserID == "u-2" && !u.IsFollowing {
 				t.Errorf("expected u-2 to have is_following = true")
 			}
+			if u.UserID == "u-2" && u.FollowerCount != 50 {
+				t.Errorf("expected u-2 follower count 50 from snapshot, got %d", u.FollowerCount)
+			}
 			if u.UserID == "u-1" && u.IsFollowing {
 				t.Errorf("current user should not follow oneself")
 			}
@@ -58,7 +61,7 @@ func TestSearchUsersHandler(t *testing.T) {
 		if len(res.Users) != 1 {
 			t.Fatalf("expected 1 brand, got %d", len(res.Users))
 		}
-		if res.Users[0].UserID != "u-2" || res.Users[0].Role != "brand" {
+		if res.Users[0].UserID != "u-2" || res.Users[0].Role != "brand" || res.Users[0].FollowerCount != 50 {
 			t.Errorf("unexpected brand result: %+v", res.Users[0])
 		}
 	})

@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS social.users (
     full_name VARCHAR(255) NOT NULL DEFAULT '',
     avatar_url TEXT NOT NULL DEFAULT 'https://lqhhwimtzrcrmyfhlizv.supabase.co/storage/v1/object/public/gym-companion-assets/avatar_default/male/avatar-vo-tri-loopy-cute.jpg',
     role VARCHAR(50) NOT NULL DEFAULT 'user',
+    follower_count INT NOT NULL DEFAULT 0,
+    following_count INT NOT NULL DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

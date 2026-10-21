@@ -79,14 +79,9 @@ func (h *SearchUsersHandler) Handle(ctx context.Context, q SearchUsersQuery) (*S
 		followingMap, _ = h.followRepo.FilterFollowingIDs(ctx, q.CurrentUserID, targetUserIDs)
 	}
 
-	followerCountsMap, _ := h.followRepo.CountFollowersByIDs(ctx, targetUserIDs)
-
 	dtos := make([]*DiscoverUserDTO, len(users))
 	for i, u := range users {
-		var followerCount int32
-		if followerCountsMap != nil {
-			followerCount = followerCountsMap[u.ID()]
-		}
+		followerCount := u.FollowerCount()
 
 		isFollowing := false
 		if followingMap != nil && q.CurrentUserID != u.ID() {

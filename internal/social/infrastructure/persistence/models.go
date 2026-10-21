@@ -7,11 +7,13 @@ import (
 )
 
 type SocialUserModel struct {
-	ID        string    `gorm:"primaryKey;column:id"`
-	FullName  string    `gorm:"column:full_name"`
-	AvatarURL string    `gorm:"column:avatar_url"`
-	Role      string    `gorm:"column:role;default:user"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
+	ID             string    `gorm:"primaryKey;column:id"`
+	FullName       string    `gorm:"column:full_name"`
+	AvatarURL      string    `gorm:"column:avatar_url"`
+	Role           string    `gorm:"column:role;default:user"`
+	FollowerCount  int32     `gorm:"column:follower_count;default:0"`
+	FollowingCount int32     `gorm:"column:following_count;default:0"`
+	UpdatedAt      time.Time `gorm:"column:updated_at"`
 }
 
 func (SocialUserModel) TableName() string {

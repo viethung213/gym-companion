@@ -139,15 +139,15 @@ func TestMapper_Reaction(t *testing.T) {
 
 func TestMapper_UserSnapshot(t *testing.T) {
 	now := time.Now().UTC()
-	u := entity.NewUserSnapshot("u-1", "Alice", "https://avatar.png", "user", now)
+	u := entity.NewUserSnapshotWithCounts("u-1", "Alice", "https://avatar.png", "user", 12, 34, now)
 
 	model := persistence.ToPersistenceUserSnapshot(u)
-	if model.ID != "u-1" || model.FullName != "Alice" || model.Role != "user" {
+	if model.ID != "u-1" || model.FullName != "Alice" || model.Role != "user" || model.FollowerCount != 12 || model.FollowingCount != 34 {
 		t.Fatalf("unexpected snapshot model: %+v", model)
 	}
 
 	domainUser := persistence.ToDomainUserSnapshot(model)
-	if domainUser.FullName() != u.FullName() || domainUser.Role() != "user" {
-		t.Fatalf("fullname or role mismatch")
+	if domainUser.FullName() != u.FullName() || domainUser.Role() != "user" || domainUser.FollowerCount() != 12 || domainUser.FollowingCount() != 34 {
+		t.Fatalf("fullname, role or follow counts mismatch")
 	}
 }

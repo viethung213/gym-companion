@@ -150,15 +150,25 @@ func ToPersistenceComment(c *entity.Comment) *CommentModel {
 }
 
 func ToDomainUserSnapshot(m *SocialUserModel) *entity.UserSnapshot {
-	return entity.NewUserSnapshot(m.ID, m.FullName, m.AvatarURL, m.Role, m.UpdatedAt)
+	return entity.NewUserSnapshotWithCounts(
+		m.ID,
+		m.FullName,
+		m.AvatarURL,
+		m.Role,
+		m.FollowerCount,
+		m.FollowingCount,
+		m.UpdatedAt,
+	)
 }
 
 func ToPersistenceUserSnapshot(u *entity.UserSnapshot) *SocialUserModel {
 	return &SocialUserModel{
-		ID:        u.ID(),
-		FullName:  u.FullName(),
-		AvatarURL: u.AvatarURL(),
-		Role:      u.Role(),
-		UpdatedAt: u.UpdatedAt(),
+		ID:             u.ID(),
+		FullName:       u.FullName(),
+		AvatarURL:      u.AvatarURL(),
+		Role:           u.Role(),
+		FollowerCount:  u.FollowerCount(),
+		FollowingCount: u.FollowingCount(),
+		UpdatedAt:      u.UpdatedAt(),
 	}
 }

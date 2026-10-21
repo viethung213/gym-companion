@@ -35,7 +35,7 @@ func newE2EFixture(t *testing.T) *e2eFixture {
 	pub := &testutil.MockEventPublisher{}
 
 	followUserHandler := command.NewFollowUserHandler(repos.FollowRepo, repos.UserSnapshotRepo, pub, repos.TxManager)
-	unfollowUserHandler := command.NewUnfollowUserHandler(repos.FollowRepo, repos.TxManager)
+	unfollowUserHandler := command.NewUnfollowUserHandler(repos.FollowRepo, repos.UserSnapshotRepo, repos.TxManager)
 	createPostHandler := command.NewCreatePostHandler(repos.FeedItemRepo, pub, repos.TxManager)
 	deleteFeedItemHandler := command.NewDeleteFeedItemHandler(repos.FeedItemRepo, repos.TxManager)
 	reactTargetHandler := command.NewReactTargetHandler(repos.InteractionRepo, repos.FeedItemRepo, repos.UserSnapshotRepo, pub, repos.TxManager)
@@ -46,7 +46,7 @@ func newE2EFixture(t *testing.T) *e2eFixture {
 
 	getActivityFeedHandler := query.NewGetActivityFeedHandler(repos.FollowRepo, repos.FeedItemRepo, repos.InteractionRepo, repos.UserSnapshotRepo)
 	getUserProfileFeedHandler := query.NewGetUserProfileFeedHandler(repos.FeedItemRepo, repos.UserSnapshotRepo)
-	getSocialSummaryHandler := query.NewGetSocialSummaryHandler(repos.FollowRepo, repos.FeedItemRepo)
+	getSocialSummaryHandler := query.NewGetSocialSummaryHandler(repos.FollowRepo, repos.FeedItemRepo, repos.UserSnapshotRepo)
 	getFollowersHandler := query.NewGetFollowersHandler(repos.FollowRepo, repos.UserSnapshotRepo)
 	getFollowingHandler := query.NewGetFollowingHandler(repos.FollowRepo, repos.UserSnapshotRepo)
 	listCommentsHandler := query.NewListCommentsHandler(repos.InteractionRepo, repos.UserSnapshotRepo)

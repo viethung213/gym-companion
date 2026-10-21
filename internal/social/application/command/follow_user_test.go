@@ -47,6 +47,27 @@ func TestFollowUserHandler(t *testing.T) {
 		if ev.FollowerName != "John Doe" || ev.FollowerAvatarURL != "https://example.com/avatar.png" {
 			t.Errorf("expected follower info in event, got name=%q avatar=%q", ev.FollowerName, ev.FollowerAvatarURL)
 		}
+
+		u1, _ := userRepo.GetByID(context.Background(), "u-1")
+		if u1.FollowingCount() != 1 {
+			t.Errorf("expected u-1 following count 1, got %d", u1.FollowingCount())
+		}
+
+		// Idempotent: follow again does not double count or re-publish
+		err = handler.Handle(context.Background(), FollowUserCommand{
+			FollowerID:  "u-1",
+			FollowingID: "u-2",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error on idempotent follow: %v", err)
+		}
+		if len(pub.published) != 1 {
+			t.Errorf("expected still 1 event published, got %d", len(pub.published))
+		}
+		u1, _ = userRepo.GetByID(context.Background(), "u-1")
+		if u1.FollowingCount() != 1 {
+			t.Errorf("expected u-1 following count still 1, got %d", u1.FollowingCount())
+		}
 	})
 
 	t.Run("self follow rejected", func(t *testing.T) {

@@ -127,6 +127,41 @@ func TestRepositories_InteractionsAndUser(t *testing.T) {
 		t.Fatalf("SearchUsers failed: len=%d, total=%d, err=%v", len(searched), total, err)
 	}
 
+	// Update Follow Counts
+	u2 := entity.NewUserSnapshot("u-test-2", "Followed User", "https://avatar2.png", "user", now)
+	if err := repos.UserSnapshotRepo.Upsert(ctx, u2); err != nil {
+		t.Fatalf("Upsert u2 failed: %v", err)
+	}
+	if err := repos.UserSnapshotRepo.UpdateFollowCounts(ctx, "u-test-1", "u-test-2", 1); err != nil {
+		t.Fatalf("UpdateFollowCounts +1 failed: %v", err)
+	}
+	u1Fetched, _ := repos.UserSnapshotRepo.GetByID(ctx, "u-test-1")
+	u2Fetched, _ := repos.UserSnapshotRepo.GetByID(ctx, "u-test-2")
+	if u1Fetched.FollowingCount() != 1 || u2Fetched.FollowerCount() != 1 {
+		t.Fatalf("expected u1 following=1, u2 follower=1; got following=%d, follower=%d",
+			u1Fetched.FollowingCount(), u2Fetched.FollowerCount())
+	}
+	// Decrement counts
+	if err := repos.UserSnapshotRepo.UpdateFollowCounts(ctx, "u-test-1", "u-test-2", -1); err != nil {
+		t.Fatalf("UpdateFollowCounts -1 failed: %v", err)
+	}
+	u1Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-1")
+	u2Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-2")
+	if u1Fetched.FollowingCount() != 0 || u2Fetched.FollowerCount() != 0 {
+		t.Fatalf("expected counts clamped to 0; got following=%d, follower=%d",
+			u1Fetched.FollowingCount(), u2Fetched.FollowerCount())
+	}
+	// Decrement again to verify clamp at 0
+	if err := repos.UserSnapshotRepo.UpdateFollowCounts(ctx, "u-test-1", "u-test-2", -1); err != nil {
+		t.Fatalf("UpdateFollowCounts clamp failed: %v", err)
+	}
+	u1Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-1")
+	u2Fetched, _ = repos.UserSnapshotRepo.GetByID(ctx, "u-test-2")
+	if u1Fetched.FollowingCount() != 0 || u2Fetched.FollowerCount() != 0 {
+		t.Fatalf("expected counts clamped to 0 after extra decrement; got following=%d, follower=%d",
+			u1Fetched.FollowingCount(), u2Fetched.FollowerCount())
+	}
+
 	// 2. Interaction (Reactions & Comments)
 	r, _ := entity.NewReaction("r-1", "u-test-1", "target-1", vo.ReactionTypeFire, now)
 	if err := repos.InteractionRepo.SaveReaction(ctx, r); err != nil {
