@@ -162,7 +162,7 @@ sequenceDiagram
 ### 4.1. Bản chất kiến trúc System Bot
 Thay vì sinh ngẫu nhiên các chuỗi text ảo on-the-fly (dẫn tới việc dữ liệu bot không nhất quán giữa các lần xem lịch sử đấu), Solo Match triển khai mô hình **System Bot Pool**:
 * **Bảng `solo_match.system_bots`**: Chứa danh sách các tài khoản Bot hệ thống định danh rõ ràng.
-* **Khởi tạo dữ liệu**: Đăng ký các tài khoản Bot thông qua API Auth chính thức của hệ thống (`DefaultBotProfiles`: Alex Vance, Sarah Jenkins, Leo Martinez, Maya Lin, Marcus Stone...) với avatar người thật, tên tuổi tự nhiên và giới tính.
+* **Khởi tạo dữ liệu**: Các tài khoản Bot được cấu hình sẵn với thông tin danh tính tự nhiên (avatar, tên tuổi, giới tính) tương tự như người dùng thật.
 * **Đồng bộ bảng Snapshot**: Mỗi Bot đều có một bản ghi hợp lệ trong `solo_match.user_snapshots`.
 * **Tuyệt đối ẩn danh AI**: Trong Protobuf Contract (`ParticipantView`), không có bất kỳ cờ `is_bot` nào. Client hiển thị đối thủ mượt mà như một gymer thật.
 

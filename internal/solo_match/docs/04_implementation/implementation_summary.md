@@ -131,8 +131,6 @@ ok  github.com/viethung213/gym-companion/internal/solo_match/transport/grpc     
 1. **Khởi động ứng dụng**:
    - Module `solo_match` được kích hoạt tự động cùng server API chính tại `cmd/api/main.go`.
    - Redis và PostgreSQL được khởi tạo thông qua Docker Compose (`infra/redis/` và `infra/db/postgres/`).
-2. **Khởi tạo dữ liệu mẫu (Seeding)**:
-   - Hệ thống tự động nạp hồ sơ mẫu của 4 Bot gymer lúc khởi động qua seeder (`bot_seeder.go`).
-3. **Mở rộng trong tương lai**:
+2. **Mở rộng trong tương lai**:
    - Khi triển khai luồng Stream đối kháng trực tiếp (live video / live pose skeleton), client sẽ handshake qua WebSocket/gRPC Bidi-Stream và gửi `match_id` trong metadata stream.
    - Các sự kiện phát ra từ luồng stream sẽ mang sẵn `match_id`, đảm bảo tương thích 100% với kiến trúc hiện có.
