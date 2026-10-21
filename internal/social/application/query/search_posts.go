@@ -116,7 +116,7 @@ func (h *SearchPostsHandler) Handle(ctx context.Context, q SearchPostsQuery) (*S
 			itemIDs[i] = item.ID()
 		}
 		var err error
-		userReactions, err = h.interactionRepo.GetReactionsByUserAndFeedItemIDs(ctx, filter.ViewerID, itemIDs)
+		userReactions, err = h.interactionRepo.GetUserReactions(ctx, filter.ViewerID, itemIDs)
 		if err != nil {
 			return nil, fmt.Errorf("get user reactions: %w", err)
 		}

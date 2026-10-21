@@ -52,6 +52,11 @@ func (h *GetFollowingHandler) Handle(ctx context.Context, q GetFollowingQuery) (
 
 	userInfoMap, _ := h.userSnapshotRepo.GetByIDs(ctx, userIDs)
 
+	var followingMap map[string]bool
+	if q.CurrentUserID != "" && len(userIDs) > 0 {
+		followingMap, _ = h.followRepo.FilterFollowingIDs(ctx, q.CurrentUserID, userIDs)
+	}
+
 	result := make([]*UserSocialSummaryDTO, 0, len(follows))
 	for _, f := range follows {
 		fullName := ""
@@ -62,8 +67,8 @@ func (h *GetFollowingHandler) Handle(ctx context.Context, q GetFollowingQuery) (
 		}
 
 		isFollowing := false
-		if q.CurrentUserID != "" && q.CurrentUserID != f.FollowingID() {
-			isFollowing, _ = h.followRepo.IsFollowing(ctx, q.CurrentUserID, f.FollowingID())
+		if followingMap != nil && q.CurrentUserID != f.FollowingID() {
+			isFollowing = followingMap[f.FollowingID()]
 		}
 
 		result = append(result, &UserSocialSummaryDTO{

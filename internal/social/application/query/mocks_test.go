@@ -96,6 +96,25 @@ func (m *queryMockFollowRepo) CountFollowers(ctx context.Context, userID string)
 func (m *queryMockFollowRepo) CountFollowing(ctx context.Context, userID string) (int32, error) {
 	return 5, nil
 }
+func (m *queryMockFollowRepo) FilterFollowingIDs(ctx context.Context, followerID string, targetUserIDs []string) (map[string]bool, error) {
+	res := make(map[string]bool)
+	for _, id := range m.followingIDs {
+		for _, targetID := range targetUserIDs {
+			if id == targetID {
+				res[targetID] = true
+				break
+			}
+		}
+	}
+	return res, nil
+}
+func (m *queryMockFollowRepo) CountFollowersByIDs(ctx context.Context, userIDs []string) (map[string]int32, error) {
+	res := make(map[string]int32)
+	for _, id := range userIDs {
+		res[id] = 10
+	}
+	return res, nil
+}
 
 type queryMockFeedItemRepo struct {
 	items []*aggregate.FeedItem
@@ -144,13 +163,14 @@ func (m *queryMockInteractionRepo) GetReaction(ctx context.Context, userID, feed
 func (m *queryMockInteractionRepo) GetReactionsByFeedItem(ctx context.Context, feedItemID string) ([]*entity.Reaction, error) {
 	return m.reactions, nil
 }
-func (m *queryMockInteractionRepo) GetReactionsByUserAndFeedItemIDs(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
+func (m *queryMockInteractionRepo) GetUserReactions(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
 	res := make(map[string]*entity.Reaction)
 	for _, r := range m.reactions {
 		if r.UserID() == userID {
-			for _, id := range feedItemIDs {
-				if r.FeedItemID() == id {
-					res[id] = r
+			for _, fid := range feedItemIDs {
+				if r.FeedItemID() == fid {
+					res[fid] = r
+					break
 				}
 			}
 		}

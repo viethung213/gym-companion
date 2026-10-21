@@ -69,7 +69,7 @@ func (m *searchTestMockInteractionRepo) GetReaction(ctx context.Context, userID,
 func (m *searchTestMockInteractionRepo) GetReactionsByFeedItem(ctx context.Context, feedItemID string) ([]*entity.Reaction, error) {
 	return nil, nil
 }
-func (m *searchTestMockInteractionRepo) GetReactionsByUserAndFeedItemIDs(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
+func (m *searchTestMockInteractionRepo) GetUserReactions(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
 	if m.err != nil {
 		return nil, m.err
 	}

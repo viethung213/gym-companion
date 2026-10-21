@@ -97,6 +97,27 @@ func (r *GormInteractionRepository) GetReactionsByUserAndFeedItemIDs(
 	return res, nil
 }
 
+func (r *GormInteractionRepository) GetUserReactions(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error) {
+	res := make(map[string]*entity.Reaction)
+	if len(feedItemIDs) == 0 || userID == "" {
+		return res, nil
+	}
+
+	var models []ReactionModel
+	err := getDB(ctx, r.db).Where("user_id = ? AND feed_item_id IN ?", userID, feedItemIDs).Find(&models).Error
+	if err != nil {
+		return nil, fmt.Errorf("find batch user reactions: %w", err)
+	}
+
+	for i := range models {
+		item, domainErr := ToDomainReaction(&models[i])
+		if domainErr == nil {
+			res[item.FeedItemID()] = item
+		}
+	}
+	return res, nil
+}
+
 func (r *GormInteractionRepository) AddComment(ctx context.Context, comment *entity.Comment) error {
 	m := ToPersistenceComment(comment)
 	if err := getDB(ctx, r.db).Create(m).Error; err != nil {

@@ -18,7 +18,10 @@ func TestGetActivityFeedHandler(t *testing.T) {
 
 	followRepo := &queryMockFollowRepo{followingIDs: []string{"user-friend"}}
 	feedItemRepo := &queryMockFeedItemRepo{items: []*aggregate.FeedItem{a, p}}
-	interactionRepo := &queryMockInteractionRepo{}
+	r1, _ := entity.NewReaction("r-1", "user-me", "a-1", vo.ReactionTypeFire, now)
+	interactionRepo := &queryMockInteractionRepo{
+		reactions: []*entity.Reaction{r1},
+	}
 	userSnapshotRepo := &mockUserSnapshotRepo{
 		users: map[string]*entity.UserSnapshot{
 			"user-friend": entity.NewUserSnapshot("user-friend", "Friend Name", "http://avatar.jpg", "user", time.Time{}),
@@ -43,5 +46,11 @@ func TestGetActivityFeedHandler(t *testing.T) {
 	}
 	if res.Items[0].AuthorName != "Friend Name" {
 		t.Errorf("expected author name 'Friend Name', got '%s'", res.Items[0].AuthorName)
+	}
+	if res.Items[0].UserReaction != "FIRE" {
+		t.Errorf("expected user reaction 'FIRE', got '%s'", res.Items[0].UserReaction)
+	}
+	if res.Items[1].UserReaction != "" {
+		t.Errorf("expected empty user reaction for item 2, got '%s'", res.Items[1].UserReaction)
 	}
 }

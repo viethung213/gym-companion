@@ -12,7 +12,7 @@ type InteractionRepository interface {
 	DeleteReaction(ctx context.Context, userID, feedItemID string) error
 	GetReaction(ctx context.Context, userID, feedItemID string) (*entity.Reaction, error)
 	GetReactionsByFeedItem(ctx context.Context, feedItemID string) ([]*entity.Reaction, error)
-	GetReactionsByUserAndFeedItemIDs(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error)
+	GetUserReactions(ctx context.Context, userID string, feedItemIDs []string) (map[string]*entity.Reaction, error)
 
 	// Comments
 	AddComment(ctx context.Context, comment *entity.Comment) error
