@@ -35,6 +35,8 @@ func NewGetStreakHandler(userStreakRepo repository.UserStreakRepository) *GetStr
 
 // Handle retrieves streak status without altering any database records (BR-ST-01, ADR-0001).
 // Computes virtual streak display: if inactivity delta >= 2 days, displays CurrentStreak = 0.
+// If daysDiff <= 0 (e.g. activity completed today or local timezone is ahead of server UTC),
+// IsActiveToday is strictly marked as true.
 func (h *GetStreakHandler) Handle(ctx context.Context, q GetStreakQuery) (*GetStreakResult, error) {
 	streak, err := h.userStreakRepo.FindByID(ctx, q.UserID)
 	if err != nil {
@@ -59,14 +61,14 @@ func (h *GetStreakHandler) Handle(ctx context.Context, q GetStreakQuery) (*GetSt
 		currDate, errCurr := time.Parse("2006-01-02", q.CurrentLocalDate)
 		if errLast == nil && errCurr == nil {
 			daysDiff := int(currDate.Sub(lastDate).Hours() / 24)
-			if daysDiff == 0 {
+			if daysDiff <= 0 {
 				isActiveToday = true
 			} else if daysDiff >= 2 {
 				// The streak was broken yesterday! Virtual display shows 0 to be truthful to user (ADR-0001)
 				currentStreak = 0
 			}
 		}
-	} else if q.CurrentLocalDate != "" && streak.LastActivityDate() == q.CurrentLocalDate {
+	} else if q.CurrentLocalDate != "" && streak.LastActivityDate() >= q.CurrentLocalDate {
 		isActiveToday = true
 	}
 

@@ -196,6 +196,20 @@ func (r *GormOutboxRepository) MarkAsFailed(ctx context.Context, ids []string, l
 	return nil
 }
 
+// ReleaseClaims unlocks claimed records back to PENDING without incrementing retry_count (e.g. on graceful shutdown).
+func (r *GormOutboxRepository) ReleaseClaims(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	db := GetDB(ctx, r.db)
+	return db.Model(&OutboxModel{}).
+		Where("id IN ?", ids).
+		Updates(map[string]any{
+			"status":       "PENDING",
+			"locked_until": nil,
+		}).Error
+}
+
 // ProcessBatch claims a batch, passes it to publishFn, and marks claimed records as published or failed.
 func (r *GormOutboxRepository) ProcessBatch(
 	ctx context.Context,
@@ -216,7 +230,19 @@ func (r *GormOutboxRepository) ProcessBatch(
 	}
 
 	if pubErr := publishFn(ctx, records); pubErr != nil {
-		if failErr := r.MarkAsFailed(ctx, ids, pubErr); failErr != nil {
+		cleanupCtx := ctx
+		if ctx.Err() != nil {
+			var cancel context.CancelFunc
+			cleanupCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+		}
+
+		if errors.Is(pubErr, context.Canceled) || ctx.Err() != nil {
+			_ = r.ReleaseClaims(cleanupCtx, ids)
+			return fmt.Errorf("publish outbox batch interrupted by shutdown: %w", pubErr)
+		}
+
+		if failErr := r.MarkAsFailed(cleanupCtx, ids, pubErr); failErr != nil {
 			return fmt.Errorf("publish outbox batch failed: %w; also failed to mark failed records: %w", pubErr, failErr)
 		}
 		return fmt.Errorf("publish outbox batch: %w", pubErr)
