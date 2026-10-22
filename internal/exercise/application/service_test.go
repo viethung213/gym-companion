@@ -64,6 +64,37 @@ func TestUpdateExerciseDoesNotChangeStatus(t *testing.T) {
 	}
 }
 
+func TestCreateAndUpdateExerciseMeasurementType(t *testing.T) {
+	t.Parallel()
+	suite := newTestSuite()
+	ctx := adminContext()
+
+	// 1. Create with duration
+	info := validInfo()
+	info.Name = "Plank"
+	info.MeasurementType = domain.MeasurementTypeDuration
+	exercise, err := suite.createHandler.Handle(ctx, &command.CreateExerciseCommand{Info: info})
+	if err != nil {
+		t.Fatalf("create exercise: %v", err)
+	}
+	if got, want := exercise.Info().MeasurementType, domain.MeasurementTypeDuration; got != want {
+		t.Errorf("got measurement type %q, want %q", got, want)
+	}
+
+	// 2. Update to reps
+	info.MeasurementType = domain.MeasurementTypeReps
+	updated, err := suite.updateHandler.Handle(ctx, &command.UpdateExerciseCommand{
+		ID:   exercise.Info().ID,
+		Info: info,
+	})
+	if err != nil {
+		t.Fatalf("update exercise: %v", err)
+	}
+	if got, want := updated.Info().MeasurementType, domain.MeasurementTypeReps; got != want {
+		t.Errorf("got measurement type %q, want %q", got, want)
+	}
+}
+
 func TestArchiveExercise(t *testing.T) {
 	t.Parallel()
 	suite := newTestSuite()

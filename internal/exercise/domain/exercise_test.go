@@ -237,6 +237,9 @@ func TestNewExercise_Normalization(t *testing.T) {
 	if got, want := info.DefaultRestSeconds, int32(60); got != want {
 		t.Errorf("got default rest seconds %d, want %d", got, want)
 	}
+	if got, want := info.MeasurementType, MeasurementTypeReps; got != want {
+		t.Errorf("got measurement type %q, want %q", got, want)
+	}
 }
 
 func TestUpdateInfo_Validations(t *testing.T) {
@@ -268,6 +271,17 @@ func TestUpdateInfo_Validations(t *testing.T) {
 			},
 			want: ErrInvalidExercise,
 		},
+		{
+			name: "invalid measurement type",
+			give: Info{
+				Name:            "Squat",
+				BodyPartID:      "legs",
+				EquipmentID:     "barbell",
+				TargetMuscleID:  "quads",
+				MeasurementType: "INVALID",
+			},
+			want: ErrInvalidExercise,
+		},
 	}
 
 	for _, tt := range tests {
@@ -281,4 +295,58 @@ func TestUpdateInfo_Validations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMeasurementType(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
+
+	t.Run("default to reps", func(t *testing.T) {
+		t.Parallel()
+		info := validInfo()
+		info.MeasurementType = ""
+		exercise, err := NewExercise(info, now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := exercise.Info().MeasurementType, MeasurementTypeReps; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("explicit duration type", func(t *testing.T) {
+		t.Parallel()
+		info := validInfo()
+		info.MeasurementType = MeasurementTypeDuration
+		exercise, err := NewExercise(info, now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := exercise.Info().MeasurementType, MeasurementTypeDuration; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("update measurement type", func(t *testing.T) {
+		t.Parallel()
+		exercise := newValidExercise(t, now)
+		info := exercise.Info()
+		info.MeasurementType = MeasurementTypeDuration
+		if err := exercise.UpdateInfo(info, now.Add(time.Minute)); err != nil {
+			t.Fatalf("update info: %v", err)
+		}
+		if got, want := exercise.Info().MeasurementType, MeasurementTypeDuration; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("invalid measurement type on create", func(t *testing.T) {
+		t.Parallel()
+		info := validInfo()
+		info.MeasurementType = "UNRECOGNIZED"
+		_, err := NewExercise(info, now)
+		if !errors.Is(err, ErrInvalidExercise) {
+			t.Fatalf("got error %v, want %v", err, ErrInvalidExercise)
+		}
+	})
 }

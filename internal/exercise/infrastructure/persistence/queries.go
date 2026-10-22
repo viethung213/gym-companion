@@ -139,6 +139,9 @@ func (r *PostgresRepository) searchActiveRecords(
 	if filters.Difficulty != "" {
 		query = query.Where("e.difficulty = ?", filters.Difficulty)
 	}
+	if filters.MeasurementType != "" {
+		query = query.Where("e.measurement_type = ?", filters.MeasurementType)
+	}
 	for _, muscleID := range filters.SecondaryMuscleIDs {
 		query = query.Where(
 			`EXISTS (

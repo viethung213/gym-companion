@@ -17,6 +17,7 @@ type SearchFilters struct {
 	Difficulty         string
 	Limit              int32
 	Offset             int32
+	MeasurementType    string
 }
 
 type Metadata struct {

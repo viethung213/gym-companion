@@ -42,11 +42,15 @@ CREATE TABLE IF NOT EXISTS exercise.exercises (
     default_rest_seconds INT DEFAULT 60,
     status VARCHAR(50) DEFAULT 'DRAFT',
     has_ai_supported BOOLEAN NOT NULL DEFAULT FALSE,
+    measurement_type VARCHAR(32) NOT NULL DEFAULT 'REPS',
     archived_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_exercises_status CHECK (
         status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'ARCHIVED')
+    ),
+    CONSTRAINT chk_exercises_measurement_type CHECK (
+        measurement_type IN ('REPS', 'DURATION')
     )
 );
 
@@ -55,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_exercises_body_part ON exercise.exercises(body_pa
 CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercise.exercises(equipment_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_target_muscle ON exercise.exercises(target_muscle_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_status ON exercise.exercises(status);
+CREATE INDEX IF NOT EXISTS idx_exercises_measurement_type ON exercise.exercises(measurement_type);
 CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm ON exercise.exercises USING gin (name gin_trgm_ops);
 
 -- 6. Table: exercise_secondary_muscles (Many-to-Many)

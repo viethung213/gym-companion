@@ -137,6 +137,7 @@ func (s *ExerciseServer) SearchExercises(
 			Difficulty:         req.GetDifficulty(),
 			Limit:              req.GetLimit(),
 			Offset:             req.GetOffset(),
+			MeasurementType:    toDomainMeasurementTypeString(req.GetMeasurementType()),
 		},
 	})
 	if err != nil {
@@ -205,6 +206,7 @@ func (s *ExerciseServer) CreateExercise(
 			Difficulty:         req.GetDifficulty(),
 			DefaultRestSeconds: req.GetDefaultRestSeconds(),
 			TagIDs:             req.GetTagIds(),
+			MeasurementType:    toDomainMeasurementType(req.GetMeasurementType()),
 		},
 	})
 	if err != nil {
@@ -239,6 +241,7 @@ func (s *ExerciseServer) UpdateExercise(
 			Difficulty:         req.GetDifficulty(),
 			DefaultRestSeconds: req.GetDefaultRestSeconds(),
 			TagIDs:             req.GetTagIds(),
+			MeasurementType:    toDomainMeasurementType(req.GetMeasurementType()),
 		},
 	})
 	if err != nil {
@@ -325,6 +328,7 @@ func toProtoExercise(info *domain.Info) *exercisemsg.ExerciseInfo {
 		TagIds:             info.TagIDs,
 		Status:             toProtoStatus(info.Status),
 		HasAiSupported:     info.HasAISupported,
+		MeasurementType:    toProtoMeasurementType(info.MeasurementType),
 	}
 }
 
@@ -376,6 +380,39 @@ func toProtoStatus(status domain.Status) exercisemsg.ExerciseStatus {
 		return exercisemsg.ExerciseStatus_EXERCISE_STATUS_ARCHIVED
 	default:
 		return exercisemsg.ExerciseStatus_EXERCISE_STATUS_UNSPECIFIED
+	}
+}
+
+func toProtoMeasurementType(m domain.MeasurementType) exercisemsg.ExerciseMeasurementType {
+	switch m {
+	case domain.MeasurementTypeReps:
+		return exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS
+	case domain.MeasurementTypeDuration:
+		return exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION
+	default:
+		return exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_UNSPECIFIED
+	}
+}
+
+func toDomainMeasurementType(m exercisemsg.ExerciseMeasurementType) domain.MeasurementType {
+	switch m {
+	case exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION:
+		return domain.MeasurementTypeDuration
+	case exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS:
+		return domain.MeasurementTypeReps
+	default:
+		return ""
+	}
+}
+
+func toDomainMeasurementTypeString(m exercisemsg.ExerciseMeasurementType) string {
+	switch m {
+	case exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION:
+		return string(domain.MeasurementTypeDuration)
+	case exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS:
+		return string(domain.MeasurementTypeReps)
+	default:
+		return ""
 	}
 }
 
