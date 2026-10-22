@@ -62,8 +62,8 @@ func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPe
 			return fmt.Errorf("earn pr xp: %w", err)
 		}
 
-		if err := h.userXpRepo.Save(txCtx, userXp); err != nil {
-			return fmt.Errorf("save user xp: %w", err)
+		if saveErr := h.userXpRepo.Save(txCtx, userXp); saveErr != nil {
+			return fmt.Errorf("save user xp: %w", saveErr)
 		}
 
 		history := entity.NewXpHistoryEntry(
@@ -75,8 +75,8 @@ func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPe
 			cmd.ActivityDate,
 			cmd.AchievedAt,
 		)
-		if err := h.userXpRepo.SaveHistory(txCtx, history); err != nil {
-			return fmt.Errorf("save xp history: %w", err)
+		if histErr := h.userXpRepo.SaveHistory(txCtx, history); histErr != nil {
+			return fmt.Errorf("save xp history: %w", histErr)
 		}
 
 		outboxEvents := make([]any, len(xpEvents))
@@ -84,12 +84,15 @@ func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPe
 			outboxEvents[i] = ev
 		}
 
-		if err := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, outboxEvents); err != nil {
-			return fmt.Errorf("write outbox events: %w", err)
+		if writeErr := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, outboxEvents); writeErr != nil {
+			return fmt.Errorf("write outbox events: %w", writeErr)
 		}
 
-		has, err := h.badgeRepo.HasBadge(txCtx, cmd.UserID, "PR_BREAKER")
-		if err == nil && !has {
+		has, hasErr := h.badgeRepo.HasBadge(txCtx, cmd.UserID, "PR_BREAKER")
+		if hasErr != nil {
+			return fmt.Errorf("check badge PR_BREAKER for user %s: %w", cmd.UserID, hasErr)
+		}
+		if !has {
 			def, _ := vo.GetBadgeDefinition("PR_BREAKER")
 			meta := map[string]string{
 				"exerciseId": cmd.ExerciseID,
@@ -105,10 +108,14 @@ func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPe
 				meta,
 				cmd.AchievedAt,
 			)
-			if bErr == nil {
-				if err := h.badgeRepo.Save(txCtx, badge); err == nil {
-					_ = h.outboxWriter.WriteEvents(txCtx, "user_badges", cmd.UserID, []any{badgeEv})
-				}
+			if bErr != nil {
+				return fmt.Errorf("unlock badge PR_BREAKER for user %s: %w", cmd.UserID, bErr)
+			}
+			if saveBadgeErr := h.badgeRepo.Save(txCtx, badge); saveBadgeErr != nil {
+				return fmt.Errorf("save badge PR_BREAKER for user %s: %w", cmd.UserID, saveBadgeErr)
+			}
+			if writeBadgeErr := h.outboxWriter.WriteEvents(txCtx, "user_badges", cmd.UserID, []any{badgeEv}); writeBadgeErr != nil {
+				return fmt.Errorf("write outbox badge event for user %s: %w", cmd.UserID, writeBadgeErr)
 			}
 		}
 

@@ -76,6 +76,8 @@ func (c *NutritionEventConsumer) Start(ctx context.Context) {
 
 			if processErr != nil {
 				log.Printf("[Gamification] NutritionEvent consumer process error after retries: %v", processErr)
+				time.Sleep(500 * time.Millisecond)
+				continue
 			}
 
 			if err := c.reader.CommitMessages(ctx, msg); err != nil {
