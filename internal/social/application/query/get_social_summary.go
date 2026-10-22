@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/viethung213/gym-companion/internal/social/domain/entity"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
 )
 
@@ -36,6 +37,20 @@ func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummary
 		return nil, fmt.Errorf("get user snapshot: %w", err)
 	}
 
+	fullName := "User"
+	avatarURL := entity.DefaultAvatarURL
+	role := "user"
+	var followerCount int32
+	var followingCount int32
+
+	if userInfo != nil {
+		fullName = userInfo.FullName()
+		avatarURL = userInfo.AvatarURL()
+		role = userInfo.Role()
+		followerCount = userInfo.FollowerCount()
+		followingCount = userInfo.FollowingCount()
+	}
+
 	feedCount, err := h.feedItemRepo.CountByUserID(ctx, q.TargetUserID)
 	if err != nil {
 		return nil, fmt.Errorf("count feed items: %w", err)
@@ -48,8 +63,11 @@ func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummary
 
 	return &SocialSummaryDTO{
 		UserID:         q.TargetUserID,
-		FollowerCount:  userInfo.FollowerCount(),
-		FollowingCount: userInfo.FollowingCount(),
+		FullName:       fullName,
+		AvatarURL:      avatarURL,
+		Role:           role,
+		FollowerCount:  followerCount,
+		FollowingCount: followingCount,
 		PostCount:      feedCount,
 		IsFollowing:    isFollowing,
 	}, nil

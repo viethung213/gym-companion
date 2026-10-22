@@ -318,8 +318,17 @@ func TestGRPCHandler_MeEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSocialSummary without userId failed: %v", err)
 	}
-	if summaryRes.Msg.GetUserId() != "user-1" {
-		t.Errorf("expected user-1, got %s", summaryRes.Msg.GetUserId())
+	if got, want := summaryRes.Msg.GetUserId(), "user-1"; got != want {
+		t.Errorf("expected userId %s, got %s", want, got)
+	}
+	if got, want := summaryRes.Msg.GetFullName(), "Test User"; got != want {
+		t.Errorf("expected fullName %s, got %s", want, got)
+	}
+	if summaryRes.Msg.GetAvatarUrl() == "" {
+		t.Errorf("expected non-empty avatarUrl")
+	}
+	if got, want := summaryRes.Msg.GetRole(), "user"; got != want {
+		t.Errorf("expected role %s, got %s", want, got)
 	}
 
 	// 2. GetFollowers without userId (calls /me/followers)
