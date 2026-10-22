@@ -82,7 +82,7 @@ func TestNutritionEventConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	logRepo := newMockOutboxLogRepo()
 	logRepo.processedMap["evt-nut-dup"] = true
 
-	c := consumer.NewNutritionEventConsumer(nil, nil, nil, logRepo)
+	c := consumer.NewNutritionEventConsumer(nil, nil, nil, nil, logRepo)
 
 	envelope := consumer.CloudEvent{
 		ID:   "evt-nut-dup",
@@ -113,7 +113,7 @@ func TestUserRegisteredConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 func TestConsumers_StartWithNilReader(t *testing.T) {
 	logRepo := newMockOutboxLogRepo()
 	wc := consumer.NewWorkoutEventConsumer(nil, nil, logRepo)
-	nc := consumer.NewNutritionEventConsumer(nil, nil, nil, logRepo)
+	nc := consumer.NewNutritionEventConsumer(nil, nil, nil, nil, logRepo)
 	uc := consumer.NewUserRegisteredConsumer(nil, nil, logRepo)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -164,4 +164,73 @@ func TestResolveLocalDate(t *testing.T) {
 	utcTime := time.Date(2026, 10, 13, 22, 30, 0, 0, time.UTC)
 	localDate := consumer.ResolveLocalDate(utcTime)
 	assert.Equal(t, "2026-10-14", localDate)
+}
+
+type mockTxManager struct {
+	called bool
+	err    error
+}
+
+func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
+	m.called = true
+	if m.err != nil {
+		return m.err
+	}
+	return fn(ctx)
+}
+
+func TestNutritionEventConsumer_ProcessMessage_SuccessWithTransaction(t *testing.T) {
+	logRepo := newMockOutboxLogRepo()
+	txMgr := &mockTxManager{}
+
+	c := consumer.NewNutritionEventConsumer(nil, nil, nil, txMgr, logRepo)
+
+	payload := map[string]interface{}{
+		"userId":       "usr-nut-1",
+		"activityDate": "2026-10-22",
+	}
+	pBytes, _ := json.Marshal(payload)
+	envelope := consumer.CloudEvent{
+		ID:   "evt-nut-100",
+		Type: "contracts.core.nutrition.v1.mealLogged",
+		Data: pBytes,
+	}
+	bytes, _ := json.Marshal(envelope)
+
+	err := c.ProcessMessage(context.Background(), &kafka.Message{
+		Key:   []byte("usr-nut-1"),
+		Value: bytes,
+	})
+	assert.NoError(t, err)
+	assert.True(t, txMgr.called)
+	assert.True(t, logRepo.processedMap["evt-nut-100"])
+}
+
+func TestNutritionEventConsumer_ProcessMessage_TxErrorBubblesUp(t *testing.T) {
+	logRepo := newMockOutboxLogRepo()
+	txMgr := &mockTxManager{err: assert.AnError}
+
+	c := consumer.NewNutritionEventConsumer(nil, nil, nil, txMgr, logRepo)
+
+	payload := map[string]interface{}{
+		"userId":       "usr-nut-2",
+		"activityDate": "2026-10-22",
+	}
+	pBytes, _ := json.Marshal(payload)
+	envelope := consumer.CloudEvent{
+		ID:   "evt-nut-200",
+		Type: "contracts.core.nutrition.v1.mealLogged",
+		Data: pBytes,
+	}
+	bytes, _ := json.Marshal(envelope)
+
+	err := c.ProcessMessage(context.Background(), &kafka.Message{
+		Key:   []byte("usr-nut-2"),
+		Value: bytes,
+	})
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.True(t, txMgr.called)
+	assert.False(t, logRepo.processedMap["evt-nut-200"])
+	assert.Len(t, logRepo.savedLogs, 1)
+	assert.Equal(t, "FAILED", logRepo.savedLogs[0].Status)
 }
