@@ -25,6 +25,7 @@ type NutritionEventConsumer struct {
 	reader           *kafka.Reader
 	nutritionHandler *command.ProcessNutritionXpHandler
 	streakHandler    *command.RecordStreakActivityHandler
+	txManager        port.TransactionManager
 	outboxLogRepo    port.OutboxLogRepository
 }
 
@@ -33,12 +34,14 @@ func NewNutritionEventConsumer(
 	reader *kafka.Reader,
 	nutritionHandler *command.ProcessNutritionXpHandler,
 	streakHandler *command.RecordStreakActivityHandler,
+	txManager port.TransactionManager,
 	outboxLogRepo port.OutboxLogRepository,
 ) *NutritionEventConsumer {
 	return &NutritionEventConsumer{
 		reader:           reader,
 		nutritionHandler: nutritionHandler,
 		streakHandler:    streakHandler,
+		txManager:        txManager,
 		outboxLogRepo:    outboxLogRepo,
 	}
 }
@@ -88,7 +91,7 @@ func (c *NutritionEventConsumer) Start(ctx context.Context) {
 	}
 }
 
-// ProcessMessage processes inbound nutrition goal achievement events.
+// ProcessMessage processes inbound nutrition goal achievement events atomically.
 func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {
 	if msg == nil {
 		return errors.New("kafka message is nil")
@@ -126,13 +129,64 @@ func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.
 	}
 	now := time.Now().UTC()
 
-	// 1. Award Nutrition XP (+30 XP)
-	_, err := c.nutritionHandler.Handle(ctx, command.ProcessNutritionXpCommand{
-		UserID:       userID,
-		ActivityDate: activityDate,
-		AchievedAt:   now,
-	})
-	if err != nil {
+	var processErr error
+	if c.txManager != nil {
+		// Atomic transaction adhering strictly to user_streak -> user_xp lock ordering to prevent deadlocks
+		processErr = c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+			// 1. Advance / maintain streak for rest day discipline
+			if c.streakHandler != nil {
+				_, sErr := c.streakHandler.Handle(txCtx, command.RecordStreakActivityCommand{
+					UserID:       userID,
+					ActivityDate: activityDate,
+					ActivityType: "NUTRITION",
+					RecordedAt:   now,
+				})
+				if sErr != nil {
+					return fmt.Errorf("record nutrition streak activity: %w", sErr)
+				}
+			}
+
+			// 2. Award Nutrition XP (+30 XP)
+			if c.nutritionHandler != nil {
+				_, nErr := c.nutritionHandler.Handle(txCtx, command.ProcessNutritionXpCommand{
+					UserID:       userID,
+					ActivityDate: activityDate,
+					AchievedAt:   now,
+				})
+				if nErr != nil {
+					return fmt.Errorf("process nutrition xp: %w", nErr)
+				}
+			}
+
+			return nil
+		})
+	} else {
+		// Fallback for environments without transaction manager
+		if c.streakHandler != nil {
+			_, sErr := c.streakHandler.Handle(ctx, command.RecordStreakActivityCommand{
+				UserID:       userID,
+				ActivityDate: activityDate,
+				ActivityType: "NUTRITION",
+				RecordedAt:   now,
+			})
+			if sErr != nil {
+				processErr = fmt.Errorf("record nutrition streak activity: %w", sErr)
+			}
+		}
+
+		if processErr == nil && c.nutritionHandler != nil {
+			_, nErr := c.nutritionHandler.Handle(ctx, command.ProcessNutritionXpCommand{
+				UserID:       userID,
+				ActivityDate: activityDate,
+				AchievedAt:   now,
+			})
+			if nErr != nil {
+				processErr = fmt.Errorf("process nutrition xp: %w", nErr)
+			}
+		}
+	}
+
+	if processErr != nil {
 		if c.outboxLogRepo != nil && ce.ID != "" {
 			_ = c.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
 				EventID:      ce.ID,
@@ -140,21 +194,10 @@ func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.
 				Payload:      msg.Value,
 				PartitionKey: string(msg.Key),
 				Status:       "FAILED",
-				ErrorMessage: err.Error(),
+				ErrorMessage: processErr.Error(),
 			})
 		}
-		return err
-	}
-
-	// 2. Advance / maintain streak for rest day discipline
-	_, err = c.streakHandler.Handle(ctx, command.RecordStreakActivityCommand{
-		UserID:       userID,
-		ActivityDate: activityDate,
-		ActivityType: "NUTRITION",
-		RecordedAt:   now,
-	})
-	if err != nil {
-		log.Printf("[Gamification] Warning: streak update for nutrition event failed: %v", err)
+		return processErr
 	}
 
 	if c.outboxLogRepo != nil && ce.ID != "" {
