@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
     session_scr           NUMERIC(5,2),
     session_delta_rpe     NUMERIC(4,2),
     CONSTRAINT chk_session_status CHECK (status IN ('PENDING', 'COMPLETED', 'SKIPPED', 'ABORTED')),
-    CONSTRAINT chk_session_source CHECK (source IN ('COACH_SCHEDULED', 'USER_ADHOC'))
+    CONSTRAINT chk_session_source CHECK (source IN ('COACH_SCHEDULED', 'USER_ADHOC', 'SOLO_MATCH'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_plans_day_plan_id  ON coaching.session_plans(day_plan_id);

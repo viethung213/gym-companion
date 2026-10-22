@@ -51,12 +51,13 @@ type SessionPlanSource string
 const (
 	SessionPlanSourceScheduled SessionPlanSource = "COACH_SCHEDULED"
 	SessionPlanSourceAdHoc     SessionPlanSource = "USER_ADHOC"
+	SessionPlanSourceSoloMatch SessionPlanSource = "SOLO_MATCH"
 )
 
 // Valid reports whether s is a known SessionPlanSource.
 func (s SessionPlanSource) Valid() bool {
 	switch s {
-	case SessionPlanSourceScheduled, SessionPlanSourceAdHoc:
+	case SessionPlanSourceScheduled, SessionPlanSourceAdHoc, SessionPlanSourceSoloMatch:
 		return true
 	default:
 		return false
