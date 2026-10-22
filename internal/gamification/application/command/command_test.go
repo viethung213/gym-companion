@@ -326,3 +326,95 @@ func TestInitUserGamificationHandler(t *testing.T) {
 		t.Errorf("expected baseline user_snapshot")
 	}
 }
+
+type mockBadgeRepo struct {
+	badges map[string][]*aggregate.UserBadge
+}
+
+func (m *mockBadgeRepo) FindByUserID(ctx context.Context, userID string) ([]*aggregate.UserBadge, error) {
+	return m.badges[userID], nil
+}
+
+func (m *mockBadgeRepo) HasBadge(ctx context.Context, userID, badgeCode string) (bool, error) {
+	for _, b := range m.badges[userID] {
+		if b.BadgeCode() == badgeCode {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *mockBadgeRepo) Save(ctx context.Context, badge *aggregate.UserBadge) error {
+	m.badges[badge.UserID()] = append(m.badges[badge.UserID()], badge)
+	return nil
+}
+
+func (m *mockBadgeRepo) SaveBatch(ctx context.Context, badges []*aggregate.UserBadge) error {
+	for _, b := range badges {
+		m.badges[b.UserID()] = append(m.badges[b.UserID()], b)
+	}
+	return nil
+}
+
+func TestProcessPersonalRecordHandler(t *testing.T) {
+	xpRepo := newMockUserXpRepo()
+	badgeRepo := &mockBadgeRepo{badges: make(map[string][]*aggregate.UserBadge)}
+	tx := &mockTxManager{}
+	outbox := &mockOutboxWriter{}
+
+	handler := command.NewProcessPersonalRecordHandler(xpRepo, badgeRepo, tx, outbox)
+
+	now := time.Now().UTC()
+	err := handler.Handle(context.Background(), command.ProcessPersonalRecordCommand{
+		UserID:       "u-pr-1",
+		ExerciseID:   "bench_press",
+		Weight:       100.0,
+		Reps:         5,
+		ActivityDate: "2026-10-22",
+		AchievedAt:   now,
+	})
+	if err != nil {
+		t.Fatalf("ProcessPersonalRecord error: %v", err)
+	}
+
+	userXp := xpRepo.users["u-pr-1"]
+	if userXp == nil || userXp.Xp() != 25 {
+		t.Errorf("expected 25 XP for PR, got: %+v", userXp)
+	}
+
+	if len(badgeRepo.badges["u-pr-1"]) != 1 || badgeRepo.badges["u-pr-1"][0].BadgeCode() != "PR_BREAKER" {
+		t.Errorf("expected PR_BREAKER badge to be unlocked, got: %+v", badgeRepo.badges["u-pr-1"])
+	}
+}
+
+func TestProcessNutritionActivityHandler(t *testing.T) {
+	streakRepo := newMockUserStreakRepo()
+	xpRepo := newMockUserXpRepo()
+	tx := &mockTxManager{}
+	outbox := &mockOutboxWriter{}
+
+	streakHandler := command.NewRecordStreakActivityHandler(streakRepo, tx, outbox)
+	nutritionHandler := command.NewProcessNutritionXpHandler(xpRepo, tx, outbox)
+
+	handler := command.NewProcessNutritionActivityHandler(streakHandler, nutritionHandler, tx)
+
+	now := time.Now().UTC()
+	err := handler.Handle(context.Background(), command.ProcessNutritionActivityCommand{
+		UserID:       "u-nut-1",
+		ActivityDate: "2026-10-22",
+		RecordedAt:   now,
+	})
+	if err != nil {
+		t.Fatalf("ProcessNutritionActivity error: %v", err)
+	}
+
+	userStreak := streakRepo.streaks["u-nut-1"]
+	if userStreak == nil || userStreak.CurrentStreak() != 1 {
+		t.Errorf("expected streak to advance to 1, got: %+v", userStreak)
+	}
+
+	userXp := xpRepo.users["u-nut-1"]
+	if userXp == nil || userXp.Xp() != 30 {
+		t.Errorf("expected 30 XP for nutrition, got: %+v", userXp)
+	}
+}
