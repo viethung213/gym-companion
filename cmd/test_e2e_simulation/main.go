@@ -129,7 +129,7 @@ func run() error {
 		regProto := &authv1event.UserRegistered{
 			UserId:       u.id,
 			IdentityType: "EMAIL",
-			Identifier:   fmt.Sprintf("%s@fitai.com", u.id[:8]),
+			Identifier:   u.id[:8] + "@fitai.com",
 			FullName:     u.name,
 			AvatarUrl:    "https://fitai.com/avatars/default.png",
 			RegisteredAt: timestamppb.Now(),
@@ -141,14 +141,14 @@ func run() error {
 	// Chờ consumer xử lý đăng ký cho 5 users
 	log.Println("⏳ Chờ consumers eager-initialize bản ghi trong DB...")
 	for _, u := range users {
-		if err := waitForCount(db, "gamification.user_xp", "user_id", u.id, 1, 10*time.Second); err != nil {
-			return fmt.Errorf("user_xp not initialized for %s: %w", u.name, err)
+		if waitErr := waitForCount(db, "gamification.user_xp", "user_id", u.id, 1, 10*time.Second); waitErr != nil {
+			return fmt.Errorf("user_xp not initialized for %s: %w", u.name, waitErr)
 		}
-		if err := waitForCount(db, "gamification.user_streak", "user_id", u.id, 1, 10*time.Second); err != nil {
-			return fmt.Errorf("user_streak not initialized for %s: %w", u.name, err)
+		if waitErr := waitForCount(db, "gamification.user_streak", "user_id", u.id, 1, 10*time.Second); waitErr != nil {
+			return fmt.Errorf("user_streak not initialized for %s: %w", u.name, waitErr)
 		}
-		if err := waitForCount(db, "gamification.user_snapshots", "user_id", u.id, 1, 10*time.Second); err != nil {
-			return fmt.Errorf("user_snapshots not initialized for %s: %w", u.name, err)
+		if waitErr := waitForCount(db, "gamification.user_snapshots", "user_id", u.id, 1, 10*time.Second); waitErr != nil {
+			return fmt.Errorf("user_snapshots not initialized for %s: %w", u.name, waitErr)
 		}
 	}
 	log.Println("✅ [GIAI ĐOẠN 1 THÀNH CÔNG] Toàn bộ 5 User đã được khởi tạo atomic trong DB!")
@@ -322,7 +322,8 @@ func run() error {
 	for _, u := range users {
 		var curStreak, longStreak int
 		var lastActive sql.NullString
-		_ = db.QueryRow("SELECT current_streak, longest_streak, last_active_date FROM gamification.user_streak WHERE user_id = $1", u.id).Scan(&curStreak, &longStreak, &lastActive)
+		streakQ := "SELECT current_streak, longest_streak, last_active_date FROM gamification.user_streak WHERE user_id = $1"
+		_ = db.QueryRow(streakQ, u.id).Scan(&curStreak, &longStreak, &lastActive)
 
 		var historyRows int
 		_ = db.QueryRow("SELECT COUNT(*) FROM gamification.streak_history WHERE user_id = $1", u.id).Scan(&historyRows)
@@ -425,7 +426,7 @@ func waitForCount(db *sql.DB, table, col, val string, expected int, timeout time
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		var count int
-		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1", table, col) //nolint:gosec
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1", table, col) //nolint:gosec // table is safe test parameter
 		_ = db.QueryRow(query, val).Scan(&count)
 		if count >= expected {
 			return nil
