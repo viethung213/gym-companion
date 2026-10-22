@@ -8,6 +8,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/transport/consumer"
 )
@@ -34,6 +35,26 @@ func (m *mockOutboxLogRepo) SaveLog(ctx context.Context, record *port.OutboxLogR
 
 func (m *mockOutboxLogRepo) IsProcessed(ctx context.Context, eventID string) (bool, error) {
 	return m.processedMap[eventID], nil
+}
+
+type mockNutritionHandler struct {
+	called bool
+	err    error
+}
+
+func (m *mockNutritionHandler) Handle(ctx context.Context, cmd command.ProcessNutritionActivityCommand) error {
+	m.called = true
+	return m.err
+}
+
+type mockPRHandler struct {
+	called bool
+	err    error
+}
+
+func (m *mockPRHandler) Handle(ctx context.Context, cmd command.ProcessPersonalRecordCommand) error {
+	m.called = true
+	return m.err
 }
 
 func TestWorkoutEventConsumer_ProcessMessage_InvalidJSON(t *testing.T) {
@@ -82,7 +103,7 @@ func TestNutritionEventConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	logRepo := newMockOutboxLogRepo()
 	logRepo.processedMap["evt-nut-dup"] = true
 
-	c := consumer.NewNutritionEventConsumer(nil, nil, nil, nil, logRepo)
+	c := consumer.NewNutritionEventConsumer(nil, nil, logRepo)
 
 	envelope := consumer.CloudEvent{
 		ID:   "evt-nut-dup",
@@ -113,18 +134,19 @@ func TestUserRegisteredConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 func TestConsumers_StartWithNilReader(t *testing.T) {
 	logRepo := newMockOutboxLogRepo()
 	wc := consumer.NewWorkoutEventConsumer(nil, nil, logRepo)
-	nc := consumer.NewNutritionEventConsumer(nil, nil, nil, nil, logRepo)
+	nc := consumer.NewNutritionEventConsumer(nil, nil, logRepo)
 	uc := consumer.NewUserRegisteredConsumer(nil, nil, logRepo)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	// Calling Start with nil reader should return immediately without blocking
 	wc.Start(ctx)
 	nc.Start(ctx)
 	uc.Start(ctx)
 	pic := consumer.NewUserIdentityUpdatedConsumer(nil, nil, logRepo)
 	pic.Start(ctx)
+	prc := consumer.NewPersonalRecordConsumer(nil, nil, logRepo)
+	prc.Start(ctx)
 }
 
 func TestUserIdentityUpdatedConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T) {
@@ -147,7 +169,7 @@ func TestPersonalRecordConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	logRepo := newMockOutboxLogRepo()
 	logRepo.processedMap["evt-pr-dup"] = true
 
-	c := consumer.NewPersonalRecordConsumer(nil, nil, nil, nil, nil, logRepo)
+	c := consumer.NewPersonalRecordConsumer(nil, nil, logRepo)
 
 	envelope := consumer.CloudEvent{
 		ID:   "evt-pr-dup",
@@ -159,31 +181,11 @@ func TestPersonalRecordConsumer_ProcessMessage_IdempotentDuplicate(t *testing.T)
 	assert.NoError(t, err)
 }
 
-func TestResolveLocalDate(t *testing.T) {
-	// 2026-10-13 22:30 UTC -> 2026-10-14 05:30 Asia/Ho_Chi_Minh (UTC+7)
-	utcTime := time.Date(2026, 10, 13, 22, 30, 0, 0, time.UTC)
-	localDate := consumer.ResolveLocalDate(utcTime)
-	assert.Equal(t, "2026-10-14", localDate)
-}
-
-type mockTxManager struct {
-	called bool
-	err    error
-}
-
-func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
-	m.called = true
-	if m.err != nil {
-		return m.err
-	}
-	return fn(ctx)
-}
-
-func TestNutritionEventConsumer_ProcessMessage_SuccessWithTransaction(t *testing.T) {
+func TestNutritionEventConsumer_ProcessMessage_Success(t *testing.T) {
 	logRepo := newMockOutboxLogRepo()
-	txMgr := &mockTxManager{}
+	handler := &mockNutritionHandler{}
 
-	c := consumer.NewNutritionEventConsumer(nil, nil, nil, txMgr, logRepo)
+	c := consumer.NewNutritionEventConsumer(nil, handler, logRepo)
 
 	payload := map[string]interface{}{
 		"userId":       "usr-nut-1",
@@ -202,15 +204,15 @@ func TestNutritionEventConsumer_ProcessMessage_SuccessWithTransaction(t *testing
 		Value: bytes,
 	})
 	assert.NoError(t, err)
-	assert.True(t, txMgr.called)
+	assert.True(t, handler.called)
 	assert.True(t, logRepo.processedMap["evt-nut-100"])
 }
 
-func TestNutritionEventConsumer_ProcessMessage_TxErrorBubblesUp(t *testing.T) {
+func TestNutritionEventConsumer_ProcessMessage_ErrorLogged(t *testing.T) {
 	logRepo := newMockOutboxLogRepo()
-	txMgr := &mockTxManager{err: assert.AnError}
+	handler := &mockNutritionHandler{err: assert.AnError}
 
-	c := consumer.NewNutritionEventConsumer(nil, nil, nil, txMgr, logRepo)
+	c := consumer.NewNutritionEventConsumer(nil, handler, logRepo)
 
 	payload := map[string]interface{}{
 		"userId":       "usr-nut-2",
@@ -229,8 +231,68 @@ func TestNutritionEventConsumer_ProcessMessage_TxErrorBubblesUp(t *testing.T) {
 		Value: bytes,
 	})
 	assert.ErrorIs(t, err, assert.AnError)
-	assert.True(t, txMgr.called)
+	assert.True(t, handler.called)
 	assert.False(t, logRepo.processedMap["evt-nut-200"])
+	assert.Len(t, logRepo.savedLogs, 1)
+	assert.Equal(t, "FAILED", logRepo.savedLogs[0].Status)
+}
+
+func TestPersonalRecordConsumer_ProcessMessage_Success(t *testing.T) {
+	logRepo := newMockOutboxLogRepo()
+	handler := &mockPRHandler{}
+
+	c := consumer.NewPersonalRecordConsumer(nil, handler, logRepo)
+
+	payload := map[string]interface{}{
+		"userId":     "usr-pr-1",
+		"exerciseId": "ex-squat",
+		"weight":     120.0,
+		"reps":       5,
+	}
+	pBytes, _ := json.Marshal(payload)
+	envelope := consumer.CloudEvent{
+		ID:   "evt-pr-100",
+		Type: "contracts.core.workout_execution.v1.newPersonalRecordAchieved",
+		Data: pBytes,
+	}
+	bytes, _ := json.Marshal(envelope)
+
+	err := c.ProcessMessage(context.Background(), &kafka.Message{
+		Key:   []byte("usr-pr-1"),
+		Value: bytes,
+	})
+	assert.NoError(t, err)
+	assert.True(t, handler.called)
+	assert.True(t, logRepo.processedMap["evt-pr-100"])
+}
+
+func TestPersonalRecordConsumer_ProcessMessage_ErrorLogged(t *testing.T) {
+	logRepo := newMockOutboxLogRepo()
+	handler := &mockPRHandler{err: assert.AnError}
+
+	c := consumer.NewPersonalRecordConsumer(nil, handler, logRepo)
+
+	payload := map[string]interface{}{
+		"userId":     "usr-pr-2",
+		"exerciseId": "ex-bench",
+		"weight":     100.0,
+		"reps":       3,
+	}
+	pBytes, _ := json.Marshal(payload)
+	envelope := consumer.CloudEvent{
+		ID:   "evt-pr-200",
+		Type: "contracts.core.workout_execution.v1.newPersonalRecordAchieved",
+		Data: pBytes,
+	}
+	bytes, _ := json.Marshal(envelope)
+
+	err := c.ProcessMessage(context.Background(), &kafka.Message{
+		Key:   []byte("usr-pr-2"),
+		Value: bytes,
+	})
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.True(t, handler.called)
+	assert.False(t, logRepo.processedMap["evt-pr-200"])
 	assert.Len(t, logRepo.savedLogs, 1)
 	assert.Equal(t, "FAILED", logRepo.savedLogs[0].Status)
 }
