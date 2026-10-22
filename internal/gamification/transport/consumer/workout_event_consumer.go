@@ -114,7 +114,7 @@ func (c *WorkoutEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Me
 	if protoEv.CompletedAt != nil {
 		completedAt = protoEv.CompletedAt.AsTime()
 	}
-	activityDate := ResolveLocalDate(completedAt)
+	activityDate := completedAt.UTC().Format("2006-01-02")
 
 	cmd := &command.ProcessWorkoutXpCommand{
 		UserID:           protoEv.GetUserId(),

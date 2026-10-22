@@ -74,6 +74,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	recordStreakHandler := command.NewRecordStreakActivityHandler(userStreakRepo, txManager, outboxWriter)
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(leaderboardRepo)
 	initUserGamificationHandler := command.NewInitUserGamificationHandler(userXpRepo, userStreakRepo, leaderboardRepo, txManager)
+	processPersonalRecordHandler := command.NewProcessPersonalRecordHandler(userXpRepo, badgeRepo, txManager, outboxWriter)
+	processNutritionActivityHandler := command.NewProcessNutritionActivityHandler(recordStreakHandler, processNutritionXpHandler, txManager)
 
 	// 3. Coordinator
 	coordinator := appService.NewActivityIngestionCoordinator(
@@ -135,11 +137,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		}
 
 		if prReader, prErr := deps.KafkaRegistry.GetReader("gamification-pr-group", "workout_execution.events", brokers); prErr == nil {
-			personalRecordConsumer = consumer.NewPersonalRecordConsumer(prReader, userXpRepo, badgeRepo, txManager, outboxWriter, outboxLogRepo)
+			personalRecordConsumer = consumer.NewPersonalRecordConsumer(prReader, processPersonalRecordHandler, outboxLogRepo)
 		}
 
 		if nutritionReader, nErr := deps.KafkaRegistry.GetReader("gamification-nutrition-group", "nutrition.events", brokers); nErr == nil {
-			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, processNutritionXpHandler, recordStreakHandler, txManager, outboxLogRepo)
+			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, processNutritionActivityHandler, outboxLogRepo)
 		}
 
 		if profileReader, pErr := deps.KafkaRegistry.GetReader("gamification-profile-group", "profile.events", brokers); pErr == nil {
