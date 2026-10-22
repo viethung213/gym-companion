@@ -18,7 +18,7 @@ type BotProfileSeed struct {
 	Email           string
 	Password        string
 	FullName        string
-	Gender          string
+	Gender          authv1message.Gender
 	DateOfBirth     string
 	AvatarURL       string
 	DifficultyLevel string // BEGINNER, INTERMEDIATE, ADVANCED
@@ -31,7 +31,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.hung@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Nguyễn Văn Hùng (AI Beast)",
-			Gender:          "MALE",
+			Gender:          authv1message.Gender_GENDER_MALE,
 			DateOfBirth:     "1995-04-12",
 			AvatarURL:       "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "ADVANCED",
@@ -40,7 +40,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.mai@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Trần Thị Mai (AI Fit Pro)",
-			Gender:          "FEMALE",
+			Gender:          authv1message.Gender_GENDER_FEMALE,
 			DateOfBirth:     "1998-08-23",
 			AvatarURL:       "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "INTERMEDIATE",
@@ -49,7 +49,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.nam@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Lê Hoàng Nam (AI Rookie)",
-			Gender:          "MALE",
+			Gender:          authv1message.Gender_GENDER_MALE,
 			DateOfBirth:     "2001-01-15",
 			AvatarURL:       "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "BEGINNER",
@@ -58,7 +58,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.ha@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Phạm Thu Hà (AI Athletic)",
-			Gender:          "FEMALE",
+			Gender:          authv1message.Gender_GENDER_FEMALE,
 			DateOfBirth:     "1997-11-30",
 			AvatarURL:       "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "INTERMEDIATE",
@@ -67,7 +67,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.bao@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Đặng Quốc Bảo (AI Titan)",
-			Gender:          "MALE",
+			Gender:          authv1message.Gender_GENDER_MALE,
 			DateOfBirth:     "1993-06-19",
 			AvatarURL:       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "ADVANCED",
@@ -76,7 +76,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.duc@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Vũ Minh Đức (AI Iron)",
-			Gender:          "MALE",
+			Gender:          authv1message.Gender_GENDER_MALE,
 			DateOfBirth:     "1996-09-10",
 			AvatarURL:       "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "ADVANCED",
@@ -85,7 +85,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.linh@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Hoàng Thùy Linh (AI Cardio)",
-			Gender:          "FEMALE",
+			Gender:          authv1message.Gender_GENDER_FEMALE,
 			DateOfBirth:     "2000-03-25",
 			AvatarURL:       "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "BEGINNER",
@@ -94,7 +94,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.dung@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Bùi Tiến Dũng (AI Striker)",
-			Gender:          "MALE",
+			Gender:          authv1message.Gender_GENDER_MALE,
 			DateOfBirth:     "1999-12-05",
 			AvatarURL:       "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "INTERMEDIATE",
@@ -103,7 +103,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.thao@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Đỗ Phương Thảo (AI Core)",
-			Gender:          "FEMALE",
+			Gender:          authv1message.Gender_GENDER_FEMALE,
 			DateOfBirth:     "1998-07-14",
 			AvatarURL:       "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "INTERMEDIATE",
@@ -112,7 +112,7 @@ func DefaultBotProfiles() []BotProfileSeed {
 			Email:           "bot.hai@fitai.bot",
 			Password:        "FitAIBot@2026!",
 			FullName:        "Ngô Quang Hải (AI Power)",
-			Gender:          "MALE",
+			Gender:          authv1message.Gender_GENDER_MALE,
 			DateOfBirth:     "1994-05-18",
 			AvatarURL:       "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=300&q=80",
 			DifficultyLevel: "ADVANCED",

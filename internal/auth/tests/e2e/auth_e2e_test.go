@@ -510,7 +510,7 @@ func TestE2E_Register_And_CredentialsLogin(t *testing.T) {
 		"identifier":  "newbie@example.com",
 		"password":    "StrongPassword123!",
 		"fullName":    "Newbie User",
-		"gender":      "MALE",
+		"gender":      "GENDER_MALE",
 		"dateOfBirth": "1995-10-20",
 	}
 	regEmailBody, _ := json.Marshal(regEmailReq)
@@ -592,7 +592,7 @@ func TestE2E_Register_And_CredentialsLogin(t *testing.T) {
 		"identifier":  "0912345678",
 		"password":    "StrongPassword123!",
 		"fullName":    "Phone User",
-		"gender":      "FEMALE",
+		"gender":      "GENDER_FEMALE",
 		"dateOfBirth": "1998-05-15",
 	}
 	regPhoneBody, _ := json.Marshal(regPhoneReq)
@@ -644,7 +644,7 @@ func TestE2E_ChangePassword(t *testing.T) {
 		"identifier":  "changepwd@example.com",
 		"password":    "InitialPass123!",
 		"fullName":    "Change Password User",
-		"gender":      "MALE",
+		"gender":      "GENDER_MALE",
 		"dateOfBirth": "1992-02-02",
 	}
 	regBody, _ := json.Marshal(regReq)
@@ -746,7 +746,7 @@ func TestE2E_OTP_And_ResetPassword(t *testing.T) {
 		"identifier":  "forgotuser@example.com",
 		"password":    "InitialPass123!",
 		"fullName":    "Forgot User",
-		"gender":      "MALE",
+		"gender":      "GENDER_MALE",
 		"dateOfBirth": "1994-04-04",
 	}
 	regBody, _ := json.Marshal(regReq)

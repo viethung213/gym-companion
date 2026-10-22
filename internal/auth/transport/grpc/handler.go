@@ -249,14 +249,25 @@ func (h *GRPCHandler) Register(
 	ctx context.Context,
 	req *authv1message.RegisterRequest,
 ) (*authv1message.RegisterResponse, error) {
+	var genderStr string
+	switch req.Gender {
+	case authv1message.Gender_GENDER_MALE:
+		genderStr = "MALE"
+	case authv1message.Gender_GENDER_FEMALE:
+		genderStr = "FEMALE"
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "giới tính không hợp lệ: vui lòng chọn nam hoặc nữ")
+	}
+
 	if h.registerHandler == nil {
 		return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
 	}
+
 	res, err := h.registerHandler.Handle(ctx, command.RegisterCommand{
 		Identifier:  req.Identifier,
 		Password:    req.Password,
 		FullName:    req.FullName,
-		Gender:      req.Gender,
+		Gender:      genderStr,
 		DateOfBirth: req.DateOfBirth,
 	})
 	if err != nil {
