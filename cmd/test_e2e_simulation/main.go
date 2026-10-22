@@ -99,11 +99,11 @@ func run() error {
 	// -------------------------------------------------------------
 	// SCENARIO SETUP: 5 USERS WITH DIVERSE BEHAVIOR
 	// -------------------------------------------------------------
-	userHulk := uuid.New().String()     // Elite powerlifter: workout + PR + nutrition
-	userFlash := uuid.New().String()    // Moderate athlete: workout + nutrition
-	userRest := uuid.New().String()     // Rest day user: nutrition only
-	userNewbie := uuid.New().String()   // Freshly registered user: no activities
-	userIdemp := uuid.New().String()    // Resiliency user: duplicate event delivery
+	userHulk := uuid.New().String()   // Elite powerlifter: workout + PR + nutrition
+	userFlash := uuid.New().String()  // Moderate athlete: workout + nutrition
+	userRest := uuid.New().String()   // Rest day user: nutrition only
+	userNewbie := uuid.New().String() // Freshly registered user: no activities
+	userIdemp := uuid.New().String()  // Resiliency user: duplicate event delivery
 
 	log.Println("\n📋 DANH SÁCH 5 TEST USERS:")
 	log.Printf("   1. [Hulk - Elite Powerlifter]    ID: %s", userHulk)
@@ -205,14 +205,14 @@ func run() error {
 	sendEvent(ctx, workoutWriter, userIdemp, idempEventID, "contracts.core.workout_execution.v1.event.WorkoutSessionCompleted", idempWData)
 
 	// Chờ DB ghi nhận XP buổi tập
-	if err := waitForXp(db, userHulk, 99, 10*time.Second); err != nil {
-		return fmt.Errorf("hulk workout xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userHulk, 99, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("hulk workout xp mismatch: %w", waitErr)
 	}
-	if err := waitForXp(db, userFlash, 86, 10*time.Second); err != nil {
-		return fmt.Errorf("flash workout xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userFlash, 86, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("flash workout xp mismatch: %w", waitErr)
 	}
-	if err := waitForXp(db, userIdemp, 84, 10*time.Second); err != nil {
-		return fmt.Errorf("idemp workout xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userIdemp, 84, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("idemp workout xp mismatch: %w", waitErr)
 	}
 	log.Println("✅ [GIAI ĐOẠN 2 THÀNH CÔNG] Toàn bộ workout XP đã được tính toán chính xác và ghi nhận!")
 	log.Println("   -> Hulk: +99 XP | Flash: +86 XP | IdempBot: +84 XP (Không bị cộng đúp dù bắn 2 lần!)")
@@ -231,11 +231,11 @@ func run() error {
 	sendEvent(ctx, workoutWriter, userHulk, uuid.New().String(), "contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved", prData)
 
 	// Hulk: 99 XP + 25 PR = 124 XP
-	if err := waitForXp(db, userHulk, 124, 10*time.Second); err != nil {
-		return fmt.Errorf("hulk pr xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userHulk, 124, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("hulk pr xp mismatch: %w", waitErr)
 	}
-	if err := waitForBadge(db, userHulk, "PR_BREAKER", 10*time.Second); err != nil {
-		return fmt.Errorf("hulk pr badge missing: %w", err)
+	if waitErr := waitForBadge(db, userHulk, "PR_BREAKER", 10*time.Second); waitErr != nil {
+		return fmt.Errorf("hulk pr badge missing: %w", waitErr)
 	}
 	log.Println("✅ [GIAI ĐOẠN 3 THÀNH CÔNG] Hulk nhận thêm +25 XP (Tổng: 124 XP) và mở khóa PR_BREAKER!")
 
@@ -255,14 +255,14 @@ func run() error {
 	// Hulk: 124 + 30 = 154 XP
 	// Flash: 86 + 30 = 116 XP
 	// RestDay: 0 + 30 = 30 XP
-	if err := waitForXp(db, userHulk, 154, 10*time.Second); err != nil {
-		return fmt.Errorf("hulk nutrition xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userHulk, 154, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("hulk nutrition xp mismatch: %w", waitErr)
 	}
-	if err := waitForXp(db, userFlash, 116, 10*time.Second); err != nil {
-		return fmt.Errorf("flash nutrition xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userFlash, 116, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("flash nutrition xp mismatch: %w", waitErr)
 	}
-	if err := waitForXp(db, userRest, 30, 10*time.Second); err != nil {
-		return fmt.Errorf("restday nutrition xp mismatch: %w", err)
+	if waitErr := waitForXp(db, userRest, 30, 10*time.Second); waitErr != nil {
+		return fmt.Errorf("restday nutrition xp mismatch: %w", waitErr)
 	}
 	log.Println("✅ [GIAI ĐOẠN 4 THÀNH CÔNG] Dinh dưỡng +30 XP và duy trì Streak hoàn tất!")
 	log.Println("   -> Hulk: 154 XP | Flash: 116 XP | RestDay: 30 XP | Newbie: 0 XP")
