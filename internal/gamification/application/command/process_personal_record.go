@@ -44,6 +44,7 @@ func NewProcessPersonalRecordHandler(
 	}
 }
 
+//nolint:gocritic // hugeParam: command struct is an immutable value object
 func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPersonalRecordCommand) error {
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		userXp, err := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
