@@ -285,3 +285,53 @@ func TestSessionPlanStatus_Valid(t *testing.T) {
 		t.Error("PENDING should not be final")
 	}
 }
+
+func TestSessionPlanSource_Valid(t *testing.T) {
+	tests := []struct {
+		name string
+		give SessionPlanSource
+		want bool
+	}{
+		{name: "scheduled", give: SessionPlanSourceScheduled, want: true},
+		{name: "adhoc", give: SessionPlanSourceAdHoc, want: true},
+		{name: "solo_match", give: SessionPlanSourceSoloMatch, want: true},
+		{name: "empty", give: SessionPlanSource(""), want: false},
+		{name: "unknown", give: SessionPlanSource("UNKNOWN"), want: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.give.Valid()
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewSessionPlan_SoloMatchSource(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	info := newTestSessionInfo()
+	info.Source = SessionPlanSourceSoloMatch
+
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := sp.Info().Source; got != SessionPlanSourceSoloMatch {
+		t.Errorf("got source %s, want %s", got, SessionPlanSourceSoloMatch)
+	}
+
+	info.Status = SessionPlanStatusPending
+	rehydrated, err := RehydrateSessionPlan(&info)
+	if err != nil {
+		t.Fatalf("unexpected rehydrate error: %v", err)
+	}
+
+	if got := rehydrated.Info().Source; got != SessionPlanSourceSoloMatch {
+		t.Errorf("got rehydrated source %s, want %s", got, SessionPlanSourceSoloMatch)
+	}
+}

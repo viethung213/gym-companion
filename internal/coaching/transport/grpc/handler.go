@@ -475,6 +475,9 @@ func domainSourceToPB(src roadmap.SessionPlanSource) pbmsg.SessionPlanSource {
 	case roadmap.SessionPlanSourceAdHoc:
 		return pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_USER_ADHOC
 
+	case roadmap.SessionPlanSourceSoloMatch:
+		return pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_SOLO_MATCH
+
 	default:
 		return pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_UNSPECIFIED
 	}
@@ -487,6 +490,9 @@ func pbSourceToDomain(src pbmsg.SessionPlanSource) roadmap.SessionPlanSource {
 
 	case pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_USER_ADHOC:
 		return roadmap.SessionPlanSourceAdHoc
+
+	case pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_SOLO_MATCH:
+		return roadmap.SessionPlanSourceSoloMatch
 
 	default:
 		return ""

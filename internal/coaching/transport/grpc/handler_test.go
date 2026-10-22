@@ -230,3 +230,83 @@ func (a *testCoachAgent) Adapt(ctx context.Context, userID string, decisionReaso
 func (a *testCoachAgent) SuggestAdHocSession(ctx context.Context, userID string, hint *port.AdHocHint) (port.SuggestedSession, error) {
 	return a.suggestResult, nil
 }
+
+func TestDomainSourceToPB(t *testing.T) {
+	tests := []struct {
+		name string
+		give roadmap.SessionPlanSource
+		want pbmsg.SessionPlanSource
+	}{
+		{
+			name: "scheduled",
+			give: roadmap.SessionPlanSourceScheduled,
+			want: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_COACH_SCHEDULED,
+		},
+		{
+			name: "adhoc",
+			give: roadmap.SessionPlanSourceAdHoc,
+			want: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_USER_ADHOC,
+		},
+		{
+			name: "solo_match",
+			give: roadmap.SessionPlanSourceSoloMatch,
+			want: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_SOLO_MATCH,
+		},
+		{
+			name: "unknown",
+			give: roadmap.SessionPlanSource("UNKNOWN"),
+			want: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_UNSPECIFIED,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := domainSourceToPB(tt.give)
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPBSourceToDomain(t *testing.T) {
+	tests := []struct {
+		name string
+		give pbmsg.SessionPlanSource
+		want roadmap.SessionPlanSource
+	}{
+		{
+			name: "scheduled",
+			give: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_COACH_SCHEDULED,
+			want: roadmap.SessionPlanSourceScheduled,
+		},
+		{
+			name: "adhoc",
+			give: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_USER_ADHOC,
+			want: roadmap.SessionPlanSourceAdHoc,
+		},
+		{
+			name: "solo_match",
+			give: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_SOLO_MATCH,
+			want: roadmap.SessionPlanSourceSoloMatch,
+		},
+		{
+			name: "unspecified",
+			give: pbmsg.SessionPlanSource_SESSION_PLAN_SOURCE_UNSPECIFIED,
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := pbSourceToDomain(tt.give)
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
