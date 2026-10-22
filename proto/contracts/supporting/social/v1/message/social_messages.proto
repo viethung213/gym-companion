@@ -79,10 +79,13 @@ message GetSocialSummaryRequest {
 
 message GetSocialSummaryResponse {
   string user_id = 1;
-  int32 follower_count = 2;
-  int32 following_count = 3;
-  int32 post_count = 4;
-  bool is_following = 5;
+  string full_name = 2;
+  string avatar_url = 3;
+  string role = 4;
+  int32 follower_count = 5;
+  int32 following_count = 6;
+  int32 post_count = 7;
+  bool is_following = 8;
 }
 
 // --- Unified Feed Item Messages ---

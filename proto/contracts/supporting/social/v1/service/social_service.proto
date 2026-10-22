@@ -77,7 +77,7 @@ service SocialService {
     };
   }
 
-  // Lấy thống kê mạng xã hội của một user (Followers, Following, Posts, is_following)
+  // Lấy trang thông tin cá nhân của user
   rpc GetSocialSummary (contracts.supporting.social.v1.message.GetSocialSummaryRequest) returns (contracts.supporting.social.v1.message.GetSocialSummaryResponse) {
     option (google.api.http) = {
       get: "/api/v1/social/users/{user_id}/summary"

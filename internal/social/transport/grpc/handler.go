@@ -232,6 +232,9 @@ func (h *GRPCHandler) GetSocialSummary(
 
 	return connect.NewResponse(&socialv1message.GetSocialSummaryResponse{
 		UserId:         res.UserID,
+		FullName:       res.FullName,
+		AvatarUrl:      res.AvatarURL,
+		Role:           res.Role,
 		FollowerCount:  res.FollowerCount,
 		FollowingCount: res.FollowingCount,
 		PostCount:      res.PostCount,

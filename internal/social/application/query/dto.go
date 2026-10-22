@@ -36,6 +36,9 @@ type CommentItemDTO struct {
 
 type SocialSummaryDTO struct {
 	UserID         string
+	FullName       string
+	AvatarURL      string
+	Role           string
 	FollowerCount  int32
 	FollowingCount int32
 	PostCount      int32
