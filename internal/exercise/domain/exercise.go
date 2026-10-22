@@ -17,6 +17,22 @@ const (
 	StatusArchived        Status = "ARCHIVED"
 )
 
+type MeasurementType string
+
+const (
+	MeasurementTypeReps     MeasurementType = "REPS"
+	MeasurementTypeDuration MeasurementType = "DURATION"
+)
+
+func (m MeasurementType) Valid() bool {
+	switch m {
+	case MeasurementTypeReps, MeasurementTypeDuration:
+		return true
+	default:
+		return false
+	}
+}
+
 var (
 	ErrInvalidExercise      = errors.New("invalid exercise")
 	ErrInvalidStatus        = errors.New("invalid exercise status")
@@ -42,6 +58,7 @@ type Info struct {
 	TagIDs             []string
 	Status             Status
 	HasAISupported     bool
+	MeasurementType    MeasurementType
 	ArchivedAt         *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -110,6 +127,9 @@ func (e *Exercise) UpdateInfo(info Info, now time.Time) error {
 	current.DefaultRestSeconds = info.DefaultRestSeconds
 	current.TagIDs = copyStrings(info.TagIDs)
 	current.HasAISupported = info.HasAISupported
+	if info.MeasurementType != "" {
+		current.MeasurementType = info.MeasurementType
+	}
 	current.UpdatedAt = now
 
 	current = normalizeInfo(current)
@@ -196,6 +216,9 @@ func (e *Exercise) validateRequired() error {
 	if !info.Status.Valid() {
 		return fmt.Errorf("%w: %s", ErrInvalidStatus, info.Status)
 	}
+	if !info.MeasurementType.Valid() {
+		return fmt.Errorf("%w: invalid measurement type %s", ErrInvalidExercise, info.MeasurementType)
+	}
 
 	return nil
 }
@@ -217,6 +240,9 @@ func normalizeInfo(info Info) Info {
 	}
 	if info.DefaultRestSeconds == 0 {
 		info.DefaultRestSeconds = 60
+	}
+	if info.MeasurementType == "" {
+		info.MeasurementType = MeasurementTypeReps
 	}
 	info.SecondaryMuscleIDs = copyStrings(info.SecondaryMuscleIDs)
 	info.TagIDs = copyStrings(info.TagIDs)

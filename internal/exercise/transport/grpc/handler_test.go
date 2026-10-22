@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,4 +85,102 @@ func TestRpcErrorMapping(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMeasurementTypeMappers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("toProtoMeasurementType", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			give domain.MeasurementType
+			want exercisemsg.ExerciseMeasurementType
+		}{
+			{
+				give: domain.MeasurementTypeReps,
+				want: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS,
+			},
+			{
+				give: domain.MeasurementTypeDuration,
+				want: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION,
+			},
+			{
+				give: "UNKNOWN",
+				want: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_UNSPECIFIED,
+			},
+		}
+
+		for _, tt := range tests {
+			if got := toProtoMeasurementType(tt.give); got != tt.want {
+				t.Errorf("toProtoMeasurementType(%q) = %v, want %v", tt.give, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("toDomainMeasurementType", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			give exercisemsg.ExerciseMeasurementType
+			want domain.MeasurementType
+		}{
+			{
+				give: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS,
+				want: domain.MeasurementTypeReps,
+			},
+			{
+				give: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION,
+				want: domain.MeasurementTypeDuration,
+			},
+			{
+				give: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_UNSPECIFIED,
+				want: "",
+			},
+		}
+
+		for _, tt := range tests {
+			if got := toDomainMeasurementType(tt.give); got != tt.want {
+				t.Errorf("toDomainMeasurementType(%v) = %q, want %q", tt.give, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("toDomainMeasurementTypeString", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			give exercisemsg.ExerciseMeasurementType
+			want string
+		}{
+			{
+				give: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS,
+				want: "REPS",
+			},
+			{
+				give: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION,
+				want: "DURATION",
+			},
+			{
+				give: exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_UNSPECIFIED,
+				want: "",
+			},
+		}
+
+		for _, tt := range tests {
+			if got := toDomainMeasurementTypeString(tt.give); got != tt.want {
+				t.Errorf("toDomainMeasurementTypeString(%v) = %q, want %q", tt.give, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("toProtoExercise", func(t *testing.T) {
+		t.Parallel()
+		info := &domain.Info{
+			ID:              "ex-1",
+			Name:            "Plank",
+			MeasurementType: domain.MeasurementTypeDuration,
+		}
+		protoEx := toProtoExercise(info)
+		if got, want := protoEx.GetMeasurementType(), exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
 }
