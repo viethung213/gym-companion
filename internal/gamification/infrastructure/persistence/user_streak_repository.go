@@ -42,10 +42,22 @@ func (r *GormUserStreakRepository) FindByID(ctx context.Context, userID string) 
 }
 
 // FindByIDForUpdate retrieves a UserStreak aggregate with pessimistic lock (SELECT ... FOR UPDATE).
-// To prevent lost updates on brand-new users, it seeds a baseline row (ON CONFLICT DO NOTHING)
-// ensuring SELECT ... FOR UPDATE always locks a physical row.
+// Fast-path: queries with SELECT ... FOR UPDATE first since existing records account for ~99.999% of requests.
+// Fallback: if record does not exist (gorm.ErrRecordNotFound), seeds a baseline row (ON CONFLICT DO NOTHING)
+// to prevent lost updates on brand-new users, then re-acquires the row lock.
 func (r *GormUserStreakRepository) FindByIDForUpdate(ctx context.Context, userID string) (*aggregate.UserStreak, error) {
 	db := GetDB(ctx, r.db)
+
+	var model UserStreakModel
+	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ?", userID).
+		First(&model).Error
+	if err == nil {
+		return streakModelToDomain(&model), nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("find user_streak for update: %w", err)
+	}
 
 	now := time.Now().UTC()
 	initModel := &UserStreakModel{
@@ -55,22 +67,18 @@ func (r *GormUserStreakRepository) FindByIDForUpdate(ctx context.Context, userID
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
-	if err := db.Clauses(clause.OnConflict{
+	if seedErr := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}},
 		DoNothing: true,
-	}).Create(initModel).Error; err != nil {
-		return nil, fmt.Errorf("seed user_streak baseline for update: %w", err)
+	}).Create(initModel).Error; seedErr != nil {
+		return nil, fmt.Errorf("seed user_streak baseline for update: %w", seedErr)
 	}
 
-	var model UserStreakModel
-	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+	err = db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ?", userID).
 		First(&model).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("find user_streak for update: %w", err)
+		return nil, fmt.Errorf("find user_streak for update after seed: %w", err)
 	}
 	return streakModelToDomain(&model), nil
 }

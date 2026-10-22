@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -150,7 +149,10 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 
 	for _, code := range candidateCodes {
 		has, err := c.badgeRepo.HasBadge(ctx, userID, code)
-		if err != nil || has {
+		if err != nil {
+			return fmt.Errorf("check badge %s for user %s: %w", code, userID, err)
+		}
+		if has {
 			continue
 		}
 
@@ -165,8 +167,7 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 			now,
 		)
 		if err != nil {
-			log.Printf("[Gamification] Error constructing badge %s for user %s: %v", code, userID, err)
-			continue
+			return fmt.Errorf("unlock badge %s for user %s: %w", code, userID, err)
 		}
 
 		badgesToUnlock = append(badgesToUnlock, badge)

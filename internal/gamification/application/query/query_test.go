@@ -168,6 +168,16 @@ func TestGetStreakHandler(t *testing.T) {
 	if err != nil || res4.CurrentStreak != 0 || res4.IsActiveToday || res4.LongestStreak != 10 {
 		t.Fatalf("unexpected broken streak state for delta>=2: %+v, err: %v", res4, err)
 	}
+
+	// Timezone boundary: Activity completed in UTC+7 (2026-10-15), query runs when server UTC is still 2026-10-14 (delta = -1) -> IsActiveToday must be true
+	repo.streak = aggregate.ReconstituteUserStreak("u-1", 6, 10, "2026-10-15", now)
+	res5, err := handler.Handle(context.Background(), query.GetStreakQuery{
+		UserID:           "u-1",
+		CurrentLocalDate: "2026-10-14",
+	})
+	if err != nil || !res5.IsActiveToday || res5.CurrentStreak != 6 {
+		t.Fatalf("unexpected streak state for delta=-1 (timezone boundary): %+v, err: %v", res5, err)
+	}
 }
 
 func TestGetGlobalLeaderboardHandler(t *testing.T) {
