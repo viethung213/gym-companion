@@ -6,7 +6,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
-	"github.com/viethung213/gym-companion/internal/gamification/transport/consumer"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 	gamificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
@@ -152,7 +151,7 @@ func (h *Handler) GetStreak(
 		return nil, err
 	}
 
-	currentLocalDate := consumer.ResolveLocalDate(time.Now())
+	currentLocalDate := time.Now().UTC().Format("2006-01-02")
 	res, err := h.getStreakHandler.Handle(ctx, query.GetStreakQuery{
 		UserID:           userID,
 		CurrentLocalDate: currentLocalDate,

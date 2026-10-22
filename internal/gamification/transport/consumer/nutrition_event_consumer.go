@@ -14,39 +14,33 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 )
 
-// NutritionPayload represents the minimal inbound JSON payload for nutrition events.
 type NutritionPayload struct {
 	UserID       string `json:"userId"`
-	ActivityDate string `json:"activityDate"` // YYYY-MM-DD
+	ActivityDate string `json:"activityDate"`
 }
 
-// NutritionEventConsumer listens for daily nutrition goal completion events.
+type NutritionActivityHandler interface {
+	Handle(ctx context.Context, cmd command.ProcessNutritionActivityCommand) error
+}
+
 type NutritionEventConsumer struct {
-	reader           *kafka.Reader
-	nutritionHandler *command.ProcessNutritionXpHandler
-	streakHandler    *command.RecordStreakActivityHandler
-	txManager        port.TransactionManager
-	outboxLogRepo    port.OutboxLogRepository
+	reader        *kafka.Reader
+	handler       NutritionActivityHandler
+	outboxLogRepo port.OutboxLogRepository
 }
 
-// NewNutritionEventConsumer constructs NutritionEventConsumer.
 func NewNutritionEventConsumer(
 	reader *kafka.Reader,
-	nutritionHandler *command.ProcessNutritionXpHandler,
-	streakHandler *command.RecordStreakActivityHandler,
-	txManager port.TransactionManager,
+	handler NutritionActivityHandler,
 	outboxLogRepo port.OutboxLogRepository,
 ) *NutritionEventConsumer {
 	return &NutritionEventConsumer{
-		reader:           reader,
-		nutritionHandler: nutritionHandler,
-		streakHandler:    streakHandler,
-		txManager:        txManager,
-		outboxLogRepo:    outboxLogRepo,
+		reader:        reader,
+		handler:       handler,
+		outboxLogRepo: outboxLogRepo,
 	}
 }
 
-// Start polls Kafka for nutrition events until context cancellation.
 func (c *NutritionEventConsumer) Start(ctx context.Context) {
 	if c.reader == nil {
 		return
@@ -91,11 +85,11 @@ func (c *NutritionEventConsumer) Start(ctx context.Context) {
 	}
 }
 
-// ProcessMessage processes inbound nutrition goal achievement events atomically.
 func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {
 	if msg == nil {
 		return errors.New("kafka message is nil")
 	}
+
 	var ce CloudEvent
 	if err := json.Unmarshal(msg.Value, &ce); err != nil {
 		return fmt.Errorf("unmarshal cloudevent envelope: %w", err)
@@ -106,7 +100,6 @@ func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.
 		return nil
 	}
 
-	// Idempotency check
 	if c.outboxLogRepo != nil && ce.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, ce.ID)
 		if err == nil && processed {
@@ -125,65 +118,18 @@ func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.
 	}
 	activityDate := payload.ActivityDate
 	if activityDate == "" {
-		activityDate = ResolveLocalDate(time.Now())
+		activityDate = time.Now().UTC().Format("2006-01-02")
 	}
-	now := time.Now().UTC()
+
+	cmd := command.ProcessNutritionActivityCommand{
+		UserID:       userID,
+		ActivityDate: activityDate,
+		RecordedAt:   time.Now().UTC(),
+	}
 
 	var processErr error
-	if c.txManager != nil {
-		// Atomic transaction adhering strictly to user_streak -> user_xp lock ordering to prevent deadlocks
-		processErr = c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-			// 1. Advance / maintain streak for rest day discipline
-			if c.streakHandler != nil {
-				_, sErr := c.streakHandler.Handle(txCtx, command.RecordStreakActivityCommand{
-					UserID:       userID,
-					ActivityDate: activityDate,
-					ActivityType: "NUTRITION",
-					RecordedAt:   now,
-				})
-				if sErr != nil {
-					return fmt.Errorf("record nutrition streak activity: %w", sErr)
-				}
-			}
-
-			// 2. Award Nutrition XP (+30 XP)
-			if c.nutritionHandler != nil {
-				_, nErr := c.nutritionHandler.Handle(txCtx, command.ProcessNutritionXpCommand{
-					UserID:       userID,
-					ActivityDate: activityDate,
-					AchievedAt:   now,
-				})
-				if nErr != nil {
-					return fmt.Errorf("process nutrition xp: %w", nErr)
-				}
-			}
-
-			return nil
-		})
-	} else {
-		// Fallback for environments without transaction manager
-		if c.streakHandler != nil {
-			_, sErr := c.streakHandler.Handle(ctx, command.RecordStreakActivityCommand{
-				UserID:       userID,
-				ActivityDate: activityDate,
-				ActivityType: "NUTRITION",
-				RecordedAt:   now,
-			})
-			if sErr != nil {
-				processErr = fmt.Errorf("record nutrition streak activity: %w", sErr)
-			}
-		}
-
-		if processErr == nil && c.nutritionHandler != nil {
-			_, nErr := c.nutritionHandler.Handle(ctx, command.ProcessNutritionXpCommand{
-				UserID:       userID,
-				ActivityDate: activityDate,
-				AchievedAt:   now,
-			})
-			if nErr != nil {
-				processErr = fmt.Errorf("process nutrition xp: %w", nErr)
-			}
-		}
+	if c.handler != nil {
+		processErr = c.handler.Handle(ctx, cmd)
 	}
 
 	if processErr != nil {
