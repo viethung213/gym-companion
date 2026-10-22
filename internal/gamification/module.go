@@ -139,7 +139,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		}
 
 		if nutritionReader, nErr := deps.KafkaRegistry.GetReader("gamification-nutrition-group", "nutrition.events", brokers); nErr == nil {
-			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, processNutritionXpHandler, recordStreakHandler, outboxLogRepo)
+			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, processNutritionXpHandler, recordStreakHandler, txManager, outboxLogRepo)
 		}
 
 		if profileReader, pErr := deps.KafkaRegistry.GetReader("gamification-profile-group", "profile.events", brokers); pErr == nil {
