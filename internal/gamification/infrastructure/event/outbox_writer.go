@@ -15,45 +15,65 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// NameProvider is implemented by events that provide their event type name.
 type NameProvider interface {
 	EventName() string
 }
 
-// OutboxWriter implements port.OutboxWriter.
 type OutboxWriter struct {
 	outboxRepo port.OutboxRepository
 }
 
-// Compile-time interface check.
 var _ port.OutboxWriter = (*OutboxWriter)(nil)
 
-// NewOutboxWriter constructs a new OutboxWriter.
 func NewOutboxWriter(outboxRepo port.OutboxRepository) *OutboxWriter {
 	return &OutboxWriter{outboxRepo: outboxRepo}
 }
 
-// WriteEvents serializes domain events to CloudEvents 1.0 format and stores them in the Outbox.
+type batchOutboxSaver interface {
+	SaveBatch(ctx context.Context, records []*port.OutboxRecord) error
+}
+
 func (w *OutboxWriter) WriteEvents(
 	ctx context.Context,
 	aggregateType string,
 	aggregateID string,
 	events []any,
 ) error {
-	for _, ev := range events {
-		if err := w.writeSingleEvent(ctx, aggregateType, aggregateID, ev); err != nil {
+	if len(events) == 0 {
+		return nil
+	}
+
+	baseNow := time.Now().UTC()
+	records := make([]*port.OutboxRecord, 0, len(events))
+	for i, ev := range events {
+		rec, err := w.buildRecord(aggregateType, aggregateID, ev)
+		if err != nil {
 			return err
+		}
+		rec.CreatedAt = baseNow.Add(time.Duration(i) * time.Microsecond)
+		records = append(records, rec)
+	}
+
+	if batchRepo, ok := w.outboxRepo.(batchOutboxSaver); ok && len(records) > 1 {
+		if err := batchRepo.SaveBatch(ctx, records); err != nil {
+			return fmt.Errorf("batch save outbox records: %w", err)
+		}
+		return nil
+	}
+
+	for _, rec := range records {
+		if err := w.outboxRepo.Save(ctx, rec); err != nil {
+			return fmt.Errorf("save outbox record: %w", err)
 		}
 	}
 	return nil
 }
 
-func (w *OutboxWriter) writeSingleEvent(
-	ctx context.Context,
+func (w *OutboxWriter) buildRecord(
 	aggregateType string,
 	aggregateID string,
 	ev any,
-) error {
+) (*port.OutboxRecord, error) {
 	eventType := "contracts.supporting.gamification.v1.unknownEvent"
 	if np, ok := ev.(NameProvider); ok {
 		eventType = np.EventName()
@@ -65,12 +85,12 @@ func (w *OutboxWriter) writeSingleEvent(
 	if protoMsg := mapToProtoEvent(ev); protoMsg != nil {
 		payloadBytes, err = protojson.Marshal(protoMsg)
 		if err != nil {
-			return fmt.Errorf("marshal proto event payload: %w", err)
+			return nil, fmt.Errorf("marshal proto event payload: %w", err)
 		}
 	} else {
 		payloadBytes, err = json.Marshal(ev)
 		if err != nil {
-			return fmt.Errorf("marshal event payload: %w", err)
+			return nil, fmt.Errorf("marshal event payload: %w", err)
 		}
 	}
 
@@ -90,7 +110,7 @@ func (w *OutboxWriter) writeSingleEvent(
 
 	envelopeBytes, err := json.Marshal(cloudEvent)
 	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
+		return nil, fmt.Errorf("marshal cloudevent envelope: %w", err)
 	}
 
 	partitionKey := extractUserID(ev)
@@ -98,7 +118,7 @@ func (w *OutboxWriter) writeSingleEvent(
 		partitionKey = aggregateID
 	}
 
-	record := &port.OutboxRecord{
+	return &port.OutboxRecord{
 		ID:            outboxID,
 		EventID:       eventID,
 		AggregateType: aggregateType,
@@ -108,89 +128,20 @@ func (w *OutboxWriter) writeSingleEvent(
 		PartitionKey:  partitionKey,
 		Published:     false,
 		CreatedAt:     time.Now().UTC(),
-	}
-
-	if err := w.outboxRepo.Save(ctx, record); err != nil {
-		return fmt.Errorf("save outbox record: %w", err)
-	}
-
-	return nil
+	}, nil
 }
 
 func extractUserID(ev any) string {
-	if ev == nil {
-		return ""
-	}
-
 	if de, ok := ev.(domainEvent.Event); ok {
 		return de.PartitionKey()
 	}
-
-	switch e := ev.(type) {
-	case domainEvent.XpEarned:
-		return e.UserID
-	case *domainEvent.XpEarned:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.UserLeveledUp:
-		return e.UserID
-	case *domainEvent.UserLeveledUp:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.StreakAdvanced:
-		return e.UserID
-	case *domainEvent.StreakAdvanced:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.StreakReset:
-		return e.UserID
-	case *domainEvent.StreakReset:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.StreakMilestoneReached:
-		return e.UserID
-	case *domainEvent.StreakMilestoneReached:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.BadgeUnlocked:
-		return e.UserID
-	case *domainEvent.BadgeUnlocked:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.CoinsEarned:
-		return e.UserID
-	case *domainEvent.CoinsEarned:
-		if e != nil {
-			return e.UserID
-		}
-	case domainEvent.CoinsSpent:
-		return e.UserID
-	case *domainEvent.CoinsSpent:
-		if e != nil {
-			return e.UserID
-		}
-	}
-
 	return ""
 }
 
 func mapToProtoEvent(ev any) proto.Message {
 	switch e := ev.(type) {
 	case domainEvent.XpEarned:
-		return &gamificationv1event.XpEarned{
-			UserId:   e.UserID,
-			DeltaXp:  e.DeltaXp,
-			NewXp:    e.NewXp,
-			NewLevel: e.NewLevel,
-			Source:   e.Source,
-			EarnedAt: timestamppb.New(e.EarnedAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.XpEarned:
 		if e == nil {
 			return nil
@@ -204,13 +155,7 @@ func mapToProtoEvent(ev any) proto.Message {
 			EarnedAt: timestamppb.New(e.EarnedAt),
 		}
 	case domainEvent.UserLeveledUp:
-		return &gamificationv1event.UserLeveledUp{
-			UserId:      e.UserID,
-			OldLevel:    e.OldLevel,
-			NewLevel:    e.NewLevel,
-			TotalXp:     e.TotalXp,
-			LeveledUpAt: timestamppb.New(e.LeveledUpAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.UserLeveledUp:
 		if e == nil {
 			return nil
@@ -223,14 +168,7 @@ func mapToProtoEvent(ev any) proto.Message {
 			LeveledUpAt: timestamppb.New(e.LeveledUpAt),
 		}
 	case domainEvent.StreakAdvanced:
-		return &gamificationv1event.StreakAdvanced{
-			UserId:        e.UserID,
-			NewStreak:     e.NewStreak,
-			LongestStreak: e.LongestStreak,
-			ActivityDate:  e.ActivityDate,
-			ActivityType:  e.ActivityType,
-			AdvancedAt:    timestamppb.New(e.AdvancedAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.StreakAdvanced:
 		if e == nil {
 			return nil
@@ -244,12 +182,7 @@ func mapToProtoEvent(ev any) proto.Message {
 			AdvancedAt:    timestamppb.New(e.AdvancedAt),
 		}
 	case domainEvent.StreakReset:
-		return &gamificationv1event.StreakReset{
-			UserId:         e.UserID,
-			PreviousStreak: e.PreviousStreak,
-			ResetDate:      e.ResetDate,
-			ResetAt:        timestamppb.New(e.ResetAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.StreakReset:
 		if e == nil {
 			return nil
@@ -268,13 +201,7 @@ func mapToProtoEvent(ev any) proto.Message {
 		}
 		return mapStreakMilestoneReached(e)
 	case domainEvent.BadgeUnlocked:
-		return &gamificationv1event.BadgeUnlocked{
-			UserId:     e.UserID,
-			BadgeCode:  e.BadgeCode,
-			BadgeName:  e.BadgeName,
-			Category:   e.Category,
-			UnlockedAt: timestamppb.New(e.UnlockedAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.BadgeUnlocked:
 		if e == nil {
 			return nil
@@ -287,14 +214,7 @@ func mapToProtoEvent(ev any) proto.Message {
 			UnlockedAt: timestamppb.New(e.UnlockedAt),
 		}
 	case domainEvent.CoinsEarned:
-		return &gamificationv1event.CoinsEarned{
-			UserId:       e.UserID,
-			Amount:       e.Amount,
-			BalanceAfter: e.BalanceAfter,
-			Reason:       e.Reason,
-			ReferenceId:  e.ReferenceID,
-			EarnedAt:     timestamppb.New(e.EarnedAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.CoinsEarned:
 		if e == nil {
 			return nil
@@ -308,14 +228,7 @@ func mapToProtoEvent(ev any) proto.Message {
 			EarnedAt:     timestamppb.New(e.EarnedAt),
 		}
 	case domainEvent.CoinsSpent:
-		return &gamificationv1event.CoinsSpent{
-			UserId:       e.UserID,
-			Amount:       e.Amount,
-			BalanceAfter: e.BalanceAfter,
-			Reason:       e.Reason,
-			ReferenceId:  e.ReferenceID,
-			SpentAt:      timestamppb.New(e.SpentAt),
-		}
+		return mapToProtoEvent(&e)
 	case *domainEvent.CoinsSpent:
 		if e == nil {
 			return nil

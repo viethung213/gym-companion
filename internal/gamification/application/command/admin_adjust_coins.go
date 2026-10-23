@@ -59,13 +59,16 @@ func (h *AdminAdjustCoinsHandler) Handle(
 	if cmd.TargetUserID == "" {
 		return nil, aggregate.ErrEmptyUserID
 	}
+	if _, err := uuid.Parse(cmd.TargetUserID); err != nil {
+		return nil, aggregate.ErrEmptyUserID
+	}
 	if cmd.AdminID == "" {
 		return nil, aggregate.ErrEmptyAdminID
 	}
-	if cmd.IdempotencyKey == "" {
+	if cmd.IdempotencyKey == "" || len(cmd.IdempotencyKey) > aggregate.MaxIdempotencyKeyLength {
 		return nil, aggregate.ErrEmptyIdempotencyKey
 	}
-	if cmd.Note == "" {
+	if cmd.Note == "" || len(cmd.Note) > aggregate.MaxNoteLength {
 		return nil, aggregate.ErrEmptyAdjustmentNote
 	}
 

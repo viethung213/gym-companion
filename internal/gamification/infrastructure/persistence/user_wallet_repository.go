@@ -44,10 +44,6 @@ func (r *GormUserWalletRepository) FindByID(ctx context.Context, userID string) 
 	return walletModelToDomain(&model), nil
 }
 
-// FindByIDForUpdate retrieves a UserWallet aggregate with pessimistic row lock (SELECT ... FOR UPDATE).
-// Fast-path: queries with SELECT ... FOR UPDATE first since existing records account for ~99.999% of requests.
-// Fallback: if record does not exist (gorm.ErrRecordNotFound), seeds a baseline row (ON CONFLICT DO NOTHING)
-// to prevent lost updates on brand-new users, then re-acquires the row lock.
 func (r *GormUserWalletRepository) FindByIDForUpdate(ctx context.Context, userID string) (*aggregate.UserWallet, error) {
 	db := GetDB(ctx, r.db)
 
@@ -95,7 +91,7 @@ func (r *GormUserWalletRepository) Save(ctx context.Context, wallet *aggregate.U
 	db := GetDB(ctx, r.db)
 	err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}},
-		UpdateAll: true,
+		DoUpdates: clause.AssignmentColumns([]string{"balance", "last_workout_reward_date", "last_pr_reward_date", "last_nutrition_reward_date", "updated_at"}),
 	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("save user_wallet: %w", err)
@@ -103,40 +99,82 @@ func (r *GormUserWalletRepository) Save(ctx context.Context, wallet *aggregate.U
 	return nil
 }
 
-// SaveLedgerEntry appends an immutable FitCoins transaction record into gamification.coin_ledger.
+// SaveLedgerEntry appends a single immutable FitCoins transaction record into gamification.coin_ledger.
 func (r *GormUserWalletRepository) SaveLedgerEntry(ctx context.Context, entry *entity.CoinLedgerEntry) error {
 	if entry == nil {
 		return errors.New("nil coin ledger entry")
 	}
+	return r.SaveLedgerEntries(ctx, []*entity.CoinLedgerEntry{entry})
+}
 
-	if entry.ID == "" {
-		entry.ID = uuid.NewString()
+// SaveLedgerEntries appends multiple immutable FitCoins transaction records in a single batch INSERT.
+func (r *GormUserWalletRepository) SaveLedgerEntries(ctx context.Context, entries []*entity.CoinLedgerEntry) error {
+	if len(entries) == 0 {
+		return nil
 	}
 
-	actDate, err := time.Parse("2006-01-02", entry.ActivityDate)
-	if err != nil {
-		actDate = time.Now().UTC()
+	models := make([]*CoinLedgerModel, 0, len(entries))
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		if entry.ID == "" {
+			entry.ID = uuid.NewString()
+		}
+
+		actDate, err := time.Parse("2006-01-02", entry.ActivityDate)
+		if err != nil {
+			actDate = time.Now().UTC()
+		}
+
+		models = append(models, &CoinLedgerModel{
+			ID:             entry.ID,
+			UserID:         entry.UserID,
+			Amount:         entry.Amount,
+			BalanceAfter:   entry.BalanceAfter,
+			Reason:         string(entry.Reason),
+			ReferenceID:    entry.ReferenceID,
+			IdempotencyKey: entry.IdempotencyKey,
+			ActivityDate:   actDate,
+			AdminID:        entry.AdminID,
+			Note:           entry.Note,
+			CreatedAt:      entry.CreatedAt,
+		})
 	}
 
-	model := &CoinLedgerModel{
-		ID:             entry.ID,
-		UserID:         entry.UserID,
-		Amount:         entry.Amount,
-		BalanceAfter:   entry.BalanceAfter,
-		Reason:         string(entry.Reason),
-		ReferenceID:    entry.ReferenceID,
-		IdempotencyKey: entry.IdempotencyKey,
-		ActivityDate:   actDate,
-		AdminID:        entry.AdminID,
-		Note:           entry.Note,
-		CreatedAt:      entry.CreatedAt,
+	if len(models) == 0 {
+		return nil
 	}
 
 	db := GetDB(ctx, r.db)
-	if err := db.Create(model).Error; err != nil {
-		return fmt.Errorf("save coin_ledger entry: %w", err)
+	if err := db.Create(&models).Error; err != nil {
+		return fmt.Errorf("batch save coin_ledger entries: %w", err)
 	}
 	return nil
+}
+
+// FindExistingLedgerEntriesByIdempotencyKeys retrieves existing ledger entries matching any of the given idempotency keys in a single query.
+func (r *GormUserWalletRepository) FindExistingLedgerEntriesByIdempotencyKeys(
+	ctx context.Context,
+	userID string,
+	keys []string,
+) (map[string]*entity.CoinLedgerEntry, error) {
+	if userID == "" || len(keys) == 0 {
+		return nil, nil
+	}
+
+	db := GetDB(ctx, r.db)
+	var models []*CoinLedgerModel
+	err := db.Where("user_id = ? AND idempotency_key IN ?", userID, keys).Find(&models).Error
+	if err != nil {
+		return nil, fmt.Errorf("find coin_ledger entries by idempotency keys: %w", err)
+	}
+
+	result := make(map[string]*entity.CoinLedgerEntry, len(models))
+	for _, m := range models {
+		result[m.IdempotencyKey] = ledgerModelToDomain(m)
+	}
+	return result, nil
 }
 
 // FindLedgerEntryByIdempotencyKey retrieves an existing ledger entry for a (user_id, idempotency_key) pair.

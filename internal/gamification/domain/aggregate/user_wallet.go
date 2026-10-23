@@ -10,6 +10,13 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 )
 
+// Validation length constraints matching PostgreSQL schema column limits.
+const (
+	MaxIdempotencyKeyLength = 150
+	MaxReferenceIDLength    = 100
+	MaxNoteLength           = 500
+)
+
 var (
 	// ErrInsufficientFunds indicates the wallet balance is lower than the requested spend/deduction amount.
 	ErrInsufficientFunds = errors.New("insufficient fitcoins balance")
@@ -20,14 +27,17 @@ var (
 	// ErrInvalidTransactionReason indicates a transaction reason that does not match the operation type.
 	ErrInvalidTransactionReason = errors.New("invalid coin transaction reason for operation")
 
-	// ErrEmptyIdempotencyKey indicates a missing idempotency key for a ledger transaction.
-	ErrEmptyIdempotencyKey = errors.New("idempotency key cannot be empty")
+	// ErrEmptyIdempotencyKey indicates a missing or overly long idempotency key for a ledger transaction.
+	ErrEmptyIdempotencyKey = errors.New("idempotency key must be between 1 and 150 characters")
+
+	// ErrInvalidReferenceID indicates a reference ID exceeding the column length limit.
+	ErrInvalidReferenceID = errors.New("reference id cannot exceed 100 characters")
 
 	// ErrEmptyAdminID indicates a missing administrator identifier for an admin adjustment.
 	ErrEmptyAdminID = errors.New("admin id cannot be empty for admin adjustment")
 
-	// ErrEmptyAdjustmentNote indicates a missing audit note for an admin adjustment.
-	ErrEmptyAdjustmentNote = errors.New("adjustment note cannot be empty for admin adjustment")
+	// ErrEmptyAdjustmentNote indicates a missing or overly long audit note for an admin adjustment.
+	ErrEmptyAdjustmentNote = errors.New("adjustment note must be between 1 and 500 characters")
 
 	// ErrBalanceOverflow indicates adding the requested amount would overflow int64.
 	ErrBalanceOverflow = errors.New("wallet balance overflow")
@@ -110,6 +120,20 @@ func (w *UserWallet) UpdatedAt() time.Time {
 	return w.updatedAt
 }
 
+// IsDailyCapReached checks in O(1) memory whether the daily cap for the given reason and YYYY-MM-DD date is already reached.
+func (w *UserWallet) IsDailyCapReached(reason vo.CoinTransactionReason, activityDate string) bool {
+	switch reason {
+	case vo.ReasonEarnWorkout:
+		return w.lastWorkoutRewardDate != nil && *w.lastWorkoutRewardDate == activityDate
+	case vo.ReasonEarnPR:
+		return w.lastPRRewardDate != nil && *w.lastPRRewardDate == activityDate
+	case vo.ReasonEarnNutrition:
+		return w.lastNutritionRewardDate != nil && *w.lastNutritionRewardDate == activityDate
+	default:
+		return false
+	}
+}
+
 // Award credits positive FitCoins to the wallet, enforcing O(1) daily caps and int64 overflow protection.
 func (w *UserWallet) Award(
 	entryID string,
@@ -126,8 +150,11 @@ func (w *UserWallet) Award(
 	if !reason.IsEarn() {
 		return nil, nil, ErrInvalidTransactionReason
 	}
-	if idempotencyKey == "" {
+	if idempotencyKey == "" || len(idempotencyKey) > MaxIdempotencyKeyLength {
 		return nil, nil, ErrEmptyIdempotencyKey
+	}
+	if refID != nil && len(*refID) > MaxReferenceIDLength {
+		return nil, nil, ErrInvalidReferenceID
 	}
 	if _, err := time.Parse("2006-01-02", activityDate); err != nil {
 		return nil, nil, ErrInvalidDateFormat
@@ -136,20 +163,8 @@ func (w *UserWallet) Award(
 		return nil, nil, ErrBalanceOverflow
 	}
 
-	// Enforce O(1) daily cap on the locked aggregate row
-	switch reason {
-	case vo.ReasonEarnWorkout:
-		if w.lastWorkoutRewardDate != nil && *w.lastWorkoutRewardDate == activityDate {
-			return nil, nil, ErrDailyCapReached
-		}
-	case vo.ReasonEarnPR:
-		if w.lastPRRewardDate != nil && *w.lastPRRewardDate == activityDate {
-			return nil, nil, ErrDailyCapReached
-		}
-	case vo.ReasonEarnNutrition:
-		if w.lastNutritionRewardDate != nil && *w.lastNutritionRewardDate == activityDate {
-			return nil, nil, ErrDailyCapReached
-		}
+	if w.IsDailyCapReached(reason, activityDate) {
+		return nil, nil, ErrDailyCapReached
 	}
 
 	w.balance += amount
@@ -211,8 +226,14 @@ func (w *UserWallet) Spend(
 	if !reason.IsSpend() {
 		return nil, nil, ErrInvalidTransactionReason
 	}
-	if idempotencyKey == "" {
+	if idempotencyKey == "" || len(idempotencyKey) > MaxIdempotencyKeyLength {
 		return nil, nil, ErrEmptyIdempotencyKey
+	}
+	if refID != nil && len(*refID) > MaxReferenceIDLength {
+		return nil, nil, ErrInvalidReferenceID
+	}
+	if note != nil && len(*note) > MaxNoteLength {
+		return nil, nil, ErrEmptyAdjustmentNote
 	}
 	if w.balance < amount {
 		return nil, nil, ErrInsufficientFunds
@@ -271,10 +292,10 @@ func (w *UserWallet) AdminAdjust(
 	if adminID == "" {
 		return nil, nil, ErrEmptyAdminID
 	}
-	if idempotencyKey == "" {
+	if idempotencyKey == "" || len(idempotencyKey) > MaxIdempotencyKeyLength {
 		return nil, nil, ErrEmptyIdempotencyKey
 	}
-	if note == "" {
+	if note == "" || len(note) > MaxNoteLength {
 		return nil, nil, ErrEmptyAdjustmentNote
 	}
 

@@ -73,6 +73,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	awardCoinsHandler := command.NewAwardCoinsHandler(userWalletRepo, txManager, outboxWriter)
 	spendCoinsHandler := command.NewSpendCoinsHandler(userWalletRepo, txManager, outboxWriter)
 	adminAdjustCoinsHandler := command.NewAdminAdjustCoinsHandler(userWalletRepo, txManager, outboxWriter)
+	evaluateBadgesHandler := command.NewEvaluateBadgesHandler(badgeRepo, txManager, outboxWriter)
 
 	processWorkoutXpHandler := command.NewProcessWorkoutXpHandler(userXpRepo, txManager, outboxWriter)
 	processNutritionXpHandler := command.NewProcessNutritionXpHandler(userXpRepo, txManager, outboxWriter)
@@ -80,20 +81,18 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(leaderboardRepo)
 	initUserGamificationHandler := command.NewInitUserGamificationHandler(userXpRepo, userStreakRepo, leaderboardRepo, txManager).
 		WithWalletRepository(userWalletRepo)
-	processPersonalRecordHandler := command.NewProcessPersonalRecordHandler(userXpRepo, badgeRepo, txManager, outboxWriter).
-		WithWalletRewarder(awardCoinsHandler)
-	processNutritionActivityHandler := command.NewProcessNutritionActivityHandler(recordStreakHandler, processNutritionXpHandler, txManager).
-		WithWalletRewarder(awardCoinsHandler)
+	processPersonalRecordHandler := command.NewProcessPersonalRecordHandler(userXpRepo, txManager, outboxWriter)
 
 	// 3. Coordinator
 	coordinator := appService.NewActivityIngestionCoordinator(
 		processWorkoutXpHandler,
 		recordStreakHandler,
-		userStreakRepo,
 		badgeRepo,
 		txManager,
 		outboxWriter,
-	).WithWalletRewarder(awardCoinsHandler)
+	).WithBadgeHandler(evaluateBadgesHandler).
+		WithWalletRewarder(awardCoinsHandler).
+		WithNutritionAndPRHandlers(processNutritionXpHandler, processPersonalRecordHandler)
 
 	// 4. Application Queries
 	getMyXpHandler := query.NewGetMyXpHandler(userXpRepo)
@@ -152,11 +151,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		}
 
 		if prReader, prErr := deps.KafkaRegistry.GetReader("gamification-pr-group", "workout_execution.events", brokers); prErr == nil {
-			personalRecordConsumer = consumer.NewPersonalRecordConsumer(prReader, processPersonalRecordHandler, outboxLogRepo)
+			personalRecordConsumer = consumer.NewPersonalRecordConsumer(prReader, prCoordinatorAdapter{coordinator: coordinator}, outboxLogRepo)
 		}
 
 		if nutritionReader, nErr := deps.KafkaRegistry.GetReader("gamification-nutrition-group", "nutrition.events", brokers); nErr == nil {
-			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, processNutritionActivityHandler, outboxLogRepo)
+			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, nutritionCoordinatorAdapter{coordinator: coordinator}, outboxLogRepo)
 		}
 
 		if profileReader, pErr := deps.KafkaRegistry.GetReader("gamification-profile-group", "profile.events", brokers); pErr == nil {
@@ -224,6 +223,22 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	}
 
 	return grpcHandler, shutdown, nil
+}
+
+type nutritionCoordinatorAdapter struct {
+	coordinator *appService.ActivityIngestionCoordinator
+}
+
+func (a nutritionCoordinatorAdapter) Handle(ctx context.Context, cmd command.ProcessNutritionActivityCommand) error {
+	return a.coordinator.IngestNutritionActivity(ctx, cmd)
+}
+
+type prCoordinatorAdapter struct {
+	coordinator *appService.ActivityIngestionCoordinator
+}
+
+func (a prCoordinatorAdapter) Handle(ctx context.Context, cmd command.ProcessPersonalRecordCommand) error {
+	return a.coordinator.IngestPersonalRecord(ctx, cmd)
 }
 
 // RegisterConnectHandler mounts the Gamification service on the provided HTTP multiplexer.

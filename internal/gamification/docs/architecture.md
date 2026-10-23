@@ -55,20 +55,21 @@ internal/gamification/
 │   └── repository/              # Port Interfaces (Định nghĩa hợp đồng lưu trữ)
 │
 ├── application/                 # TẦNG ĐIỀU PHỐI (Use Cases)
-│   ├── command/                 # Xử lý các tác vụ ghi (XP, Streak, Badges, AwardCoins, SpendCoins, AdminAdjustCoins)
+│   ├── command/                 # Xử lý các tác vụ ghi (XP, Streak, EvaluateBadges, AwardCoins, SpendCoins, AdminAdjustCoins)
 │   ├── query/                   # Xử lý các tác vụ đọc (XP, Streak, Leaderboard, Badges, Wallet, LedgerTransactions)
-│   ├── service/                 # ActivityIngestionCoordinator điều phối nguyên tử đa Aggregate
+│   ├── service/                 # ActivityIngestionCoordinator điều phối nguyên tử In-Memory Event Pipeline
 │   └── port/                    # Ports giao tiếp (TransactionManager, OutboxWriter, WalletRewarder)
 │
 ├── infrastructure/              # TẦNG KỸ THUẬT (Driven Adapters)
-│   ├── event/                   # OutboxWriter đóng gói CloudEvents 1.0 Protobuf JSON
+│   ├── event/                   # OutboxWriter đóng gói CloudEvents 1.0 Protobuf JSON (+1µs monotonic offset)
 │   ├── kafka/                   # Kafka Publisher
 │   ├── persistence/             # Hiện thực hóa lưu trữ (PostgreSQL GORM)
-│   └── worker/                  # Outbox Worker quét đẩy sự kiện ra Kafka
+│   └── worker/                  # Outbox Worker quét đẩy sự kiện ra Kafka (Dead-Letter Poison Pill Guard)
 │
 └── transport/                   # TẦNG GIAO DIỆN (Driving Adapters)
     ├── grpc/                    # ConnectRPC Service Handlers (GamificationServiceHandler)
     └── consumer/                # Kafka Message Consumers
+        ├── cloudevent.go                       # Shared Idempotent CloudEvent Loop & Poison Pill Commit
         ├── user_registered_consumer.go         # Khởi tạo tức thì hồ sơ game hóa khi đăng ký
         ├── workout_event_consumer.go           # Consumer hoàn thành buổi tập (gọi Coordinator)
         ├── personal_record_consumer.go         # Consumer phá kỷ lục cá nhân (PR)
@@ -200,34 +201,34 @@ Khi một buổi tập kết thúc, sự kiện tác động đồng thời lên
 4. `UserWallet`: Cộng thưởng FitCoins (`EARN_WORKOUT`, `EARN_PR`, `EARN_STREAK_MILESTONE`, `EARN_BADGE`) và ghi sổ cái `coin_ledger`.
 
 ### 5.2 Khử Triệt Để Deadlock & Đảm Bảo Tính Toàn Vẹn ACID: Single Atomic Transaction
-- **Giải Pháp Chuẩn Hóa (Single Atomic Transaction với Thứ Tự Khóa Tất Định - DAG Lock Ordering)**:
-  - `ActivityIngestionCoordinator` bọc toàn bộ 4 bước trong **1 Database Transaction duy nhất** thông qua `SQLTransactionManager.WithTransaction` (hỗ trợ transaction tái nhập / re-entrant).
+- **Giải Pháp Chuẩn Hóa (Single Atomic Transaction với In-Memory Event Pipeline & DAG Lock Ordering)**:
+  - `ActivityIngestionCoordinator` bọc toàn bộ chuỗi tiến trình (`Streak -> XP -> Badges -> Wallet`) trong **1 Database Transaction duy nhất** thông qua `SQLTransactionManager.WithTransaction` (hỗ trợ transaction tái nhập / re-entrant).
   - Áp dụng **Thứ tự khóa đơn điệu nghiêm ngặt (Monotonic Lock Ordering)**:
     $$\texttt{user\_streak} \longrightarrow \texttt{user\_xp} \longrightarrow \texttt{user\_badges} \longrightarrow \texttt{user\_wallet}$$
   - **Chứng minh 0% Deadlock**:
-    - Mọi luồng đa bảng (`ActivityIngestionCoordinator`, `ProcessNutritionActivityHandler`, `ProcessPersonalRecordHandler`, `InitUserGamificationHandler`) đều khóa theo đúng chiều từ trái sang phải, trong đó `user_wallet` luôn là bảng được khóa cuối cùng.
+    - Mọi luồng đa bảng (`IngestWorkoutSession`, `IngestNutritionActivity`, `IngestPersonalRecord`, `InitUserGamificationHandler`) đều khóa theo đúng chiều từ trái sang phải, trong đó `user_wallet` luôn là bảng được khóa cuối cùng.
     - Các luồng giao dịch ví độc lập (`SpendCoins`, `AdminAdjustCoins`) chỉ khóa duy nhất bảng `user_wallet`.
     - Đồ thị phụ thuộc khóa là một **Đồ thị có hướng không chu trình (DAG)** $\Rightarrow$ Điều kiện chờ vòng (**Circular Wait**) không thể xảy ra $\Rightarrow$ **0% Deadlock** mà không cần tách tiến trình qua Kafka nội bộ (tránh được độ trễ 5–10 giây của `OutboxWorker`).
 
 ```text
-SINGLE ATOMIC TRANSACTION (Toàn vẹn ACID - Rollback toàn bộ nếu bất kỳ bước nào lỗi):
+SINGLE ATOMIC TRANSACTION (In-Memory Event Pipeline + Batch Execution):
   BEGIN;
     -- Bước 1: Khóa và cập nhật Streak (Deterministic Lock #1)
     SELECT * FROM gamification.user_streak WHERE user_id = $1 FOR UPDATE;
-    --> Cập nhật chuỗi ngày liên tục (UserStreak) & ghi Outbox streakAdvanced / streakMilestoneReached
+    --> Cập nhật chuỗi ngày liên tục (UserStreak) & emit StreakAdvanced / StreakMilestoneReached
 
     -- Bước 2: Khóa và cập nhật XP (Deterministic Lock #2)
     SELECT * FROM gamification.user_xp WHERE user_id = $1 FOR UPDATE;
-    --> Cập nhật điểm XP theo Streak Multiplier mới nhất & ghi Outbox xpEarned / userLeveledUp
+    --> Cập nhật điểm XP theo Streak Multiplier mới nhất & emit XpEarned / UserLeveledUp
 
-    -- Bước 3: Mở khóa Badges (Deterministic Lock #3)
-    --> Kiểm tra và INSERT INTO gamification.user_badges ON CONFLICT DO NOTHING
-    --> Ghi nhận Outbox badgeUnlocked
+    -- Bước 3: Đánh giá & Mở khóa Badges theo mẻ (Deterministic Lock #3)
+    --> Batch INSERT INTO gamification.user_badges ON CONFLICT DO NOTHING RETURNING badge_code
+    --> Chỉ emit BadgeUnlocked cho các huy hiệu thực sự vừa ghi mới vào DB
 
-    -- Bước 4: Khóa và thưởng FitCoins qua In-Process Port WalletRewarder (Deterministic Lock #4)
+    -- Bước 4: Khóa và thưởng FitCoins qua Batch Port WalletRewarder (Deterministic Lock #4)
     SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE;
-    --> Kiểm tra Idempotency Key & O(1) Daily Cap ngay trên dòng đang khóa
-    --> Cập nhật user_wallet, INSERT gamification.coin_ledger & ghi Outbox coinsEarned
+    --> Kiểm tra Idempotency Key & O(1) Daily Cap ngay trên bộ nhớ trước khi hit DB
+    --> Cập nhật user_wallet, Batch INSERT gamification.coin_ledger & emit CoinsEarned
   COMMIT;
 ```
 
