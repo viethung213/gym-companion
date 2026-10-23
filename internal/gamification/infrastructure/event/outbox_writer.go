@@ -163,6 +163,18 @@ func extractUserID(ev any) string {
 		if e != nil {
 			return e.UserID
 		}
+	case domainEvent.CoinsEarned:
+		return e.UserID
+	case *domainEvent.CoinsEarned:
+		if e != nil {
+			return e.UserID
+		}
+	case domainEvent.CoinsSpent:
+		return e.UserID
+	case *domainEvent.CoinsSpent:
+		if e != nil {
+			return e.UserID
+		}
 	}
 
 	return ""
@@ -273,6 +285,48 @@ func mapToProtoEvent(ev any) proto.Message {
 			BadgeName:  e.BadgeName,
 			Category:   e.Category,
 			UnlockedAt: timestamppb.New(e.UnlockedAt),
+		}
+	case domainEvent.CoinsEarned:
+		return &gamificationv1event.CoinsEarned{
+			UserId:       e.UserID,
+			Amount:       e.Amount,
+			BalanceAfter: e.BalanceAfter,
+			Reason:       e.Reason,
+			ReferenceId:  e.ReferenceID,
+			EarnedAt:     timestamppb.New(e.EarnedAt),
+		}
+	case *domainEvent.CoinsEarned:
+		if e == nil {
+			return nil
+		}
+		return &gamificationv1event.CoinsEarned{
+			UserId:       e.UserID,
+			Amount:       e.Amount,
+			BalanceAfter: e.BalanceAfter,
+			Reason:       e.Reason,
+			ReferenceId:  e.ReferenceID,
+			EarnedAt:     timestamppb.New(e.EarnedAt),
+		}
+	case domainEvent.CoinsSpent:
+		return &gamificationv1event.CoinsSpent{
+			UserId:       e.UserID,
+			Amount:       e.Amount,
+			BalanceAfter: e.BalanceAfter,
+			Reason:       e.Reason,
+			ReferenceId:  e.ReferenceID,
+			SpentAt:      timestamppb.New(e.SpentAt),
+		}
+	case *domainEvent.CoinsSpent:
+		if e == nil {
+			return nil
+		}
+		return &gamificationv1event.CoinsSpent{
+			UserId:       e.UserID,
+			Amount:       e.Amount,
+			BalanceAfter: e.BalanceAfter,
+			Reason:       e.Reason,
+			ReferenceId:  e.ReferenceID,
+			SpentAt:      timestamppb.New(e.SpentAt),
 		}
 	default:
 		return nil

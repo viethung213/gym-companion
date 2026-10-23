@@ -34,6 +34,9 @@ var (
 
 	// ErrDailyCapReached indicates the user has already claimed the daily FitCoins reward for this reason on the given date.
 	ErrDailyCapReached = errors.New("daily coin reward cap already reached for this date")
+
+	// ErrInvalidCursor indicates a malformed pagination cursor for ledger queries.
+	ErrInvalidCursor = errors.New("invalid pagination cursor")
 )
 
 // UserWallet is the aggregate root managing a user's FitCoins balance and daily reward caps.

@@ -131,3 +131,39 @@ type UserBadgeModel struct {
 func (UserBadgeModel) TableName() string {
 	return "gamification.user_badges"
 }
+
+// UserWalletModel maps to gamification.user_wallet table.
+type UserWalletModel struct {
+	UserID                  string     `gorm:"column:user_id;primaryKey"`
+	Balance                 int64      `gorm:"column:balance"`
+	LastWorkoutRewardDate   *time.Time `gorm:"column:last_workout_reward_date;type:date"`
+	LastPRRewardDate        *time.Time `gorm:"column:last_pr_reward_date;type:date"`
+	LastNutritionRewardDate *time.Time `gorm:"column:last_nutrition_reward_date;type:date"`
+	CreatedAt               time.Time  `gorm:"column:created_at"`
+	UpdatedAt               time.Time  `gorm:"column:updated_at"`
+}
+
+// TableName returns the table name for UserWalletModel.
+func (UserWalletModel) TableName() string {
+	return "gamification.user_wallet"
+}
+
+// CoinLedgerModel maps to gamification.coin_ledger table.
+type CoinLedgerModel struct {
+	ID             string    `gorm:"column:id;primaryKey"`
+	UserID         string    `gorm:"column:user_id"`
+	Amount         int64     `gorm:"column:amount"`
+	BalanceAfter   int64     `gorm:"column:balance_after"`
+	Reason         string    `gorm:"column:reason"`
+	ReferenceID    *string   `gorm:"column:reference_id"`
+	IdempotencyKey string    `gorm:"column:idempotency_key"`
+	ActivityDate   time.Time `gorm:"column:activity_date;type:date"`
+	AdminID        *string   `gorm:"column:admin_id"`
+	Note           *string   `gorm:"column:note"`
+	CreatedAt      time.Time `gorm:"column:created_at"`
+}
+
+// TableName returns the table name for CoinLedgerModel.
+func (CoinLedgerModel) TableName() string {
+	return "gamification.coin_ledger"
+}
