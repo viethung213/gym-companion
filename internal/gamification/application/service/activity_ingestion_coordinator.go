@@ -15,8 +15,10 @@ import (
 )
 
 // ActivityIngestionCoordinator orchestrates atomic multi-aggregate ingestion (Architecture #5).
-// It executes Step 1 (Streak) -> Step 2 (XP) -> Step 3 (Badges) within a single atomic database transaction.
-// Strict lock acquisition order (user_streak -> user_xp -> user_badges) eliminates deadlocks while guaranteeing 100% ACID consistency.
+// It executes Step 1 (Streak) -> Step 2 (XP) -> Step 3 (Badges) -> Step 4 (FitCoins Wallet)
+// within a single atomic database transaction.
+// Strict lock acquisition order (user_streak -> user_xp -> user_badges -> user_wallet) eliminates
+// deadlocks while guaranteeing 100% ACID consistency.
 type ActivityIngestionCoordinator struct {
 	xpHandler      *command.ProcessWorkoutXpHandler
 	streakHandler  *command.RecordStreakActivityHandler
@@ -24,6 +26,7 @@ type ActivityIngestionCoordinator struct {
 	badgeRepo      repository.BadgeRepository
 	txManager      port.TransactionManager
 	outboxWriter   port.OutboxWriter
+	walletRewarder port.WalletRewarder
 }
 
 // NewActivityIngestionCoordinator constructs ActivityIngestionCoordinator.
@@ -45,8 +48,16 @@ func NewActivityIngestionCoordinator(
 	}
 }
 
-// IngestWorkoutSession coordinates Step 1 (Streak), Step 2 (XP with up-to-date multiplier), and Step 3 (Badges)
-// atomically inside a single database transaction. If any step fails, all changes are rolled back.
+// WithWalletRewarder attaches an optional WalletRewarder for Step 4 FitCoins rewards.
+func (c *ActivityIngestionCoordinator) WithWalletRewarder(
+	walletRewarder port.WalletRewarder,
+) *ActivityIngestionCoordinator {
+	c.walletRewarder = walletRewarder
+	return c
+}
+
+// IngestWorkoutSession coordinates Step 1 (Streak), Step 2 (XP with up-to-date multiplier),
+// Step 3 (Badges), and Step 4 (FitCoins Wallet) atomically inside a single database transaction.
 func (c *ActivityIngestionCoordinator) IngestWorkoutSession(
 	ctx context.Context,
 	cmd *command.ProcessWorkoutXpCommand,
@@ -56,7 +67,6 @@ func (c *ActivityIngestionCoordinator) IngestWorkoutSession(
 	}
 	return c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		// --- Step 1: Streak Evaluation ---
-		// Update streak first so today's session advances the streak count immediately.
 		streakCmd := command.RecordStreakActivityCommand{
 			UserID:       cmd.UserID,
 			ActivityDate: cmd.ActivityDate,
@@ -78,12 +88,102 @@ func (c *ActivityIngestionCoordinator) IngestWorkoutSession(
 		}
 
 		// --- Step 3: Badges Evaluation ---
-		if err := c.evaluateBadges(txCtx, cmd.UserID, xpResult, streakResult, cmd.HasNewPR, cmd.CompletedAt); err != nil {
+		unlockedBadges, err := c.evaluateBadges(
+			txCtx,
+			cmd.UserID,
+			xpResult,
+			streakResult,
+			cmd.HasNewPR,
+			cmd.CompletedAt,
+		)
+		if err != nil {
 			return fmt.Errorf("coordinator step 3 (badges): %w", err)
+		}
+
+		// --- Step 4: FitCoins Wallet Rewards (last in lock order: user_wallet) ---
+		if err := c.awardWorkoutCoins(txCtx, cmd, streakResult, unlockedBadges); err != nil {
+			return fmt.Errorf("coordinator step 4 (wallet): %w", err)
 		}
 
 		return nil
 	})
+}
+
+func (c *ActivityIngestionCoordinator) awardWorkoutCoins(
+	ctx context.Context,
+	cmd *command.ProcessWorkoutXpCommand,
+	streakRes *command.RecordStreakActivityResult,
+	unlockedBadges []string,
+) error {
+	if c.walletRewarder == nil {
+		return nil
+	}
+
+	sessionRef := cmd.SessionID
+	// 1. Daily Workout Reward (+10 FitCoins, Max 1/day)
+	if _, err := c.walletRewarder.AwardCoins(ctx, port.AwardCoinsInput{
+		UserID:         cmd.UserID,
+		Amount:         vo.WorkoutCoinReward,
+		Reason:         vo.ReasonEarnWorkout,
+		ReferenceID:    &sessionRef,
+		IdempotencyKey: fmt.Sprintf("WORKOUT:%s:%s", cmd.UserID, cmd.ActivityDate),
+		ActivityDate:   cmd.ActivityDate,
+		OccurredAt:     cmd.CompletedAt,
+	}); err != nil {
+		return fmt.Errorf("award workout coins: %w", err)
+	}
+
+	// 2. Daily Personal Record Reward (+20 FitCoins, Max 1/day)
+	if cmd.HasNewPR {
+		if _, err := c.walletRewarder.AwardCoins(ctx, port.AwardCoinsInput{
+			UserID:         cmd.UserID,
+			Amount:         vo.PersonalRecordCoinReward,
+			Reason:         vo.ReasonEarnPR,
+			ReferenceID:    &sessionRef,
+			IdempotencyKey: fmt.Sprintf("PR:%s:%s", cmd.UserID, cmd.ActivityDate),
+			ActivityDate:   cmd.ActivityDate,
+			OccurredAt:     cmd.CompletedAt,
+		}); err != nil {
+			return fmt.Errorf("award pr coins: %w", err)
+		}
+	}
+
+	// 3. Streak Milestone Reward (+30/+75/+150/+250/+500/+1500 FitCoins)
+	if streakRes != nil && streakRes.Advanced {
+		milestoneReward := vo.StreakMilestoneCoinReward(streakRes.CurrentStreak)
+		if milestoneReward > 0 {
+			milestoneRef := fmt.Sprintf("STREAK_%d", streakRes.CurrentStreak)
+			if _, err := c.walletRewarder.AwardCoins(ctx, port.AwardCoinsInput{
+				UserID:         cmd.UserID,
+				Amount:         milestoneReward,
+				Reason:         vo.ReasonEarnStreakMilestone,
+				ReferenceID:    &milestoneRef,
+				IdempotencyKey: fmt.Sprintf("STREAK_MILESTONE:%s:%d:%s", cmd.UserID, streakRes.CurrentStreak, cmd.ActivityDate),
+				ActivityDate:   cmd.ActivityDate,
+				OccurredAt:     cmd.CompletedAt,
+			}); err != nil {
+				return fmt.Errorf("award streak milestone coins: %w", err)
+			}
+		}
+	}
+
+	// 4. Newly Unlocked Badges Reward (+15 FitCoins per badge)
+	for _, badgeCode := range unlockedBadges {
+		codeRef := badgeCode
+		if _, err := c.walletRewarder.AwardCoins(ctx, port.AwardCoinsInput{
+			UserID:         cmd.UserID,
+			Amount:         vo.BadgeUnlockedCoinReward,
+			Reason:         vo.ReasonEarnBadge,
+			ReferenceID:    &codeRef,
+			IdempotencyKey: fmt.Sprintf("BADGE:%s:%s", cmd.UserID, badgeCode),
+			ActivityDate:   cmd.ActivityDate,
+			OccurredAt:     cmd.CompletedAt,
+		}); err != nil {
+			return fmt.Errorf("award badge coins (%s): %w", badgeCode, err)
+		}
+	}
+
+	return nil
 }
 
 func (c *ActivityIngestionCoordinator) evaluateBadges(
@@ -93,9 +193,9 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 	streakRes *command.RecordStreakActivityResult,
 	hasNewPR bool,
 	now time.Time,
-) error {
+) ([]string, error) {
 	if c.badgeRepo == nil || c.txManager == nil || c.outboxWriter == nil {
-		return nil
+		return nil, nil
 	}
 
 	var candidateCodes []string
@@ -145,12 +245,13 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 	}
 
 	badgesToUnlock := make([]*aggregate.UserBadge, 0, len(candidateCodes))
+	unlockedCodes := make([]string, 0, len(candidateCodes))
 	outboxEvents := make([]any, 0, len(candidateCodes))
 
 	for _, code := range candidateCodes {
 		has, err := c.badgeRepo.HasBadge(ctx, userID, code)
 		if err != nil {
-			return fmt.Errorf("check badge %s for user %s: %w", code, userID, err)
+			return nil, fmt.Errorf("check badge %s for user %s: %w", code, userID, err)
 		}
 		if has {
 			continue
@@ -167,15 +268,16 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 			now,
 		)
 		if err != nil {
-			return fmt.Errorf("unlock badge %s for user %s: %w", code, userID, err)
+			return nil, fmt.Errorf("unlock badge %s for user %s: %w", code, userID, err)
 		}
 
 		badgesToUnlock = append(badgesToUnlock, badge)
+		unlockedCodes = append(unlockedCodes, code)
 		outboxEvents = append(outboxEvents, ev)
 	}
 
 	if len(badgesToUnlock) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Execute all unlocked badges in the active transaction
@@ -189,8 +291,8 @@ func (c *ActivityIngestionCoordinator) evaluateBadges(
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("save and write badge events: %w", err)
+		return nil, fmt.Errorf("save and write badge events: %w", err)
 	}
 
-	return nil
+	return unlockedCodes, nil
 }

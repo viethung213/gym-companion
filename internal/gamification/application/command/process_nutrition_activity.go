@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 )
 
 type ProcessNutritionActivityCommand struct {
@@ -18,6 +19,7 @@ type ProcessNutritionActivityHandler struct {
 	streakHandler    *RecordStreakActivityHandler
 	nutritionHandler *ProcessNutritionXpHandler
 	txManager        port.TransactionManager
+	walletRewarder   port.WalletRewarder
 }
 
 func NewProcessNutritionActivityHandler(
@@ -32,6 +34,14 @@ func NewProcessNutritionActivityHandler(
 	}
 }
 
+// WithWalletRewarder attaches an optional WalletRewarder to credit daily nutrition FitCoins.
+func (h *ProcessNutritionActivityHandler) WithWalletRewarder(
+	walletRewarder port.WalletRewarder,
+) *ProcessNutritionActivityHandler {
+	h.walletRewarder = walletRewarder
+	return h
+}
+
 func (h *ProcessNutritionActivityHandler) Handle(ctx context.Context, cmd ProcessNutritionActivityCommand) error {
 	if h.txManager == nil {
 		return h.execute(ctx, cmd)
@@ -43,8 +53,10 @@ func (h *ProcessNutritionActivityHandler) Handle(ctx context.Context, cmd Proces
 }
 
 func (h *ProcessNutritionActivityHandler) execute(ctx context.Context, cmd ProcessNutritionActivityCommand) error {
+	var streakRes *RecordStreakActivityResult
 	if h.streakHandler != nil {
-		_, err := h.streakHandler.Handle(ctx, RecordStreakActivityCommand{
+		var err error
+		streakRes, err = h.streakHandler.Handle(ctx, RecordStreakActivityCommand{
 			UserID:       cmd.UserID,
 			ActivityDate: cmd.ActivityDate,
 			ActivityType: "NUTRITION",
@@ -63,6 +75,38 @@ func (h *ProcessNutritionActivityHandler) execute(ctx context.Context, cmd Proce
 		})
 		if err != nil {
 			return fmt.Errorf("process nutrition xp: %w", err)
+		}
+	}
+
+	if h.walletRewarder != nil {
+		if _, err := h.walletRewarder.AwardCoins(ctx, port.AwardCoinsInput{
+			UserID:         cmd.UserID,
+			Amount:         vo.NutritionDailyCoinReward,
+			Reason:         vo.ReasonEarnNutrition,
+			ReferenceID:    nil,
+			IdempotencyKey: fmt.Sprintf("NUTRITION:%s:%s", cmd.UserID, cmd.ActivityDate),
+			ActivityDate:   cmd.ActivityDate,
+			OccurredAt:     cmd.RecordedAt,
+		}); err != nil {
+			return fmt.Errorf("award nutrition coins: %w", err)
+		}
+
+		if streakRes != nil && streakRes.Advanced {
+			milestoneReward := vo.StreakMilestoneCoinReward(streakRes.CurrentStreak)
+			if milestoneReward > 0 {
+				milestoneRef := fmt.Sprintf("STREAK_%d", streakRes.CurrentStreak)
+				if _, err := h.walletRewarder.AwardCoins(ctx, port.AwardCoinsInput{
+					UserID:         cmd.UserID,
+					Amount:         milestoneReward,
+					Reason:         vo.ReasonEarnStreakMilestone,
+					ReferenceID:    &milestoneRef,
+					IdempotencyKey: fmt.Sprintf("STREAK_MILESTONE:%s:%d:%s", cmd.UserID, streakRes.CurrentStreak, cmd.ActivityDate),
+					ActivityDate:   cmd.ActivityDate,
+					OccurredAt:     cmd.RecordedAt,
+				}); err != nil {
+					return fmt.Errorf("award nutrition streak milestone coins: %w", err)
+				}
+			}
 		}
 	}
 
