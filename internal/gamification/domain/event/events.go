@@ -110,3 +110,39 @@ func (BadgeUnlocked) EventName() string {
 func (e *BadgeUnlocked) PartitionKey() string {
 	return e.UserID
 }
+
+// CoinsEarned represents the domain event when a user earns FitCoins.
+type CoinsEarned struct {
+	UserID       string
+	Amount       int64
+	BalanceAfter int64
+	Reason       string
+	ReferenceID  string
+	EarnedAt     time.Time
+}
+
+func (CoinsEarned) EventName() string {
+	return "contracts.supporting.gamification.v1.coinsEarned"
+}
+
+func (e *CoinsEarned) PartitionKey() string {
+	return e.UserID
+}
+
+// CoinsSpent represents the domain event when FitCoins are deducted from a user's wallet.
+type CoinsSpent struct {
+	UserID       string
+	Amount       int64
+	BalanceAfter int64
+	Reason       string
+	ReferenceID  string
+	SpentAt      time.Time
+}
+
+func (CoinsSpent) EventName() string {
+	return "contracts.supporting.gamification.v1.coinsSpent"
+}
+
+func (e *CoinsSpent) PartitionKey() string {
+	return e.UserID
+}
