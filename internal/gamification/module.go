@@ -65,17 +65,25 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	userStreakRepo := persistence.NewGormUserStreakRepository(gormDB)
 	leaderboardRepo := persistence.NewGormLeaderboardRepository(gormDB)
 	badgeRepo := persistence.NewGormBadgeRepository(gormDB)
+	userWalletRepo := persistence.NewGormUserWalletRepository(gormDB)
 
 	outboxWriter := infraEvent.NewOutboxWriter(outboxRepo)
 
 	// 2. Application Commands
+	awardCoinsHandler := command.NewAwardCoinsHandler(userWalletRepo, txManager, outboxWriter)
+	spendCoinsHandler := command.NewSpendCoinsHandler(userWalletRepo, txManager, outboxWriter)
+	adminAdjustCoinsHandler := command.NewAdminAdjustCoinsHandler(userWalletRepo, txManager, outboxWriter)
+
 	processWorkoutXpHandler := command.NewProcessWorkoutXpHandler(userXpRepo, txManager, outboxWriter)
 	processNutritionXpHandler := command.NewProcessNutritionXpHandler(userXpRepo, txManager, outboxWriter)
 	recordStreakHandler := command.NewRecordStreakActivityHandler(userStreakRepo, txManager, outboxWriter)
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(leaderboardRepo)
-	initUserGamificationHandler := command.NewInitUserGamificationHandler(userXpRepo, userStreakRepo, leaderboardRepo, txManager)
-	processPersonalRecordHandler := command.NewProcessPersonalRecordHandler(userXpRepo, badgeRepo, txManager, outboxWriter)
-	processNutritionActivityHandler := command.NewProcessNutritionActivityHandler(recordStreakHandler, processNutritionXpHandler, txManager)
+	initUserGamificationHandler := command.NewInitUserGamificationHandler(userXpRepo, userStreakRepo, leaderboardRepo, txManager).
+		WithWalletRepository(userWalletRepo)
+	processPersonalRecordHandler := command.NewProcessPersonalRecordHandler(userXpRepo, badgeRepo, txManager, outboxWriter).
+		WithWalletRewarder(awardCoinsHandler)
+	processNutritionActivityHandler := command.NewProcessNutritionActivityHandler(recordStreakHandler, processNutritionXpHandler, txManager).
+		WithWalletRewarder(awardCoinsHandler)
 
 	// 3. Coordinator
 	coordinator := appService.NewActivityIngestionCoordinator(
@@ -85,7 +93,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		badgeRepo,
 		txManager,
 		outboxWriter,
-	)
+	).WithWalletRewarder(awardCoinsHandler)
 
 	// 4. Application Queries
 	getMyXpHandler := query.NewGetMyXpHandler(userXpRepo)
@@ -94,6 +102,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	getStreakHistoryHandler := query.NewGetStreakHistoryHandler(userStreakRepo)
 	getGlobalLeaderboardHandler := query.NewGetGlobalLeaderboardHandler(leaderboardRepo)
 	getMyBadgesHandler := query.NewGetMyBadgesHandler(badgeRepo)
+	getWalletHandler := query.NewGetWalletHandler(userWalletRepo)
+	listTransactionsHandler := query.NewListTransactionsHandler(userWalletRepo)
 
 	// 5. Transport gRPC Handler
 	grpcHandler := gamificationGRPC.NewGRPCHandler(
@@ -103,6 +113,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		getStreakHistoryHandler,
 		getGlobalLeaderboardHandler,
 		getMyBadgesHandler,
+	).WithWalletHandlers(
+		getWalletHandler,
+		listTransactionsHandler,
+		spendCoinsHandler,
+		adminAdjustCoinsHandler,
 	)
 
 	// 6. Kafka & Workers Setup
