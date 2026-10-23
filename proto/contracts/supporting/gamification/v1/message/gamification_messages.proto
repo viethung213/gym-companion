@@ -123,3 +123,66 @@ message GetMyBadgesResponse {
   int32 total_available = 3;
 }
 
+
+// LedgerEntry biểu diễn một bút toán bất biến trong sổ cái FitCoins.
+message LedgerEntry {
+  string id = 1;
+  string user_id = 2;
+  int64 amount = 3;
+  int64 balance_after = 4;
+  string reason = 5;
+  optional string reference_id = 6;
+  string idempotency_key = 7;
+  string activity_date = 8; // YYYY-MM-DD
+  optional string admin_id = 9;
+  optional string note = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+// Request / Response cho API GetWallet
+message GetWalletRequest {}
+
+message GetWalletResponse {
+  string user_id = 1;
+  int64 balance = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+// Request / Response cho API ListTransactions (Cursor Pagination)
+message ListTransactionsRequest {
+  int32 limit = 1;
+  string cursor = 2;
+}
+
+message ListTransactionsResponse {
+  repeated LedgerEntry entries = 1;
+  string next_cursor = 2;
+}
+
+// Request / Response cho API SpendCoins
+message SpendCoinsRequest {
+  int64 amount = 1;
+  string reason = 2;
+  string reference_id = 3;
+  string idempotency_key = 4;
+  string note = 5;
+}
+
+message SpendCoinsResponse {
+  int64 balance_after = 1;
+  string transaction_id = 2;
+}
+
+// Request / Response cho API AdminAdjustCoins
+message AdminAdjustCoinsRequest {
+  string target_user_id = 1;
+  int64 amount = 2;
+  string reason = 3;
+  string idempotency_key = 4;
+  string note = 5;
+}
+
+message AdminAdjustCoinsResponse {
+  int64 balance_after = 1;
+  string transaction_id = 2;
+}

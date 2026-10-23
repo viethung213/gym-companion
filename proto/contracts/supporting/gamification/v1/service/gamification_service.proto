@@ -12,7 +12,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
     title: "Gamification Engine API"
     version: "1.0"
-    description: "API quản lý điểm kinh nghiệm (XP), cấp độ (Levels), chuỗi ngày (Streaks) và Bảng xếp hạng (Leaderboards)."
+    description: "API quản lý điểm kinh nghiệm (XP), cấp độ (Levels), chuỗi ngày (Streaks), Bảng xếp hạng (Leaderboards) và Ví ảo FitCoins."
   }
   security_definitions: {
     security: {
@@ -73,6 +73,36 @@ service GamificationService {
   rpc GetMyBadges (contracts.supporting.gamification.v1.message.GetMyBadgesRequest) returns (contracts.supporting.gamification.v1.message.GetMyBadgesResponse) {
     option (google.api.http) = {
       get: "/api/v1/gamification/badges/me"
+    };
+  }
+
+  // Lấy số dư ví ảo FitCoins hiện tại của bản thân
+  rpc GetWallet (contracts.supporting.gamification.v1.message.GetWalletRequest) returns (contracts.supporting.gamification.v1.message.GetWalletResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/wallet/me"
+    };
+  }
+
+  // Tra cứu sổ cái lịch sử biến động FitCoins (Cursor Pagination)
+  rpc ListTransactions (contracts.supporting.gamification.v1.message.ListTransactionsRequest) returns (contracts.supporting.gamification.v1.message.ListTransactionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/gamification/wallet/transactions"
+    };
+  }
+
+  // Khấu trừ FitCoins từ ví người dùng (yêu cầu Idempotency Key)
+  rpc SpendCoins (contracts.supporting.gamification.v1.message.SpendCoinsRequest) returns (contracts.supporting.gamification.v1.message.SpendCoinsResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/gamification/wallet/spend"
+      body: "*"
+    };
+  }
+
+  // Điều chỉnh số dư FitCoins thủ công dành cho Quản trị viên (RBAC Admin)
+  rpc AdminAdjustCoins (contracts.supporting.gamification.v1.message.AdminAdjustCoinsRequest) returns (contracts.supporting.gamification.v1.message.AdminAdjustCoinsResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/gamification/admin/wallet/adjust"
+      body: "*"
     };
   }
 }

@@ -15,6 +15,7 @@ import (
 
 // Handler implements the Gamification gRPC/Connect service.
 type Handler struct {
+	gamificationv1serviceconnect.UnimplementedGamificationServiceHandler
 	getMyXpHandler              *query.GetMyXpHandler
 	getXpHistoryHandler         *query.GetXpHistoryHandler
 	getStreakHandler            *query.GetStreakHandler

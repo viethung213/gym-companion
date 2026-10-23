@@ -141,3 +141,41 @@ CREATE TABLE IF NOT EXISTS gamification.user_badges (
 CREATE INDEX IF NOT EXISTS idx_user_badges_user_unlocked
     ON gamification.user_badges (user_id, unlocked_at DESC);
 
+
+-- ---------------------------------------------------------------------
+-- 7. FITCOINS VIRTUAL WALLET & IMMUTABLE LEDGER
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS gamification.user_wallet (
+    user_id UUID PRIMARY KEY,
+    balance BIGINT NOT NULL DEFAULT 0,
+    last_workout_reward_date DATE,
+    last_pr_reward_date DATE,
+    last_nutrition_reward_date DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_user_wallet_balance_non_negative CHECK (balance >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS gamification.coin_ledger (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES gamification.user_wallet(user_id) ON DELETE CASCADE,
+    amount BIGINT NOT NULL,
+    balance_after BIGINT NOT NULL,
+    reason VARCHAR(50) NOT NULL,
+    reference_id VARCHAR(100),
+    idempotency_key VARCHAR(150) NOT NULL,
+    activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    admin_id UUID,
+    note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_coin_ledger_amount_non_zero CHECK (amount <> 0),
+    CONSTRAINT chk_coin_ledger_balance_after_non_negative CHECK (balance_after >= 0),
+    CONSTRAINT uq_coin_ledger_user_idempotency UNIQUE (user_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coin_ledger_user_created
+    ON gamification.coin_ledger (user_id, created_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coin_ledger_daily_cap
+    ON gamification.coin_ledger (user_id, reason, activity_date)
+    WHERE reason IN ('EARN_WORKOUT', 'EARN_PR', 'EARN_NUTRITION');
