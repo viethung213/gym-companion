@@ -23,6 +23,7 @@ type InitUserGamificationHandler struct {
 	userXpRepo      repository.UserXpRepository
 	userStreakRepo  repository.UserStreakRepository
 	leaderboardRepo repository.LeaderboardRepository
+	userWalletRepo  repository.UserWalletRepository
 	txManager       port.TransactionManager
 }
 
@@ -41,8 +42,16 @@ func NewInitUserGamificationHandler(
 	}
 }
 
-// Handle sets up initial UserStreak, UserXp, and UserSnapshot records.
-// Lock acquisition order strictly adheres to user_streak -> user_xp to eliminate
+// WithWalletRepository attaches an optional UserWalletRepository for eager wallet initialization.
+func (h *InitUserGamificationHandler) WithWalletRepository(
+	userWalletRepo repository.UserWalletRepository,
+) *InitUserGamificationHandler {
+	h.userWalletRepo = userWalletRepo
+	return h
+}
+
+// Handle sets up initial UserStreak, UserXp, UserWallet, and UserSnapshot records.
+// Lock acquisition order strictly adheres to user_streak -> user_xp -> user_wallet to eliminate
 // deadlock cycles with ActivityIngestionCoordinator.
 func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGamificationCommand) error {
 	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -71,6 +80,22 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 			}
 			if saveXpErr := h.userXpRepo.Save(txCtx, newXp); saveXpErr != nil {
 				return saveXpErr
+			}
+		}
+
+		if h.userWalletRepo != nil {
+			existingWallet, findWalletErr := h.userWalletRepo.FindByID(txCtx, cmd.UserID)
+			if findWalletErr != nil {
+				return findWalletErr
+			}
+			if existingWallet == nil {
+				newWallet, createWalletErr := aggregate.NewUserWallet(cmd.UserID)
+				if createWalletErr != nil {
+					return createWalletErr
+				}
+				if saveWalletErr := h.userWalletRepo.Save(txCtx, newWallet); saveWalletErr != nil {
+					return saveWalletErr
+				}
 			}
 		}
 

@@ -24,10 +24,11 @@ type ProcessPersonalRecordCommand struct {
 }
 
 type ProcessPersonalRecordHandler struct {
-	userXpRepo   repository.UserXpRepository
-	badgeRepo    repository.BadgeRepository
-	txManager    port.TransactionManager
-	outboxWriter port.OutboxWriter
+	userXpRepo     repository.UserXpRepository
+	badgeRepo      repository.BadgeRepository
+	txManager      port.TransactionManager
+	outboxWriter   port.OutboxWriter
+	walletRewarder port.WalletRewarder
 }
 
 func NewProcessPersonalRecordHandler(
@@ -42,6 +43,14 @@ func NewProcessPersonalRecordHandler(
 		txManager:    txManager,
 		outboxWriter: outboxWriter,
 	}
+}
+
+// WithWalletRewarder attaches an optional WalletRewarder for Personal Record FitCoins rewards.
+func (h *ProcessPersonalRecordHandler) WithWalletRewarder(
+	walletRewarder port.WalletRewarder,
+) *ProcessPersonalRecordHandler {
+	h.walletRewarder = walletRewarder
+	return h
 }
 
 //nolint:gocritic // hugeParam: command struct is an immutable value object
@@ -117,6 +126,36 @@ func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPe
 			}
 			if writeBadgeErr := h.outboxWriter.WriteEvents(txCtx, "user_badges", cmd.UserID, []any{badgeEv}); writeBadgeErr != nil {
 				return fmt.Errorf("write outbox badge event for user %s: %w", cmd.UserID, writeBadgeErr)
+			}
+		}
+
+		if h.walletRewarder != nil {
+			exerciseRef := cmd.ExerciseID
+			if _, prCoinErr := h.walletRewarder.AwardCoins(txCtx, port.AwardCoinsInput{
+				UserID:         cmd.UserID,
+				Amount:         vo.PersonalRecordCoinReward,
+				Reason:         vo.ReasonEarnPR,
+				ReferenceID:    &exerciseRef,
+				IdempotencyKey: fmt.Sprintf("PR:%s:%s", cmd.UserID, cmd.ActivityDate),
+				ActivityDate:   cmd.ActivityDate,
+				OccurredAt:     cmd.AchievedAt,
+			}); prCoinErr != nil {
+				return fmt.Errorf("award pr coins: %w", prCoinErr)
+			}
+
+			if !has {
+				badgeCode := "PR_BREAKER"
+				if _, badgeCoinErr := h.walletRewarder.AwardCoins(txCtx, port.AwardCoinsInput{
+					UserID:         cmd.UserID,
+					Amount:         vo.BadgeUnlockedCoinReward,
+					Reason:         vo.ReasonEarnBadge,
+					ReferenceID:    &badgeCode,
+					IdempotencyKey: fmt.Sprintf("BADGE:%s:%s", cmd.UserID, badgeCode),
+					ActivityDate:   cmd.ActivityDate,
+					OccurredAt:     cmd.AchievedAt,
+				}); badgeCoinErr != nil {
+					return fmt.Errorf("award pr badge coins: %w", badgeCoinErr)
+				}
 			}
 		}
 
