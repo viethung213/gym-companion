@@ -358,21 +358,21 @@ func (m *mockBadgeRepo) SaveBatch(ctx context.Context, badges []*aggregate.UserB
 
 func TestProcessPersonalRecordHandler(t *testing.T) {
 	xpRepo := newMockUserXpRepo()
-	badgeRepo := &mockBadgeRepo{badges: make(map[string][]*aggregate.UserBadge)}
 	tx := &mockTxManager{}
 	outbox := &mockOutboxWriter{}
 
-	handler := command.NewProcessPersonalRecordHandler(xpRepo, badgeRepo, tx, outbox)
+	handler := command.NewProcessPersonalRecordHandler(xpRepo, tx, outbox)
 
 	now := time.Now().UTC()
-	err := handler.Handle(context.Background(), command.ProcessPersonalRecordCommand{
+	cmd := command.ProcessPersonalRecordCommand{
 		UserID:       "u-pr-1",
 		ExerciseID:   "bench_press",
 		Weight:       100.0,
 		Reps:         5,
 		ActivityDate: "2026-10-22",
 		AchievedAt:   now,
-	})
+	}
+	err := handler.Handle(context.Background(), cmd)
 	if err != nil {
 		t.Fatalf("ProcessPersonalRecord error: %v", err)
 	}
@@ -382,39 +382,11 @@ func TestProcessPersonalRecordHandler(t *testing.T) {
 		t.Errorf("expected 25 XP for PR, got: %+v", userXp)
 	}
 
-	if len(badgeRepo.badges["u-pr-1"]) != 1 || badgeRepo.badges["u-pr-1"][0].BadgeCode() != "PR_BREAKER" {
-		t.Errorf("expected PR_BREAKER badge to be unlocked, got: %+v", badgeRepo.badges["u-pr-1"])
+	// Idempotent replay of the exact same PR event must NOT award duplicate XP
+	if err := handler.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("ProcessPersonalRecord idempotent replay error: %v", err)
 	}
-}
-
-func TestProcessNutritionActivityHandler(t *testing.T) {
-	streakRepo := newMockUserStreakRepo()
-	xpRepo := newMockUserXpRepo()
-	tx := &mockTxManager{}
-	outbox := &mockOutboxWriter{}
-
-	streakHandler := command.NewRecordStreakActivityHandler(streakRepo, tx, outbox)
-	nutritionHandler := command.NewProcessNutritionXpHandler(xpRepo, tx, outbox)
-
-	handler := command.NewProcessNutritionActivityHandler(streakHandler, nutritionHandler, tx)
-
-	now := time.Now().UTC()
-	err := handler.Handle(context.Background(), command.ProcessNutritionActivityCommand{
-		UserID:       "u-nut-1",
-		ActivityDate: "2026-10-22",
-		RecordedAt:   now,
-	})
-	if err != nil {
-		t.Fatalf("ProcessNutritionActivity error: %v", err)
-	}
-
-	userStreak := streakRepo.streaks["u-nut-1"]
-	if userStreak == nil || userStreak.CurrentStreak() != 1 {
-		t.Errorf("expected streak to advance to 1, got: %+v", userStreak)
-	}
-
-	userXp := xpRepo.users["u-nut-1"]
-	if userXp == nil || userXp.Xp() != 30 {
-		t.Errorf("expected 30 XP for nutrition, got: %+v", userXp)
+	if xpRepo.users["u-pr-1"].Xp() != 25 {
+		t.Errorf("expected XP to remain 25 after duplicate PR replay, got: %d", xpRepo.users["u-pr-1"].Xp())
 	}
 }

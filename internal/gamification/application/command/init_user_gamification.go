@@ -51,11 +51,9 @@ func (h *InitUserGamificationHandler) WithWalletRepository(
 }
 
 // Handle sets up initial UserStreak, UserXp, UserWallet, and UserSnapshot records.
-// Lock acquisition order strictly adheres to user_streak -> user_xp -> user_wallet to eliminate
-// deadlock cycles with ActivityIngestionCoordinator.
 func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGamificationCommand) error {
 	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		existingStreak, findStreakErr := h.userStreakRepo.FindByID(txCtx, cmd.UserID)
+		existingStreak, findStreakErr := h.userStreakRepo.FindByIDForUpdate(txCtx, cmd.UserID)
 		if findStreakErr != nil {
 			return findStreakErr
 		}
@@ -69,7 +67,7 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 			}
 		}
 
-		existingXp, findXpErr := h.userXpRepo.FindByID(txCtx, cmd.UserID)
+		existingXp, findXpErr := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
 		if findXpErr != nil {
 			return findXpErr
 		}
@@ -84,7 +82,7 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 		}
 
 		if h.userWalletRepo != nil {
-			existingWallet, findWalletErr := h.userWalletRepo.FindByID(txCtx, cmd.UserID)
+			existingWallet, findWalletErr := h.userWalletRepo.FindByIDForUpdate(txCtx, cmd.UserID)
 			if findWalletErr != nil {
 				return findWalletErr
 			}

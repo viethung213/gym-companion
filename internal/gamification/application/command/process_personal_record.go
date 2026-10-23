@@ -3,15 +3,14 @@ package command
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/event"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
-	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 )
 
 type ProcessPersonalRecordCommand struct {
@@ -24,141 +23,117 @@ type ProcessPersonalRecordCommand struct {
 }
 
 type ProcessPersonalRecordHandler struct {
-	userXpRepo     repository.UserXpRepository
-	badgeRepo      repository.BadgeRepository
-	txManager      port.TransactionManager
-	outboxWriter   port.OutboxWriter
-	walletRewarder port.WalletRewarder
+	userXpRepo   repository.UserXpRepository
+	txManager    port.TransactionManager
+	outboxWriter port.OutboxWriter
 }
 
 func NewProcessPersonalRecordHandler(
 	userXpRepo repository.UserXpRepository,
-	badgeRepo repository.BadgeRepository,
 	txManager port.TransactionManager,
 	outboxWriter port.OutboxWriter,
 ) *ProcessPersonalRecordHandler {
 	return &ProcessPersonalRecordHandler{
 		userXpRepo:   userXpRepo,
-		badgeRepo:    badgeRepo,
 		txManager:    txManager,
 		outboxWriter: outboxWriter,
 	}
 }
 
-// WithWalletRewarder attaches an optional WalletRewarder for Personal Record FitCoins rewards.
-func (h *ProcessPersonalRecordHandler) WithWalletRewarder(
-	walletRewarder port.WalletRewarder,
-) *ProcessPersonalRecordHandler {
-	h.walletRewarder = walletRewarder
-	return h
+func (h *ProcessPersonalRecordHandler) HandleEvents(
+	ctx context.Context,
+	events []event.Event,
+) ([]event.Event, error) {
+	if h == nil {
+		return nil, nil
+	}
+	var emitted []event.Event
+	for _, ev := range events {
+		if e, ok := ev.(*event.PersonalRecordIngested); ok {
+			xpEvents, err := h.awardPRXp(ctx, ProcessPersonalRecordCommand{
+				UserID:       e.UserID,
+				ExerciseID:   e.ExerciseID,
+				Weight:       e.Weight,
+				Reps:         e.Reps,
+				ActivityDate: e.ActivityDate,
+				AchievedAt:   e.AchievedAt,
+			})
+			if err != nil {
+				return nil, err
+			}
+			emitted = append(emitted, xpEvents...)
+		}
+	}
+	return emitted, nil
 }
 
 //nolint:gocritic // hugeParam: command struct is an immutable value object
 func (h *ProcessPersonalRecordHandler) Handle(ctx context.Context, cmd ProcessPersonalRecordCommand) error {
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		userXp, err := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
-		if err != nil {
-			return fmt.Errorf("find user xp: %w", err)
-		}
-		if userXp == nil {
-			userXp, err = aggregate.NewUserXp(cmd.UserID)
-			if err != nil {
-				return fmt.Errorf("create user xp: %w", err)
-			}
-		}
-
-		xpEvents, err := userXp.EarnXp(25, "PERSONAL_RECORD", cmd.AchievedAt)
-		if err != nil {
-			return fmt.Errorf("earn pr xp: %w", err)
-		}
-
-		if saveErr := h.userXpRepo.Save(txCtx, userXp); saveErr != nil {
-			return fmt.Errorf("save user xp: %w", saveErr)
-		}
-
-		history := entity.NewXpHistoryEntry(
-			uuid.NewString(),
-			cmd.UserID,
-			25,
-			"PERSONAL_RECORD",
-			nil,
-			cmd.ActivityDate,
-			cmd.AchievedAt,
-		)
-		if histErr := h.userXpRepo.SaveHistory(txCtx, history); histErr != nil {
-			return fmt.Errorf("save xp history: %w", histErr)
-		}
-
-		outboxEvents := make([]any, len(xpEvents))
-		for i, ev := range xpEvents {
-			outboxEvents[i] = ev
-		}
-
-		if writeErr := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, outboxEvents); writeErr != nil {
-			return fmt.Errorf("write outbox events: %w", writeErr)
-		}
-
-		has, hasErr := h.badgeRepo.HasBadge(txCtx, cmd.UserID, "PR_BREAKER")
-		if hasErr != nil {
-			return fmt.Errorf("check badge PR_BREAKER for user %s: %w", cmd.UserID, hasErr)
-		}
-		if !has {
-			def, _ := vo.GetBadgeDefinition("PR_BREAKER")
-			meta := map[string]string{
-				"exerciseId": cmd.ExerciseID,
-				"weight":     fmt.Sprintf("%.1f", cmd.Weight),
-				"reps":       strconv.Itoa(int(cmd.Reps)),
-			}
-			badge, badgeEv, bErr := aggregate.UnlockBadge(
-				uuid.NewString(),
-				cmd.UserID,
-				"PR_BREAKER",
-				def.Name,
-				def.Category,
-				meta,
-				cmd.AchievedAt,
-			)
-			if bErr != nil {
-				return fmt.Errorf("unlock badge PR_BREAKER for user %s: %w", cmd.UserID, bErr)
-			}
-			if saveBadgeErr := h.badgeRepo.Save(txCtx, badge); saveBadgeErr != nil {
-				return fmt.Errorf("save badge PR_BREAKER for user %s: %w", cmd.UserID, saveBadgeErr)
-			}
-			if writeBadgeErr := h.outboxWriter.WriteEvents(txCtx, "user_badges", cmd.UserID, []any{badgeEv}); writeBadgeErr != nil {
-				return fmt.Errorf("write outbox badge event for user %s: %w", cmd.UserID, writeBadgeErr)
-			}
-		}
-
-		if h.walletRewarder != nil {
-			exerciseRef := cmd.ExerciseID
-			if _, prCoinErr := h.walletRewarder.AwardCoins(txCtx, port.AwardCoinsInput{
-				UserID:         cmd.UserID,
-				Amount:         vo.PersonalRecordCoinReward,
-				Reason:         vo.ReasonEarnPR,
-				ReferenceID:    &exerciseRef,
-				IdempotencyKey: fmt.Sprintf("PR:%s:%s", cmd.UserID, cmd.ActivityDate),
-				ActivityDate:   cmd.ActivityDate,
-				OccurredAt:     cmd.AchievedAt,
-			}); prCoinErr != nil {
-				return fmt.Errorf("award pr coins: %w", prCoinErr)
-			}
-
-			if !has {
-				badgeCode := "PR_BREAKER"
-				if _, badgeCoinErr := h.walletRewarder.AwardCoins(txCtx, port.AwardCoinsInput{
-					UserID:         cmd.UserID,
-					Amount:         vo.BadgeUnlockedCoinReward,
-					Reason:         vo.ReasonEarnBadge,
-					ReferenceID:    &badgeCode,
-					IdempotencyKey: fmt.Sprintf("BADGE:%s:%s", cmd.UserID, badgeCode),
-					ActivityDate:   cmd.ActivityDate,
-					OccurredAt:     cmd.AchievedAt,
-				}); badgeCoinErr != nil {
-					return fmt.Errorf("award pr badge coins: %w", badgeCoinErr)
-				}
-			}
-		}
-
-		return nil
+		_, err := h.awardPRXp(txCtx, cmd)
+		return err
 	})
+}
+
+//nolint:gocritic // hugeParam: command struct is an immutable value object
+func (h *ProcessPersonalRecordHandler) awardPRXp(
+	ctx context.Context,
+	cmd ProcessPersonalRecordCommand,
+) ([]event.Event, error) {
+	userXp, err := h.userXpRepo.FindByIDForUpdate(ctx, cmd.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("find user xp: %w", err)
+	}
+	if userXp == nil {
+		userXp, err = aggregate.NewUserXp(cmd.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("create user xp: %w", err)
+		}
+	}
+
+	prSessionID := uuid.NewSHA1(
+		uuid.NameSpaceOID,
+		[]byte(fmt.Sprintf("PR:%s:%s:%.2f:%d:%d", cmd.UserID, cmd.ExerciseID, cmd.Weight, cmd.Reps, cmd.AchievedAt.UTC().UnixNano())),
+	).String()
+
+	alreadyProcessed, err := h.userXpRepo.HasSession(ctx, cmd.UserID, prSessionID)
+	if err != nil {
+		return nil, fmt.Errorf("check pr session idempotency: %w", err)
+	}
+	if alreadyProcessed {
+		return nil, nil
+	}
+
+	xpEvents, err := userXp.EarnXp(25, "PERSONAL_RECORD", cmd.AchievedAt)
+	if err != nil {
+		return nil, fmt.Errorf("earn pr xp: %w", err)
+	}
+
+	if err := h.userXpRepo.Save(ctx, userXp); err != nil {
+		return nil, fmt.Errorf("save user xp: %w", err)
+	}
+
+	history := entity.NewXpHistoryEntry(
+		uuid.NewString(),
+		cmd.UserID,
+		25,
+		"PERSONAL_RECORD",
+		&prSessionID,
+		cmd.ActivityDate,
+		cmd.AchievedAt,
+	)
+	if err := h.userXpRepo.SaveHistory(ctx, history); err != nil {
+		return nil, fmt.Errorf("save xp history: %w", err)
+	}
+
+	outboxEvents := make([]any, len(xpEvents))
+	for i, ev := range xpEvents {
+		outboxEvents[i] = ev
+	}
+
+	if err := h.outboxWriter.WriteEvents(ctx, "user_xp", cmd.UserID, outboxEvents); err != nil {
+		return nil, fmt.Errorf("write outbox events: %w", err)
+	}
+
+	return xpEvents, nil
 }

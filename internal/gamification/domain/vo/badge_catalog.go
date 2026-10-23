@@ -9,9 +9,8 @@ type BadgeDefinition struct {
 	IconURL     string
 }
 
-// MasterBadgeCatalog is the Single Source of Truth for system achievement badges.
-func MasterBadgeCatalog() []BadgeDefinition {
-	return []BadgeDefinition{
+var (
+	masterBadgeCatalog = []BadgeDefinition{
 		{
 			Code:        "FIRST_WORKOUT",
 			Name:        "Khởi Đầu Mới",
@@ -97,14 +96,27 @@ func MasterBadgeCatalog() []BadgeDefinition {
 			IconURL:     "/assets/badges/pr_breaker.svg",
 		},
 	}
+
+	badgeCatalogIndex = func() map[string]BadgeDefinition {
+		m := make(map[string]BadgeDefinition, len(masterBadgeCatalog))
+		for _, b := range masterBadgeCatalog {
+			m[b.Code] = b
+		}
+		return m
+	}()
+)
+
+// MasterBadgeCatalog returns a defensive copy of the system achievement badges catalog.
+func MasterBadgeCatalog() []BadgeDefinition {
+	out := make([]BadgeDefinition, len(masterBadgeCatalog))
+	copy(out, masterBadgeCatalog)
+	return out
 }
 
-// GetBadgeDefinition returns badge metadata for a given badge code.
+// GetBadgeDefinition returns badge metadata for a given badge code in O(1).
 func GetBadgeDefinition(code string) (BadgeDefinition, bool) {
-	for _, b := range MasterBadgeCatalog() {
-		if b.Code == code {
-			return b, true
-		}
+	if def, ok := badgeCatalogIndex[code]; ok {
+		return def, true
 	}
 	return BadgeDefinition{
 		Code:        code,

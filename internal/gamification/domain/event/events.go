@@ -4,13 +4,11 @@ import (
 	"time"
 )
 
-// Event is the marker interface for domain events.
 type Event interface {
 	EventName() string
 	PartitionKey() string
 }
 
-// XpEarned represents the domain event when a user gains XP.
 type XpEarned struct {
 	UserID   string
 	DeltaXp  int32
@@ -24,11 +22,10 @@ func (XpEarned) EventName() string {
 	return "contracts.supporting.gamification.v1.xpEarned"
 }
 
-func (e *XpEarned) PartitionKey() string {
+func (e XpEarned) PartitionKey() string {
 	return e.UserID
 }
 
-// UserLeveledUp represents the domain event when a user levels up.
 type UserLeveledUp struct {
 	UserID      string
 	OldLevel    int32
@@ -41,11 +38,10 @@ func (UserLeveledUp) EventName() string {
 	return "contracts.supporting.gamification.v1.userLeveledUp"
 }
 
-func (e *UserLeveledUp) PartitionKey() string {
+func (e UserLeveledUp) PartitionKey() string {
 	return e.UserID
 }
 
-// StreakAdvanced represents the domain event when a user's streak advances.
 type StreakAdvanced struct {
 	UserID        string
 	NewStreak     int32
@@ -59,11 +55,10 @@ func (StreakAdvanced) EventName() string {
 	return "contracts.supporting.gamification.v1.streakAdvanced"
 }
 
-func (e *StreakAdvanced) PartitionKey() string {
+func (e StreakAdvanced) PartitionKey() string {
 	return e.UserID
 }
 
-// StreakReset represents the domain event when a user's streak resets.
 type StreakReset struct {
 	UserID         string
 	PreviousStreak int32
@@ -75,11 +70,10 @@ func (StreakReset) EventName() string {
 	return "contracts.supporting.gamification.v1.streakReset"
 }
 
-func (e *StreakReset) PartitionKey() string {
+func (e StreakReset) PartitionKey() string {
 	return e.UserID
 }
 
-// StreakMilestoneReached represents the domain event when a user reaches a streak milestone.
 type StreakMilestoneReached struct {
 	UserID        string
 	MilestoneDays int32
@@ -90,11 +84,10 @@ func (StreakMilestoneReached) EventName() string {
 	return "contracts.supporting.gamification.v1.streakMilestoneReached"
 }
 
-func (e *StreakMilestoneReached) PartitionKey() string {
+func (e StreakMilestoneReached) PartitionKey() string {
 	return e.UserID
 }
 
-// BadgeUnlocked represents the domain event when a user unlocks a badge.
 type BadgeUnlocked struct {
 	UserID     string
 	BadgeCode  string
@@ -107,11 +100,10 @@ func (BadgeUnlocked) EventName() string {
 	return "contracts.supporting.gamification.v1.badgeUnlocked"
 }
 
-func (e *BadgeUnlocked) PartitionKey() string {
+func (e BadgeUnlocked) PartitionKey() string {
 	return e.UserID
 }
 
-// CoinsEarned represents the domain event when a user earns FitCoins.
 type CoinsEarned struct {
 	UserID       string
 	Amount       int64
@@ -125,11 +117,10 @@ func (CoinsEarned) EventName() string {
 	return "contracts.supporting.gamification.v1.coinsEarned"
 }
 
-func (e *CoinsEarned) PartitionKey() string {
+func (e CoinsEarned) PartitionKey() string {
 	return e.UserID
 }
 
-// CoinsSpent represents the domain event when FitCoins are deducted from a user's wallet.
 type CoinsSpent struct {
 	UserID       string
 	Amount       int64
@@ -143,6 +134,57 @@ func (CoinsSpent) EventName() string {
 	return "contracts.supporting.gamification.v1.coinsSpent"
 }
 
-func (e *CoinsSpent) PartitionKey() string {
+func (e CoinsSpent) PartitionKey() string {
+	return e.UserID
+}
+
+type WorkoutActivityIngested struct {
+	UserID           string
+	SessionID        string
+	ActivityDate     string
+	TotalSets        int32
+	TotalVolumeKg    float64
+	VolumeRatio      *float64
+	AverageFormScore *float32
+	HasNewPR         bool
+	CompletedAt      time.Time
+}
+
+func (WorkoutActivityIngested) EventName() string {
+	return "internal.gamification.workoutActivityIngested"
+}
+
+func (e WorkoutActivityIngested) PartitionKey() string {
+	return e.UserID
+}
+
+type NutritionActivityIngested struct {
+	UserID       string
+	ActivityDate string
+	RecordedAt   time.Time
+}
+
+func (NutritionActivityIngested) EventName() string {
+	return "internal.gamification.nutritionActivityIngested"
+}
+
+func (e NutritionActivityIngested) PartitionKey() string {
+	return e.UserID
+}
+
+type PersonalRecordIngested struct {
+	UserID       string
+	ExerciseID   string
+	Weight       float64
+	Reps         int32
+	ActivityDate string
+	AchievedAt   time.Time
+}
+
+func (PersonalRecordIngested) EventName() string {
+	return "internal.gamification.personalRecordIngested"
+}
+
+func (e PersonalRecordIngested) PartitionKey() string {
 	return e.UserID
 }

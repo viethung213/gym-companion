@@ -36,7 +36,9 @@ Cần một quyết định kiến trúc cân bằng giữa tính phân tách ra
   1. Tầng Application của FitCoins định nghĩa Input Port `WalletRewarder`:
      ```go
      type WalletRewarder interface {
-         AwardCoins(ctx context.Context, cmd AwardCoinsCommand) (*AwardCoinsResult, error)
+         AwardCoins(ctx context.Context, in AwardCoinsInput) (*AwardCoinsOutput, error)
+         AwardCoinsBatch(ctx context.Context, userID string, items []AwardCoinsInput) ([]*AwardCoinsOutput, error)
+         HandleEvents(ctx context.Context, userID, activityDate string, occurredAt time.Time, events []event.Event) ([]event.Event, error)
      }
      ```
   2. **Luồng nội bộ cùng tiến trình**:

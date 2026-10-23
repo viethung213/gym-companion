@@ -93,7 +93,7 @@ func (r *GormUserStreakRepository) Save(ctx context.Context, userStreak *aggrega
 	db := GetDB(ctx, r.db)
 	err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}},
-		UpdateAll: true,
+		DoUpdates: clause.AssignmentColumns([]string{"current_streak", "longest_streak", "last_active_date", "updated_at"}),
 	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("save user_streak: %w", err)

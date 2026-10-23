@@ -37,7 +37,7 @@ flowchart TD
         DB_OUTBOX[(gamification.outbox)]
     end
 
-    IN_PROC -->|AwardCoins(txCtx)| PORT_REWARD --> CMD_EARN
+    IN_PROC -->|AwardCoinsBatch(txCtx)| PORT_REWARD --> CMD_EARN
     GRPC --> CMD_SPEND & CMD_ADMIN & QRY_BAL & QRY_TX
     CMD_EARN & CMD_SPEND & CMD_ADMIN -->|Mutate| AGG
     AGG -->|Create| ENTITY
@@ -135,7 +135,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_coin_ledger_daily_cap
 
 ## 4. Luồng Xử Lý Nghiệp Vụ (Sequence Diagrams)
 
-### 4.1. Luồng Thưởng Coin Đồng Bộ Trong Cùng Transaction (In-Process `WalletRewarder`)
+### 4.1. Luồng Thưởng Coin Theo Lô Qua In-Memory Domain Event Pipeline (`AwardCoinsBatch`)
 
 ```mermaid
 sequenceDiagram
@@ -145,28 +145,31 @@ sequenceDiagram
     participant Repo as GormUserWalletRepository
     participant DB as PostgreSQL (gamification)
 
-    Coord->>Handler: AwardCoins(txCtx, AwardCoinsInput)
-    Handler->>Repo: FindByIDForUpdate(txCtx, user_id)
+    Note over Coord: Bước 1-3: Streak, XP, Badges phát Domain Events trong RAM
+    Coord->>Handler: AwardCoinsBatch(txCtx, user_id, []AwardCoinsItem)
+    Handler->>Repo: FindByIDForUpdate(txCtx, user_id) (1 lần duy nhất cho cả lô)
     Repo->>DB: SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE
     DB-->>Repo: locked wallet row
     Repo-->>Handler: UserWallet Aggregate
 
-    Note over Handler,Repo: Kiểm tra Idempotency bên trong khóa FOR UPDATE (chống TOCTOU)
-    Handler->>Repo: FindLedgerEntryByIdempotencyKey(txCtx, user_id, key)
-    alt Đã tồn tại IdempotencyKey
-        Repo-->>Handler: existing CoinLedgerEntry
-        Handler-->>Coord: AwardCoinsOutput {Skipped: true, BalanceAfter: existing.BalanceAfter}
-    else Chưa tồn tại
-        Handler->>Handler: wallet.Award(...) (Kiểm tra O(1) Daily Cap trên Aggregate)
-        alt Đạt giới hạn ngày (ErrDailyCapReached)
-            Handler-->>Coord: AwardCoinsOutput {Skipped: true, BalanceAfter: wallet.Balance()}
-        else Hợp lệ
-            Handler->>Repo: Save(txCtx, wallet)
-            Handler->>Repo: SaveLedgerEntry(txCtx, entry)
-            Handler->>DB: WriteEvents(txCtx, "user_wallet", CoinsEarned)
-            Handler-->>Coord: AwardCoinsOutput {Skipped: false, BalanceAfter: newBalance}
+    loop Với mỗi AwardCoinsItem trong lô
+        Handler->>Handler: wallet.IsDailyCapReached(reason, activityDate) (O(1) RAM trước khi chạm DB)
+        alt Đạt giới hạn ngày (Daily Cap Reached)
+            Handler->>Handler: Bỏ qua ngay trong RAM (0 SQL query vào coin_ledger)
+        else Chưa đạt giới hạn ngày
+            Handler->>Repo: FindLedgerEntryByIdempotencyKey(txCtx, user_id, key)
+            alt Chưa tồn tại IdempotencyKey
+                Handler->>Handler: wallet.Award(...) (cộng dồn vào UserWallet trên RAM)
+            end
         end
     end
+
+    alt Có ít nhất 1 khoản thưởng hợp lệ (len(ledgerEntries) > 0)
+        Handler->>Repo: Save(txCtx, wallet) (1 câu UPDATE duy nhất)
+        Handler->>Repo: SaveLedgerEntries(txCtx, entries) (1 câu Batch INSERT duy nhất)
+        Handler->>DB: WriteEvents(txCtx, "user_wallet", []CoinsEarned) (1 lần ghi Outbox)
+    end
+    Handler-->>Coord: []AwardCoinsOutput
 ```
 
 ### 4.2. Luồng Chi Tiêu Coin (`SpendCoins` & Idempotent Replay)
@@ -231,14 +234,15 @@ internal/gamification/
 │   ├── entity/
 │   │   └── coin_ledger_entry.go           # Entity bản ghi sổ cái bất biến (Append-only)
 │   ├── event/
-│   │   └── events.go                      # Bổ sung CoinsEarned & CoinsSpent
+│   │   └── events.go                      # Bổ sung CoinsEarned, CoinsSpent & In-Memory Seed Events
 │   ├── repository/
 │   │   └── user_wallet_repository.go      # Output Port: UserWalletRepository
 │   └── vo/
 │       └── coin_transaction_reason.go     # Enum CoinTransactionReason & hằng số mức thưởng
 ├── application/
 │   ├── command/
-│   │   ├── award_coins.go                 # Hiện thực hóa WalletRewarder Port
+│   │   ├── award_coins.go                 # Hiện thực hóa WalletRewarder Port (AwardCoinsBatch & HandleEvents)
+│   │   ├── evaluate_badges.go             # Handler độc lập đánh giá & mở khóa huy hiệu từ []event.Event
 │   │   ├── spend_coins.go                 # Use Case trừ xu (Idempotent Replay)
 │   │   └── admin_adjust_coins.go          # Use Case điều chỉnh số dư bởi Admin
 │   ├── query/
@@ -247,13 +251,13 @@ internal/gamification/
 │   ├── port/
 │   │   └── wallet_rewarder.go             # Input Port thưởng xu đồng bộ trong tiến trình
 │   └── service/
-│       └── activity_ingestion_coordinator.go # Bước 4: Thưởng FitCoins cuối chu trình
+│       └── activity_ingestion_coordinator.go # Điều phối In-Memory Event Pipeline chung cho Workout, Nutrition, PR
 ├── infrastructure/
 │   ├── event/
-│   │   └── outbox_writer.go               # Ánh xạ CoinsEarned & CoinsSpent sang Protobuf
+│   │   └── outbox_writer.go               # Ánh xạ CoinsEarned & CoinsSpent sang Protobuf (Batch Outbox)
 │   └── persistence/
 │       ├── models.go                      # UserWalletModel & CoinLedgerModel
-│       └── user_wallet_repository.go      # GORM implementation với Fast-Path FOR UPDATE & Keyset Cursor
+│       └── user_wallet_repository.go      # GORM implementation với Fast-Path FOR UPDATE, Batch Insert & Keyset Cursor
 └── transport/
     └── grpc/
         └── handler.go                     # ConnectRPC Handlers: GetWallet, ListTransactions, SpendCoins, AdminAdjustCoins

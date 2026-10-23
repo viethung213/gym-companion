@@ -19,8 +19,7 @@ Tính năng **Tiền Tệ Ảo FitCoins & Sổ Cái Bất Biến (FitCoins & Imm
 - **System Administrator**:
   - Điều chỉnh số dư thủ công (cộng bù hoặc thu hồi có ghi chú kiểm toán): RPC `AdminAdjustCoins` (`POST /api/v1/gamification/admin/wallet/adjust`).
 - **In-Process Callers (Application Port `WalletRewarder`)**:
-  - `ActivityIngestionCoordinator`: Gọi trực tiếp `WalletRewarder.AwardCoins(txCtx, ...)` ở Bước 4 trong cùng transaction với Streak, XP và Badges.
-  - `ProcessNutritionActivityHandler` & `ProcessPersonalRecordHandler`: Gọi trực tiếp `WalletRewarder.AwardCoins(txCtx, ...)` khi xử lý sự kiện dinh dưỡng và PR.
+  - `ActivityIngestionCoordinator`: Gọi trực tiếp `WalletRewarder.HandleEvents(txCtx, ...)` (ủy quyền xuống `AwardCoinsBatch`) ở Bước 4 trong cùng transaction cho cả 3 luồng (`IngestWorkoutSession`, `IngestNutritionActivity`, `IngestPersonalRecord`).
 
 ---
 

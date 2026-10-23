@@ -125,6 +125,8 @@ func (h *Handler) GetXpHistory(
 	pageSize := int(req.Msg.PageSize)
 	if pageSize <= 0 {
 		pageSize = 20
+	} else if pageSize > 100 {
+		pageSize = 100
 	}
 	page := int(req.Msg.Page)
 	if page <= 0 {
@@ -206,6 +208,8 @@ func (h *Handler) GetStreakHistory(
 	limit := int(req.Msg.LimitDays)
 	if limit <= 0 {
 		limit = 30
+	} else if limit > 365 {
+		limit = 365
 	}
 
 	res, err := h.getStreakHistoryHandler.Handle(ctx, query.GetStreakHistoryQuery{
@@ -246,6 +250,8 @@ func (h *Handler) GetGlobalLeaderboard(
 	limit := int(req.Msg.Limit)
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 100 {
+		limit = 100
 	}
 
 	res, err := h.getGlobalLeaderboardHandler.Handle(ctx, query.GetGlobalLeaderboardQuery{
@@ -259,6 +265,10 @@ func (h *Handler) GetGlobalLeaderboard(
 
 	topEntries := make([]*gamificationv1message.LeaderboardEntry, 0, len(res.TopUsers))
 	for _, u := range res.TopUsers {
+		updatedAt := u.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = time.Now().UTC()
+		}
 		topEntries = append(topEntries, &gamificationv1message.LeaderboardEntry{
 			Rank:        int32(u.Rank),
 			UserId:      u.UserID,
@@ -266,12 +276,16 @@ func (h *Handler) GetGlobalLeaderboard(
 			AvatarUrl:   u.AvatarURL,
 			Xp:          u.Xp,
 			Level:       u.Level,
-			UpdatedAt:   timestamppb.Now(),
+			UpdatedAt:   timestamppb.New(updatedAt),
 		})
 	}
 
 	var myStanding *gamificationv1message.LeaderboardEntry
 	if res.MyEntry != nil {
+		updatedAt := res.MyEntry.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = time.Now().UTC()
+		}
 		myStanding = &gamificationv1message.LeaderboardEntry{
 			Rank:        int32(res.MyRank),
 			UserId:      res.MyEntry.UserID,
@@ -279,7 +293,7 @@ func (h *Handler) GetGlobalLeaderboard(
 			AvatarUrl:   res.MyEntry.AvatarURL,
 			Xp:          res.MyEntry.Xp,
 			Level:       res.MyEntry.Level,
-			UpdatedAt:   timestamppb.Now(),
+			UpdatedAt:   timestamppb.New(updatedAt),
 		}
 	}
 
@@ -496,6 +510,7 @@ func mapWalletDomainError(err error) error {
 	case errors.Is(err, aggregate.ErrInvalidCoinAmount),
 		errors.Is(err, aggregate.ErrInvalidTransactionReason),
 		errors.Is(err, aggregate.ErrEmptyIdempotencyKey),
+		errors.Is(err, aggregate.ErrInvalidReferenceID),
 		errors.Is(err, aggregate.ErrEmptyAdminID),
 		errors.Is(err, aggregate.ErrEmptyAdjustmentNote),
 		errors.Is(err, aggregate.ErrEmptyUserID),
