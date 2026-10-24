@@ -40,6 +40,9 @@ type SocialSummaryDTO struct {
 	FollowingCount int32
 	PostCount      int32
 	IsFollowing    bool
+	FullName       string
+	AvatarURL      string
+	Role           string
 }
 
 type UserSocialSummaryDTO struct {

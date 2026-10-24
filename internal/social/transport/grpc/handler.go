@@ -236,6 +236,9 @@ func (h *GRPCHandler) GetSocialSummary(
 		FollowingCount: res.FollowingCount,
 		PostCount:      res.PostCount,
 		IsFollowing:    res.IsFollowing,
+		FullName:       res.FullName,
+		AvatarUrl:      res.AvatarURL,
+		Role:           res.Role,
 	}), nil
 }
 

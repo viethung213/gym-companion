@@ -14,7 +14,7 @@ func TestGetSocialSummaryHandler(t *testing.T) {
 	feedItemRepo := &queryMockFeedItemRepo{items: []*aggregate.FeedItem{nil, nil}} // 2 items
 	userRepo := &mockUserSnapshotRepo{
 		users: map[string]*entity.UserSnapshot{
-			"u-target": entity.NewUserSnapshotWithCounts("u-target", "Target User", "", "user", 42, 17, time.Time{}),
+			"u-target": entity.NewUserSnapshotWithCounts("u-target", "Target User", "https://avatar.png", "user", 42, 17, time.Time{}),
 		},
 	}
 
@@ -28,7 +28,7 @@ func TestGetSocialSummaryHandler(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if res.FollowerCount != 42 || res.FollowingCount != 17 || res.PostCount != 2 || !res.IsFollowing {
+		if res.FollowerCount != 42 || res.FollowingCount != 17 || res.PostCount != 2 || !res.IsFollowing || res.FullName != "Target User" || res.AvatarURL != "https://avatar.png" || res.Role != "user" {
 			t.Errorf("unexpected summary result: %+v", res)
 		}
 	})

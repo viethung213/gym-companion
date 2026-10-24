@@ -52,5 +52,8 @@ func (h *GetSocialSummaryHandler) Handle(ctx context.Context, q GetSocialSummary
 		FollowingCount: userInfo.FollowingCount(),
 		PostCount:      feedCount,
 		IsFollowing:    isFollowing,
+		FullName:       userInfo.FullName(),
+		AvatarURL:      userInfo.AvatarURL(),
+		Role:           userInfo.Role(),
 	}, nil
 }
