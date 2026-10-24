@@ -13,16 +13,20 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/redis/go-redis/v9"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
+	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
 	workoutConfig "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/config"
 	workoutEvent "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/event"
 	workoutKafka "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
-	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
+	workoutRule "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/rule"
+	workoutStorage "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
+	workoutSync "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/sync"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
 	workoutConsumer "github.com/viethung213/gym-companion/internal/workout_execution/transport/consumer"
 	workoutGRPC "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
@@ -35,6 +39,7 @@ import (
 type ModuleDeps struct {
 	DB            *sql.DB
 	KafkaRegistry *sharedKafka.Registry
+	RedisClient   *redis.Client
 }
 
 // Initialize wires dependencies, registers gRPC services, and starts background workers.
@@ -72,7 +77,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	outboxWriter := workoutEvent.NewOutboxWriter(outboxRepo)
 
 	loadGuard := service.NewTrainingLoadGuard(sessionRepo)
-	storageProvider := storage.NewS3StorageProviderFromEnv()
+	storageProvider := workoutStorage.NewS3StorageProviderFromEnv()
 
 	// Initialize Command Handlers
 	startSessionHandler := command.NewStartWorkoutSessionHandler(sessionRepo, nil, outboxWriter, txManager)
@@ -97,6 +102,22 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	getMotionSpecStatsQuery := query.NewGetMotionSpecificationStatsQueryHandler(motionRepo)
 	getPresignedUploadURLQuery := query.NewGetPresignedUploadURLQueryHandler(storageProvider)
 
+	// Solo Match streaming dependencies (Redis-backed distributed live sync via ModuleDeps)
+	ruleProvider := workoutRule.NewCachedRuleProvider(motionRepo, storageProvider)
+
+	var liveSync port.SoloMatchLiveSyncPort
+	if deps.RedisClient != nil {
+		liveSync = workoutSync.NewRedisLiveSyncHub(deps.RedisClient, 2*time.Hour)
+	}
+	soloTrackingService := command.NewSoloTrackingService(
+		ruleProvider,
+		service.NewDefaultRuleEvaluator(),
+		liveSync,
+		outboxWriter,
+		sessionRepo,
+		txManager,
+	)
+
 	// Initialize gRPC Transport
 	grpcHandler := workoutGRPC.NewGRPCHandler(
 		startSessionHandler,
@@ -117,6 +138,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		getMotionSpecStatsQuery,
 		getPresignedUploadURLQuery,
 		patchMotionSpecAssetHandler,
+		soloTrackingService,
 	)
 
 	// Kafka Setup

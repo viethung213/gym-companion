@@ -126,6 +126,21 @@ service WorkoutExecutionService {
       get: "/api/v1/execution/history"
     };
   }
+
+  // Luồng stream thời gian thực phục vụ AI trọng tài form, đồng bộ điểm và chốt sự kiện Solo Match (Single Set)
+  rpc StreamSoloMatchTracking (stream contracts.core.workout_execution.v1.message.StreamSoloMatchTrackingRequest)
+      returns (stream contracts.core.workout_execution.v1.message.StreamSoloMatchTrackingResponse) {
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Luồng stream realtime phục vụ AI trọng tài form, đồng bộ điểm và chốt sự kiện Solo Match";
+      tags: "Workout Execution / Solo Match Streaming";
+      security: {
+        security_requirement: {
+          key: "BearerAuth";
+          value: {};
+        }
+      };
+    };
+  }
 }
 
 // Service dành riêng cho Admin tra cứu thông tin tập luyện của người dùng

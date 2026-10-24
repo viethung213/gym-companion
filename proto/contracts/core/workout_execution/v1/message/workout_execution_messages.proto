@@ -105,22 +105,6 @@ message SyncWorkoutLogsRequest {
 
 message SyncWorkoutLogsResponse {}
 
-message DialogueOption {
-  string text = 1;
-  string audio_url = 2;
-}
-
-message DialogueSeverities {
-  repeated DialogueOption severity_1 = 1;
-  repeated DialogueOption severity_2 = 2;
-}
-
-message DialogueEngineConfig {
-  string personality_id = 1;
-  map<string, float> cooldowns = 2;
-  map<string, DialogueSeverities> dialogue_map = 3;
-}
-
 message GetMotionSpecificationRequest {
   string exercise_id = 1;
   string coach_personality = 2;
@@ -286,5 +270,77 @@ message PatchMotionSpecificationAssetResponse {
   string file_url = 3;
   google.protobuf.Timestamp updated_at = 4;
 }
+
+enum SoloChallengeType {
+  SOLO_CHALLENGE_TYPE_UNSPECIFIED = 0;
+  SOLO_CHALLENGE_TYPE_REPS = 1;
+  SOLO_CHALLENGE_TYPE_DURATION = 2;
+}
+
+enum ParticipantStreamStatus {
+  PARTICIPANT_STREAM_STATUS_UNSPECIFIED = 0;
+  PARTICIPANT_STREAM_STATUS_ACTIVE = 1;
+  PARTICIPANT_STREAM_STATUS_SPECTATING = 2;
+  PARTICIPANT_STREAM_STATUS_COMPLETED = 3;
+  PARTICIPANT_STREAM_STATUS_WAITING = 4;
+}
+
+message SkeletonLandmark {
+  int32 landmark_index = 1;
+  float x = 2;
+  float y = 3;
+  float z = 4;
+  float visibility = 5;
+  float presence = 6;
+}
+
+message SoloTrackingConfig {
+  string match_id = 1;
+  string plan_id = 2;
+  string exercise_id = 3;
+  SoloChallengeType challenge_type = 4;
+  string camera_angle = 5;
+  int32 time_ceiling_seconds = 6;
+}
+
+message SoloTrackingFrame {
+  google.protobuf.Timestamp timestamp = 1;
+  repeated SkeletonLandmark landmarks = 2;
+  string camera_angle = 3;
+}
+
+message SoloTrackingAbort {
+  string reason = 1; // e.g. "USER_FORFEITED"
+}
+
+message SoloTrackingSubmit {
+  // Gửi khi người dùng bấm hoàn thành / nộp bài chủ động
+}
+
+message StreamSoloMatchTrackingRequest {
+  oneof payload {
+    SoloTrackingConfig config = 1; // Gửi 1 lần duy nhất khi mở kết nối stream
+    SoloTrackingFrame frame = 2;   // Gửi liên tục 15 - 20 FPS
+    SoloTrackingAbort abort = 3;   // Gửi khi người dùng bấm bỏ cuộc / đầu hàng
+    SoloTrackingSubmit submit = 4; // Gửi khi người dùng bấm hoàn thành / nộp bài
+  }
+}
+
+message StreamSoloMatchTrackingResponse {
+  int32 my_confirmed_value = 1;
+  float my_form_score = 2;
+  bool is_valid_form = 3;
+  ParticipantStreamStatus my_status = 4;
+  bool is_completed = 5;
+  int32 opponent_value = 6;
+  float opponent_form_score = 7;
+  ParticipantStreamStatus opponent_status = 8;
+  repeated string detected_errors = 9;
+  string audio_cue = 10;
+  int32 remaining_ceiling_seconds = 11;
+  bool match_ended = 12;
+  google.protobuf.Timestamp timestamp = 13;
+}
+
 
 

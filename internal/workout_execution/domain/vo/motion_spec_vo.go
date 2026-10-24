@@ -16,22 +16,3 @@ type RepCountingRules struct {
 type FormScoringRules struct {
 	PenaltyPerError float32
 }
-
-// DialogueOption defines a voice/text feedback line for AI coach.
-type DialogueOption struct {
-	Text     string
-	AudioURL string
-}
-
-// DialogueSeverities maps severity levels to dialogue options.
-type DialogueSeverities struct {
-	Severity1 []DialogueOption
-	Severity2 []DialogueOption
-}
-
-// DialogueEngineConfig holds audio feedback rules and cooldowns for a specific coach personality.
-type DialogueEngineConfig struct {
-	PersonalityID string
-	Cooldowns     map[string]float32
-	DialogueMap   map[string]DialogueSeverities
-}

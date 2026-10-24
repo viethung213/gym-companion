@@ -120,25 +120,4 @@ func TestMotionSpecVO(t *testing.T) {
 
 	}
 
-	dialogue := vo.DialogueEngineConfig{
-
-		PersonalityID: "coach1",
-
-		Cooldowns: map[string]float32{"ERR1": 5.0},
-
-		DialogueMap: map[string]vo.DialogueSeverities{
-
-			"ERR1": {
-
-				Severity1: []vo.DialogueOption{{Text: "Keep back straight", AudioURL: "http://audio"}},
-			},
-		},
-	}
-
-	if dialogue.PersonalityID != "coach1" || len(dialogue.DialogueMap["ERR1"].Severity1) != 1 {
-
-		t.Errorf("invalid DialogueEngineConfig struct")
-
-	}
-
 }

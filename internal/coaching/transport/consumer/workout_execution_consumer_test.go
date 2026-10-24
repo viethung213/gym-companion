@@ -218,3 +218,164 @@ func TestWorkoutSessionAbortedPayload_Unmarshal(t *testing.T) {
 		}
 	})
 }
+
+func TestSoloTrackingCompletedPayload_Unmarshal(t *testing.T) {
+	t.Run("camelCase protojson mapping", func(t *testing.T) {
+		raw := []byte(`{
+			"matchId": "match-101",
+			"userId": "user-101",
+			"exerciseId": "exercise_squat_01",
+			"challengeType": "REPS",
+			"confirmedValue": 25,
+			"averageFormScore": 88.5,
+			"totalDurationSeconds": 180,
+			"completedAt": "2026-10-22T08:00:00Z",
+			"planId": "plan-solo-999"
+		}`)
+
+		var p SoloTrackingCompletedPayload
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+
+		if got, want := p.PlanID, "plan-solo-999"; got != want {
+			t.Errorf("PlanID got %s, want %s", got, want)
+		}
+		if got, want := p.MatchID, "match-101"; got != want {
+			t.Errorf("MatchID got %s, want %s", got, want)
+		}
+		if got, want := p.UserID, "user-101"; got != want {
+			t.Errorf("UserID got %s, want %s", got, want)
+		}
+		if got, want := p.ExerciseID, "exercise_squat_01"; got != want {
+			t.Errorf("ExerciseID got %s, want %s", got, want)
+		}
+		if got, want := p.ChallengeType, "REPS"; got != want {
+			t.Errorf("ChallengeType got %s, want %s", got, want)
+		}
+		if got, want := p.ConfirmedValue, int32(25); got != want {
+			t.Errorf("ConfirmedValue got %d, want %d", got, want)
+		}
+		if got, want := p.AverageFormScore, float32(88.5); got != want {
+			t.Errorf("AverageFormScore got %f, want %f", got, want)
+		}
+		if got, want := p.TotalDurationSeconds, int32(180); got != want {
+			t.Errorf("TotalDurationSeconds got %d, want %d", got, want)
+		}
+		if got, want := p.CompletedAt, "2026-10-22T08:00:00Z"; got != want {
+			t.Errorf("CompletedAt got %s, want %s", got, want)
+		}
+	})
+
+	t.Run("snake_case fallback mapping", func(t *testing.T) {
+		raw := []byte(`{
+			"match_id": "match-202",
+			"user_id": "user-202",
+			"exercise_id": "exercise_plank_01",
+			"challenge_type": "DURATION",
+			"confirmed_value": 45,
+			"average_form_score": 91.0,
+			"total_duration_seconds": 45,
+			"completed_at": "2026-10-22T08:05:00Z",
+			"plan_id": "plan-solo-888"
+		}`)
+
+		var p SoloTrackingCompletedPayload
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+
+		if got, want := p.PlanID, "plan-solo-888"; got != want {
+			t.Errorf("PlanID got %s, want %s", got, want)
+		}
+		if got, want := p.MatchID, "match-202"; got != want {
+			t.Errorf("MatchID got %s, want %s", got, want)
+		}
+		if got, want := p.ConfirmedValue, int32(45); got != want {
+			t.Errorf("ConfirmedValue got %d, want %d", got, want)
+		}
+		if got, want := p.AverageFormScore, float32(91.0); got != want {
+			t.Errorf("AverageFormScore got %f, want %f", got, want)
+		}
+	})
+}
+
+func TestConsumer_SoloTrackingCompleted_EmptyPlanId_Ignored(t *testing.T) {
+	c := NewWorkoutExecutionConsumer(nil, nil, nil, &stubOutbox{})
+
+	raw := makeCE(t, "evt-solo-1", "contracts.core.workout_execution.v1.soloTrackingCompleted",
+		map[string]any{"planId": "", "matchId": "match-101"})
+
+	if err := c.HandleMessage(context.Background(), raw); err != nil {
+		t.Errorf("expected nil when planId is empty, got %v", err)
+	}
+}
+
+func TestSoloTrackingAbortedPayload_Unmarshal(t *testing.T) {
+	t.Run("camelCase protojson mapping", func(t *testing.T) {
+		raw := []byte(`{
+			"matchId": "match-abort-101",
+			"userId": "user-abort-101",
+			"exerciseId": "exercise_squat_01",
+			"reason": "USER_FORFEITED",
+			"abortedAt": "2026-10-22T08:10:00Z",
+			"planId": "plan-abort-999",
+			"confirmedValue": 12,
+			"totalDurationSeconds": 45
+		}`)
+
+		var p SoloTrackingAbortedPayload
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+
+		if got, want := p.PlanID, "plan-abort-999"; got != want {
+			t.Errorf("PlanID got %s, want %s", got, want)
+		}
+		if got, want := p.MatchID, "match-abort-101"; got != want {
+			t.Errorf("MatchID got %s, want %s", got, want)
+		}
+		if got, want := p.Reason, "USER_FORFEITED"; got != want {
+			t.Errorf("Reason got %s, want %s", got, want)
+		}
+		if got, want := p.ConfirmedValue, int32(12); got != want {
+			t.Errorf("ConfirmedValue got %d, want %d", got, want)
+		}
+	})
+
+	t.Run("snake_case fallback mapping", func(t *testing.T) {
+		raw := []byte(`{
+			"match_id": "match-abort-202",
+			"user_id": "user-abort-202",
+			"exercise_id": "exercise_plank_01",
+			"reason": "USER_DISCONNECTED",
+			"aborted_at": "2026-10-22T08:15:00Z",
+			"plan_id": "plan-abort-888",
+			"confirmed_value": 20,
+			"total_duration_seconds": 25
+		}`)
+
+		var p SoloTrackingAbortedPayload
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+
+		if got, want := p.PlanID, "plan-abort-888"; got != want {
+			t.Errorf("PlanID got %s, want %s", got, want)
+		}
+		if got, want := p.Reason, "USER_DISCONNECTED"; got != want {
+			t.Errorf("Reason got %s, want %s", got, want)
+		}
+	})
+}
+
+func TestConsumer_SoloTrackingAborted_EmptyPlanId_Ignored(t *testing.T) {
+	c := NewWorkoutExecutionConsumer(nil, nil, nil, &stubOutbox{})
+
+	raw := makeCE(t, "evt-solo-abort-1", "contracts.core.workout_execution.v1.soloTrackingAborted",
+		map[string]any{"planId": "", "matchId": "match-abort-101"})
+
+	if err := c.HandleMessage(context.Background(), raw); err != nil {
+		t.Errorf("expected nil when planId is empty, got %v", err)
+	}
+}

@@ -112,3 +112,38 @@ type WorkoutSessionShared struct {
 func (e *WorkoutSessionShared) EventName() string {
 	return "contracts.core.workout_execution.v1.workoutSessionShared"
 }
+
+// SoloTrackingCompleted is published when a solo match tracking session ends.
+type SoloTrackingCompleted struct {
+	MatchID              string
+	UserID               string
+	ExerciseID           string
+	ChallengeType        vo.ChallengeType
+	ConfirmedValue       int32
+	AverageFormScore     float32
+	TotalDurationSeconds int32
+	CompletedAt          time.Time
+	PlanID               string
+}
+
+// EventName returns the CloudEvent type for SoloTrackingCompleted.
+func (e *SoloTrackingCompleted) EventName() string {
+	return "contracts.core.workout_execution.v1.soloTrackingCompleted"
+}
+
+// SoloTrackingAborted is published when a solo challenge session is aborted or forfeited midway.
+type SoloTrackingAborted struct {
+	MatchID              string
+	UserID               string
+	ExerciseID           string
+	Reason               string
+	AbortedAt            time.Time
+	PlanID               string
+	ConfirmedValue       int32
+	TotalDurationSeconds int32
+}
+
+// EventName returns the CloudEvent type for SoloTrackingAborted.
+func (e *SoloTrackingAborted) EventName() string {
+	return "contracts.core.workout_execution.v1.soloTrackingAborted"
+}

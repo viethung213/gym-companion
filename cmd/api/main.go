@@ -10,8 +10,10 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/coaching"
@@ -70,6 +72,27 @@ func run() error {
 	// Initialize Kafka Registry
 	kafkaRegistry := sharedKafka.GetRegistry()
 	defer kafkaRegistry.CloseAll()
+
+	// Initialize Redis Client for real-time services
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	if pingErr := redisClient.Ping(pingCtx).Err(); pingErr != nil {
+		log.Printf("Warning: Redis at %s is unreachable: %v. Live sync will operate in standalone mode.\n", redisAddr, pingErr)
+	} else {
+		log.Println("Initialized Redis Client successfully at", redisAddr)
+	}
+	pingCancel()
+	defer func() {
+		if closeErr := redisClient.Close(); closeErr != nil {
+			log.Printf("Warning: failed to close Redis client: %v\n", closeErr)
+		}
+	}()
 
 	db, err := dbRegistry.GetPool("auth")
 	if err != nil {
@@ -131,6 +154,7 @@ func run() error {
 	workoutServer, shutdownWorkout, err := workoutexecution.Initialize(ctx, workoutexecution.ModuleDeps{
 		DB:            workoutDB,
 		KafkaRegistry: kafkaRegistry,
+		RedisClient:   redisClient,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize workout execution module: %w", err)

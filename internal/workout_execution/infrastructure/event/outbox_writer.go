@@ -153,6 +153,18 @@ func extractUserID(ev interface{}) string {
 		if e != nil {
 			return e.UserID
 		}
+	case domainEvent.SoloTrackingCompleted:
+		return e.UserID
+	case *domainEvent.SoloTrackingCompleted:
+		if e != nil {
+			return e.UserID
+		}
+	case domainEvent.SoloTrackingAborted:
+		return e.UserID
+	case *domainEvent.SoloTrackingAborted:
+		if e != nil {
+			return e.UserID
+		}
 	}
 
 	v := reflect.ValueOf(ev)
@@ -244,8 +256,49 @@ func mapToProtoEvent(ev interface{}) proto.Message {
 			return nil
 		}
 		return mapWorkoutSessionSharedToProto(e)
+	case domainEvent.SoloTrackingCompleted:
+		return mapSoloTrackingCompletedToProto(&e)
+	case *domainEvent.SoloTrackingCompleted:
+		if e == nil {
+			return nil
+		}
+		return mapSoloTrackingCompletedToProto(e)
+	case domainEvent.SoloTrackingAborted:
+		return mapSoloTrackingAbortedToProto(&e)
+	case *domainEvent.SoloTrackingAborted:
+		if e == nil {
+			return nil
+		}
+		return mapSoloTrackingAbortedToProto(e)
 	default:
 		return nil
+	}
+}
+
+func mapSoloTrackingCompletedToProto(e *domainEvent.SoloTrackingCompleted) *workoutexecutionv1event.SoloTrackingCompleted {
+	return &workoutexecutionv1event.SoloTrackingCompleted{
+		MatchId:              e.MatchID,
+		UserId:               e.UserID,
+		ExerciseId:           e.ExerciseID,
+		ChallengeType:        e.ChallengeType.String(),
+		ConfirmedValue:       e.ConfirmedValue,
+		AverageFormScore:     e.AverageFormScore,
+		TotalDurationSeconds: e.TotalDurationSeconds,
+		CompletedAt:          timestamppb.New(e.CompletedAt),
+		PlanId:               e.PlanID,
+	}
+}
+
+func mapSoloTrackingAbortedToProto(e *domainEvent.SoloTrackingAborted) *workoutexecutionv1event.SoloTrackingAborted {
+	return &workoutexecutionv1event.SoloTrackingAborted{
+		MatchId:              e.MatchID,
+		UserId:               e.UserID,
+		ExerciseId:           e.ExerciseID,
+		Reason:               e.Reason,
+		AbortedAt:            timestamppb.New(e.AbortedAt),
+		PlanId:               e.PlanID,
+		ConfirmedValue:       e.ConfirmedValue,
+		TotalDurationSeconds: e.TotalDurationSeconds,
 	}
 }
 

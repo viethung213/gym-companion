@@ -179,6 +179,194 @@ func (p *WorkoutSessionAbortedPayload) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// SoloTrackingCompletedPayload mirrors the proto CloudEvent data field for solo challenges.
+// It flexibly decodes both camelCase (protojson) and snake_case JSON keys.
+type SoloTrackingCompletedPayload struct {
+	MatchID              string  `json:"matchId"`
+	UserID               string  `json:"userId"`
+	ExerciseID           string  `json:"exerciseId"`
+	ChallengeType        string  `json:"challengeType"`
+	ConfirmedValue       int32   `json:"confirmedValue"`
+	AverageFormScore     float32 `json:"averageFormScore"`
+	TotalDurationSeconds int32   `json:"totalDurationSeconds"`
+	CompletedAt          string  `json:"completedAt"` // RFC3339
+	PlanID               string  `json:"planId"`
+}
+
+func (p *SoloTrackingCompletedPayload) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		// camelCase (protojson)
+		MatchIDCamel              string   `json:"matchId"`
+		UserIDCamel               string   `json:"userId"`
+		ExerciseIDCamel           string   `json:"exerciseId"`
+		ChallengeTypeCamel        string   `json:"challengeType"`
+		ConfirmedValueCamel       int32    `json:"confirmedValue"`
+		AverageFormScoreCamel     *float32 `json:"averageFormScore"`
+		TotalDurationSecondsCamel int32    `json:"totalDurationSeconds"`
+		CompletedAtCamel          string   `json:"completedAt"`
+		PlanIDCamel               string   `json:"planId"`
+
+		// snake_case
+		MatchIDSnake              string   `json:"match_id"`
+		UserIDSnake               string   `json:"user_id"`
+		ExerciseIDSnake           string   `json:"exercise_id"`
+		ChallengeTypeSnake        string   `json:"challenge_type"`
+		ConfirmedValueSnake       int32    `json:"confirmed_value"`
+		AverageFormScoreSnake     *float32 `json:"average_form_score"`
+		TotalDurationSecondsSnake int32    `json:"total_duration_seconds"`
+		CompletedAtSnake          string   `json:"completed_at"`
+		PlanIDSnake               string   `json:"plan_id"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if raw.PlanIDCamel != "" {
+		p.PlanID = raw.PlanIDCamel
+	} else {
+		p.PlanID = raw.PlanIDSnake
+	}
+
+	if raw.MatchIDCamel != "" {
+		p.MatchID = raw.MatchIDCamel
+	} else {
+		p.MatchID = raw.MatchIDSnake
+	}
+
+	if raw.UserIDCamel != "" {
+		p.UserID = raw.UserIDCamel
+	} else {
+		p.UserID = raw.UserIDSnake
+	}
+
+	if raw.ExerciseIDCamel != "" {
+		p.ExerciseID = raw.ExerciseIDCamel
+	} else {
+		p.ExerciseID = raw.ExerciseIDSnake
+	}
+
+	if raw.ChallengeTypeCamel != "" {
+		p.ChallengeType = raw.ChallengeTypeCamel
+	} else {
+		p.ChallengeType = raw.ChallengeTypeSnake
+	}
+
+	if raw.ConfirmedValueCamel != 0 {
+		p.ConfirmedValue = raw.ConfirmedValueCamel
+	} else {
+		p.ConfirmedValue = raw.ConfirmedValueSnake
+	}
+
+	if raw.AverageFormScoreCamel != nil {
+		p.AverageFormScore = *raw.AverageFormScoreCamel
+	} else if raw.AverageFormScoreSnake != nil {
+		p.AverageFormScore = *raw.AverageFormScoreSnake
+	}
+
+	if raw.TotalDurationSecondsCamel != 0 {
+		p.TotalDurationSeconds = raw.TotalDurationSecondsCamel
+	} else {
+		p.TotalDurationSeconds = raw.TotalDurationSecondsSnake
+	}
+
+	if raw.CompletedAtCamel != "" {
+		p.CompletedAt = raw.CompletedAtCamel
+	} else {
+		p.CompletedAt = raw.CompletedAtSnake
+	}
+
+	return nil
+}
+
+// SoloTrackingAbortedPayload mirrors the proto CloudEvent data field for aborted solo challenges.
+// It flexibly decodes both camelCase (protojson) and snake_case JSON keys.
+type SoloTrackingAbortedPayload struct {
+	MatchID              string `json:"matchId"`
+	UserID               string `json:"userId"`
+	ExerciseID           string `json:"exerciseId"`
+	Reason               string `json:"reason"`
+	AbortedAt            string `json:"abortedAt"` // RFC3339
+	PlanID               string `json:"planId"`
+	ConfirmedValue       int32  `json:"confirmedValue"`
+	TotalDurationSeconds int32  `json:"totalDurationSeconds"`
+}
+
+func (p *SoloTrackingAbortedPayload) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		// camelCase (protojson)
+		MatchIDCamel              string `json:"matchId"`
+		UserIDCamel               string `json:"userId"`
+		ExerciseIDCamel           string `json:"exerciseId"`
+		AbortedAtCamel            string `json:"abortedAt"`
+		PlanIDCamel               string `json:"planId"`
+		ConfirmedValueCamel       int32  `json:"confirmedValue"`
+		TotalDurationSecondsCamel int32  `json:"totalDurationSeconds"`
+
+		// snake_case
+		MatchIDSnake              string `json:"match_id"`
+		UserIDSnake               string `json:"user_id"`
+		ExerciseIDSnake           string `json:"exercise_id"`
+		AbortedAtSnake            string `json:"aborted_at"`
+		PlanIDSnake               string `json:"plan_id"`
+		ConfirmedValueSnake       int32  `json:"confirmed_value"`
+		TotalDurationSecondsSnake int32  `json:"total_duration_seconds"`
+
+		// Shared field
+		Reason string `json:"reason"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if raw.PlanIDCamel != "" {
+		p.PlanID = raw.PlanIDCamel
+	} else {
+		p.PlanID = raw.PlanIDSnake
+	}
+
+	if raw.MatchIDCamel != "" {
+		p.MatchID = raw.MatchIDCamel
+	} else {
+		p.MatchID = raw.MatchIDSnake
+	}
+
+	if raw.UserIDCamel != "" {
+		p.UserID = raw.UserIDCamel
+	} else {
+		p.UserID = raw.UserIDSnake
+	}
+
+	if raw.ExerciseIDCamel != "" {
+		p.ExerciseID = raw.ExerciseIDCamel
+	} else {
+		p.ExerciseID = raw.ExerciseIDSnake
+	}
+
+	p.Reason = raw.Reason
+
+	if raw.AbortedAtCamel != "" {
+		p.AbortedAt = raw.AbortedAtCamel
+	} else {
+		p.AbortedAt = raw.AbortedAtSnake
+	}
+
+	if raw.ConfirmedValueCamel != 0 {
+		p.ConfirmedValue = raw.ConfirmedValueCamel
+	} else {
+		p.ConfirmedValue = raw.ConfirmedValueSnake
+	}
+
+	if raw.TotalDurationSecondsCamel != 0 {
+		p.TotalDurationSeconds = raw.TotalDurationSecondsCamel
+	} else {
+		p.TotalDurationSeconds = raw.TotalDurationSecondsSnake
+	}
+
+	return nil
+}
+
 // WorkoutExecutionConsumer routes WorkoutSessionCompleted/Aborted events to
 // the appropriate command handler.
 type WorkoutExecutionConsumer struct {
@@ -288,6 +476,14 @@ func (c *WorkoutExecutionConsumer) HandleMessage(ctx context.Context, rawValue [
 		"contracts.core.workout_execution.v1.event.WorkoutSessionAborted":
 		return c.handleAborted(ctx, env.Data)
 
+	case "contracts.core.workout_execution.v1.soloTrackingCompleted",
+		"contracts.core.workout_execution.v1.event.SoloTrackingCompleted":
+		return c.handleSoloCompleted(ctx, env.Data)
+
+	case "contracts.core.workout_execution.v1.soloTrackingAborted",
+		"contracts.core.workout_execution.v1.event.SoloTrackingAborted":
+		return c.handleSoloAborted(ctx, env.Data)
+
 	default:
 		log.Printf("[Coaching] Ignoring unknown event type: %s", env.Type)
 		return nil
@@ -340,6 +536,58 @@ func (c *WorkoutExecutionConsumer) handleAborted(ctx context.Context, data []byt
 
 	if errors.Is(err, roadmap.ErrSessionNotFound) {
 		log.Printf("[Coaching] WorkoutSessionAborted references unknown plan_id=%s; ignoring", p.PlanID)
+		return nil
+	}
+
+	return err
+}
+
+func (c *WorkoutExecutionConsumer) handleSoloCompleted(ctx context.Context, data []byte) error {
+	var p SoloTrackingCompletedPayload
+
+	if err := json.Unmarshal(data, &p); err != nil {
+		return fmt.Errorf("decode SoloTrackingCompleted: %w", err)
+	}
+
+	if p.PlanID == "" {
+		log.Printf("[Coaching] SoloTrackingCompleted missing plan_id; match=%s ignored", p.MatchID)
+		return nil
+	}
+
+	_, err := c.complete.Handle(ctx, command.CompleteSessionCommand{
+		SessionPlanID:       p.PlanID,
+		TotalActualSets:     1,
+		TotalPrescribedSets: 0,
+		AverageActualRPE:    8.0,
+		CompletedAt:         p.CompletedAt,
+	})
+
+	if errors.Is(err, roadmap.ErrSessionNotFound) {
+		log.Printf("[Coaching] SoloTrackingCompleted references unknown plan_id=%s; ignoring", p.PlanID)
+		return nil
+	}
+
+	return err
+}
+
+func (c *WorkoutExecutionConsumer) handleSoloAborted(ctx context.Context, data []byte) error {
+	var p SoloTrackingAbortedPayload
+
+	if err := json.Unmarshal(data, &p); err != nil {
+		return fmt.Errorf("decode SoloTrackingAborted: %w", err)
+	}
+
+	if p.PlanID == "" {
+		return nil
+	}
+
+	err := c.abort.Handle(ctx, command.AbortSessionCommand{
+		SessionPlanID: p.PlanID,
+		Reason:        p.Reason,
+	})
+
+	if errors.Is(err, roadmap.ErrSessionNotFound) {
+		log.Printf("[Coaching] SoloTrackingAborted references unknown plan_id=%s; ignoring", p.PlanID)
 		return nil
 	}
 

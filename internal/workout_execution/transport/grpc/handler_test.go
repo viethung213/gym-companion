@@ -192,6 +192,7 @@ func TestGRPCHandler(t *testing.T) {
 		query.NewGetMotionSpecificationStatsQueryHandler(motionRepo),
 		query.NewGetPresignedUploadURLQueryHandler(&mockStorageProvider{}),
 		command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
+		nil,
 	)
 
 	t.Run("StartWorkoutSession error and success", func(t *testing.T) {
@@ -612,6 +613,7 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 				query.NewGetMotionSpecificationStatsQueryHandler(motionRepo),
 				query.NewGetPresignedUploadURLQueryHandler(&mockStorageProvider{}),
 				command.NewPatchMotionSpecificationAssetHandler(motionRepo, &mockStorageProvider{}, nil, tx),
+				nil,
 			)
 
 			ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
