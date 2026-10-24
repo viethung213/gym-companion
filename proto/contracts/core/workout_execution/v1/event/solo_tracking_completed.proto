@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package contracts.core.workout_execution.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
+
+message SoloTrackingCompleted {
+  string match_id = 1;
+  string plan_id = 2;
+  string user_id = 3;
+  string exercise_id = 4;
+  string challenge_type = 5;
+  int32 confirmed_value = 6;
+  float average_form_score = 7;
+  int32 total_duration_seconds = 8;
+  google.protobuf.Timestamp completed_at = 9;
+}

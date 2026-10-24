@@ -9,6 +9,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/event"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	infraEvent "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/event"
 )
 
@@ -267,22 +268,106 @@ func TestOutboxWriter(t *testing.T) {
 		}
 	})
 
-	t.Run("WriteEvents repo save error", func(t *testing.T) {
-
-		repo := &mockOutboxRepo{saveErr: errors.New("db error")}
-
+	t.Run("WriteEvents with SoloTrackingCompleted", func(t *testing.T) {
+		repo := &mockOutboxRepo{}
 		writer := infraEvent.NewOutboxWriter(repo)
 
-		ev := event.WorkoutSessionStarted{SessionID: "sess-1"}
-
-		err := writer.WriteEvents(context.Background(), "WorkoutSession", "sess-1", []interface{}{ev})
-
-		if err == nil {
-
-			t.Fatal("got nil, want error")
-
+		ev := &event.SoloTrackingCompleted{
+			MatchID:              "match-123",
+			UserID:               "user-456",
+			ExerciseID:           "plank-01",
+			ChallengeType:        vo.ChallengeTypeDuration,
+			ConfirmedValue:       35,
+			AverageFormScore:     94.5,
+			TotalDurationSeconds: 35,
+			CompletedAt:          time.Now().UTC(),
 		}
 
+		err := writer.WriteEvents(context.Background(), "SoloMatch", "match-123", []interface{}{ev})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if repo.savedRecord == nil {
+			t.Fatal("expected record to be saved")
+		}
+		if repo.savedRecord.PartitionKey != "user-456" {
+			t.Errorf("got partition key %s, want user-456", repo.savedRecord.PartitionKey)
+		}
+		if repo.savedRecord.EventType != "contracts.core.workout_execution.v1.soloTrackingCompleted" {
+			t.Errorf("got event type %s", repo.savedRecord.EventType)
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data map, got %T", envelope["data"])
+		}
+		if dataMap["matchId"] != "match-123" || dataMap["userId"] != "user-456" {
+			t.Errorf("data payload mismatch: %v", dataMap)
+		}
+		if dataMap["confirmedValue"] != float64(35) {
+			t.Errorf("expected confirmedValue 35, got %v", dataMap["confirmedValue"])
+		}
 	})
 
+	t.Run("WriteEvents with SoloTrackingAborted maps fields", func(t *testing.T) {
+		repo := &mockOutboxRepo{}
+		writer := infraEvent.NewOutboxWriter(repo)
+		ev := &event.SoloTrackingAborted{
+			MatchID:              "match-abort-1",
+			UserID:               "user-abort-2",
+			ExerciseID:           "exercise_plank_01",
+			Reason:               "USER_FORFEITED",
+			AbortedAt:            time.Now().UTC(),
+			PlanID:               "plan-abort-99",
+			ConfirmedValue:       10,
+			TotalDurationSeconds: 10,
+		}
+
+		if err := writer.WriteEvents(context.Background(), "SoloMatch", "match-abort-1", []interface{}{ev}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if repo.savedRecord == nil {
+			t.Fatal("expected record to be saved")
+		}
+		if repo.savedRecord.PartitionKey != "user-abort-2" {
+			t.Errorf("got partition key %s, want user-abort-2", repo.savedRecord.PartitionKey)
+		}
+		if repo.savedRecord.EventType != "contracts.core.workout_execution.v1.soloTrackingAborted" {
+			t.Errorf("got event type %s", repo.savedRecord.EventType)
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(repo.savedRecord.Payload, &envelope); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		dataMap, ok := envelope["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data map, got %T", envelope["data"])
+		}
+		if dataMap["matchId"] != "match-abort-1" || dataMap["userId"] != "user-abort-2" {
+			t.Errorf("data payload mismatch: %v", dataMap)
+		}
+		if dataMap["reason"] != "USER_FORFEITED" {
+			t.Errorf("expected reason USER_FORFEITED, got %v", dataMap["reason"])
+		}
+		if dataMap["planId"] != "plan-abort-99" {
+			t.Errorf("expected planId plan-abort-99, got %v", dataMap["planId"])
+		}
+	})
+
+	t.Run("WriteEvents repo save error", func(t *testing.T) {
+		repo := &mockOutboxRepo{saveErr: errors.New("db error")}
+		writer := infraEvent.NewOutboxWriter(repo)
+		ev := event.WorkoutSessionStarted{SessionID: "sess-1"}
+		err := writer.WriteEvents(context.Background(), "WorkoutSession", "sess-1", []interface{}{ev})
+		if err == nil {
+			t.Fatal("got nil, want error")
+		}
+	})
 }

@@ -3,7 +3,11 @@ package grpc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -15,6 +19,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,6 +48,7 @@ type GRPCHandler struct {
 	getMotionSpecStatsQuery      *query.GetMotionSpecificationStatsQueryHandler
 	getPresignedUploadURLQuery   *query.GetPresignedUploadURLQueryHandler
 	patchMotionSpecAssetHandler  *command.PatchMotionSpecificationAssetHandler
+	soloTrackingService          *command.SoloTrackingService
 }
 
 var _ workoutexecutionv1service.WorkoutExecutionServiceServer = (*GRPCHandler)(nil)
@@ -68,6 +74,7 @@ func NewGRPCHandler(
 	getMotionSpecStatsQuery *query.GetMotionSpecificationStatsQueryHandler,
 	getPresignedUploadURLQuery *query.GetPresignedUploadURLQueryHandler,
 	patchMotionSpecAssetHandler *command.PatchMotionSpecificationAssetHandler,
+	soloTrackingService *command.SoloTrackingService,
 ) *GRPCHandler {
 	return &GRPCHandler{
 		startSessionHandler:          startSessionHandler,
@@ -88,6 +95,7 @@ func NewGRPCHandler(
 		getMotionSpecStatsQuery:      getMotionSpecStatsQuery,
 		getPresignedUploadURLQuery:   getPresignedUploadURLQuery,
 		patchMotionSpecAssetHandler:  patchMotionSpecAssetHandler,
+		soloTrackingService:          soloTrackingService,
 	}
 }
 
@@ -681,30 +689,6 @@ func (h *GRPCHandler) GetMotionSpecificationStats(ctx context.Context, req *work
 	}, nil
 }
 
-func mapProtoToDialogueEngine(cfg *workoutexecutionv1message.DialogueEngineConfig) vo.DialogueEngineConfig {
-	if cfg == nil {
-		return vo.DialogueEngineConfig{}
-	}
-	dMap := make(map[string]vo.DialogueSeverities)
-	for errKey, sevs := range cfg.GetDialogueMap() {
-		var s1, s2 []vo.DialogueOption
-		if sevs != nil {
-			for _, opt := range sevs.GetSeverity_1() {
-				s1 = append(s1, vo.DialogueOption{Text: opt.GetText(), AudioURL: opt.GetAudioUrl()})
-			}
-			for _, opt := range sevs.GetSeverity_2() {
-				s2 = append(s2, vo.DialogueOption{Text: opt.GetText(), AudioURL: opt.GetAudioUrl()})
-			}
-		}
-		dMap[errKey] = vo.DialogueSeverities{Severity1: s1, Severity2: s2}
-	}
-	return vo.DialogueEngineConfig{
-		PersonalityID: cfg.GetPersonalityId(),
-		Cooldowns:     cfg.GetCooldowns(),
-		DialogueMap:   dMap,
-	}
-}
-
 // parseTimestampOrNow parses an RFC3339 string into a Protobuf Timestamp, defaulting to Now() if empty or invalid.
 func parseTimestampOrNow(timeStr string) *timestamppb.Timestamp {
 	if timeStr != "" {
@@ -753,6 +737,370 @@ func toGRPCError(msg string, err error) error {
 	// 500 Internal — infrastructure / unknown errors
 	default:
 		return status.Errorf(codes.Internal, "%s: %v", msg, err)
+	}
+}
+
+// StreamSoloMatchTracking handles bi-directional gRPC streaming for solo challenge tracking.
+func (h *GRPCHandler) StreamSoloMatchTracking(
+	stream workoutexecutionv1service.WorkoutExecutionService_StreamSoloMatchTrackingServer,
+) error {
+	ctx := stream.Context()
+	userID, err := extractUserID(ctx)
+	if err != nil || userID == "" {
+		return status.Errorf(codes.Unauthenticated, "unauthenticated stream: %v", err)
+	}
+
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+
+	var (
+		session       *service.SoloRefereeSession
+		rule          *vo.ExerciseMotionRule
+		matchID       string
+		exerciseID    string
+		planID        string
+		cameraAngle   string
+		lastTimestamp time.Time
+		sendMu        sync.Mutex
+		subCancel     context.CancelFunc
+	)
+
+	safeSend := func(resp *workoutexecutionv1message.StreamSoloMatchTrackingResponse) error {
+		sendMu.Lock()
+		defer sendMu.Unlock()
+		return stream.Send(resp)
+	}
+
+	defer func() {
+		cancelStream()
+		if subCancel != nil {
+			subCancel()
+		}
+		if session != nil && h.soloTrackingService != nil {
+			cleanCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if finErr := h.soloTrackingService.FinalizeSession(
+				cleanCtx, session, matchID, userID, exerciseID, planID,
+			); finErr != nil {
+				slog.WarnContext(cleanCtx, "failed to finalize solo session on stream exit",
+					slog.String("match_id", matchID),
+					slog.String("user_id", userID),
+					slog.Any("err", finErr),
+				)
+			}
+		}
+	}()
+
+	type recvResult struct {
+		req *workoutexecutionv1message.StreamSoloMatchTrackingRequest
+		err error
+	}
+	recvChan := make(chan recvResult)
+
+	go func() {
+		for {
+			req, recvErr := stream.Recv()
+			select {
+			case <-streamCtx.Done():
+				return
+			case recvChan <- recvResult{req: req, err: recvErr}:
+				if recvErr != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	for {
+		var req *workoutexecutionv1message.StreamSoloMatchTrackingRequest
+		select {
+		case <-streamCtx.Done():
+			return nil
+		case res := <-recvChan:
+			if res.err != nil {
+				if errors.Is(res.err, io.EOF) {
+					return nil
+				}
+				return res.err
+			}
+			req = res.req
+		}
+
+		switch p := req.GetPayload().(type) {
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config:
+			cfg := p.Config
+			if cfg != nil && session == nil {
+				matchID = cfg.MatchId
+				exerciseID = cfg.ExerciseId
+				challengeType := toDomainChallengeType(cfg.ChallengeType)
+				planID = strings.TrimSpace(cfg.PlanId)
+				if planID == "" {
+					return status.Errorf(codes.InvalidArgument, "plan_id is required")
+				}
+				ceilingSec := cfg.TimeCeilingSeconds
+				cameraAngle = strings.ToLower(strings.TrimSpace(cfg.CameraAngle))
+				if h.soloTrackingService != nil {
+					sess, r, initErr := h.soloTrackingService.InitializeSession(
+						streamCtx, matchID, userID, exerciseID, challengeType, ceilingSec, planID,
+					)
+					if initErr != nil {
+						if errors.Is(initErr, apperror.ErrMatchRoomFull) {
+							return status.Errorf(codes.PermissionDenied, "%v", initErr)
+						}
+						if errors.Is(initErr, apperror.ErrMatchExerciseMismatch) {
+							return status.Errorf(codes.InvalidArgument, "%v", initErr)
+						}
+						if errors.Is(initErr, apperror.ErrInvalidInput) {
+							return status.Errorf(codes.InvalidArgument, "%v", initErr)
+						}
+						return status.Errorf(
+							codes.FailedPrecondition,
+							"exercise motion rule not configured: %v",
+							initErr,
+						)
+					}
+					session = sess
+					if cameraAngle != "" {
+						session.SetCameraAngle(cameraAngle)
+					}
+					rule = r
+
+					// Start asynchronous opponent update listener for real-time spectating and match-end sync
+					subCtx, cancel := context.WithCancel(streamCtx)
+					subCancel = cancel
+					oppChan, unsub, subErr := h.soloTrackingService.SubscribeMatchUpdates(
+						subCtx, matchID, userID,
+					)
+					if subErr != nil {
+						slog.WarnContext(subCtx, "failed to subscribe match updates",
+							slog.String("match_id", matchID),
+							slog.String("user_id", userID),
+							slog.Any("err", subErr),
+						)
+					}
+
+					go func() {
+						if unsub != nil {
+							defer unsub()
+						}
+						ticker := time.NewTicker(1 * time.Second)
+						defer ticker.Stop()
+
+						for {
+							select {
+							case <-subCtx.Done():
+								return
+							case prog, ok := <-oppChan:
+								if !ok {
+									oppChan = nil
+									continue
+								}
+								if session == nil {
+									continue
+								}
+								bothDone := session.IsCompleted() &&
+									(prog.Status == "COMPLETED" || prog.Status == "SPECTATING" || prog.Status == "ABORTED")
+								if bothDone {
+									session.MarkCompleted(session.CompletionReason())
+								}
+								resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+									MyConfirmedValue:        session.ConfirmedValue(),
+									MyFormScore:             session.AverageFormScore(),
+									IsValidForm:             true,
+									MyStatus:                mapParticipantStatusToProto(string(session.Status())),
+									IsCompleted:             session.IsCompleted(),
+									OpponentValue:           prog.Value,
+									OpponentFormScore:       prog.FormScore,
+									OpponentStatus:          mapParticipantStatusToProto(prog.Status),
+									RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
+									MatchEnded:              bothDone,
+									Timestamp:               timestamppb.Now(),
+								}
+								if err := safeSend(resp); err != nil {
+									cancelStream()
+									return
+								}
+								if bothDone {
+									cancelStream()
+									return
+								}
+							case <-ticker.C:
+								if session != nil && session.IsCompleted() {
+									opp, oppErr := h.soloTrackingService.GetOpponentProgress(subCtx, matchID, userID)
+									if oppErr != nil {
+										slog.WarnContext(subCtx, "failed to poll opponent progress",
+											slog.String("match_id", matchID),
+											slog.Any("err", oppErr),
+										)
+									} else if opp != nil {
+										bothDone := opp.Status == "COMPLETED" || opp.Status == "SPECTATING" || opp.Status == "ABORTED"
+										if bothDone {
+											session.MarkCompleted(session.CompletionReason())
+											resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+												MyConfirmedValue:        session.ConfirmedValue(),
+												MyFormScore:             session.AverageFormScore(),
+												IsValidForm:             true,
+												MyStatus:                mapParticipantStatusToProto(string(session.Status())),
+												IsCompleted:             session.IsCompleted(),
+												OpponentValue:           opp.Value,
+												OpponentFormScore:       opp.FormScore,
+												OpponentStatus:          mapParticipantStatusToProto(opp.Status),
+												RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
+												MatchEnded:              true,
+												Timestamp:               timestamppb.Now(),
+											}
+											if sendErr := safeSend(resp); sendErr != nil {
+												slog.WarnContext(subCtx, "failed to send match ended response",
+													slog.Any("err", sendErr),
+												)
+											}
+											cancelStream()
+											return
+										}
+									}
+								}
+							}
+						}
+					}()
+				}
+				lastTimestamp = time.Now()
+			}
+			continue
+
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Abort:
+			reason := ""
+			if p.Abort != nil {
+				reason = p.Abort.Reason
+			}
+			if reason == "" {
+				reason = "USER_FORFEITED"
+			}
+			if h.soloTrackingService != nil && session != nil {
+				if abortErr := h.soloTrackingService.AbortSession(
+					streamCtx, session, matchID, userID, exerciseID, reason, planID,
+				); abortErr != nil {
+					slog.WarnContext(streamCtx, "failed to abort solo session",
+						slog.String("match_id", matchID),
+						slog.String("user_id", userID),
+						slog.Any("err", abortErr),
+					)
+				}
+			}
+			cancelStream()
+			return nil
+
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Submit:
+			if session == nil {
+				continue
+			}
+			if h.soloTrackingService != nil {
+				res, submitErr := h.soloTrackingService.SubmitSession(
+					streamCtx, session, matchID, userID, exerciseID, planID,
+				)
+				if submitErr != nil {
+					return status.Errorf(codes.Internal, "submit session: %v", submitErr)
+				}
+				resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+					MyConfirmedValue:        res.MyConfirmedValue,
+					MyFormScore:             res.MyFormScore,
+					IsValidForm:             res.IsValidForm,
+					MyStatus:                mapParticipantStatusToProto(res.MyStatus),
+					IsCompleted:             res.IsCompleted,
+					OpponentValue:           res.OpponentValue,
+					OpponentFormScore:       res.OpponentFormScore,
+					OpponentStatus:          mapParticipantStatusToProto(res.OpponentStatus),
+					DetectedErrors:          res.DetectedErrors,
+					AudioCue:                res.AudioCue,
+					RemainingCeilingSeconds: res.RemainingCeilingSeconds,
+					MatchEnded:              res.MatchEnded,
+					Timestamp:               timestamppb.Now(),
+				}
+				if err := safeSend(resp); err != nil {
+					return err
+				}
+				if res.MatchEnded {
+					cancelStream()
+					return nil
+				}
+			}
+			continue
+
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Frame:
+			frm := p.Frame
+			if frm == nil {
+				continue
+			}
+
+			if session == nil || rule == nil {
+				return status.Errorf(
+					codes.FailedPrecondition,
+					"session not initialized: exercise motion rule is required before streaming frames",
+				)
+			}
+
+			now := time.Now()
+			delta := now.Sub(lastTimestamp)
+			if delta <= 0 {
+				delta = 50 * time.Millisecond
+			}
+			lastTimestamp = now
+
+			landmarks := make([]vo.SkeletonPoint, 0, len(frm.Landmarks))
+			for _, lm := range frm.Landmarks {
+				landmarks = append(landmarks, vo.SkeletonPoint{
+					Index:      int(lm.LandmarkIndex),
+					X:          lm.X,
+					Y:          lm.Y,
+					Z:          lm.Z,
+					Visibility: lm.Visibility,
+					Presence:   lm.Presence,
+				})
+			}
+
+			if frm.CameraAngle != "" {
+				cameraAngle = strings.ToLower(strings.TrimSpace(frm.CameraAngle))
+				session.SetCameraAngle(cameraAngle)
+			}
+
+			var result command.StreamFrameResult
+			if h.soloTrackingService != nil {
+				res, procErr := h.soloTrackingService.ProcessFrame(
+					streamCtx, session, rule, landmarks, delta, matchID, userID, exerciseID, planID, cameraAngle,
+				)
+				if procErr != nil {
+					return status.Errorf(codes.Internal, "process frame: %v", procErr)
+				}
+				result = res
+			}
+
+			resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+				MyConfirmedValue:        result.MyConfirmedValue,
+				MyFormScore:             result.MyFormScore,
+				IsValidForm:             result.IsValidForm,
+				MyStatus:                mapParticipantStatusToProto(result.MyStatus),
+				IsCompleted:             result.IsCompleted,
+				OpponentValue:           result.OpponentValue,
+				OpponentFormScore:       result.OpponentFormScore,
+				OpponentStatus:          mapParticipantStatusToProto(result.OpponentStatus),
+				DetectedErrors:          result.DetectedErrors,
+				AudioCue:                result.AudioCue,
+				RemainingCeilingSeconds: result.RemainingCeilingSeconds,
+				MatchEnded:              result.MatchEnded,
+				Timestamp:               timestamppb.Now(),
+			}
+
+			if err := safeSend(resp); err != nil {
+				return err
+			}
+
+			if result.MatchEnded {
+				cancelStream()
+				return nil
+			}
+
+		default:
+			continue
+		}
 	}
 }
 
@@ -928,4 +1276,397 @@ func (c *ConnectWorkoutExecutionHandler) GetMotionSpecificationStats(ctx context
 		return nil, err
 	}
 	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) StreamSoloMatchTracking(
+	ctx context.Context,
+	stream *connect.BidiStream[
+		workoutexecutionv1message.StreamSoloMatchTrackingRequest,
+		workoutexecutionv1message.StreamSoloMatchTrackingResponse,
+	],
+) error {
+	userID, err := extractUserID(ctx)
+	if err != nil || userID == "" {
+		return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated stream: %w", err))
+	}
+
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+
+	var (
+		session       *service.SoloRefereeSession
+		rule          *vo.ExerciseMotionRule
+		matchID       string
+		exerciseID    string
+		planID        string
+		cameraAngle   string
+		lastTimestamp time.Time
+		sendMu        sync.Mutex
+		subCancel     context.CancelFunc
+	)
+
+	safeSend := func(resp *workoutexecutionv1message.StreamSoloMatchTrackingResponse) error {
+		sendMu.Lock()
+		defer sendMu.Unlock()
+		return stream.Send(resp)
+	}
+
+	defer func() {
+		cancelStream()
+		if subCancel != nil {
+			subCancel()
+		}
+		if session != nil && c.grpcHandler.soloTrackingService != nil {
+			cleanCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if finErr := c.grpcHandler.soloTrackingService.FinalizeSession(
+				cleanCtx, session, matchID, userID, exerciseID, planID,
+			); finErr != nil {
+				slog.WarnContext(cleanCtx, "failed to finalize solo session on connect stream exit",
+					slog.String("match_id", matchID),
+					slog.String("user_id", userID),
+					slog.Any("err", finErr),
+				)
+			}
+		}
+	}()
+
+	type recvResult struct {
+		req *workoutexecutionv1message.StreamSoloMatchTrackingRequest
+		err error
+	}
+	recvChan := make(chan recvResult)
+
+	go func() {
+		for {
+			req, recvErr := stream.Receive()
+			select {
+			case <-streamCtx.Done():
+				return
+			case recvChan <- recvResult{req: req, err: recvErr}:
+				if recvErr != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	for {
+		var req *workoutexecutionv1message.StreamSoloMatchTrackingRequest
+		select {
+		case <-streamCtx.Done():
+			return nil
+		case res := <-recvChan:
+			if res.err != nil {
+				if errors.Is(res.err, io.EOF) {
+					return nil
+				}
+				return res.err
+			}
+			req = res.req
+		}
+
+		switch p := req.GetPayload().(type) {
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config:
+			cfg := p.Config
+			if cfg != nil && session == nil {
+				matchID = cfg.MatchId
+				exerciseID = cfg.ExerciseId
+				challengeType := toDomainChallengeType(cfg.ChallengeType)
+				planID = strings.TrimSpace(cfg.PlanId)
+				if planID == "" {
+					return connect.NewError(
+						connect.CodeInvalidArgument,
+						errors.New("plan_id is required"),
+					)
+				}
+				ceilingSec := cfg.TimeCeilingSeconds
+				cameraAngle = strings.ToLower(strings.TrimSpace(cfg.CameraAngle))
+				if c.grpcHandler.soloTrackingService != nil {
+					sess, r, initErr := c.grpcHandler.soloTrackingService.InitializeSession(
+						streamCtx, matchID, userID, exerciseID, challengeType, ceilingSec, planID,
+					)
+					if initErr != nil {
+						if errors.Is(initErr, apperror.ErrMatchRoomFull) {
+							return connect.NewError(connect.CodePermissionDenied, initErr)
+						}
+						if errors.Is(initErr, apperror.ErrMatchExerciseMismatch) {
+							return connect.NewError(connect.CodeInvalidArgument, initErr)
+						}
+						if errors.Is(initErr, apperror.ErrInvalidInput) {
+							return connect.NewError(connect.CodeInvalidArgument, initErr)
+						}
+						return connect.NewError(connect.CodeFailedPrecondition, initErr)
+					}
+					session = sess
+					if cameraAngle != "" {
+						session.SetCameraAngle(cameraAngle)
+					}
+					rule = r
+
+					// Start asynchronous opponent update listener for real-time spectating and match-end sync
+					subCtx, cancel := context.WithCancel(streamCtx)
+					subCancel = cancel
+					oppChan, unsub, subErr := c.grpcHandler.soloTrackingService.SubscribeMatchUpdates(
+						subCtx, matchID, userID,
+					)
+					if subErr != nil {
+						slog.WarnContext(subCtx, "failed to subscribe match updates",
+							slog.String("match_id", matchID),
+							slog.String("user_id", userID),
+							slog.Any("err", subErr),
+						)
+					}
+
+					go func() {
+						if unsub != nil {
+							defer unsub()
+						}
+						ticker := time.NewTicker(1 * time.Second)
+						defer ticker.Stop()
+
+						for {
+							select {
+							case <-subCtx.Done():
+								return
+							case prog, ok := <-oppChan:
+								if !ok {
+									oppChan = nil
+									continue
+								}
+								if session == nil {
+									continue
+								}
+								bothDone := session.IsCompleted() &&
+									(prog.Status == "COMPLETED" || prog.Status == "SPECTATING" || prog.Status == "ABORTED")
+								if bothDone {
+									session.MarkCompleted(session.CompletionReason())
+								}
+								resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+									MyConfirmedValue:        session.ConfirmedValue(),
+									MyFormScore:             session.AverageFormScore(),
+									IsValidForm:             true,
+									MyStatus:                mapParticipantStatusToProto(string(session.Status())),
+									IsCompleted:             session.IsCompleted(),
+									OpponentValue:           prog.Value,
+									OpponentFormScore:       prog.FormScore,
+									OpponentStatus:          mapParticipantStatusToProto(prog.Status),
+									RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
+									MatchEnded:              bothDone,
+									Timestamp:               timestamppb.Now(),
+								}
+								if err := safeSend(resp); err != nil {
+									cancelStream()
+									return
+								}
+								if bothDone {
+									cancelStream()
+									return
+								}
+							case <-ticker.C:
+								if session != nil && session.IsCompleted() {
+									opp, oppErr := c.grpcHandler.soloTrackingService.GetOpponentProgress(
+										subCtx, matchID, userID,
+									)
+									if oppErr != nil {
+										slog.WarnContext(subCtx, "failed to poll opponent progress",
+											slog.String("match_id", matchID),
+											slog.Any("err", oppErr),
+										)
+									} else if opp != nil {
+										bothDone := opp.Status == "COMPLETED" || opp.Status == "SPECTATING" || opp.Status == "ABORTED"
+										if bothDone {
+											session.MarkCompleted(session.CompletionReason())
+											resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+												MyConfirmedValue:        session.ConfirmedValue(),
+												MyFormScore:             session.AverageFormScore(),
+												IsValidForm:             true,
+												MyStatus:                mapParticipantStatusToProto(string(session.Status())),
+												IsCompleted:             session.IsCompleted(),
+												OpponentValue:           opp.Value,
+												OpponentFormScore:       opp.FormScore,
+												OpponentStatus:          mapParticipantStatusToProto(opp.Status),
+												RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
+												MatchEnded:              true,
+												Timestamp:               timestamppb.Now(),
+											}
+											if sendErr := safeSend(resp); sendErr != nil {
+												slog.WarnContext(subCtx, "failed to send match ended response",
+													slog.Any("err", sendErr),
+												)
+											}
+											cancelStream()
+											return
+										}
+									}
+								}
+							}
+						}
+					}()
+				}
+				lastTimestamp = time.Now()
+			}
+			continue
+
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Abort:
+			reason := ""
+			if p.Abort != nil {
+				reason = p.Abort.Reason
+			}
+			if reason == "" {
+				reason = "USER_FORFEITED"
+			}
+			if c.grpcHandler.soloTrackingService != nil && session != nil {
+				if abortErr := c.grpcHandler.soloTrackingService.AbortSession(
+					streamCtx, session, matchID, userID, exerciseID, reason, planID,
+				); abortErr != nil {
+					slog.WarnContext(streamCtx, "failed to abort connect solo session",
+						slog.String("match_id", matchID),
+						slog.String("user_id", userID),
+						slog.Any("err", abortErr),
+					)
+				}
+			}
+			cancelStream()
+			return nil
+
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Submit:
+			if session == nil {
+				continue
+			}
+			if c.grpcHandler.soloTrackingService != nil {
+				res, submitErr := c.grpcHandler.soloTrackingService.SubmitSession(
+					streamCtx, session, matchID, userID, exerciseID, planID,
+				)
+				if submitErr != nil {
+					return connect.NewError(connect.CodeInternal, submitErr)
+				}
+				resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+					MyConfirmedValue:        res.MyConfirmedValue,
+					MyFormScore:             res.MyFormScore,
+					IsValidForm:             res.IsValidForm,
+					MyStatus:                mapParticipantStatusToProto(res.MyStatus),
+					IsCompleted:             res.IsCompleted,
+					OpponentValue:           res.OpponentValue,
+					OpponentFormScore:       res.OpponentFormScore,
+					OpponentStatus:          mapParticipantStatusToProto(res.OpponentStatus),
+					DetectedErrors:          res.DetectedErrors,
+					AudioCue:                res.AudioCue,
+					RemainingCeilingSeconds: res.RemainingCeilingSeconds,
+					MatchEnded:              res.MatchEnded,
+					Timestamp:               timestamppb.Now(),
+				}
+				if err := safeSend(resp); err != nil {
+					return err
+				}
+				if res.MatchEnded {
+					cancelStream()
+					return nil
+				}
+			}
+			continue
+
+		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Frame:
+			frm := p.Frame
+			if frm == nil {
+				continue
+			}
+
+			if session == nil || rule == nil {
+				return connect.NewError(
+					connect.CodeFailedPrecondition,
+					errors.New("session not initialized: exercise motion rule is required before streaming frames"),
+				)
+			}
+
+			now := time.Now()
+			delta := now.Sub(lastTimestamp)
+			if delta <= 0 {
+				delta = 50 * time.Millisecond
+			}
+			lastTimestamp = now
+
+			landmarks := make([]vo.SkeletonPoint, 0, len(frm.Landmarks))
+			for _, lm := range frm.Landmarks {
+				landmarks = append(landmarks, vo.SkeletonPoint{
+					Index:      int(lm.LandmarkIndex),
+					X:          lm.X,
+					Y:          lm.Y,
+					Z:          lm.Z,
+					Visibility: lm.Visibility,
+					Presence:   lm.Presence,
+				})
+			}
+
+			if frm.CameraAngle != "" {
+				cameraAngle = strings.ToLower(strings.TrimSpace(frm.CameraAngle))
+				session.SetCameraAngle(cameraAngle)
+			}
+
+			var result command.StreamFrameResult
+			if c.grpcHandler.soloTrackingService != nil {
+				res, procErr := c.grpcHandler.soloTrackingService.ProcessFrame(
+					streamCtx, session, rule, landmarks, delta, matchID, userID, exerciseID, planID, cameraAngle,
+				)
+				if procErr != nil {
+					return connect.NewError(connect.CodeInternal, procErr)
+				}
+				result = res
+			}
+
+			resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+				MyConfirmedValue:        result.MyConfirmedValue,
+				MyFormScore:             result.MyFormScore,
+				IsValidForm:             result.IsValidForm,
+				MyStatus:                mapParticipantStatusToProto(result.MyStatus),
+				IsCompleted:             result.IsCompleted,
+				OpponentValue:           result.OpponentValue,
+				OpponentFormScore:       result.OpponentFormScore,
+				OpponentStatus:          mapParticipantStatusToProto(result.OpponentStatus),
+				DetectedErrors:          result.DetectedErrors,
+				AudioCue:                result.AudioCue,
+				RemainingCeilingSeconds: result.RemainingCeilingSeconds,
+				MatchEnded:              result.MatchEnded,
+				Timestamp:               timestamppb.Now(),
+			}
+
+			if err := safeSend(resp); err != nil {
+				return err
+			}
+
+			if result.MatchEnded {
+				cancelStream()
+				return nil
+			}
+
+		default:
+			continue
+		}
+	}
+}
+
+func mapParticipantStatusToProto(status string) workoutexecutionv1message.ParticipantStreamStatus {
+	switch status {
+	case "ACTIVE":
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_ACTIVE
+	case "SPECTATING":
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_SPECTATING
+	case "COMPLETED":
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_COMPLETED
+	case "WAITING":
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_WAITING
+	default:
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED
+	}
+}
+
+func toDomainChallengeType(t workoutexecutionv1message.SoloChallengeType) vo.ChallengeType {
+	switch t {
+	case workoutexecutionv1message.SoloChallengeType_SOLO_CHALLENGE_TYPE_DURATION:
+		return vo.ChallengeTypeDuration
+	case workoutexecutionv1message.SoloChallengeType_SOLO_CHALLENGE_TYPE_REPS:
+		return vo.ChallengeTypeReps
+	default:
+		return vo.ChallengeTypeReps
+	}
 }

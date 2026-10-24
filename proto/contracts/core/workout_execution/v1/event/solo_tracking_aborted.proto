@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package contracts.core.workout_execution.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
+
+message SoloTrackingAborted {
+  string match_id = 1;
+  string user_id = 2;
+  string exercise_id = 3;
+  string reason = 4; // e.g. "USER_FORFEITED", "USER_DISCONNECTED"
+  google.protobuf.Timestamp aborted_at = 5;
+  string plan_id = 6;
+  int32 confirmed_value = 7;
+  int32 total_duration_seconds = 8;
+}

@@ -80,4 +80,36 @@ func TestDomainEventNames(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	ev7 := &event.SoloTrackingCompleted{
+		MatchID:              "m1",
+		UserID:               "u1",
+		ExerciseID:           "plank_01",
+		ChallengeType:        vo.ChallengeTypeDuration,
+		ConfirmedValue:       30,
+		AverageFormScore:     95.5,
+		TotalDurationSeconds: 30,
+		CompletedAt:          now,
+	}
+
+	if got, want := ev7.EventName(), "contracts.core.workout_execution.v1.soloTrackingCompleted"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	ev8 := &event.SoloTrackingAborted{
+		MatchID:              "m1",
+		UserID:               "u1",
+		ExerciseID:           "plank_01",
+		Reason:               "USER_FORFEITED",
+		AbortedAt:            now,
+		PlanID:               "p1",
+		ConfirmedValue:       15,
+		TotalDurationSeconds: 15,
+	}
+
+	if got, want := ev8.EventName(), "contracts.core.workout_execution.v1.soloTrackingAborted"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := ev8.PlanID, "p1"; got != want {
+		t.Errorf("got PlanID %v, want %v", got, want)
+	}
 }

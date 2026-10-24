@@ -12,4 +12,6 @@ var (
 	ErrTransactionFailed          = errors.New("database transaction failed")
 	ErrConflict                   = errors.New("resource conflict")
 	ErrInternal                   = errors.New("internal server error")
+	ErrMatchRoomFull              = errors.New("match room is full: maximum 2 participants allowed")
+	ErrMatchExerciseMismatch      = errors.New("exercise does not match the solo match room exercise")
 )
