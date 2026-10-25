@@ -27,6 +27,7 @@ type ExerciseServer struct {
 	approveHandler           *command.ApproveExerciseHandler
 	archiveHandler           *command.ArchiveExerciseHandler
 	getHandler               *query.GetExerciseHandler
+	getRandomHandler         *query.GetRandomExerciseHandler
 	searchHandler            *query.SearchExercisesHandler
 	metadataHandler          *query.GetCatalogMetadataHandler
 
@@ -64,6 +65,7 @@ func NewExerciseServer(
 	approveHandler *command.ApproveExerciseHandler,
 	archiveHandler *command.ArchiveExerciseHandler,
 	getHandler *query.GetExerciseHandler,
+	getRandomHandler *query.GetRandomExerciseHandler,
 	searchHandler *query.SearchExercisesHandler,
 	metadataHandler *query.GetCatalogMetadataHandler,
 	createBodyPartHandler *command.CreateBodyPartHandler,
@@ -94,6 +96,7 @@ func NewExerciseServer(
 		approveHandler:           approveHandler,
 		archiveHandler:           archiveHandler,
 		getHandler:               getHandler,
+		getRandomHandler:         getRandomHandler,
 		searchHandler:            searchHandler,
 		metadataHandler:          metadataHandler,
 		createBodyPartHandler:    createBodyPartHandler,
@@ -181,6 +184,21 @@ func (s *ExerciseServer) GetExercise(
 
 	info := exercise.Info()
 	return &exercisemsg.GetExerciseResponse{
+		Exercise: toProtoExercise(&info),
+	}, nil
+}
+
+func (s *ExerciseServer) GetRandomExercise(
+	ctx context.Context,
+	_ *exercisemsg.GetRandomExerciseRequest,
+) (*exercisemsg.GetRandomExerciseResponse, error) {
+	exercise, err := s.getRandomHandler.Handle(ctx, query.GetRandomExerciseQuery{})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+
+	info := exercise.Info()
+	return &exercisemsg.GetRandomExerciseResponse{
 		Exercise: toProtoExercise(&info),
 	}, nil
 }
@@ -763,6 +781,17 @@ func (c *ConnectExerciseHandler) GetExercise(
 	req *connect.Request[exercisemsg.GetExerciseRequest],
 ) (*connect.Response[exercisemsg.GetExerciseResponse], error) {
 	res, err := c.server.GetExercise(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectExerciseHandler) GetRandomExercise(
+	ctx context.Context,
+	req *connect.Request[exercisemsg.GetRandomExerciseRequest],
+) (*connect.Response[exercisemsg.GetRandomExerciseResponse], error) {
+	res, err := c.server.GetRandomExercise(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}

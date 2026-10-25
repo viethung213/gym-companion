@@ -88,6 +88,31 @@ func (r *PostgresRepository) SearchActive(
 	return exercises, nil
 }
 
+func (r *PostgresRepository) GetRandomAISupported(
+	ctx context.Context,
+) (*domain.Exercise, error) {
+	var record exerciseRecord
+	err := r.db.WithContext(ctx).
+		Where("status = ?", string(domain.StatusActive)).
+		Where("has_ai_supported = ?", true).
+		Order("RANDOM()").
+		First(&record).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrExerciseNotFound
+		}
+
+		return nil, fmt.Errorf("find random exercise: %w", err)
+	}
+
+	exercise, err := r.rehydrate(ctx, &record)
+	if err != nil {
+		return nil, err
+	}
+
+	return exercise, nil
+}
+
 func (r *PostgresRepository) GetMetadata(ctx context.Context) (port.Metadata, error) {
 	bodyParts, err := queryBodyParts(ctx, r.db)
 	if err != nil {

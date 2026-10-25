@@ -243,6 +243,10 @@ func (m *mockRepository) SearchActive(ctx context.Context, filters *port.SearchF
 	return nil, nil
 }
 
+func (m *mockRepository) GetRandomAISupported(_ context.Context) (*domain.Exercise, error) {
+	return nil, nil
+}
+
 func (m *mockRepository) GetMetadata(ctx context.Context) (port.Metadata, error) {
 	return port.Metadata{}, nil
 }

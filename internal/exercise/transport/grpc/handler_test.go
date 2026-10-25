@@ -3,9 +3,14 @@
 package grpc
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/exercise/application/port"
+	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
@@ -15,7 +20,7 @@ import (
 
 func TestNewExerciseServer(t *testing.T) {
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -28,7 +33,7 @@ func TestNewExerciseServer(t *testing.T) {
 
 func TestNewConnectExerciseHandler(t *testing.T) {
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -183,4 +188,185 @@ func TestMeasurementTypeMappers(t *testing.T) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	})
+}
+
+type mockRepoForHandler struct {
+	exercise *domain.Exercise
+	err      error
+}
+
+func (m *mockRepoForHandler) Save(_ context.Context, _ *domain.Exercise, _ *domain.Event) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) FindByID(_ context.Context, _ string) (*domain.Exercise, error) {
+	return nil, nil
+}
+
+func (m *mockRepoForHandler) SearchActive(_ context.Context, _ *port.SearchFilters) ([]*domain.Exercise, error) {
+	return nil, nil
+}
+
+func (m *mockRepoForHandler) GetRandomAISupported(_ context.Context) (*domain.Exercise, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.exercise, nil
+}
+
+func (m *mockRepoForHandler) GetMetadata(_ context.Context) (port.Metadata, error) {
+	return port.Metadata{}, nil
+}
+
+func (m *mockRepoForHandler) CreateBodyPart(_ context.Context, _ *port.BodyPart) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) GetBodyPart(_ context.Context, _ string) (*port.BodyPart, error) {
+	return nil, nil
+}
+
+func (m *mockRepoForHandler) ListBodyParts(_ context.Context, _, _ int) ([]port.BodyPart, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockRepoForHandler) UpdateBodyPart(_ context.Context, _ *port.BodyPart) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) DeleteBodyPart(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) CreateEquipment(_ context.Context, _ *port.Equipment) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) GetEquipment(_ context.Context, _ string) (*port.Equipment, error) {
+	return nil, nil
+}
+
+func (m *mockRepoForHandler) ListEquipments(_ context.Context, _, _ int) ([]port.Equipment, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockRepoForHandler) UpdateEquipment(_ context.Context, _ *port.Equipment) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) DeleteEquipment(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) CreateMuscle(_ context.Context, _ *port.Muscle) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) GetMuscle(_ context.Context, _ string) (*port.Muscle, error) {
+	return nil, nil
+}
+
+func (m *mockRepoForHandler) ListMuscles(_ context.Context, _ string, _, _ int) ([]port.Muscle, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockRepoForHandler) UpdateMuscle(_ context.Context, _ *port.Muscle) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) DeleteMuscle(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) CreateTag(_ context.Context, _ *port.Tag) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) GetTag(_ context.Context, _ string) (*port.Tag, error) {
+	return nil, nil
+}
+
+func (m *mockRepoForHandler) ListTags(_ context.Context, _, _ int) ([]port.Tag, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockRepoForHandler) UpdateTag(_ context.Context, _ *port.Tag) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) DeleteTag(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockRepoForHandler) SetAISupportedWithOutboxLog(_ context.Context, _ string, _ bool, _ *port.OutboxLogRecord) error {
+	return nil
+}
+
+func TestExerciseServer_GetRandomExercise(t *testing.T) {
+	now := time.Now().UTC()
+	ex, err := domain.RehydrateExercise(domain.Info{
+		ID:              "ex-123",
+		Name:            "Push-up",
+		Instructions:    "Push up description",
+		BodyPartID:      "chest",
+		EquipmentID:     "none",
+		TargetMuscleID:  "pectoralis",
+		Difficulty:      "BEGINNER",
+		Status:          domain.StatusActive,
+		HasAISupported:  true,
+		MeasurementType: domain.MeasurementTypeReps,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	if err != nil {
+		t.Fatalf("unexpected rehydrate error: %v", err)
+	}
+
+	repo := &mockRepoForHandler{exercise: ex}
+	getRandomHdlr := query.NewGetRandomExerciseHandler(repo)
+	srv := NewExerciseServer(
+		nil, nil, nil, nil, nil, nil, getRandomHdlr, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+	)
+
+	ctx := context.Background()
+	req := &exercisemsg.GetRandomExerciseRequest{}
+
+	resp, err := srv.GetRandomExercise(ctx, req)
+	if err != nil {
+		t.Fatalf("GetRandomExercise failed: %v", err)
+	}
+	if resp.GetExercise().GetId() != "ex-123" {
+		t.Errorf("got id %q, want %q", resp.GetExercise().GetId(), "ex-123")
+	}
+
+	// Test Connect Handler wrapper
+	connectHdlr := NewConnectExerciseHandler(srv)
+	connectResp, err := connectHdlr.GetRandomExercise(ctx, connect.NewRequest(req))
+	if err != nil {
+		t.Fatalf("ConnectExerciseHandler.GetRandomExercise failed: %v", err)
+	}
+	if connectResp.Msg.GetExercise().GetId() != "ex-123" {
+		t.Errorf("got connect id %q, want %q", connectResp.Msg.GetExercise().GetId(), "ex-123")
+	}
+
+	// Test Error case
+	repoErr := &mockRepoForHandler{err: domain.ErrExerciseNotFound}
+	srvErr := NewExerciseServer(
+		nil, nil, nil, nil, nil, nil, query.NewGetRandomExerciseHandler(repoErr), nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+	)
+	_, err = srvErr.GetRandomExercise(ctx, req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if s, ok := status.FromError(err); !ok || s.Code() != codes.NotFound {
+		t.Errorf("got status %v, want NotFound", err)
+	}
 }

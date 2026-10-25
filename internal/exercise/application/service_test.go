@@ -229,6 +229,18 @@ func (r *fakeRepository) SearchActive(
 	return exercises, nil
 }
 
+func (r *fakeRepository) GetRandomAISupported(
+	_ context.Context,
+) (*domain.Exercise, error) {
+	for _, exercise := range r.exercises {
+		info := exercise.Info()
+		if info.Status == domain.StatusActive && info.HasAISupported {
+			return exercise, nil
+		}
+	}
+	return nil, domain.ErrExerciseNotFound
+}
+
 func (r *fakeRepository) GetMetadata(_ context.Context) (port.Metadata, error) {
 	return port.Metadata{}, nil
 }

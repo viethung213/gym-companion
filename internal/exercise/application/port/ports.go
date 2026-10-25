@@ -52,6 +52,7 @@ type Repository interface {
 	Save(ctx context.Context, exercise *domain.Exercise, event *domain.Event) error
 	FindByID(ctx context.Context, id string) (*domain.Exercise, error)
 	SearchActive(ctx context.Context, filters *SearchFilters) ([]*domain.Exercise, error)
+	GetRandomAISupported(ctx context.Context) (*domain.Exercise, error)
 	GetMetadata(ctx context.Context) (Metadata, error)
 
 	// BodyPart CRUD

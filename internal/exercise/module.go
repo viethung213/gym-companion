@@ -60,6 +60,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 
 	// Initialize CQRS Query Handlers
 	getHandler := query.NewGetExerciseHandler(repo)
+	getRandomHandler := query.NewGetRandomExerciseHandler(repo)
 	searchHandler := query.NewSearchExercisesHandler(repo)
 	metadataHandler := query.NewGetCatalogMetadataHandler(repo)
 
@@ -96,6 +97,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 		approveHandler,
 		archiveHandler,
 		getHandler,
+		getRandomHandler,
 		searchHandler,
 		metadataHandler,
 		createBodyPartHandler,

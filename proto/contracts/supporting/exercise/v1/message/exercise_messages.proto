@@ -111,6 +111,12 @@ message GetExerciseResponse {
   ExerciseInfo exercise = 1;
 }
 
+message GetRandomExerciseRequest {}
+
+message GetRandomExerciseResponse {
+  ExerciseInfo exercise = 1;
+}
+
 message SearchExercisesRequest {
   string body_part_id = 1;
   string equipment_id = 2;
