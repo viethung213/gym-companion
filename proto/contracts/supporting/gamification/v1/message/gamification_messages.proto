@@ -140,7 +140,9 @@ message LedgerEntry {
 }
 
 // Request / Response cho API GetWallet
-message GetWalletRequest {}
+message GetWalletRequest {
+  string user_id = 1; // Tuỳ chọn: Admin tra cứu ví của học viên; để trống mặc định lấy caller
+}
 
 message GetWalletResponse {
   string user_id = 1;
@@ -152,6 +154,7 @@ message GetWalletResponse {
 message ListTransactionsRequest {
   int32 limit = 1;
   string cursor = 2;
+  string user_id = 3; // Tuỳ chọn: Admin tra cứu sổ cái của học viên; để trống mặc định lấy caller
 }
 
 message ListTransactionsResponse {

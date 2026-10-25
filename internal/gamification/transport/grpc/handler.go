@@ -351,12 +351,13 @@ func (h *Handler) GetMyBadges(
 	}), nil
 }
 
-// GetWallet returns the authenticated user's FitCoins wallet balance.
+// GetWallet returns the FitCoins wallet balance for the authenticated user,
+// or for a target user if requested by an Administrator.
 func (h *Handler) GetWallet(
 	ctx context.Context,
-	_ *connect.Request[gamificationv1message.GetWalletRequest],
+	req *connect.Request[gamificationv1message.GetWalletRequest],
 ) (*connect.Response[gamificationv1message.GetWalletResponse], error) {
-	userID, err := getUserIDFromContext(ctx)
+	userID, err := resolveWalletTargetUserID(ctx, req.Msg.GetUserId())
 	if err != nil {
 		return nil, err
 	}
@@ -376,12 +377,13 @@ func (h *Handler) GetWallet(
 	}), nil
 }
 
-// ListTransactions returns cursor-paginated FitCoins ledger entries for the authenticated user.
+// ListTransactions returns cursor-paginated FitCoins ledger entries for the authenticated user,
+// or for a target user if requested by an Administrator.
 func (h *Handler) ListTransactions(
 	ctx context.Context,
 	req *connect.Request[gamificationv1message.ListTransactionsRequest],
 ) (*connect.Response[gamificationv1message.ListTransactionsResponse], error) {
-	userID, err := getUserIDFromContext(ctx)
+	userID, err := resolveWalletTargetUserID(ctx, req.Msg.GetUserId())
 	if err != nil {
 		return nil, err
 	}
@@ -481,8 +483,20 @@ func (h *Handler) AdminAdjustCoins(
 	}
 
 	reason := vo.CoinTransactionReason(req.Msg.Reason)
-	if reason == "" {
+	note := req.Msg.Note
+	if !reason.IsAdmin() {
+		if req.Msg.Reason != "" && note == "" {
+			note = "[" + req.Msg.Reason + "]"
+		} else if req.Msg.Reason != "" {
+			prefix := "[" + req.Msg.Reason + "] "
+			if len(note) < len(prefix) || note[:len(prefix)] != prefix {
+				note = prefix + note
+			}
+		}
 		reason = vo.ReasonAdminAdjust
+	}
+	if note == "" {
+		note = "Admin manual balance adjustment"
 	}
 
 	res, err := h.adminAdjustCoinsHandler.Handle(ctx, command.AdminAdjustCoinsCommand{
@@ -491,7 +505,7 @@ func (h *Handler) AdminAdjustCoins(
 		Amount:         req.Msg.Amount,
 		Reason:         reason,
 		IdempotencyKey: req.Msg.IdempotencyKey,
-		Note:           req.Msg.Note,
+		Note:           note,
 		AdjustedAt:     time.Now().UTC(),
 	})
 	if err != nil {
@@ -521,6 +535,22 @@ func mapWalletDomainError(err error) error {
 	default:
 		return connect.NewError(connect.CodeInternal, err)
 	}
+}
+
+func resolveWalletTargetUserID(ctx context.Context, requestedUserID string) (string, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return "", connect.NewError(connect.CodeUnauthenticated, middleware.ErrUnauthorized)
+	}
+
+	if requestedUserID != "" && requestedUserID != actor.UserID {
+		if !actor.IsAdmin() {
+			return "", connect.NewError(connect.CodePermissionDenied, errors.New("access denied: only administrators can query another user's wallet"))
+		}
+		return requestedUserID, nil
+	}
+
+	return actor.UserID, nil
 }
 
 func getUserIDFromContext(ctx context.Context) (string, error) {
