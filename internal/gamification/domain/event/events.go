@@ -22,6 +22,7 @@ func (XpEarned) EventName() string {
 	return "contracts.supporting.gamification.v1.xpEarned"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e XpEarned) PartitionKey() string {
 	return e.UserID
 }
@@ -38,6 +39,7 @@ func (UserLeveledUp) EventName() string {
 	return "contracts.supporting.gamification.v1.userLeveledUp"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e UserLeveledUp) PartitionKey() string {
 	return e.UserID
 }
@@ -55,6 +57,7 @@ func (StreakAdvanced) EventName() string {
 	return "contracts.supporting.gamification.v1.streakAdvanced"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e StreakAdvanced) PartitionKey() string {
 	return e.UserID
 }
@@ -70,6 +73,7 @@ func (StreakReset) EventName() string {
 	return "contracts.supporting.gamification.v1.streakReset"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e StreakReset) PartitionKey() string {
 	return e.UserID
 }
@@ -84,6 +88,7 @@ func (StreakMilestoneReached) EventName() string {
 	return "contracts.supporting.gamification.v1.streakMilestoneReached"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e StreakMilestoneReached) PartitionKey() string {
 	return e.UserID
 }
@@ -100,6 +105,7 @@ func (BadgeUnlocked) EventName() string {
 	return "contracts.supporting.gamification.v1.badgeUnlocked"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e BadgeUnlocked) PartitionKey() string {
 	return e.UserID
 }
@@ -117,6 +123,7 @@ func (CoinsEarned) EventName() string {
 	return "contracts.supporting.gamification.v1.coinsEarned"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e CoinsEarned) PartitionKey() string {
 	return e.UserID
 }
@@ -134,6 +141,7 @@ func (CoinsSpent) EventName() string {
 	return "contracts.supporting.gamification.v1.coinsSpent"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e CoinsSpent) PartitionKey() string {
 	return e.UserID
 }
@@ -154,6 +162,7 @@ func (WorkoutActivityIngested) EventName() string {
 	return "internal.gamification.workoutActivityIngested"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e WorkoutActivityIngested) PartitionKey() string {
 	return e.UserID
 }
@@ -168,6 +177,7 @@ func (NutritionActivityIngested) EventName() string {
 	return "internal.gamification.nutritionActivityIngested"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e NutritionActivityIngested) PartitionKey() string {
 	return e.UserID
 }
@@ -185,6 +195,7 @@ func (PersonalRecordIngested) EventName() string {
 	return "internal.gamification.personalRecordIngested"
 }
 
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
 func (e PersonalRecordIngested) PartitionKey() string {
 	return e.UserID
 }

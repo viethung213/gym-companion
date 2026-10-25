@@ -10,6 +10,7 @@ type BadgeDefinition struct {
 }
 
 var (
+	//nolint:gochecknoglobals // Read-only master badge catalog.
 	masterBadgeCatalog = []BadgeDefinition{
 		{
 			Code:        "FIRST_WORKOUT",
@@ -97,6 +98,7 @@ var (
 		},
 	}
 
+	//nolint:gochecknoglobals // Read-only indexed lookup for badge catalog.
 	badgeCatalogIndex = func() map[string]BadgeDefinition {
 		m := make(map[string]BadgeDefinition, len(masterBadgeCatalog))
 		for _, b := range masterBadgeCatalog {

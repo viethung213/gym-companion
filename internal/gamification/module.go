@@ -237,6 +237,7 @@ type prCoordinatorAdapter struct {
 	coordinator *appService.ActivityIngestionCoordinator
 }
 
+//nolint:gocritic // hugeParam: command struct is an immutable value object
 func (a prCoordinatorAdapter) Handle(ctx context.Context, cmd command.ProcessPersonalRecordCommand) error {
 	return a.coordinator.IngestPersonalRecord(ctx, cmd)
 }

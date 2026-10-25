@@ -91,7 +91,7 @@ func (h *EvaluateBadgesHandler) Handle(ctx context.Context, cmd EvaluateBadgesCo
 			}
 
 			def, _ := vo.GetBadgeDefinition(c.code)
-			badge, ev, err := aggregate.UnlockBadge(
+			badge, ev, unlockErr := aggregate.UnlockBadge(
 				uuid.NewString(),
 				cmd.UserID,
 				c.code,
@@ -100,8 +100,8 @@ func (h *EvaluateBadgesHandler) Handle(ctx context.Context, cmd EvaluateBadgesCo
 				c.meta,
 				now,
 			)
-			if err != nil {
-				return fmt.Errorf("unlock badge %s for user %s: %w", c.code, cmd.UserID, err)
+			if unlockErr != nil {
+				return fmt.Errorf("unlock badge %s for user %s: %w", c.code, cmd.UserID, unlockErr)
 			}
 
 			badgesToUnlock = append(badgesToUnlock, badge)
