@@ -129,7 +129,7 @@ func (s *ExerciseServer) SearchExercises(
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	exercises, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{
+	result, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{
 		Filters: &port.SearchFilters{
 			BodyPartID:         req.GetBodyPartId(),
 			EquipmentID:        req.GetEquipmentId(),
@@ -141,6 +141,8 @@ func (s *ExerciseServer) SearchExercises(
 			Limit:              req.GetLimit(),
 			Offset:             req.GetOffset(),
 			MeasurementType:    toDomainMeasurementTypeString(req.GetMeasurementType()),
+			Status:             toDomainStatus(req.GetStatus()),
+			IncludeAllStatuses: req.GetIncludeAllStatuses(),
 		},
 	})
 	if err != nil {
@@ -148,9 +150,10 @@ func (s *ExerciseServer) SearchExercises(
 	}
 
 	response := &exercisemsg.SearchExercisesResponse{
-		Exercises: make([]*exercisemsg.ExerciseInfo, 0, len(exercises)),
+		Exercises:  make([]*exercisemsg.ExerciseInfo, 0, len(result.Exercises)),
+		TotalCount: result.TotalCount,
 	}
-	for _, exercise := range exercises {
+	for _, exercise := range result.Exercises {
 		info := exercise.Info()
 		response.Exercises = append(response.Exercises, toProtoExercise(&info))
 	}
@@ -384,6 +387,21 @@ func toProtoMetadata(metadata *port.Metadata) *exercisemsg.GetCatalogMetadataRes
 	}
 
 	return response
+}
+
+func toDomainStatus(s exercisemsg.ExerciseStatus) domain.Status {
+	switch s {
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_DRAFT:
+		return domain.StatusDraft
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_PENDING_APPROVAL:
+		return domain.StatusPendingApproval
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE:
+		return domain.StatusActive
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_ARCHIVED:
+		return domain.StatusArchived
+	default:
+		return ""
+	}
 }
 
 func toProtoStatus(status domain.Status) exercisemsg.ExerciseStatus {

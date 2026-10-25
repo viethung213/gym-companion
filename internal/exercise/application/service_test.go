@@ -158,15 +158,18 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 		t.Fatalf("create draft exercise: %v", err)
 	}
 
-	exercises, err := suite.searchHandler.Handle(
+	result, err := suite.searchHandler.Handle(
 		userCtx,
 		query.SearchExercisesQuery{Filters: &port.SearchFilters{}},
 	)
 	if err != nil {
 		t.Fatalf("search exercises: %v", err)
 	}
-	if got := len(exercises); got != 1 {
+	if got := len(result.Exercises); got != 1 {
 		t.Fatalf("got exercises %d, want 1", got)
+	}
+	if result.TotalCount != 1 {
+		t.Fatalf("got total count %d, want 1", result.TotalCount)
 	}
 
 	_, err = suite.getHandler.Handle(userCtx, query.GetExerciseQuery{ID: draft.Info().ID})
@@ -218,7 +221,7 @@ func (r *fakeRepository) FindByID(_ context.Context, id string) (*domain.Exercis
 func (r *fakeRepository) SearchActive(
 	_ context.Context,
 	_ *port.SearchFilters,
-) ([]*domain.Exercise, error) {
+) ([]*domain.Exercise, int32, error) {
 	var exercises []*domain.Exercise
 	for _, exercise := range r.exercises {
 		if exercise.Info().Status == domain.StatusActive {
@@ -226,7 +229,7 @@ func (r *fakeRepository) SearchActive(
 		}
 	}
 
-	return exercises, nil
+	return exercises, int32(len(exercises)), nil
 }
 
 func (r *fakeRepository) GetRandomAISupported(

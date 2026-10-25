@@ -12,6 +12,11 @@ type SearchExercisesQuery struct {
 	Filters *port.SearchFilters
 }
 
+type SearchExercisesResult struct {
+	Exercises  []*domain.Exercise
+	TotalCount int32
+}
+
 type SearchExercisesHandler struct {
 	repo port.Repository
 }
@@ -25,11 +30,14 @@ func NewSearchExercisesHandler(repo port.Repository) *SearchExercisesHandler {
 func (h *SearchExercisesHandler) Handle(
 	ctx context.Context,
 	q SearchExercisesQuery,
-) ([]*domain.Exercise, error) {
-	exercises, err := h.repo.SearchActive(ctx, q.Filters)
+) (*SearchExercisesResult, error) {
+	exercises, totalCount, err := h.repo.SearchActive(ctx, q.Filters)
 	if err != nil {
 		return nil, fmt.Errorf("search exercises: %w", err)
 	}
 
-	return exercises, nil
+	return &SearchExercisesResult{
+		Exercises:  exercises,
+		TotalCount: totalCount,
+	}, nil
 }
