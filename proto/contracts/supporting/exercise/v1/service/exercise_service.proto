@@ -113,6 +113,13 @@ service ExerciseService {
     };
   }
 
+  rpc RestoreExercise (contracts.supporting.exercise.v1.message.RestoreExerciseRequest) returns (contracts.supporting.exercise.v1.message.RestoreExerciseResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/admin/exercises/{id}/restore"
+      body: "*"
+    };
+  }
+
   // BodyPart CRUD operations
   rpc CreateBodyPart (contracts.supporting.exercise.v1.message.CreateBodyPartRequest) returns (contracts.supporting.exercise.v1.message.CreateBodyPartResponse) {
     option (google.api.http) = {

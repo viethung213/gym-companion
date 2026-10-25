@@ -84,6 +84,9 @@ func TestExercise_Lifecycle_E2E(t *testing.T) {
 	if got := len(searchResp.GetExercises()); got != 1 {
 		t.Fatalf("Expected 1 exercise, got %d", got)
 	}
+	if got, want := searchResp.GetTotalCount(), int32(1); got != want {
+		t.Errorf("Expected TotalCount %d, got %d", want, got)
+	}
 	if got, want := searchResp.GetExercises()[0].GetId(), exerciseID; got != want {
 		t.Errorf("Expected exercise ID %s, got %s", want, got)
 	}
@@ -114,5 +117,33 @@ func TestExercise_Lifecycle_E2E(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("Expected error when user tries to get archived exercise, got nil")
+	}
+
+	// 9. Restore Exercise as Admin
+	restoreResp, err := suite.Client.RestoreExercise(adminCtx, &exercisemsg.RestoreExerciseRequest{
+		Id: exerciseID,
+	})
+	if err != nil {
+		t.Fatalf("RestoreExercise failed: %v", err)
+	}
+	if got, want := restoreResp.GetExercise().GetStatus(), exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE; got != want {
+		t.Errorf("Expected status %v, got %v", want, got)
+	}
+
+	// 10. Verify Restored Exercise appears in SearchExercises with TotalCount
+	searchAfterRestore, err := suite.Client.SearchExercises(userCtx, &exercisemsg.SearchExercisesRequest{
+		Keyword: "Updated",
+	})
+	if err != nil {
+		t.Fatalf("SearchExercises after restore failed: %v", err)
+	}
+	if got, want := searchAfterRestore.GetTotalCount(), int32(1); got != want {
+		t.Errorf("Expected TotalCount %d, got %d", want, got)
+	}
+	if len(searchAfterRestore.GetExercises()) != 1 {
+		t.Fatalf("Expected 1 exercise after restore, got %d", len(searchAfterRestore.GetExercises()))
+	}
+	if got, want := searchAfterRestore.GetExercises()[0].GetId(), exerciseID; got != want {
+		t.Errorf("Expected exercise ID %s, got %s", want, got)
 	}
 }

@@ -44,6 +44,11 @@ func newEvent(
 			ExerciseId: exerciseInfo.Id,
 			Exercise:   exerciseInfo,
 		}
+	case domain.EventTypeExerciseRestored:
+		protoMsg = &exercisev1event.ExerciseRestoredEvent{
+			ExerciseId: exerciseInfo.Id,
+			Exercise:   exerciseInfo,
+		}
 	default:
 		return nil, fmt.Errorf("unknown event type: %s", eventType)
 	}

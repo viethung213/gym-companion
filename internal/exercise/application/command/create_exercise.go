@@ -47,6 +47,9 @@ func (h *CreateExerciseHandler) Handle(
 	now := h.clock.Now()
 	info := cmd.Info
 	info.ID = id
+	if info.Status == "" {
+		info.Status = domain.StatusDraft
+	}
 
 	exercise, err := domain.NewExercise(info, now)
 	if err != nil {

@@ -71,7 +71,9 @@ type Exercise struct {
 //nolint:gocritic // info is a value object copy to protect aggregate encapsulation
 func NewExercise(info Info, now time.Time) (*Exercise, error) {
 	info.ID = strings.TrimSpace(info.ID)
-	info.Status = StatusDraft
+	if info.Status == "" {
+		info.Status = StatusDraft
+	}
 	info.ArchivedAt = nil
 	info.CreatedAt = now
 	info.UpdatedAt = now
@@ -154,7 +156,7 @@ func (e *Exercise) SubmitForApproval(now time.Time) error {
 }
 
 func (e *Exercise) Approve(now time.Time) error {
-	if e.info.Status != StatusPendingApproval {
+	if e.info.Status != StatusPendingApproval && e.info.Status != StatusDraft {
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, e.info.Status, StatusActive)
 	}
 
@@ -171,6 +173,18 @@ func (e *Exercise) Archive(now time.Time) error {
 
 	e.info.Status = StatusArchived
 	e.info.ArchivedAt = &now
+	e.info.UpdatedAt = now
+
+	return nil
+}
+
+func (e *Exercise) Restore(now time.Time) error {
+	if e.info.Status != StatusArchived {
+		return fmt.Errorf("%w: cannot restore exercise with status %s", ErrInvalidTransition, e.info.Status)
+	}
+
+	e.info.Status = StatusActive
+	e.info.ArchivedAt = nil
 	e.info.UpdatedAt = now
 
 	return nil
