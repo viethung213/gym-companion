@@ -70,22 +70,22 @@ func (r *PostgresRepository) FindByID(
 func (r *PostgresRepository) SearchActive(
 	ctx context.Context,
 	filters *port.SearchFilters,
-) ([]*domain.Exercise, error) {
-	records, err := r.searchActiveRecords(ctx, filters)
+) ([]*domain.Exercise, int32, error) {
+	records, totalCount, err := r.searchActiveRecords(ctx, filters)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	exercises := make([]*domain.Exercise, 0, len(records))
 	for i := range records {
 		exercise, err := r.rehydrate(ctx, &records[i])
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		exercises = append(exercises, exercise)
 	}
 
-	return exercises, nil
+	return exercises, totalCount, nil
 }
 
 func (r *PostgresRepository) GetRandomAISupported(

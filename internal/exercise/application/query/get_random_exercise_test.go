@@ -24,8 +24,8 @@ func (m *mockRandomRepo) FindByID(_ context.Context, _ string) (*domain.Exercise
 	return nil, nil
 }
 
-func (m *mockRandomRepo) SearchActive(_ context.Context, _ *port.SearchFilters) ([]*domain.Exercise, error) {
-	return nil, nil
+func (m *mockRandomRepo) SearchActive(_ context.Context, _ *port.SearchFilters) ([]*domain.Exercise, int32, error) {
+	return nil, 0, nil
 }
 
 func (m *mockRandomRepo) GetMetadata(_ context.Context) (port.Metadata, error) {
