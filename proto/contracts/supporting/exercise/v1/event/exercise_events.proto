@@ -29,3 +29,9 @@ message ExerciseArchivedEvent {
   string exercise_id = 1;
   contracts.supporting.exercise.v1.message.ExerciseInfo exercise = 2;
 }
+
+// Event payload when an exercise is restored
+message ExerciseRestoredEvent {
+  string exercise_id = 1;
+  contracts.supporting.exercise.v1.message.ExerciseInfo exercise = 2;
+}

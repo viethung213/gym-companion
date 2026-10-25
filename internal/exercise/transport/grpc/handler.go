@@ -329,6 +329,13 @@ func (s *ExerciseServer) DeleteExercise(
 	return &exercisemsg.DeleteExerciseResponse{Success: true}, nil
 }
 
+func (s *ExerciseServer) RestoreExercise(
+	ctx context.Context,
+	req *exercisemsg.RestoreExerciseRequest,
+) (*exercisemsg.RestoreExerciseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestoreExercise not implemented")
+}
+
 func toProtoExercise(info *domain.Info) *exercisemsg.ExerciseInfo {
 	return &exercisemsg.ExerciseInfo{
 		Id:                 info.ID,
@@ -847,6 +854,17 @@ func (c *ConnectExerciseHandler) DeleteExercise(
 	req *connect.Request[exercisemsg.DeleteExerciseRequest],
 ) (*connect.Response[exercisemsg.DeleteExerciseResponse], error) {
 	res, err := c.server.DeleteExercise(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectExerciseHandler) RestoreExercise(
+	ctx context.Context,
+	req *connect.Request[exercisemsg.RestoreExerciseRequest],
+) (*connect.Response[exercisemsg.RestoreExerciseResponse], error) {
+	res, err := c.server.RestoreExercise(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}
