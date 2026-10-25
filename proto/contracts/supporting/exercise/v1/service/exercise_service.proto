@@ -67,6 +67,17 @@ service ExerciseService {
     };
   }
 
+  // Lấy ngẫu nhiên 1 bài tập có AI hỗ trợ (cho Solo Match hoặc gợi ý tập)
+  rpc GetRandomExercise (contracts.supporting.exercise.v1.message.GetRandomExerciseRequest) returns (contracts.supporting.exercise.v1.message.GetRandomExerciseResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/exercises/random"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Exercise Catalog"
+      security: {} // Public bypass
+    };
+  }
+
   // API dành cho Admin CRUD
   rpc CreateExercise (contracts.supporting.exercise.v1.message.CreateExerciseRequest) returns (contracts.supporting.exercise.v1.message.CreateExerciseResponse) {
     option (google.api.http) = {
