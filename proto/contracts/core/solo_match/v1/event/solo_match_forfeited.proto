@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package contracts.core.solo_match.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/event;solomatchv1event";
+
+message SoloMatchForfeited {
+  string match_id = 1;
+  string forfeited_by_id = 2;
+  string winner_id = 3;
+  string bot_user_id = 4;
+  string reason = 5;
+  google.protobuf.Timestamp forfeited_at = 6;
+}

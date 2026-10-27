@@ -17,8 +17,23 @@ func TestSoloRefereeSession_NilRule_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Duration_AccumulatesTime(t *testing.T) {
+func TestSoloRefereeSession_Duration_EmptyRules_ReturnsError(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{ExerciseID: "plank_01", ChallengeType: vo.ChallengeTypeDuration}
+	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
+	if err == nil {
+		t.Fatal("expected error when duration rule has no criteria, got nil")
+	}
+	if session != nil {
+		t.Errorf("expected nil session on error, got %v", session)
+	}
+}
+
+func TestSoloRefereeSession_Duration_AccumulatesTime(t *testing.T) {
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
 	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -38,7 +53,11 @@ func TestSoloRefereeSession_Duration_AccumulatesTime(t *testing.T) {
 }
 
 func TestSoloRefereeSession_Duration_ViolationBefore5s_DoesNotResetAccumulated(t *testing.T) {
-	rule := &vo.ExerciseMotionRule{ExerciseID: "plank_01", ChallengeType: vo.ChallengeTypeDuration}
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
 	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,7 +94,11 @@ func TestSoloRefereeSession_Duration_ViolationBefore5s_DoesNotResetAccumulated(t
 }
 
 func TestSoloRefereeSession_Duration_5sViolation_TransitionsToSpectating(t *testing.T) {
-	rule := &vo.ExerciseMotionRule{ExerciseID: "plank_01", ChallengeType: vo.ChallengeTypeDuration}
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
 	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -364,7 +387,11 @@ func TestSoloRefereeSession_TimeoutCeiling(t *testing.T) {
 }
 
 func TestSoloRefereeSession_Duration_HardCeilingAt30Minutes(t *testing.T) {
-	rule := &vo.ExerciseMotionRule{ExerciseID: "plank_01", ChallengeType: vo.ChallengeTypeDuration}
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
 	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 60*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -401,12 +428,124 @@ func TestSoloRefereeSession_Duration_HardCeilingAt30Minutes(t *testing.T) {
 }
 
 func TestSoloRefereeSession_Duration_DefaultCeilingIs30Minutes(t *testing.T) {
-	rule := &vo.ExerciseMotionRule{ExerciseID: "plank_01", ChallengeType: vo.ChallengeTypeDuration}
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
 	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 0, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if session.RemainingCeilingSeconds() != 1800 {
 		t.Errorf("expected default duration ceiling to be 1800s, got %d", session.RemainingCeilingSeconds())
+	}
+}
+
+func TestSoloRefereeSession_WallClock_CeilingExpiresWithoutFrames(t *testing.T) {
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
+	ceiling := 10 * time.Minute
+	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, ceiling, rule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Ban đầu khi chưa gửi frame nào:
+	if session.RemainingCeilingSeconds() != 1800 { // Duration challenge được hard-cap/default ở 1800s
+		t.Errorf("expected ceiling 1800s, got %d", session.RemainingCeilingSeconds())
+	}
+
+	// Giả lập thời gian thực trôi qua 1801 giây mà người chơi KHÔNG gửi bất kỳ frame nào:
+	session.SetStartedAt(time.Now().Add(-1801 * time.Second))
+
+	// RemainingCeilingSeconds phải tự động giảm về 0:
+	if rem := session.RemainingCeilingSeconds(); rem != 0 {
+		t.Errorf("expected remaining ceiling to be 0s after wall-clock timeout, got %d", rem)
+	}
+
+	// TotalDurationSeconds phải phản ánh đúng thời gian trần đã trôi qua (1800s), không phải 0:
+	if total := session.TotalDurationSeconds(); total != 1800 {
+		t.Errorf("expected total duration to be 1800s, got %d", total)
+	}
+}
+
+func TestSoloRefereeSession_WaitingState_DoesNotCountTime(t *testing.T) {
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
+	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 0, rule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Người chơi đầu tiên vào phòng và chuyển sang trạng thái WAITING:
+	session.SetStatus(ParticipantStatusWaiting)
+	if !session.StartedAt().IsZero() {
+		t.Errorf("expected startedAt to be zero while in WAITING status")
+	}
+
+	// Giả lập thời gian trôi qua trong lúc chờ đối thủ:
+	time.Sleep(10 * time.Millisecond)
+	if rem := session.RemainingCeilingSeconds(); rem != 1800 {
+		t.Errorf("expected remaining ceiling to stay at 1800s while waiting, got %d", rem)
+	}
+
+	// Khi đối thủ vào phòng, chuyển sang ACTIVE -> startedAt được kích hoạt:
+	session.Activate()
+	if session.StartedAt().IsZero() {
+		t.Errorf("expected startedAt to be non-zero after activation")
+	}
+}
+
+func TestSoloRefereeSession_SpectatingState_WallElapsedContinues(t *testing.T) {
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "squat_01",
+		ChallengeType: vo.ChallengeTypeReps,
+		PhaseDetection: &vo.PhaseDetectionConfig{
+			Metric: "knee_angle",
+			Thresholds: vo.PhaseThresholds{
+				Rest:       vo.ThresholdCondition{GT: 165.0},
+				Transition: vo.ThresholdCondition{GT: 85.0, LTE: 165.0},
+				Active:     vo.ThresholdCondition{LTE: 85.0},
+			},
+		},
+	}
+	ceiling := 300 * time.Second
+	session, err := NewSoloRefereeSession("pushup_01", vo.ChallengeTypeReps, ceiling, rule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Ban đầu là ACTIVE:
+	if got, want := session.Status(), ParticipantStatusActive; got != want {
+		t.Fatalf("status got %v, want %v", got, want)
+	}
+
+	// Giả lập người chơi hoàn thành bài tập sớm và chuyển sang trạng thái SPECTATING:
+	session.MarkSpectating("USER_SUBMITTED")
+	if got, want := session.Status(), ParticipantStatusSpectating; got != want {
+		t.Fatalf("status got %v, want %v", got, want)
+	}
+
+	// Giả lập thời gian thực của trận đấu trôi qua 100 giây:
+	session.SetStartedAt(time.Now().Add(-100 * time.Second))
+
+	// RemainingCeilingSeconds phải tiếp tục giảm theo thời gian thực (300 - 100 = 200s), không bị đóng băng:
+	if rem := session.RemainingCeilingSeconds(); rem > 200 || rem < 198 {
+		t.Errorf("remaining ceiling got %d, want ~200s", rem)
+	}
+
+	// Giả lập trận đấu trôi qua quá thời gian trần (305 giây):
+	session.SetStartedAt(time.Now().Add(-305 * time.Second))
+
+	// RemainingCeilingSeconds phải chạm 0:
+	if got, want := session.RemainingCeilingSeconds(), int32(0); got != want {
+		t.Errorf("remaining ceiling after timeout got %d, want %d", got, want)
 	}
 }

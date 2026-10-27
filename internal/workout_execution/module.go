@@ -157,9 +157,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
 	timeoutWorker := worker.NewSessionTimeoutWorker(sessionRepo, outboxWriter, txManager, 5*time.Minute)
 	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, outboxWriter, txManager, 1*time.Minute, 5*time.Minute)
+	soloBotManager := worker.NewSoloBotManager(prRepo, liveSync, outboxWriter)
 	exerciseCreatedConsumer := workoutConsumer.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)
-
 	prConsumer := workoutConsumer.NewPREventConsumer(prProcessHandler)
+	soloMatchStartedConsumer := workoutConsumer.NewSoloMatchStartedConsumer(soloBotManager, outboxLogRepo)
+	soloMatchCancelledConsumer := workoutConsumer.NewSoloMatchCancelledConsumer(liveSync, soloBotManager, outboxLogRepo)
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -220,6 +222,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
+							log.Printf("[WorkoutExecution] Exercise reader error: %v", err)
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -237,6 +240,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 					}
 				}
 			}()
+		} else if err != nil {
+			log.Printf("[WorkoutExecution] Warning: failed to obtain exercise events reader: %v", err)
 		}
 
 		// Start WorkoutSessionCompleted event consumer worker (listening to topic 'workout_execution.events')
@@ -262,6 +267,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
+							log.Printf("[WorkoutExecution] PR consumer reader error: %v", err)
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -279,12 +285,63 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 					}
 				}
 			}()
+		} else if err != nil {
+			log.Printf("[WorkoutExecution] Warning: failed to obtain PR consumer reader: %v", err)
+		}
+
+		// Start SoloMatchStarted event consumer worker (listening to topic 'solo_match.events')
+		soloMatchReader, err := deps.KafkaRegistry.GetReader("workout_execution_solo_match_consumer", "solo_match.events", kafkaBrokers)
+		if err == nil && soloMatchReader != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("PANIC RECOVERED in WorkoutExecution SoloMatchStarted consumer worker: %v", r)
+					}
+					_ = soloMatchReader.Close()
+				}()
+
+				for {
+					select {
+					case <-workerCtx.Done():
+						return
+					default:
+						msg, err := soloMatchReader.ReadMessage(workerCtx)
+						if err != nil {
+							if errors.Is(err, context.Canceled) {
+								return
+							}
+							log.Printf("[WorkoutExecution] Solo match reader error: %v", err)
+							time.Sleep(1 * time.Second)
+							continue
+						}
+
+						func() {
+							defer func() {
+								if r := recover(); r != nil {
+									log.Printf("PANIC RECOVERED in SoloMatch event handling: %v", r)
+								}
+							}()
+							if err := soloMatchStartedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
+								log.Printf("WorkoutExecution failed to process SoloMatchStarted event: %v", err)
+							}
+							if err := soloMatchCancelledConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
+								log.Printf("WorkoutExecution failed to process SoloMatchCancelled event: %v", err)
+							}
+						}()
+					}
+				}
+			}()
+		} else if err != nil {
+			log.Printf("[WorkoutExecution] Warning: failed to obtain solo match reader: %v", err)
 		}
 	}
 
 	shutdown := func() {
 		log.Println("Shutting down Workout Execution Bounded Context background workers...")
 		cancelWorkers()
+		soloBotManager.StopAll()
 		wg.Wait()
 		log.Println("Workout Execution Bounded Context background workers stopped successfully.")
 	}

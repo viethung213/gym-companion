@@ -39,10 +39,12 @@ type SoloRefereeSession struct {
 
 	status           ParticipantStatus
 	isCompleted      bool
+	isFinalized      bool
 	completionReason string
 
 	confirmedValue  int32
 	elapsedDuration time.Duration
+	startedAt       time.Time
 	scoreSum        float32
 	scoreCount      int32
 
@@ -87,16 +89,20 @@ func NewSoloRefereeSession(
 		normChallengeType = vo.ChallengeTypeDuration
 	}
 
+	// 1. Validate exercise motion rule preconditions
+	if normChallengeType == vo.ChallengeTypeReps && rule.PhaseDetection == nil {
+		return nil, fmt.Errorf("exercise motion rule must configure phase_detection for rep challenge: %s", exerciseID)
+	}
+	if normChallengeType == vo.ChallengeTypeDuration && len(rule.Rules) == 0 {
+		return nil, fmt.Errorf("exercise motion rule must configure validation criteria for duration challenge: %s", exerciseID)
+	}
+
+	// 2. Resolve time ceiling
 	ceiling := defaultRepCeiling
 	if normChallengeType == vo.ChallengeTypeDuration {
 		ceiling = fixedDurationCeiling
-	} else {
-		if rule.PhaseDetection == nil {
-			return nil, fmt.Errorf("exercise motion rule must configure phase_detection for rep challenge: %s", exerciseID)
-		}
-		if timeCeiling > 0 {
-			ceiling = timeCeiling
-		}
+	} else if timeCeiling > 0 {
+		ceiling = timeCeiling
 	}
 
 	return &SoloRefereeSession{
@@ -104,6 +110,7 @@ func NewSoloRefereeSession(
 		challengeType:         normChallengeType,
 		timeCeiling:           ceiling,
 		status:                ParticipantStatusActive,
+		startedAt:             time.Now(),
 		maxViolationThreshold: 5 * time.Second,
 		repPhase:              RepPhaseRest,
 		hasTransitionedIn:     false,
@@ -120,6 +127,15 @@ func (s *SoloRefereeSession) ProcessFrame(result vo.EvaluationResult, delta time
 
 	if s.isCompleted || s.status == ParticipantStatusWaiting {
 		return
+	}
+
+	if s.startedAt.IsZero() {
+		s.startedAt = time.Now()
+	}
+
+	curElapsed := s.getElapsedLocked()
+	if curElapsed > s.elapsedDuration {
+		s.elapsedDuration = curElapsed
 	}
 
 	// Calculate allowed delta up to time ceiling
@@ -156,6 +172,12 @@ func (s *SoloRefereeSession) ProcessFrame(result vo.EvaluationResult, delta time
 		s.status = ParticipantStatusCompleted
 		if s.completionReason == "" {
 			s.completionReason = "TIMEOUT"
+		}
+		if s.challengeType == vo.ChallengeTypeDuration && result.Passed {
+			if s.accumulatedDuration+delta >= s.timeCeiling {
+				s.accumulatedDuration = s.timeCeiling
+				s.confirmedValue = int32(s.timeCeiling.Seconds())
+			}
 		}
 	}
 }
@@ -272,6 +294,10 @@ func (s *SoloRefereeSession) RepPhase() RepPhase {
 func (s *SoloRefereeSession) MarkCompleted(reason string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	curElapsed := s.getElapsedLocked()
+	if curElapsed > s.elapsedDuration {
+		s.elapsedDuration = curElapsed
+	}
 	s.isCompleted = true
 	s.status = ParticipantStatusCompleted
 	if s.completionReason == "" {
@@ -283,6 +309,10 @@ func (s *SoloRefereeSession) MarkCompleted(reason string) {
 func (s *SoloRefereeSession) MarkSpectating(reason string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	curElapsed := s.getElapsedLocked()
+	if curElapsed > s.elapsedDuration {
+		s.elapsedDuration = curElapsed
+	}
 	s.isCompleted = true
 	s.status = ParticipantStatusSpectating
 	if s.completionReason == "" {
@@ -311,6 +341,13 @@ func (s *SoloRefereeSession) CompletionReason() string {
 	return s.completionReason
 }
 
+// SetCompletionReason sets or updates the completion reason.
+func (s *SoloRefereeSession) SetCompletionReason(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.completionReason = reason
+}
+
 // ConfirmedValue returns confirmed reps or duration in seconds.
 func (s *SoloRefereeSession) ConfirmedValue() int32 {
 	s.mu.RLock()
@@ -328,22 +365,38 @@ func (s *SoloRefereeSession) AverageFormScore() float32 {
 	return s.scoreSum / float32(s.scoreCount)
 }
 
+func (s *SoloRefereeSession) getElapsedLocked() time.Duration {
+	elapsed := s.elapsedDuration
+	if !s.startedAt.IsZero() && (s.status == ParticipantStatusActive || s.status == ParticipantStatusSpectating) {
+		wallElapsed := time.Since(s.startedAt)
+		if wallElapsed > elapsed {
+			elapsed = wallElapsed
+		}
+	}
+	if elapsed > s.timeCeiling {
+		elapsed = s.timeCeiling
+	}
+	return elapsed
+}
+
 // TotalDurationSeconds returns total elapsed time in seconds.
 func (s *SoloRefereeSession) TotalDurationSeconds() int32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return int32(s.elapsedDuration.Seconds())
+	return int32(s.getElapsedLocked().Seconds())
 }
 
 // RemainingCeilingSeconds returns the countdown seconds until the time ceiling expires.
+// It accounts for both frame-accumulated time and wall-clock time so that the ceiling
+// countdown progresses even if no frames are sent by the client.
 func (s *SoloRefereeSession) RemainingCeilingSeconds() int32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rem := s.timeCeiling - s.elapsedDuration
-	if rem < 0 {
+	rem := s.timeCeiling - s.getElapsedLocked()
+	if rem <= 0 {
 		return 0
 	}
-	return int32(rem.Seconds())
+	return int32((rem + time.Second - time.Nanosecond) / time.Second)
 }
 
 // ChallengeType returns the normalized ChallengeType for this session.
@@ -365,6 +418,14 @@ func (s *SoloRefereeSession) SetStatus(status ParticipantStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status = status
+	switch status {
+	case ParticipantStatusActive:
+		if s.startedAt.IsZero() {
+			s.startedAt = time.Now()
+		}
+	case ParticipantStatusWaiting:
+		s.startedAt = time.Time{}
+	}
 }
 
 // Activate transitions a waiting session to ACTIVE.
@@ -373,6 +434,32 @@ func (s *SoloRefereeSession) Activate() {
 	defer s.mu.Unlock()
 	if s.status == ParticipantStatusWaiting {
 		s.status = ParticipantStatusActive
+		if s.startedAt.IsZero() {
+			s.startedAt = time.Now()
+		}
+	}
+}
+
+// StartedAt returns the timestamp when the session became active.
+func (s *SoloRefereeSession) StartedAt() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.startedAt
+}
+
+// SetStartedAt updates the startedAt timestamp (useful for reconnects or time simulation).
+func (s *SoloRefereeSession) SetStartedAt(t time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.startedAt = t
+}
+
+// Tick advances elapsed time by a specific delta (useful for deterministic tests).
+func (s *SoloRefereeSession) Tick(delta time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if delta > 0 {
+		s.elapsedDuration += delta
 	}
 }
 
@@ -409,4 +496,36 @@ func (s *SoloRefereeSession) SetCameraAngle(angle string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cameraAngle = angle
+}
+
+// RestoreProgress restores score and accumulated metrics upon reconnecting to an active match.
+func (s *SoloRefereeSession) RestoreProgress(confirmedValue int32, formScore float32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if confirmedValue > s.confirmedValue {
+		s.confirmedValue = confirmedValue
+		if s.challengeType == vo.ChallengeTypeDuration {
+			s.accumulatedDuration = time.Duration(confirmedValue) * time.Second
+			s.elapsedDuration = s.accumulatedDuration
+		}
+	}
+	if formScore > 0 && s.scoreCount == 0 {
+		s.scoreSum = formScore
+		s.scoreCount = 1
+	}
+}
+
+// IsFinalized returns whether the session has already been finalized and cleaned up.
+func (s *SoloRefereeSession) IsFinalized() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.isFinalized
+}
+
+// MarkFinalized marks the session as finalized.
+func (s *SoloRefereeSession) MarkFinalized() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.isFinalized = true
 }

@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
-	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
-	domainEvent "github.com/viethung213/gym-companion/internal/workout_execution/domain/event"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
@@ -35,13 +33,18 @@ type StreamFrameResult struct {
 
 // SoloTrackingService coordinates streaming sessions, referee evaluation, live sync, session persistence, and outbox event publishing.
 type SoloTrackingService struct {
-	ruleProvider  repository.ExerciseRuleProvider
-	ruleEvaluator service.RuleEvaluator
-	liveSync      port.SoloMatchLiveSyncPort
-	outbox        port.OutboxWriter
-	sessionRepo   repository.WorkoutSessionRepository
-	txManager     port.TxManager
+	ruleProvider          repository.ExerciseRuleProvider
+	ruleEvaluator         service.RuleEvaluator
+	liveSync              port.SoloMatchLiveSyncPort
+	outbox                port.OutboxWriter
+	sessionRepo           repository.WorkoutSessionRepository
+	txManager             port.TxManager
+	readyEmitted          sync.Map
+	disconnectGracePeriod time.Duration
+	disconnectCancelers   sync.Map
 }
+
+const defaultDisconnectGracePeriod = 45 * time.Second
 
 // NewSoloTrackingService constructs a SoloTrackingService with all required dependencies.
 func NewSoloTrackingService(
@@ -56,13 +59,19 @@ func NewSoloTrackingService(
 		ruleEvaluator = service.NewDefaultRuleEvaluator()
 	}
 	return &SoloTrackingService{
-		ruleProvider:  ruleProvider,
-		ruleEvaluator: ruleEvaluator,
-		liveSync:      liveSync,
-		outbox:        outbox,
-		sessionRepo:   sessionRepo,
-		txManager:     txManager,
+		ruleProvider:          ruleProvider,
+		ruleEvaluator:         ruleEvaluator,
+		liveSync:              liveSync,
+		outbox:                outbox,
+		sessionRepo:           sessionRepo,
+		txManager:             txManager,
+		disconnectGracePeriod: defaultDisconnectGracePeriod,
 	}
+}
+
+// SetDisconnectGracePeriodForTesting overrides the default grace period for testing.
+func (s *SoloTrackingService) SetDisconnectGracePeriodForTesting(d time.Duration) {
+	s.disconnectGracePeriod = d
 }
 
 // InitializeSession loads exercise rules, registers live sync, and creates a WorkoutSession aggregate in DB.
@@ -76,6 +85,13 @@ func (s *SoloTrackingService) InitializeSession(
 	planID = strings.TrimSpace(planID)
 	if planID == "" {
 		return nil, nil, fmt.Errorf("%w: plan_id is required", apperror.ErrInvalidInput)
+	}
+
+	timerKey := matchID + ":" + userID
+	if oldCancel, ok := s.disconnectCancelers.LoadAndDelete(timerKey); ok && oldCancel != nil {
+		if cancelFn, isFn := oldCancel.(context.CancelFunc); isFn {
+			cancelFn()
+		}
 	}
 
 	var registered bool
@@ -116,9 +132,19 @@ func (s *SoloTrackingService) InitializeSession(
 		return nil, nil, fmt.Errorf("create referee session: %w", err)
 	}
 
-	// If match room does not yet have 2 participants, stay in WAITING state
+	// Reconnect recovery: restore progress if participant was previously active in this match
 	if s.liveSync != nil {
-		ready, readyErr := s.liveSync.IsMatchReady(ctx, matchID)
+		if prevProg, prevErr := s.liveSync.GetMyProgress(ctx, matchID, userID); prevErr == nil && prevProg != nil {
+			if prevProg.Value > 0 {
+				referee.RestoreProgress(prevProg.Value, prevProg.FormScore)
+			}
+		}
+	}
+
+	// If match room does not yet have 2 participants, stay in WAITING state.
+	// If ready (both participants present), activate referee and notify opponent immediately.
+	if s.liveSync != nil {
+		ready, readyErr := s.checkAndEmitRoomReady(ctx, matchID)
 		if readyErr != nil {
 			slog.WarnContext(ctx, "failed to check match readiness during initialization",
 				slog.String("match_id", matchID),
@@ -126,62 +152,26 @@ func (s *SoloTrackingService) InitializeSession(
 			)
 		} else if !ready {
 			referee.SetStatus(service.ParticipantStatusWaiting)
+		} else {
+			referee.Activate()
+			if pubErr := s.liveSync.PublishMyProgress(ctx, matchID, port.ParticipantProgress{
+				UserID:    userID,
+				Value:     referee.ConfirmedValue(),
+				FormScore: referee.AverageFormScore(),
+				Status:    "ACTIVE",
+			}); pubErr != nil {
+				slog.WarnContext(ctx, "failed to publish initial active progress to live sync",
+					slog.String("match_id", matchID),
+					slog.String("user_id", userID),
+					slog.Any("err", pubErr),
+				)
+			}
 		}
 	}
 
 	// Create and persist WorkoutSession aggregate in DB in IN_PROGRESS state
-	if s.sessionRepo != nil {
-		saveFunc := func(txCtx context.Context) error {
-			active, err := s.sessionRepo.FindActiveSessionByUserID(txCtx, userID)
-			if err != nil {
-				return fmt.Errorf("find active session: %w", err)
-			}
-			if active != nil {
-				if active.PlanID() == planID {
-					referee.SetWorkoutSessionID(active.ID())
-					return nil
-				}
-				if abortErr := active.Abort("NEW_SOLO_MATCH_STARTED"); abortErr != nil {
-					return fmt.Errorf("abort previous active session: %w", abortErr)
-				}
-				if saveErr := s.sessionRepo.Save(txCtx, active); saveErr != nil {
-					return fmt.Errorf("save aborted active session: %w", saveErr)
-				}
-				abortedEvents := active.PopEvents()
-				if len(abortedEvents) > 0 && s.outbox != nil {
-					if outboxErr := s.outbox.WriteEvents(txCtx, "WorkoutSession", active.ID(), abortedEvents); outboxErr != nil {
-						return fmt.Errorf("write outbox events for aborted session: %w", outboxErr)
-					}
-				}
-			}
-
-			sessionID := uuid.NewString()
-			workoutSess, err := aggregate.NewWorkoutSession(sessionID, userID, planID)
-			if err != nil {
-				return fmt.Errorf("create workout session: %w", err)
-			}
-			if err := s.sessionRepo.Save(txCtx, workoutSess); err != nil {
-				return fmt.Errorf("save workout session: %w", err)
-			}
-			events := workoutSess.PopEvents()
-			if len(events) > 0 && s.outbox != nil {
-				if err := s.outbox.WriteEvents(txCtx, "WorkoutSession", workoutSess.ID(), events); err != nil {
-					return fmt.Errorf("write outbox events: %w", err)
-				}
-			}
-			referee.SetWorkoutSessionID(sessionID)
-			return nil
-		}
-
-		if s.txManager != nil {
-			if err := s.txManager.WithTransaction(ctx, saveFunc); err != nil {
-				return nil, nil, fmt.Errorf("persist workout session in transaction: %w", err)
-			}
-		} else {
-			if err := saveFunc(ctx); err != nil {
-				return nil, nil, fmt.Errorf("persist workout session: %w", err)
-			}
-		}
+	if err := s.initWorkoutSessionInDB(ctx, referee, userID, planID); err != nil {
+		return nil, nil, err
 	}
 
 	return referee, rule, nil
@@ -204,7 +194,7 @@ func (s *SoloTrackingService) ProcessFrame(
 
 	// 0. Check if match has become ready (both participants present)
 	if referee.IsWaiting() && s.liveSync != nil {
-		ready, readyErr := s.liveSync.IsMatchReady(ctx, matchID)
+		ready, readyErr := s.checkAndEmitRoomReady(ctx, matchID)
 		if readyErr != nil {
 			slog.WarnContext(ctx, "failed to check match readiness in frame loop",
 				slog.String("match_id", matchID),
@@ -313,23 +303,101 @@ func (s *SoloTrackingService) ProcessFrame(
 	}, nil
 }
 
+// HandleParticipantDisconnect handles sudden stream disconnection (network drop, reload, backgrounded app).
+// It unregisters the participant on Redis live sync (which sets status = DISCONNECTED and disconnected_at timestamp),
+// and starts a background grace period timer (default 45s). If the user does not reconnect within the grace period,
+// it auto-aborts the session in DB, emits SoloTrackingAborted, and marks the participant ABORTED.
+func (s *SoloTrackingService) HandleParticipantDisconnect(
+	ctx context.Context,
+	referee *service.SoloRefereeSession,
+	matchID, userID, exerciseID, planID string,
+) error {
+	if referee == nil || referee.IsFinalized() || referee.IsCompleted() {
+		return nil
+	}
+
+	if s.liveSync != nil {
+		if err := s.liveSync.UnregisterParticipant(ctx, matchID, userID); err != nil {
+			return fmt.Errorf("unregister participant on disconnect: %w", err)
+		}
+	}
+
+	gracePeriod := s.disconnectGracePeriod
+	if gracePeriod <= 0 {
+		gracePeriod = defaultDisconnectGracePeriod
+	}
+
+	timerCtx, cancel := context.WithCancel(context.Background())
+	timerKey := matchID + ":" + userID
+	if oldCancel, ok := s.disconnectCancelers.Swap(timerKey, cancel); ok && oldCancel != nil {
+		if cancelFn, isFn := oldCancel.(context.CancelFunc); isFn {
+			cancelFn()
+		}
+	}
+
+	time.AfterFunc(gracePeriod, func() {
+		defer s.disconnectCancelers.Delete(timerKey)
+		defer cancel()
+
+		if timerCtx.Err() != nil {
+			return
+		}
+
+		if referee.IsFinalized() || referee.IsCompleted() {
+			return
+		}
+
+		// Double-check on Redis: did user reconnect?
+		if s.liveSync != nil {
+			prog, err := s.liveSync.GetMyProgress(context.Background(), matchID, userID)
+			if err == nil && prog != nil && prog.Status != "DISCONNECTED" {
+				return
+			}
+		}
+
+		slog.Info("Participant disconnect grace period expired, auto-aborting session",
+			slog.String("match_id", matchID),
+			slog.String("user_id", userID),
+		)
+
+		cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanCancel()
+
+		referee.SetCompletionReason("USER_DISCONNECTED")
+		if finErr := s.FinalizeSession(cleanCtx, referee, matchID, userID, exerciseID, planID); finErr != nil {
+			slog.Warn("Failed to finalize session after disconnect grace period expired",
+				slog.String("match_id", matchID),
+				slog.String("user_id", userID),
+				slog.Any("err", finErr),
+			)
+		}
+	})
+
+	return nil
+}
+
 // FinalizeSession writes the final Outbox event if not already written, and notifies opponents.
+// It is called ONLY when the session has actually concluded (Submitted, Timed Out, or Aborted).
 func (s *SoloTrackingService) FinalizeSession(
 	ctx context.Context,
 	referee *service.SoloRefereeSession,
 	matchID, userID, exerciseID string,
 	planID string,
 ) error {
-	if referee == nil {
+	if referee == nil || referee.IsFinalized() {
 		return nil
 	}
+	defer referee.MarkFinalized()
 
 	reason := referee.CompletionReason()
-	isAbortedReason := reason == "USER_DISCONNECTED" || reason == "USER_FORFEITED"
+	if reason == "" {
+		reason = "USER_DISCONNECTED"
+	}
+	isAbortedReason := reason == "USER_DISCONNECTED" || reason == "USER_FORFEITED" || strings.HasPrefix(reason, "ABORT") || reason == "SURRENDER" || reason == "GAVE_UP"
 
 	if !referee.IsCompleted() {
-		referee.MarkCompleted("USER_DISCONNECTED")
-		if err := s.abortWorkoutSessionInDB(ctx, referee, matchID, userID, exerciseID, "USER_DISCONNECTED", planID); err != nil {
+		referee.MarkCompleted(reason)
+		if err := s.abortWorkoutSessionInDB(ctx, referee, matchID, userID, exerciseID, reason, planID); err != nil {
 			return fmt.Errorf("abort workout session in db: %w", err)
 		}
 	} else if !isAbortedReason {
@@ -483,11 +551,13 @@ func (s *SoloTrackingService) AbortSession(
 			return fmt.Errorf("unregister participant: %w", err)
 		}
 	}
+	referee.MarkFinalized()
 
 	return nil
 }
 
-func (s *SoloTrackingService) completeWorkoutSessionInDB(
+// ForceCompleteSessionOnCeiling cưỡng chế hoàn thành session và phát SoloTrackingCompleted khi chạm thời gian trần.
+func (s *SoloTrackingService) ForceCompleteSessionOnCeiling(
 	ctx context.Context,
 	referee *service.SoloRefereeSession,
 	matchID, userID, exerciseID, planID string,
@@ -495,163 +565,15 @@ func (s *SoloTrackingService) completeWorkoutSessionInDB(
 	if referee == nil {
 		return nil
 	}
-
-	soloEvent := &domainEvent.SoloTrackingCompleted{
-		MatchID:              matchID,
-		UserID:               userID,
-		ExerciseID:           exerciseID,
-		ChallengeType:        referee.ChallengeType(),
-		ConfirmedValue:       referee.ConfirmedValue(),
-		AverageFormScore:     referee.AverageFormScore(),
-		TotalDurationSeconds: referee.TotalDurationSeconds(),
-		CompletedAt:          time.Now().UTC(),
-		PlanID:               planID,
+	if !referee.IsCompleted() {
+		referee.MarkCompleted("TIMEOUT")
+		if err := s.completeWorkoutSessionInDB(ctx, referee, matchID, userID, exerciseID, planID); err != nil {
+			return fmt.Errorf("complete session in db on ceiling: %w", err)
+		}
+	} else if referee.Status() == service.ParticipantStatusSpectating {
+		referee.MarkCompleted(referee.CompletionReason())
 	}
-
-	if s.sessionRepo == nil || referee.WorkoutSessionID() == "" {
-		if s.outbox != nil {
-			if err := s.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{soloEvent}); err != nil {
-				return fmt.Errorf("write solo match completed outbox: %w", err)
-			}
-		}
-		return nil
-	}
-
-	saveFunc := func(txCtx context.Context) error {
-		sess, err := s.sessionRepo.FindByID(txCtx, referee.WorkoutSessionID())
-		if err != nil {
-			return fmt.Errorf("find workout session: %w", err)
-		}
-		if sess == nil {
-			return fmt.Errorf("workout session %s not found", referee.WorkoutSessionID())
-		}
-		if sess.Status() == aggregate.StatusCompleted {
-			return nil
-		}
-
-		avgScore := referee.AverageFormScore()
-		setLog := aggregate.WorkoutSetLog{
-			ID:         uuid.NewString(),
-			SessionID:  sess.ID(),
-			SetNumber:  1,
-			ExerciseID: exerciseID,
-			TargetReps: int(referee.ConfirmedValue()),
-			ActualReps: int(referee.ConfirmedValue()),
-			FormScore:  &avgScore,
-			CreatedAt:  time.Now().UTC(),
-		}
-		if logErr := sess.LogSet(setLog); logErr != nil {
-			return fmt.Errorf("log set: %w", logErr)
-		}
-		if compErr := sess.Complete(false, false); compErr != nil {
-			return fmt.Errorf("complete aggregate: %w", compErr)
-		}
-
-		if err := s.sessionRepo.Save(txCtx, sess); err != nil {
-			return fmt.Errorf("save completed session: %w", err)
-		}
-
-		if s.outbox != nil {
-			events := sess.PopEvents()
-			if len(events) > 0 {
-				if err := s.outbox.WriteEvents(txCtx, "WorkoutSession", sess.ID(), events); err != nil {
-					return fmt.Errorf("write session outbox: %w", err)
-				}
-			}
-
-			if err := s.outbox.WriteEvents(txCtx, "SoloMatch", matchID, []interface{}{soloEvent}); err != nil {
-				return fmt.Errorf("write solo match completed outbox: %w", err)
-			}
-		}
-		return nil
-	}
-
-	if s.txManager != nil {
-		return s.txManager.WithTransaction(ctx, saveFunc)
-	}
-	return saveFunc(ctx)
-}
-
-func (s *SoloTrackingService) abortWorkoutSessionInDB(
-	ctx context.Context,
-	referee *service.SoloRefereeSession,
-	matchID, userID, exerciseID, reason, planID string,
-) error {
-	if referee == nil {
-		return nil
-	}
-
-	soloAbortedEv := &domainEvent.SoloTrackingAborted{
-		MatchID:              matchID,
-		UserID:               userID,
-		ExerciseID:           exerciseID,
-		Reason:               reason,
-		AbortedAt:            time.Now().UTC(),
-		PlanID:               planID,
-		ConfirmedValue:       referee.ConfirmedValue(),
-		TotalDurationSeconds: referee.TotalDurationSeconds(),
-	}
-
-	if s.sessionRepo == nil || referee.WorkoutSessionID() == "" {
-		if s.outbox != nil {
-			if err := s.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{soloAbortedEv}); err != nil {
-				return fmt.Errorf("write solo aborted outbox: %w", err)
-			}
-		}
-		return nil
-	}
-
-	abortFunc := func(txCtx context.Context) error {
-		sess, err := s.sessionRepo.FindByID(txCtx, referee.WorkoutSessionID())
-		if err != nil {
-			return fmt.Errorf("find workout session on abort: %w", err)
-		}
-		if sess == nil {
-			return fmt.Errorf("workout session %s not found on abort", referee.WorkoutSessionID())
-		}
-		if sess.Status() == aggregate.StatusInProgress {
-			if referee.ConfirmedValue() > 0 {
-				avgScore := referee.AverageFormScore()
-				setLog := aggregate.WorkoutSetLog{
-					ID:         uuid.NewString(),
-					SessionID:  sess.ID(),
-					SetNumber:  1,
-					ExerciseID: exerciseID,
-					TargetReps: int(referee.ConfirmedValue()),
-					ActualReps: int(referee.ConfirmedValue()),
-					FormScore:  &avgScore,
-					CreatedAt:  time.Now().UTC(),
-				}
-				if logErr := sess.LogSet(setLog); logErr != nil {
-					return fmt.Errorf("log set on abort: %w", logErr)
-				}
-			}
-			if abortErr := sess.Abort(reason); abortErr != nil {
-				return fmt.Errorf("abort session aggregate: %w", abortErr)
-			}
-			if err := s.sessionRepo.Save(txCtx, sess); err != nil {
-				return fmt.Errorf("save aborted session: %w", err)
-			}
-			if s.outbox != nil {
-				events := sess.PopEvents()
-				if len(events) > 0 {
-					if err := s.outbox.WriteEvents(txCtx, "WorkoutSession", sess.ID(), events); err != nil {
-						return fmt.Errorf("write aborted session outbox: %w", err)
-					}
-				}
-
-				if err := s.outbox.WriteEvents(txCtx, "SoloMatch", matchID, []interface{}{soloAbortedEv}); err != nil {
-					return fmt.Errorf("write solo aborted outbox: %w", err)
-				}
-			}
-		}
-		return nil
-	}
-
-	if s.txManager != nil {
-		return s.txManager.WithTransaction(ctx, abortFunc)
-	}
-	return abortFunc(ctx)
+	return nil
 }
 
 // SubscribeMatchUpdates subscribes to updates from the opponent in the match.

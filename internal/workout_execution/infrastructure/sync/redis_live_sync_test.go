@@ -261,7 +261,8 @@ func TestRedisLiveSyncHub_RoomCleanupOnAllFinished(t *testing.T) {
 		t.Errorf("expected metaKey %s to be deleted after all participants finished", metaKey)
 	}
 
-	// 5. Test single-user abort/exit before match starts cleans up immediately
+	// 5. Test single-user disconnect before match starts preserves room for 60s check-in / reconnect,
+	// and explicit DelRoom cleans it up upon match cancellation.
 	singleMatchID := "match-single-exit"
 	if err := hub.RegisterParticipant(ctx, singleMatchID, "user-solo", "squat_01"); err != nil {
 		t.Fatalf("register user-solo: %v", err)
@@ -273,7 +274,15 @@ func TestRedisLiveSyncHub_RoomCleanupOnAllFinished(t *testing.T) {
 	if err := hub.UnregisterParticipant(ctx, singleMatchID, "user-solo"); err != nil {
 		t.Fatalf("unregister user-solo: %v", err)
 	}
+	// Room must be preserved during check-in window to allow reconnect
+	if !mr.Exists(singlePartKey) {
+		t.Errorf("expected match room to be preserved during check-in window for reconnect")
+	}
+	// DelRoom explicitly called by cancellation consumer purges the room
+	if err := hub.DelRoom(ctx, singleMatchID); err != nil {
+		t.Fatalf("del room: %v", err)
+	}
 	if mr.Exists(singlePartKey) {
-		t.Errorf("expected single match room to be cleaned up when only user leaves")
+		t.Errorf("expected single match room to be cleaned up after DelRoom")
 	}
 }
