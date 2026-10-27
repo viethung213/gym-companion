@@ -31,24 +31,23 @@ func (r *GORMSoloMatchRepository) Save(ctx context.Context, match *aggregate.Sol
 	err := db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"status", "winner_id", "is_draw", "ended_at", "updated_at",
+			"status", "winner_id", "is_draw", "started_at", "ended_at", "updated_at",
 		}),
 	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("save solo match model: %w", err)
 	}
 
-	// Lưu các bản ghi Participants
-	for i := range model.Participants {
-		pCopy := model.Participants[i]
+	// Lưu toàn bộ Participants trong 1 Batch duy nhất
+	if len(model.Participants) > 0 {
 		err = db.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
 				"score_value", "is_completed", "completed_at", "result", "updated_at",
 			}),
-		}).Create(&pCopy).Error
+		}).Create(&model.Participants).Error
 		if err != nil {
-			return fmt.Errorf("save match participant model %s: %w", pCopy.ID, err)
+			return fmt.Errorf("save match participants batch: %w", err)
 		}
 	}
 
@@ -74,10 +73,15 @@ func (r *GORMSoloMatchRepository) FindActiveByUserID(ctx context.Context, userID
 	db := GetDB(ctx, r.db)
 	var model SoloMatchModel
 
+	activeStatuses := []string{
+		valueobject.MatchStatusPendingReady.String(),
+		valueobject.MatchStatusInProgress.String(),
+	}
+
 	err := db.Preload("Participants").
 		Joins("JOIN solo_match.match_participants ON solo_match.match_participants.match_id = solo_match.solo_matches.id").
-		Where("solo_match.solo_matches.status = ? AND solo_match.match_participants.user_id = ?",
-			valueobject.MatchStatusInProgress.String(), userID).
+		Where("solo_match.solo_matches.status IN (?) AND solo_match.match_participants.user_id = ?",
+			activeStatuses, userID).
 		First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -89,17 +93,42 @@ func (r *GORMSoloMatchRepository) FindActiveByUserID(ctx context.Context, userID
 	return model.ToDomain()
 }
 
-func (r *GORMSoloMatchRepository) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (r *GORMSoloMatchRepository) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	db := GetDB(ctx, r.db)
 	var models []SoloMatchModel
 
 	err := db.Preload("Participants").
-		Where("status = ? AND timeout_at <= ?", valueobject.MatchStatusInProgress.String(), now).
-		Order("timeout_at ASC").
+		Where("status = ? AND ready_deadline <= ?", valueobject.MatchStatusPendingReady.String(), now).
+		Order("ready_deadline ASC").
 		Limit(limit).
 		Find(&models).Error
 	if err != nil {
-		return nil, fmt.Errorf("find expired matches: %w", err)
+		return nil, fmt.Errorf("find unready expired matches: %w", err)
+	}
+
+	result := make([]*aggregate.SoloMatch, 0, len(models))
+	for i := range models {
+		m, err := models[i].ToDomain()
+		if err != nil {
+			return nil, fmt.Errorf("convert match %s to domain: %w", models[i].ID, err)
+		}
+		result = append(result, m)
+	}
+
+	return result, nil
+}
+
+func (r *GORMSoloMatchRepository) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	db := GetDB(ctx, r.db)
+	var models []SoloMatchModel
+
+	err := db.Preload("Participants").
+		Where("status = ? AND started_at <= ?", valueobject.MatchStatusInProgress.String(), startedBefore).
+		Order("started_at ASC").
+		Limit(limit).
+		Find(&models).Error
+	if err != nil {
+		return nil, fmt.Errorf("find expired in-progress matches: %w", err)
 	}
 
 	result := make([]*aggregate.SoloMatch, 0, len(models))

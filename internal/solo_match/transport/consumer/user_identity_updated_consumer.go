@@ -82,10 +82,14 @@ func (c *UserIdentityUpdatedConsumer) HandleMessage(ctx context.Context, rawPayl
 	})
 
 	if c.outboxLogRepo != nil && env.ID != "" {
+		status := "PROCESSED"
+		errMsg := ""
 		if err != nil {
-			_ = c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, "FAILED", err.Error())
-		} else {
-			_ = c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, "PROCESSED", "")
+			status = "FAILED"
+			errMsg = err.Error()
+		}
+		if saveErr := c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, status, errMsg); saveErr != nil {
+			log.Printf("[SoloMatch] Failed to save outbox log for event %s: %v", env.ID, saveErr)
 		}
 	}
 

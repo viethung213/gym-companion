@@ -32,7 +32,11 @@ func (m *activeMatchRepoMock) FindActiveByUserID(ctx context.Context, userID str
 	return m.activeMatch, nil
 }
 
-func (m *activeMatchRepoMock) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (m *activeMatchRepoMock) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *activeMatchRepoMock) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	return nil, nil
 }
 
@@ -74,10 +78,10 @@ func TestGetActiveMatchHandler(t *testing.T) {
 			"ex_squat",
 			"Bodyweight Squat",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, p2},
 			now,
 		)
+		_ = match.ActivateRoom(now)
 
 		matchRepo := &activeMatchRepoMock{activeMatch: match}
 		snapRepo := &activeSnapshotRepoMock{snapshots: make(map[string]*entity.UserSnapshot)}

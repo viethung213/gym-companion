@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	solomatchv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/message"
@@ -67,7 +68,7 @@ func (h *Handler) handleJoinQueue(
 		UserID: userID,
 	})
 	if err != nil {
-		if errors.Is(err, derror.ErrActiveMatchAlreadyExists) {
+		if errors.Is(err, derror.ErrActiveMatchAlreadyExists) || errors.Is(err, derror.ErrUserAlreadyInQueue) {
 			return status.Error(codes.FailedPrecondition, err.Error())
 		}
 		return status.Errorf(codes.Internal, "join matchmaking queue: %v", err)
@@ -92,15 +93,30 @@ func (h *Handler) handleJoinQueue(
 		select {
 		case <-ctx.Done():
 			// Client ngắt mạng hoặc hủy -> Tự động cancel ticket
-			_ = h.cancelQueueHandler.Handle(context.Background(), command.CancelMatchmakingCommand{
+			if cErr := h.cancelQueueHandler.Handle(context.Background(), command.CancelMatchmakingCommand{
 				TicketID: result.TicketID,
 				UserID:   userID,
-			})
+			}); cErr != nil {
+				log.Printf("[SoloMatch] Failed to cancel matchmaking queue on disconnect: %v", cErr)
+			}
 			return ctx.Err()
 
 		case event, ok := <-result.EventChan:
 			if !ok {
+				_ = send(&solomatchv1message.JoinQueueResponse{
+					Type:           solomatchv1message.MatchStreamEventType_MATCH_STREAM_EVENT_TYPE_CANCELLED,
+					Message:        "Matchmaking connection interrupted, please retry",
+					ElapsedSeconds: elapsedSeconds,
+				})
 				return status.Error(codes.Unavailable, "matchmaking connection interrupted, please retry")
+			}
+			if event != nil && event.Err != nil {
+				_ = send(&solomatchv1message.JoinQueueResponse{
+					Type:           solomatchv1message.MatchStreamEventType_MATCH_STREAM_EVENT_TYPE_CANCELLED,
+					Message:        event.Err.Error(),
+					ElapsedSeconds: elapsedSeconds,
+				})
+				return status.Errorf(codes.Internal, "%v", event.Err)
 			}
 			if event != nil && event.Match != nil {
 				// Lấy snapshot thông tin đối thủ để hiển thị
@@ -108,7 +124,10 @@ func (h *Handler) handleJoinQueue(
 				for _, p := range event.Match.Participants() {
 					userIDs = append(userIDs, p.UserID())
 				}
-				snapshots, _ := h.snapshotRepo.FindByUserIDs(ctx, userIDs)
+				snapshots, sErr := h.snapshotRepo.FindByUserIDs(ctx, userIDs)
+				if sErr != nil {
+					log.Printf("[SoloMatch] Failed to find snapshots for users %v: %v", userIDs, sErr)
+				}
 				if snapshots == nil {
 					snapshots = make(map[string]*entity.UserSnapshot)
 				}

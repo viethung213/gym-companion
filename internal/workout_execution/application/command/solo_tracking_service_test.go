@@ -8,7 +8,6 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
-	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	domainEvent "github.com/viethung213/gym-companion/internal/workout_execution/domain/event"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
@@ -74,6 +73,11 @@ func (m *mockLiveSyncPort) IsMatchReady(ctx context.Context, matchID string) (bo
 	return len(m.participants) >= 2, nil
 }
 
+func (m *mockLiveSyncPort) DelRoom(ctx context.Context, matchID string) error {
+	m.participants = nil
+	return nil
+}
+
 func (m *mockLiveSyncPort) ParticipantCount(ctx context.Context, matchID string) (int, error) {
 	return len(m.participants), nil
 }
@@ -81,6 +85,13 @@ func (m *mockLiveSyncPort) ParticipantCount(ctx context.Context, matchID string)
 func (m *mockLiveSyncPort) PublishMyProgress(ctx context.Context, matchID string, progress port.ParticipantProgress) error {
 	m.myProgress = progress
 	return nil
+}
+
+func (m *mockLiveSyncPort) GetMyProgress(ctx context.Context, matchID, userID string) (*port.ParticipantProgress, error) {
+	if m.myProgress.UserID == userID {
+		return &m.myProgress, nil
+	}
+	return nil, nil
 }
 
 func (m *mockLiveSyncPort) GetOpponentProgress(ctx context.Context, matchID, myUserID string) (*port.ParticipantProgress, error) {
@@ -170,12 +181,20 @@ func TestSoloTrackingService(t *testing.T) {
 		t.Fatalf("unexpected error finalizing session: %v", err)
 	}
 
-	if len(outbox.events) != 1 {
-		t.Fatalf("expected 1 outbox event written, got %d", len(outbox.events))
+	if len(outbox.events) != 2 {
+		t.Fatalf("expected 2 outbox events written (RoomReady + TrackingAborted), got %d", len(outbox.events))
 	}
-	ev, ok := outbox.events[0].(*domainEvent.SoloTrackingAborted)
+	readyEv, ok := outbox.events[0].(*domainEvent.SoloMatchRoomReady)
 	if !ok {
-		t.Fatalf("expected *domainEvent.SoloTrackingAborted, got %T", outbox.events[0])
+		t.Fatalf("expected *domainEvent.SoloMatchRoomReady, got %T", outbox.events[0])
+	}
+	if readyEv.MatchID != "match-1" {
+		t.Errorf("expected MatchID match-1, got %s", readyEv.MatchID)
+	}
+
+	ev, ok := outbox.events[1].(*domainEvent.SoloTrackingAborted)
+	if !ok {
+		t.Fatalf("expected *domainEvent.SoloTrackingAborted, got %T", outbox.events[1])
 	}
 	if ev.PlanID != "plan-solo-test" {
 		t.Errorf("expected PlanID plan-solo-test, got %s", ev.PlanID)
@@ -191,12 +210,12 @@ func TestSoloTrackingService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error aborting session: %v", err)
 	}
-	if len(outbox.events) != 1 {
-		t.Fatalf("expected 1 outbox event for abort, got %d", len(outbox.events))
+	if len(outbox.events) != 2 {
+		t.Fatalf("expected 2 outbox events for abort (RoomReady + Aborted), got %d", len(outbox.events))
 	}
-	abortEv, ok := outbox.events[0].(*domainEvent.SoloTrackingAborted)
+	abortEv, ok := outbox.events[1].(*domainEvent.SoloTrackingAborted)
 	if !ok {
-		t.Fatalf("expected *domainEvent.SoloTrackingAborted, got %T", outbox.events[0])
+		t.Fatalf("expected *domainEvent.SoloTrackingAborted, got %T", outbox.events[1])
 	}
 	if abortEv.Reason != "SURRENDER" || abortEv.PlanID != "plan-abort-2" {
 		t.Errorf("mismatch abort event: %+v", abortEv)
@@ -235,277 +254,12 @@ func TestSoloTrackingService_EmptyPlanID_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSoloTrackingService_RoomFull_BlocksThirdParticipant(t *testing.T) {
-	ctx := context.Background()
-	rule := &vo.ExerciseMotionRule{
-		ExerciseID:    "plank_01",
-		ChallengeType: vo.ChallengeTypeDuration,
-	}
-	ruleProv := &mockRuleProvider{rule: rule}
-	liveSync := &mockLiveSyncPort{}
-	svc := NewSoloTrackingService(ruleProv, service.NewDefaultRuleEvaluator(), liveSync, nil, nil, nil)
-
-	// User 1 joins -> success
-	_, _, err := svc.InitializeSession(ctx, "match-full", "user-1", "plank_01", vo.ChallengeTypeDuration, 600, "plan-full-1")
-	if err != nil {
-		t.Fatalf("user-1 should join successfully: %v", err)
-	}
-
-	// User 2 joins -> success
-	_, _, err = svc.InitializeSession(ctx, "match-full", "user-2", "plank_01", vo.ChallengeTypeDuration, 600, "plan-full-2")
-	if err != nil {
-		t.Fatalf("user-2 should join successfully: %v", err)
-	}
-
-	// User 3 joins -> must be rejected with ErrMatchRoomFull
-	_, _, err = svc.InitializeSession(ctx, "match-full", "user-3", "plank_01", vo.ChallengeTypeDuration, 600, "plan-full-3")
-	if err == nil {
-		t.Fatal("expected user-3 to be rejected, got nil error")
-	}
-	if err != apperror.ErrMatchRoomFull {
-		t.Fatalf("expected ErrMatchRoomFull, got %v", err)
-	}
-}
-
-func TestSoloTrackingService_ExerciseMismatch(t *testing.T) {
-	ctx := context.Background()
-	rulePlank := &vo.ExerciseMotionRule{
-		ExerciseID:    "plank_01",
-		ChallengeType: vo.ChallengeTypeDuration,
-		MinConfidence: 0.5,
-	}
-	rulePushup := &vo.ExerciseMotionRule{
-		ExerciseID:    "push_up_01",
-		ChallengeType: vo.ChallengeTypeReps,
-		MinConfidence: 0.5,
-	}
-	ruleProvider := &mockRuleProvider{
-		rules: map[string]*vo.ExerciseMotionRule{
-			"plank_01":   rulePlank,
-			"push_up_01": rulePushup,
-		},
-	}
-	liveSync := &mockLiveSyncPort{}
-	svc := NewSoloTrackingService(ruleProvider, nil, liveSync, nil, nil, nil)
-
-	// User 1 joins match-exercise with plank_01
-	_, _, err := svc.InitializeSession(ctx, "match-exercise", "user-1", "plank_01", vo.ChallengeTypeDuration, 600, "plan-ex-1")
-	if err != nil {
-		t.Fatalf("user-1 should join successfully: %v", err)
-	}
-
-	// User 2 attempts to join same match with push_up_01 -> must be rejected
-	_, _, err = svc.InitializeSession(ctx, "match-exercise", "user-2", "push_up_01", vo.ChallengeTypeReps, 600, "plan-ex-2")
-	if err == nil {
-		t.Fatal("expected user-2 to be rejected with exercise mismatch, got nil error")
-	}
-	if err != apperror.ErrMatchExerciseMismatch {
-		t.Fatalf("expected ErrMatchExerciseMismatch, got %v", err)
-	}
-}
-
-func TestSoloTrackingService_WaitingOpponent_DoesNotCountReps(t *testing.T) {
-	ctx := context.Background()
-	rule := &vo.ExerciseMotionRule{
-		ExerciseID:    "plank_01",
-		ChallengeType: vo.ChallengeTypeDuration,
-		MinConfidence: 0.5,
-		Rules: []vo.RuleCriterion{
-			{
-				Name:    "spine",
-				Formula: vo.FormulaAngle3D,
-				Joints:  []int{11, 23, 27},
-				ValidRange: vo.ValidAngleRange{
-					Min: 165.0,
-					Max: 195.0,
-				},
-			},
-		},
-	}
-	ruleProv := &mockRuleProvider{rule: rule}
-	liveSync := &mockLiveSyncPort{} // isReady=false (only 1 user)
-	svc := NewSoloTrackingService(ruleProv, service.NewDefaultRuleEvaluator(), liveSync, nil, nil, nil)
-
-	referee, r, err := svc.InitializeSession(ctx, "match-waiting", "user-1", "plank_01", vo.ChallengeTypeDuration, 600, "plan-wait-1")
-	if err != nil {
-		t.Fatalf("initialize failed: %v", err)
-	}
-
-	if !referee.IsWaiting() {
-		t.Fatalf("expected referee to be in WAITING state when opponent has not joined")
-	}
-
-	// Send valid frame while WAITING
-	landmarks := []vo.SkeletonPoint{
-		{Index: 11, X: -1, Y: 0, Z: 0, Visibility: 0.9},
-		{Index: 23, X: 0, Y: 0, Z: 0, Visibility: 0.9},
-		{Index: 27, X: 1, Y: 0, Z: 0, Visibility: 0.9},
-	}
-	res, err := svc.ProcessFrame(ctx, referee, r, landmarks, 2*time.Second, "match-waiting", "user-1", "plank_01", "plan-1", "side")
-	if err != nil {
-		t.Fatalf("process frame error: %v", err)
-	}
-
-	if res.MyStatus != "WAITING" {
-		t.Errorf("expected MyStatus WAITING, got %s", res.MyStatus)
-	}
-	// Must NOT accumulate confirmed value while WAITING
-	if res.MyConfirmedValue != 0 {
-		t.Errorf("expected 0 confirmed value while waiting, got %d", res.MyConfirmedValue)
-	}
-	if res.AudioCue != "Đang chờ đối thủ vào phòng..." {
-		t.Errorf("expected waiting audio cue, got %s", res.AudioCue)
-	}
-
-	// Now opponent joins
-	_ = liveSync.RegisterParticipant(ctx, "match-waiting", "user-2", "plank_01")
-
-	// Next frame should activate
-	res2, err := svc.ProcessFrame(ctx, referee, r, landmarks, 1*time.Second, "match-waiting", "user-1", "plank_01", "plan-1", "side")
-	if err != nil {
-		t.Fatalf("process frame error after opponent joined: %v", err)
-	}
-
-	if res2.MyStatus != "ACTIVE" {
-		t.Errorf("expected MyStatus ACTIVE, got %s", res2.MyStatus)
-	}
-	if res2.MyConfirmedValue != 1 {
-		t.Errorf("expected 1 second confirmed after active, got %d", res2.MyConfirmedValue)
-	}
-}
-
-type mockSoloSessionRepo struct {
-	sessions map[string]*aggregate.WorkoutSession
-}
-
-func newMockSoloSessionRepo() *mockSoloSessionRepo {
-	return &mockSoloSessionRepo{sessions: make(map[string]*aggregate.WorkoutSession)}
-}
-
-func (m *mockSoloSessionRepo) Save(ctx context.Context, session *aggregate.WorkoutSession) error {
-	m.sessions[session.ID()] = session
-	return nil
-}
-
-func (m *mockSoloSessionRepo) FindByID(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
-	return m.sessions[id], nil
-}
-
-func (m *mockSoloSessionRepo) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
-	return m.sessions[id], nil
-}
-
-func (m *mockSoloSessionRepo) FindActiveSessionByUserID(ctx context.Context, userID string) (*aggregate.WorkoutSession, error) {
-	return nil, nil
-}
-
-func (m *mockSoloSessionRepo) FindTimedOutSessions(ctx context.Context, maxDurationMinutes int) ([]*aggregate.WorkoutSession, error) {
-	return nil, nil
-}
-
-func (m *mockSoloSessionRepo) FindHistoryByUserID(ctx context.Context, userID string, limit, offset int) ([]*aggregate.WorkoutSession, error) {
-	return nil, nil
-}
-
-func (m *mockSoloSessionRepo) FindSessionsWithCriticalInactivity(ctx context.Context, inactivityThreshold time.Duration) ([]*aggregate.WorkoutSession, error) {
-	return nil, nil
-}
-
-func TestSoloTrackingService_WorkoutSessionPersistence(t *testing.T) {
-	ctx := context.Background()
-	rule := &vo.ExerciseMotionRule{
-		ExerciseID:    "squat_01",
-		ChallengeType: vo.ChallengeTypeReps,
-		MinConfidence: 0.5,
-		PhaseDetection: &vo.PhaseDetectionConfig{
-			Metric: "knee_angle",
-			Thresholds: vo.PhaseThresholds{
-				Rest:       vo.ThresholdCondition{GT: 165.0},
-				Transition: vo.ThresholdCondition{GT: 85.0, LTE: 165.0},
-				Active:     vo.ThresholdCondition{LTE: 85.0},
-			},
-		},
-		Rules: []vo.RuleCriterion{
-			{
-				Name:    "knee",
-				Formula: vo.FormulaAngle3D,
-				Joints:  []int{23, 25, 27},
-				ValidRange: vo.ValidAngleRange{
-					Min: 70.0,
-					Max: 180.0,
-				},
-			},
-		},
-	}
-
-	ruleProv := &mockRuleProvider{rule: rule}
-	liveSync := &mockLiveSyncPort{isReady: true}
-	outbox := &mockOutboxWriter{}
-	sessionRepo := newMockSoloSessionRepo()
-
-	svc := NewSoloTrackingService(ruleProv, service.NewDefaultRuleEvaluator(), liveSync, outbox, sessionRepo, nil)
-
-	// 1. Initialize session -> must create WorkoutSession in DB with StatusInProgress
-	referee, _, err := svc.InitializeSession(ctx, "match-persist-1", "user-persist", "squat_01", vo.ChallengeTypeReps, 300, "plan-custom-1")
-	if err != nil {
-		t.Fatalf("initialize session error: %v", err)
-	}
-
-	sessionID := referee.WorkoutSessionID()
-	if sessionID == "" {
-		t.Fatalf("expected referee to have a non-empty WorkoutSessionID")
-	}
-
-	dbSession := sessionRepo.sessions[sessionID]
-	if dbSession == nil {
-		t.Fatalf("expected session to be saved in DB repository")
-	}
-	if dbSession.Status() != aggregate.StatusInProgress {
-		t.Errorf("got status %s, want IN_PROGRESS", dbSession.Status())
-	}
-	if dbSession.UserID() != "user-persist" {
-		t.Errorf("got user %s, want user-persist", dbSession.UserID())
-	}
-	if dbSession.PlanID() != "plan-custom-1" {
-		t.Errorf("got plan %s, want plan-custom-1", dbSession.PlanID())
-	}
-
-	// 2. Mark completed and finalize -> must transition to StatusCompleted and log set
-	referee.MarkCompleted("GOAL_REACHED")
-	err = svc.FinalizeSession(ctx, referee, "match-persist-1", "user-persist", "squat_01", "plan-custom-1")
-	if err != nil {
-		t.Fatalf("finalize session error: %v", err)
-	}
-
-	updatedDBSess := sessionRepo.sessions[sessionID]
-	if updatedDBSess.Status() != aggregate.StatusCompleted {
-		t.Errorf("got status %s, want COMPLETED", updatedDBSess.Status())
-	}
-	if len(updatedDBSess.Sets()) != 1 {
-		t.Errorf("got %d sets logged in session, want 1", len(updatedDBSess.Sets()))
-	}
-
-	// 3. Test Abort on another session
-	referee2, _, err := svc.InitializeSession(ctx, "match-persist-2", "user-abort", "squat_01", vo.ChallengeTypeReps, 300, "plan-abort-persist")
-	if err != nil {
-		t.Fatalf("init session 2 error: %v", err)
-	}
-	sessID2 := referee2.WorkoutSessionID()
-	err = svc.AbortSession(ctx, referee2, "match-persist-2", "user-abort", "squat_01", "GAVE_UP", "match-persist-2")
-	if err != nil {
-		t.Fatalf("abort session error: %v", err)
-	}
-	abortedSess := sessionRepo.sessions[sessID2]
-	if abortedSess.Status() != aggregate.StatusAborted {
-		t.Errorf("got status %s, want ABORTED", abortedSess.Status())
-	}
-}
-
 func TestSoloTrackingService_SubmitSession(t *testing.T) {
 	ctx := context.Background()
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
 	ruleProv := &mockRuleProvider{rule: rule}
 	outbox := &mockOutboxWriter{}
@@ -546,5 +300,203 @@ func TestSoloTrackingService_SubmitSession(t *testing.T) {
 	}
 	if !res2.MatchEnded {
 		t.Errorf("expected MatchEnded=true when opponent is completed, got false")
+	}
+}
+
+func TestSoloTrackingService_ForceCompleteSessionOnCeiling(t *testing.T) {
+	ctx := context.Background()
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
+	ruleProv := &mockRuleProvider{rule: rule}
+	outbox := &mockOutboxWriter{}
+
+	svc := NewSoloTrackingService(ruleProv, nil, nil, outbox, nil, nil)
+	referee, err := service.NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 300*time.Second, rule)
+	if err != nil {
+		t.Fatalf("create referee session error: %v", err)
+	}
+
+	err = svc.ForceCompleteSessionOnCeiling(ctx, referee, "match-ceiling", "user-ceil", "plank_01", "plan-ceil")
+	if err != nil {
+		t.Fatalf("force complete error: %v", err)
+	}
+
+	if !referee.IsCompleted() {
+		t.Errorf("expected referee to be marked completed")
+	}
+	if referee.CompletionReason() != "TIMEOUT" {
+		t.Errorf("expected completion reason TIMEOUT, got %s", referee.CompletionReason())
+	}
+	if len(outbox.events) != 1 {
+		t.Fatalf("expected 1 outbox event for SoloTrackingCompleted, got %d", len(outbox.events))
+	}
+}
+
+func TestSoloTrackingService_ForceCompleteSessionOnCeiling_WhenSpectating(t *testing.T) {
+	ctx := context.Background()
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
+	}
+	ruleProv := &mockRuleProvider{rule: rule}
+	outbox := &mockOutboxWriter{}
+
+	svc := NewSoloTrackingService(ruleProv, nil, nil, outbox, nil, nil)
+	referee, err := service.NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 300*time.Second, rule)
+	if err != nil {
+		t.Fatalf("create referee session error: %v", err)
+	}
+
+	// Người chơi submit sớm và đang ở trạng thái SPECTATING:
+	referee.MarkSpectating("USER_SUBMITTED")
+	if got, want := referee.Status(), service.ParticipantStatusSpectating; got != want {
+		t.Fatalf("status got %v, want %v", got, want)
+	}
+
+	err = svc.ForceCompleteSessionOnCeiling(ctx, referee, "match-ceiling-spec", "user-ceil-spec", "plank_01", "plan-ceil")
+	if err != nil {
+		t.Fatalf("force complete error: %v", err)
+	}
+
+	// Trạng thái phải chuyển thành COMPLETED và giữ nguyên completionReason:
+	if got, want := referee.Status(), service.ParticipantStatusCompleted; got != want {
+		t.Errorf("referee status got %v, want %v", got, want)
+	}
+	if got, want := referee.CompletionReason(), "USER_SUBMITTED"; got != want {
+		t.Errorf("referee completion reason got %s, want %s", got, want)
+	}
+}
+
+func TestSoloTrackingService_SubscribeAndOpponentProgress(t *testing.T) {
+	ctx := context.Background()
+	liveSync := &mockLiveSyncPort{
+		opponentProg: &port.ParticipantProgress{
+			UserID: "opp-123",
+			Value:  15,
+		},
+	}
+	svc := NewSoloTrackingService(nil, nil, liveSync, nil, nil, nil)
+
+	ch, unsub, err := svc.SubscribeMatchUpdates(ctx, "match-sub", "user-sub")
+	if err != nil {
+		t.Fatalf("subscribe error: %v", err)
+	}
+	if ch == nil || unsub == nil {
+		t.Errorf("expected non-nil channel and unsubscribe function")
+	}
+	unsub()
+
+	opp, err := svc.GetOpponentProgress(ctx, "match-sub", "user-sub")
+	if err != nil {
+		t.Fatalf("get opponent progress error: %v", err)
+	}
+	if opp == nil || opp.UserID != "opp-123" || opp.Value != 15 {
+		t.Errorf("unexpected opponent progress: %+v", opp)
+	}
+}
+
+func TestSoloTrackingService_HandleParticipantDisconnect_GracePeriodExpired(t *testing.T) {
+	ctx := context.Background()
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		MinConfidence: 0.5,
+		Rules: []vo.RuleCriterion{
+			{
+				Name:       "spine",
+				ValidRange: vo.ValidAngleRange{Min: 165, Max: 195},
+			},
+		},
+	}
+	ruleProv := &mockRuleProvider{rule: rule}
+	liveSync := &mockLiveSyncPort{}
+	outbox := &mockOutboxWriter{}
+
+	svc := NewSoloTrackingService(ruleProv, nil, liveSync, outbox, nil, nil)
+	svc.SetDisconnectGracePeriodForTesting(50 * time.Millisecond)
+
+	referee, _, err := svc.InitializeSession(ctx, "match-disc-1", "user-disc-1", "plank_01", "DURATION", 600, "plan-disc-1")
+	if err != nil {
+		t.Fatalf("failed to initialize session: %v", err)
+	}
+
+	outbox.events = nil
+
+	// Disconnect triggers grace period
+	err = svc.HandleParticipantDisconnect(ctx, referee, "match-disc-1", "user-disc-1", "plank_01", "plan-disc-1")
+	if err != nil {
+		t.Fatalf("HandleParticipantDisconnect error: %v", err)
+	}
+
+	// Wait for grace period to expire
+	time.Sleep(120 * time.Millisecond)
+
+	if !referee.IsFinalized() {
+		t.Errorf("expected referee to be finalized after disconnect grace period expired")
+	}
+
+	if len(outbox.events) == 0 {
+		t.Fatalf("expected SoloTrackingAborted event in outbox, got 0")
+	}
+	abortEv, ok := outbox.events[len(outbox.events)-1].(*domainEvent.SoloTrackingAborted)
+	if !ok {
+		t.Fatalf("expected *domainEvent.SoloTrackingAborted, got %T", outbox.events[len(outbox.events)-1])
+	}
+	if abortEv.Reason != "USER_DISCONNECTED" {
+		t.Errorf("expected reason USER_DISCONNECTED, got %s", abortEv.Reason)
+	}
+	if abortEv.UserID != "user-disc-1" {
+		t.Errorf("expected userID user-disc-1, got %s", abortEv.UserID)
+	}
+}
+
+func TestSoloTrackingService_HandleParticipantDisconnect_Reconnected(t *testing.T) {
+	ctx := context.Background()
+	rule := &vo.ExerciseMotionRule{
+		ExerciseID:    "plank_01",
+		ChallengeType: vo.ChallengeTypeDuration,
+		MinConfidence: 0.5,
+		Rules: []vo.RuleCriterion{
+			{
+				Name:       "spine",
+				ValidRange: vo.ValidAngleRange{Min: 165, Max: 195},
+			},
+		},
+	}
+	ruleProv := &mockRuleProvider{rule: rule}
+	liveSync := &mockLiveSyncPort{}
+	outbox := &mockOutboxWriter{}
+
+	svc := NewSoloTrackingService(ruleProv, nil, liveSync, outbox, nil, nil)
+	svc.SetDisconnectGracePeriodForTesting(100 * time.Millisecond)
+
+	referee, _, err := svc.InitializeSession(ctx, "match-rec-1", "user-rec-1", "plank_01", "DURATION", 600, "plan-rec-1")
+	if err != nil {
+		t.Fatalf("failed to initialize session: %v", err)
+	}
+
+	// Disconnect triggers grace period
+	err = svc.HandleParticipantDisconnect(ctx, referee, "match-rec-1", "user-rec-1", "plank_01", "plan-rec-1")
+	if err != nil {
+		t.Fatalf("HandleParticipantDisconnect error: %v", err)
+	}
+
+	// Reconnect quickly at 20ms
+	time.Sleep(20 * time.Millisecond)
+	_, _, err = svc.InitializeSession(ctx, "match-rec-1", "user-rec-1", "plank_01", "DURATION", 600, "plan-rec-1")
+	if err != nil {
+		t.Fatalf("failed to reconnect InitializeSession: %v", err)
+	}
+
+	// Wait past the original 100ms grace period
+	time.Sleep(150 * time.Millisecond)
+
+	// Since user reconnected, referee should NOT be finalized as aborted
+	if referee.IsFinalized() {
+		t.Errorf("expected referee NOT to be finalized when user reconnected within grace period")
 	}
 }

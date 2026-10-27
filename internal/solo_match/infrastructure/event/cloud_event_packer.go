@@ -77,6 +77,13 @@ func PackCloudEvent(ev domainEvent.DomainEvent) (eventID, eventType string, payl
 			"reason":        e.Reason,
 			"forfeitedAt":   e.ForfeitedAt.Format(time.RFC3339),
 		})
+	case *domainEvent.SoloMatchCancelled:
+		partitionKey = e.MatchID
+		dataBytes, err = json.Marshal(map[string]any{
+			"matchId":     e.MatchID,
+			"reason":      e.Reason,
+			"cancelledAt": e.CancelledAt.Format(time.RFC3339),
+		})
 	default:
 		// Fallback mặc định
 		partitionKey = "default"

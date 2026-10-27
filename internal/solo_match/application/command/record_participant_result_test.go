@@ -28,7 +28,11 @@ func (m *resultMatchRepoMock) FindActiveByUserID(ctx context.Context, userID str
 	return nil, nil
 }
 
-func (m *resultMatchRepoMock) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (m *resultMatchRepoMock) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *resultMatchRepoMock) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	return nil, nil
 }
 
@@ -78,10 +82,10 @@ func TestRecordParticipantResultHandler(t *testing.T) {
 			"ex_pushup",
 			"Push-Up",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, p2},
 			now,
 		)
+		_ = match.ActivateRoom(now)
 		_ = matchRepo.Save(ctx, match)
 
 		handler := command.NewRecordParticipantResultHandler(matchRepo, eventPub, txManager, nil, botRepo)
@@ -149,7 +153,6 @@ func TestRecordParticipantResultHandler(t *testing.T) {
 			"ex_pushup",
 			"Push-Up",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, p2},
 			now,
 		)

@@ -1,137 +1,191 @@
-# Đặc Tả Yêu Cầu Nghiệp Vụ — Module Solo Match (Business Requirements)
+# Đặc Tả Yêu Cầu Nghiệp Vụ — Bounded Context Solo Match (Business Requirements)
 
-Tài liệu này định nghĩa toàn bộ mục tiêu, phạm vi và quy tắc nghiệp vụ của Bounded Context **Solo Match** (Ghép trận đối kháng thể lực 1v1) trong hệ thống Gym Companion.
+Tài liệu này định nghĩa toàn bộ mục tiêu, phạm vi, ranh giới trách nhiệm, các kịch bản và cách xử lý nghiệp vụ thuộc trách nhiệm độc quyền của Bounded Context **Solo Match** (Ghép trận và Quản lý kết quả đối kháng 1v1).
 
----
-
-## 1. Giới Thiệu & Mục Tiêu Nghiệp Vụ
-
-Module **Solo Match** đóng vai trò là phân hệ đối kháng thể thao điện tử giữa các người dùng trong hệ thống:
-1. **Tạo động lực thi đấu trực tiếp (Social Competition & Motivation)**: Thúc đẩy gymer vượt qua giới hạn bản thân thông qua các trận đấu 1v1 ngắn hạn, ngẫu nhiên với đối thủ có trình độ tương đương.
-2. **Trải nghiệm thời gian thực, độ trễ cực thấp**: Đảm bảo thời gian tìm kiếm đối thủ diễn ra nhanh chóng, phản hồi trực quan qua Server-Streaming.
-3. **Đảm bảo tính liên tục (Always-Available Matching)**: Không bao giờ để người dùng rơi vào trạng thái chờ đợi vô hạn (Deadlock / Starvation) khi phòng tập vắng người hoặc đêm muộn bằng cơ chế Bot Fallback thông minh sau 5 phút.
-4. **Công bằng & Minh bạch (Anti-Cheat & Strict Fairness)**:
-   - Cả 2 bên được giao chung một bài tập ngẫu nhiên.
-   - Kết quả được ghi nhận khách quan thông qua hệ thống AI Camera Pose Tracking của ứng dụng, loại bỏ hoàn toàn khả năng người chơi tự nhập điểm ảo.
-5. **Độc lập ranh giới (Domain Isolation)**: Module tập trung kiểm soát vòng đời trận đấu và kết quả thắng/thua, không can thiệp sâu vào chi tiết các góc xương hay tracking camera của module `workout_execution`.
+> [!IMPORTANT]
+> **Ranh giới Bounded Context (Domain Boundary)**:
+> - **Module `solo_match` (Tài liệu này)**: Chịu trách nhiệm về hàng đợi tìm trận, ghép cặp (PvP / Bot), quản lý vòng đời trận đấu (`PENDING_READY`, `IN_PROGRESS`, `COMPLETED`, `FORFEITED`, `CANCELLED`), kiểm soát hạn chót điểm danh 60 giây (`ready_deadline`), phân định thắng/thua/hòa từ điểm số nộp về, và xử lý vi phạm/bỏ cuộc.
+> - **Module `workout_execution`**: Chịu trách nhiệm về việc mở camera AI, tracking khung xương, trọng tài số chấm điểm, đếm Rep/Giây, mô phỏng Bot ảo thời gian thực, và đồng bộ tiến độ trực tiếp giữa hai bên. Xem chi tiết tại [**Tài liệu Solo Tracking của Workout Execution**](../../workout_execution/docs/solo_tracking_design.md).
 
 ---
 
-## 2. Các Phân Hệ Nghiệp Vụ Chính
+## 1. Giới Thiệu & Mục Tiêu Nghiệp Vụ Của Solo Match
 
-### 2.1. Hàng Đợi Ghép Trận Ngẫu Nhiên (Matchmaking Queue)
-- **Vào hàng đợi (Join Queue)**:
-  - Bất kỳ người dùng hợp lệ nào đã đăng nhập đều có thể gửi yêu cầu tìm trận.
-  - Người dùng đang có một trận đấu chưa hoàn thành (`IN_PROGRESS`) thì không được phép tìm trận mới.
-  - Kết nối tìm trận được duy trì qua gRPC Server-Streaming (hoặc ConnectRPC), giữ luồng stream mở để sẵn sàng nhận tín hiệu ngay khi ghép thành công.
-- **Hủy tìm trận (Cancel Queue)**:
-  - Người dùng có thể chủ động hủy vé tìm trận bất kỳ lúc nào khi đang đợi trong hàng.
-  - Sau khi hủy, vé lập tức bị thu hồi khỏi Redis Memory và luồng stream đóng lại an toàn.
-- **Thuật toán bốc cặp (FIFO Pairing)**:
-  - Sử dụng hàng đợi theo thứ tự thời gian gia nhập (Sorted Set với Score là Unix timestamp).
-  - Hai người dùng đầu tiên trong hàng đợi sẽ được bốc ra cùng lúc (nguyên tử) để ghép thành một trận đấu.
-
----
-
-### 2.2. Thể Thức Thi Đấu & Bài Tập Ngẫu Nhiên (Exercise Challenge)
-Khi hai đối thủ được ghép cặp thành công, hệ thống sẽ tự động bốc ngẫu nhiên một bài tập thể lực kèm theo thể thức thi đấu:
-
-| Thể thức | Bản chất nghiệp vụ | Ví dụ bài tập | Tiêu chí phân định thắng thua |
-| :--- | :--- | :--- | :--- |
-| **`REPS`** | Bài tập đếm số lần lặp lại (Repetitions) | Push-up (Hít đất), Bodyweight Squat, Pull-up, Burpees | Bên nào hoàn thành được **nhiều rep chuẩn hơn** sẽ giành chiến thắng. |
-| **`DURATION`** | Bài tập giữ tư thế tĩnh theo thời gian (Isometric Hold) | Plank, Wall-sit, Hollow Body Hold | Bên nào duy trì tư thế đúng form **lâu hơn (số giây lớn hơn)** sẽ giành chiến thắng. |
-
-- **Thời hạn trận đấu (`timeout_duration`)**:
-  - Mỗi trận đấu có một mốc thời gian tối đa để hoàn thành (mặc định từ 5 – 10 phút tùy độ khó bài tập).
-  - Hệ thống chốt mốc `timeout_at = started_at + timeout_duration`. Sau thời điểm này, nếu người chơi không nộp bài, trận đấu sẽ bị xử lý quá hạn.
+Module **Solo Match** đóng vai trò là cơ quan điều phối thi đấu thể thao điện tử (Matchmaker & Tournament Authority):
+1. **Tìm trận siêu tốc & Không nghẽn I/O (Pure Redis Matchmaker)**: Quản lý hàng đợi và phân giải vé tìm trận hoàn toàn trên RAM Redis (ZSet FIFO + Lua Script), giảm tải ghi đĩa PostgreSQL về 0 khi đang tìm trận.
+2. **Không để người dùng chờ đợi vô hạn (Bot Fallback sau 5 phút)**: Nếu sau 5 phút trong hàng đợi không có người chơi thật, tự động bốc ngẫu nhiên một tài khoản Bot có sẵn trong Database (`solo_match.system_bots`) để tạo trận.
+3. **Quản lý vòng đời trận đấu minh bạch & Chặt chẽ**:
+   - Trận đấu được tạo ở trạng thái `PENDING_READY` với thời hạn điểm danh vào phòng: `ready_deadline = now + 60s`.
+   - Chuyển sang `IN_PROGRESS` khi nhận được thông báo phòng thi đấu đã sẵn sàng (`SoloMatchRoomReady`).
+   - Nếu quá 60 giây không vào phòng, tự động hủy trận đấu (`CANCELLED`) để giải phóng tài nguyên.
+4. **Phân định kết quả công bằng (Match Outcome Resolution)**:
+   - Tiếp nhận điểm số cuối cùng được chứng thực bởi AI từ `workout_execution` để xác định người chiến thắng (`WIN`), người thua (`LOSE`) hoặc hòa (`DRAW`).
+   - Xử lý thua tức thì (`Fast Forfeit`) khi có người chơi bỏ cuộc hoặc mất kết nối quá thời gian quy định.
+5. **Độc lập ranh giới (Domain Isolation)**:
+   - Module `solo_match` không can thiệp vào camera, không xử lý tọa độ skeleton, không đếm rep trực tiếp.
+   - Giao tiếp với `workout_execution` hoàn toàn bất đồng bộ thông qua chuẩn **CloudEvents 1.0** trên nền **Kafka Transactional Outbox**.
 
 ---
 
-### 2.3. Cơ Chế Bot Fallback & Tài Khoản Bot Hệ Thống (System Bot Pool)
-Nhằm triệt tiêu trải nghiệm chờ đợi tiêu cực khi hệ thống ít người online, Solo Match áp dụng cơ chế Bot thông minh:
+## 2. Các Giai Đoạn Nghiệp Vụ Của Module Solo Match
 
 ```mermaid
 flowchart TD
-    A[Người dùng vào hàng đợi] --> B[Chờ đối thủ thực sự]
-    B -->|Tìm thấy trong <= 5 phút| C[Ghép trận Người vs Người]
-    B -->|Hết 5 phút không có ai| D[Kích hoạt Bot Fallback Engine]
-    D --> E[Bốc ngẫu nhiên 1 Bot ID từ bảng system_bots]
-    E --> F[Tính điểm chuẩn Bot qua BotBenchmarkCalculator]
-    F --> G[Ghép trận Người vs Bot & Đánh dấu Bot hoàn thành trước]
+    subgraph S1 [1. Hàng Đợi & Ghép Trận (Matchmaking)]
+        Q1[User gửi JoinQueue] --> Q2{Tìm thấy đối thủ trong <= 5m?}
+        Q2 -->|Có User khác| M1[Ghép cặp PvP: Bốc 2 vé nguyên tử bằng Lua]
+        Q2 -->|Hết 5 phút| M2[Bot Fallback: Bốc 1 vé lẻ & Bốc Bot từ DB]
+        Q2 -->|User hủy/ngắt mạng| C1[Hủy vé & Rút khỏi ZSet an toàn]
+    end
+
+    subgraph S2 [2. Khởi Tạo & Kích Hoạt Trận Đấu]
+        M1 --> R1[Tạo SoloMatch: PENDING_READY\nready_deadline = now + 60s]
+        M2 --> R1
+        R1 --> R2[Ghi Outbox event: SoloMatchStarted]
+        R2 --> R3{Nhận SoloMatchRoomReady trong 60s?}
+        R3 -->|Nhận sự kiện| R4[ActivateRoom: Chuyển sang IN_PROGRESS]
+        R3 -->|Quá 60s không nhận| R5[CancelOnNoShow: Chuyển sang CANCELLED\nPhát SoloMatchCancelled]
+    end
+
+    subgraph S3 [3. Phân Định Kết Quả Trận Đấu]
+        R4 --> O1{Nhận sự kiện từ workout_execution}
+        O1 -->|SoloTrackingCompleted| O2{Đã đủ 2 bên nộp bài?}
+        O2 -->|Đủ 2 bên| O3[MatchResolver: So sánh điểm số\nChuyển COMPLETED\nPhát SoloMatchCompleted]
+        O2 -->|Mới có 1 bên| O4[Ghi nhận điểm số, chờ bên còn lại]
+        O1 -->|SoloTrackingAborted| O5[Fast Forfeit: Xử thua bên bỏ cuộc\nĐối thủ WIN\nChuyển FORFEITED\nPhát SoloMatchForfeited + SoloMatchCompleted]
+        O1 -->|Treo quá 35 phút| O6[Safety Net Sweep: Xử lý trận treo\nPhát Forfeited hoặc Cancelled]
+    end
 ```
 
-1. **Ngưỡng kích hoạt**: Nếu sau **5 phút** trong hàng đợi mà không tìm được người chơi thực, Worker sẽ tự động bốc vé của người dùng đó và kích hoạt cơ chế ghép với Bot.
-2. **Kho tài khoản Bot trong Database (System Bot Pool)**:
-   - Bot không phải là chuỗi ngẫu nhiên sinh ra tức thời (on-the-fly), mà là **các tài khoản gymer thật được cấu hình sẵn trong Database** (bảng `solo_match.system_bots` liên kết khóa ngoại với `solo_match.user_snapshots`).
-   - Repository [`GORMBotRepository`](../../infrastructure/persistence/gorm_bot_repository.go) bốc ngẫu nhiên 1 `user_id` của bot đang kích hoạt (`is_active = true`) thông qua **bộ nhớ đệm In-Memory (TTL 30 ngày)**, đạt độ trễ cực thấp $O(1)$ mà không gây tải cho PostgreSQL.
-3. **Ẩn danh tính AI (Secrecy Policy)**:
-   - Người dùng **hoàn toàn không biết** mình đang thi đấu với Bot.
-   - Trong Protobuf Contract gửi về Client (`ParticipantView`), không có bất kỳ cờ `is_bot` nào.
-4. **Tính toán điểm chuẩn của Bot (`BotBenchmarkCalculator`)**:
-   - Điểm số của Bot được tính toán tập trung tại [`BotBenchmarkCalculator`](../../domain/service/bot_benchmark_calculator.go):
-     - *Kịch bản 1 (Người chơi có dữ liệu PR)*: Điểm Bot được gán bằng chính **Kỷ lục cá nhân (PR)** gần nhất của người chơi đối với bài tập đó (`*userPR`).
-     - *Kịch bản 2 (Người chơi mới chưa có PR)*:
-       - Nếu là bài tập đếm số lần (`REPS`): Điểm Bot là **5 reps** (`DefaultBotReps = 5.0`).
-       - Nếu là bài tập giữ thời gian (`DURATION`): Điểm Bot là **300 giây / 5 phút** (`DefaultBotDuration = 300.0`).
-   - Khi tạo trận đấu, điểm số của Bot được ghi nhận và chốt hoàn thành ngay lập tức (`pBot.RecordResult(botScore, now)`). Người chơi sau đó thực hiện buổi tập và nộp kết quả; khi người chơi hoàn tất, `MatchResolver` sẽ so sánh điểm số hai bên để phân định kết quả chung cuộc.
+---
+
+## 3. Chi Tiết Từng Phần, Từng Nhánh Rẽ Thuộc Solo Match
+
+### 3.1. Hàng Đợi Tìm Trận (Matchmaking Queue)
+
+#### Nhánh 1.1: Gia nhập hàng đợi (`JoinQueue`)
+- **Điều kiện tiên quyết**:
+  - Người dùng có JWT hợp lệ.
+  - **Active Match Guard**: Không có trận đấu nào đang dở dang (`PENDING_READY` hoặc `IN_PROGRESS`). Nếu có $\rightarrow$ Trả về lỗi `ErrActiveMatchAlreadyExists` (`FAILED_PRECONDITION`).
+  - **Queue Duplicate Guard**: Không có vé nào đang chờ trong hàng đợi Redis $\rightarrow$ Trả về lỗi `ErrUserAlreadyInQueue` (`FAILED_PRECONDITION`).
+- **Thực thi**:
+  - Sinh mã vé `ticketID = "ticket_" + UUID`.
+  - Mở kênh nhận thông báo Redis Pub/Sub: `solo_match:events:{ticketID}`.
+  - Thêm vé vào Redis Sorted Set `solo_match:queue:waiting` với `score = timestamp hiện tại`.
+  - Giữ luồng gRPC Server-Streaming mở, gửi sự kiện `MATCH_STREAM_EVENT_TYPE_QUEUED` kèm thời gian chờ (`elapsedSeconds`) cập nhật mỗi 1 giây.
+
+#### Nhánh 1.2: Người dùng chủ động hủy tìm trận (`CancelQueue`)
+- Client gọi RPC `CancelQueue(ticketID)`.
+- Hệ thống xóa vé khỏi Redis ZSet (`ZREM`) và đóng luồng stream an toàn.
+
+#### Nhánh 1.3: Người dùng ngắt kết nối mạng hoặc thoát app khi đang tìm trận
+- Kết nối gRPC Server-Streaming bị đứt $\rightarrow$ `ctx.Done()` kích hoạt.
+- Khối `defer` gọi `CancelMatchmakingHandler` tự động xóa vé khỏi Redis ZSet, tránh tồn đọng vé "ma".
+
+#### Nhánh 1.4: Ghép cặp Người vs Người (PvP Pairing)
+- Worker chạy Lua script nguyên tử:
+  - Bốc 2 vé đầu tiên trong ZSet có `user_id` khác nhau và xóa ngay khỏi ZSet.
+  - Lấy bài tập ngẫu nhiên từ `ExerciseProvider` (`REPS` hoặc `DURATION`).
+  - Khởi tạo thực thể `SoloMatch`: `status = PENDING_READY`, `ready_deadline = now + 60s`.
+  - Lưu vào PostgreSQL (`solo_match.solo_matches` và `solo_match.match_participants`).
+  - Ghi sự kiện `SoloMatchStarted` vào Outbox (`player1Id`, `player2Id`, `botUserId = ""`).
+  - Gửi `matchID` qua Pub/Sub cho 2 vé. Luồng stream gửi `MATCH_STREAM_EVENT_TYPE_MATCHED` về cho cả 2 người dùng.
+
+#### Nhánh 1.5: Bot Fallback sau 5 phút
+- Sau 5 phút, nếu vé có `score <= now - 5m`:
+  - Lua script rút 1 vé quá hạn ra khỏi ZSet.
+  - Bốc ngẫu nhiên 1 tài khoản Bot từ `solo_match.system_bots` qua In-Memory Cache ($O(1)$).
+  - Khởi tạo `SoloMatch`: `status = PENDING_READY`, `ready_deadline = now + 60s`.
+  - Ghi sự kiện `SoloMatchStarted` vào Outbox với trường `botUserId` được điền rõ ràng.
+  - Báo `matchID` qua Pub/Sub cho người dùng.
+  - Phía Client nhận thông tin hiển thị của Bot từ `user_snapshots` (ẩn hoàn toàn danh tính AI, không có cờ `is_bot`).
+
+#### Nhánh 1.6: Lỗi khi khởi tạo trận
+- Nếu việc lấy bài tập hoặc ghi Database thất bại:
+  - Gửi `ERROR:<msg>` qua Pub/Sub tới vé liên quan.
+  - Stream gửi `MATCH_STREAM_EVENT_TYPE_CANCELLED` kèm thông báo lỗi.
 
 ---
 
-### 2.4. Quy Tắc Phân Định Kết Quả Chung Cuộc (Match Outcome Resolution)
+### 3.2. Quản Lý Vòng Đời & Kích Hoạt Trận Đấu
 
-Khi nhận được kết quả buổi tập nộp về từ các bên tham gia:
+#### Nhánh 2.1: Kích hoạt trận đấu chính thức (`SoloMatchRoomReady`)
+- Module `workout_execution` sau khi kiểm tra phòng camera đã đủ 2 người sẽ phát sự kiện `SoloMatchRoomReady`.
+- Consumer `SoloMatchRoomReadyConsumer` nhận sự kiện:
+  - Gọi method `match.ActivateRoom(startedAt)`: Chuyển trạng thái từ `PENDING_READY` sang `IN_PROGRESS`, gán `started_at = now`.
+  - Lưu trận đấu vào PostgreSQL.
+  - **Quy tắc trạng thái hữu hạn (Terminal State Rule)**: Nếu trận đấu đã bị `CANCELLED`, `COMPLETED` hoặc `FORFEITED` $\rightarrow$ Tuyệt đối không bao giờ kích hoạt lại (`ErrMatchNotEligibleForActivation`).
 
-```mermaid
-flowchart TD
-    Start[Tiếp nhận kết quả người chơi] --> CheckBoth{Cả 2 bên đã hoàn thành?}
-    CheckBoth -->|Chưa| Wait[Chờ đối thủ hoặc chờ timeout_at]
-    CheckBoth -->|Đã nộp đủ| Compare[MatchResolver: So khớp điểm số]
-    
-    Compare --> Score1[P1.Score > P2.Score] --> Win1[Winner: Người chơi 1\nResult: P1 WIN, P2 LOSE]
-    Compare --> Score2[P2.Score > P1.Score] --> Win2[Winner: Người chơi 2\nResult: P2 WIN, P1 LOSE]
-    Compare --> Draw[P1.Score == P2.Score] --> DrawRes[Kết quả: HÒA - DRAW\nWinner: NULL, is_draw: true]
-```
-
-- **Quy tắc đặc thù cho bài tập Duration (Thời gian)**:
-  - Nếu Người chơi 1 dừng lại ở giây thứ 60, **Người chơi 2 vẫn tiếp tục được tập luyện bình thường** để chinh phục mốc thời gian cao hơn (ví dụ 90s, 120s) cho đến khi người chơi 2 tự kết thúc hoặc chạm hạn chót `timeout_at`.
-  - Hệ thống không ngắt ngang buổi tập của người chơi đang nỗ lực.
-
----
-
-### 2.5. Cơ Chế 2 Tầng Xử Lý Timeout & Bỏ Cuộc (Two-Tier Forfeit Mechanism)
-
-Để bảo vệ người chơi nghiêm túc trước các hành vi thoát game hoặc treo máy (AFK):
-
-#### Tầng 1: Xử thua tức thì (Fast Forfeit qua Event Stream)
-- Khi một bên nhấn nút **"Bỏ cuộc / Thoát trận"** hoặc gặp sự cố mất kết nối camera AI quá lâu, module `workout_execution` sẽ phát ra sự kiện hủy buổi tập (`WorkoutSessionAborted`).
-- Consumer của `solo_match` lập tức tiếp nhận sự kiện này:
-  - Đánh dấu người bỏ cuộc là `FORFEITED`.
-  - **Xử thắng (`WIN`) ngay lập tức cho đối thủ còn lại** mà không bắt họ phải chờ đến hết giờ `timeout_at`.
-  - Phát sự kiện `SoloMatchForfeited` và `SoloMatchCompleted` ra Kafka để trao thưởng tức thì.
-
-#### Tầng 2: Lưới an toàn bảo hiểm tầng cuối (Safety Net Timeout Worker)
-- Dành cho các trường hợp ngoại lệ bất khả kháng:
-  - Người chơi tắt app, hết pin, thoát ứng dụng trước khi màn hình tập kịp khởi tạo (No-show / Ghost Player).
-  - Sự cố mất mạng hoàn toàn khiến client không gửi được bất kỳ API nào về server.
-- Background Worker chạy định kỳ quét các trận `status = IN_PROGRESS` mà `now > timeout_at`:
-  - **Trường hợp 1 bên đã nộp, 1 bên chưa**: Xử bên chưa nộp là `FORFEITED`, bên đã nộp là `WIN`.
-  - **Trường hợp cả 2 bên đều không nộp**: Hủy trận đấu (`CANCELLED`), không tính thắng thua và không trừ điểm.
+#### Nhánh 2.2: Quá hạn 60 giây không vào phòng (Check-in No-Show Timeout)
+- **Bối cảnh**: Sau khi ghép trận thành công, một hoặc cả hai người chơi không chịu mở màn hình thi đấu, tắt app hoặc mất mạng.
+- **Xử lý**:
+  - `MatchTimeoutWorker` định kỳ 15 giây quét các trận `status = PENDING_READY` có `now >= ready_deadline`.
+  - Gọi method `match.CancelOnNoShow(now)`:
+    - Trận đấu chuyển sang `CANCELLED`.
+    - Cả hai bên tham gia đều bị gán `result = FORFEITED`.
+    - Cập nhật `ended_at = now`.
+  - Ghi sự kiện `SoloMatchCancelled` (lý do: `READY_TIMEOUT`) vào Outbox.
+  - Sự kiện này được Kafka chuyển tới `workout_execution` để dọn sạch phòng Redis và hủy Bot runner.
 
 ---
 
-### 2.6. Đồng Bộ Bản Sao Danh Tính (User Snapshot Synchronizer)
-- Tuân thủ nguyên tắc **Schema Isolation**: Bảng dữ liệu của module `solo_match` tuyệt đối **không JOIN sang bảng users** của module Auth/Account.
-- Module duy trì bảng cục bộ `solo_match.user_snapshots` (`user_id`, `display_name`, `avatar_url`).
+### 3.3. Phân Định Kết Quả Trận Đấu (Outcome Resolution)
+
+#### Nhánh 3.1: Tiếp nhận kết quả thi đấu (`SoloTrackingCompleted`)
+- Khi một bên hoàn thành bài tập, `workout_execution` phát sự kiện `SoloTrackingCompleted`.
+- Consumer `WorkoutCompletedConsumer` trong `solo_match` nhận sự kiện:
+  - Kiểm tra tính lũy đẳng (Idempotency) qua bảng `solo_match.outbox_logs`.
+  - Gọi `RecordParticipantResult(userID, scoreValue, completedAt)`:
+    - Ghi nhận điểm số của người chơi đó trong bảng `match_participants`.
+    - **Nếu cả 2 bên đều đã nộp kết quả (`IsCompleted() == true`)**:
+      - `MatchResolver` so sánh điểm số hai bên:
+        - `Score1 > Score2`: P1 Thắng (`WIN`), P2 Thua (`LOSE`).
+        - `Score2 > Score1`: P2 Thắng (`WIN`), P1 Thua (`LOSE`).
+        - `Score1 == Score2`: Kết quả **HÒA (`DRAW`)**, `winner_id = NULL`, `is_draw = true`.
+      - Trận đấu chuyển sang trạng thái `COMPLETED`, cập nhật `ended_at = now`.
+      - Ghi sự kiện `SoloMatchCompleted` vào Outbox để phân phối tiếp tới các phân hệ Gamification (thưởng XP, nâng huy hiệu), Streak và Social.
+
+#### Nhánh 3.2: Xử thua tức thì khi đối thủ bỏ cuộc (`SoloTrackingAborted`)
+- Khi một bên chủ động bấm bỏ cuộc, hoặc bị mất kết nối quá thời gian ân hạn, `workout_execution` phát sự kiện `SoloTrackingAborted`.
+- Consumer `WorkoutAbortedConsumer` trong `solo_match` nhận sự kiện:
+  - Kiểm tra tính lũy đẳng qua `outbox_logs`.
+  - Gọi `RecordParticipantAbortHandler`:
+    - Bên bỏ cuộc bị gán `result = FORFEITED`.
+    - Đối thủ còn lại được xử Thắng (`result = WIN`).
+    - Trận đấu chuyển sang trạng thái `FORFEITED`, `winner_id = đối thủ`.
+    - Ghi đồng thời 2 sự kiện vào Outbox:
+      1. `SoloMatchForfeited`: Ghi nhận lý do và người vi phạm.
+      2. `SoloMatchCompleted`: Giúp các phân hệ bên ngoài trao thưởng cho người chiến thắng ngay lập tức.
+
+#### Nhánh 3.3: Lưới an toàn cưỡng chế trận treo quá 35 phút
+- Worker định kỳ quét các trận `status = IN_PROGRESS` có `started_at <= now - 35m`:
+  - Gọi `match.TimeoutInProgress(now)`:
+    - *Trường hợp 1 bên đã nộp, 1 bên treo*: Bên đã nộp Thắng (`WIN`), bên treo bị xử Thua (`FORFEITED`), trạng thái sang `FORFEITED`. Phát `SoloMatchForfeited` + `SoloMatchCompleted`.
+    - *Trường hợp cả hai bên cùng treo*: Cả hai bị `FORFEITED`, trạng thái chuyển sang `CANCELLED`. Phát `SoloMatchCancelled`.
+
+---
+
+### 3.4. Đồng Bộ Bản Sao Danh Tính (User Snapshot Synchronizer)
+
+- Tuân thủ **Schema Isolation**: Bảng của `solo_match` tuyệt đối **không JOIN sang bảng users** của module Auth.
+- Duy trì bảng cục bộ `solo_match.user_snapshots` (`user_id`, `display_name`, `avatar_url`).
 - Lắng nghe sự kiện Kafka:
-  - `UserRegistered` (Module `auth`, topic `auth.events`): Tự động tạo bản ghi snapshot khi có tài khoản mới đăng ký.
-  - `UserIdentityUpdated` (Module `profile`, topic `profile.events`): Cập nhật lại tên đại diện và avatar khi người dùng đổi hồ sơ cá nhân.
-- Tốc độ đọc thông tin đối thủ khi ghép trận đạt mức < 1ms, phục vụ hoàn hảo cho việc hiển thị bảng kết quả và lịch sử đối đầu.
+  - `UserRegistered` (Module `auth`): Tự động tạo bản ghi snapshot khi có tài khoản mới.
+  - `UserIdentityUpdated` (Module `profile`): Cập nhật lại tên đại diện và avatar khi người dùng đổi hồ sơ.
 
 ---
 
-### 2.7. Tách Bạch Ranh Giới Nghiệp Vụ Với Workout Execution
-- Module `workout_execution`: Chịu trách nhiệm về thị giác máy tính AI (Computer Vision), đo góc khớp, tính toán điểm chuẩn tư thế (Form Score), đếm từng rep theo thời gian thực và quản lý nhật ký từng set tập.
-- Module `solo_match`: Đứng ở tầng cao hơn, chỉ tiếp nhận tổng số rep hoặc tổng thời lượng đã hoàn thành để so sánh tỷ số và phân định thắng thua.
-- Sự tách biệt này giúp hai module hoàn toàn độc lập, dễ dàng thay thế hoặc nâng cấp công nghệ tracking mà không làm ảnh hưởng đến luật thi đấu của trận Solo.
+## 4. Bảng Kịch Bản Nghiệp Vụ Của Module Solo Match
 
-
+| Mã Kịch Bản | Ngữ Cảnh Xử Lý Tại Solo Match | Trạng Thái Trước | Trạng Thái Sau | Kết Quả Từng Bên | Sự Kiện Phát Ra |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **SM-01** | Hai gymer vào hàng đợi trong vòng 5 phút | Không có | `PENDING_READY` | P1: `PENDING`<br>P2: `PENDING` | `SoloMatchStarted` (PvP) |
+| **SM-02** | Gymer đợi quá 5 phút trong hàng đợi | Không có | `PENDING_READY` | User: `PENDING`<br>Bot: `PENDING` | `SoloMatchStarted` (Bot) |
+| **SM-03** | Gymer hủy tìm trận hoặc mất mạng lúc đợi | Không có | Đã xóa vé ZSet | Không phát sinh | Không có |
+| **SM-04** | Nhận `SoloMatchRoomReady` trong vòng 60 giây | `PENDING_READY` | `IN_PROGRESS` | Cả hai: `PENDING` | Không có (kích hoạt nội bộ) |
+| **SM-05** | Quá 60 giây không nhận `SoloMatchRoomReady` | `PENDING_READY` | `CANCELLED` | Cả hai: `FORFEITED` | `SoloMatchCancelled` (`READY_TIMEOUT`) |
+| **SM-06** | Nhận đủ kết quả 2 bên (P1 điểm cao hơn) | `IN_PROGRESS` | `COMPLETED` | P1: `WIN`<br>P2: `LOSE` | `SoloMatchCompleted` (`winner = P1`) |
+| **SM-07** | Nhận đủ kết quả 2 bên (Điểm bằng nhau) | `IN_PROGRESS` | `COMPLETED` | P1: `DRAW`<br>P2: `DRAW` | `SoloMatchCompleted` (`isDraw = true`) |
+| **SM-08** | Nhận `SoloTrackingAborted` từ 1 bên | `IN_PROGRESS` | `FORFEITED` | Bên abort: `FORFEITED`<br>Bên kia: `WIN` | `SoloMatchForfeited` + `SoloMatchCompleted` |
+| **SM-09** | Quét trận treo quá 35 phút (1 bên đã nộp) | `IN_PROGRESS` | `FORFEITED` | Bên nộp: `WIN`<br>Bên treo: `FORFEITED` | `SoloMatchForfeited` + `SoloMatchCompleted` |
+| **SM-10** | Quét trận treo quá 35 phút (cả 2 chưa nộp) | `IN_PROGRESS` | `CANCELLED` | Cả hai: `FORFEITED` | `SoloMatchCancelled` |

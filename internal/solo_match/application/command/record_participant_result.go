@@ -74,10 +74,20 @@ func (h *RecordParticipantResultHandler) Handle(ctx context.Context, cmd RecordP
 			p2 := match.Participants()[1]
 			var botUserID string
 			if h.botRepo != nil {
-				if isBot, _ := h.botRepo.IsBot(txCtx, p1.UserID()); isBot {
+				isBot1, bErr := h.botRepo.IsBot(txCtx, p1.UserID())
+				if bErr != nil {
+					return fmt.Errorf("check p1 is bot: %w", bErr)
+				}
+				if isBot1 {
 					botUserID = p1.UserID()
-				} else if isBot, _ := h.botRepo.IsBot(txCtx, p2.UserID()); isBot {
-					botUserID = p2.UserID()
+				} else {
+					isBot2, bErr := h.botRepo.IsBot(txCtx, p2.UserID())
+					if bErr != nil {
+						return fmt.Errorf("check p2 is bot: %w", bErr)
+					}
+					if isBot2 {
+						botUserID = p2.UserID()
+					}
 				}
 			}
 

@@ -13,22 +13,20 @@ import (
 )
 
 type cloudEventEnvelope struct {
-	ID      string          `json:"id"`
-	Source  string          `json:"source"`
-	Type    string          `json:"type"`
-	Time    string          `json:"time"`
-	MatchID string          `json:"matchId,omitempty"`
-	Data    json.RawMessage `json:"data"`
+	SpecVersion     string          `json:"specversion"`
+	ID              string          `json:"id"`
+	Source          string          `json:"source"`
+	Type            string          `json:"type"`
+	Time            string          `json:"time"`
+	DataContentType string          `json:"datacontenttype,omitempty"`
+	Data            json.RawMessage `json:"data"`
 }
 
-type workoutCompletedData struct {
-	SessionID   string  `json:"sessionId"`
-	UserID      string  `json:"userId"`
-	MatchID     string  `json:"matchId,omitempty"`
-	ScoreValue  float64 `json:"scoreValue,omitempty"`
-	TotalSets   int32   `json:"totalSets,omitempty"`
-	TotalVolume float64 `json:"totalVolume,omitempty"`
-	PlanID      string  `json:"planId,omitempty"`
+type soloTrackingCompletedData struct {
+	MatchID        string `json:"matchId"`
+	UserID         string `json:"userId"`
+	ConfirmedValue int32  `json:"confirmedValue"`
+	CompletedAt    string `json:"completedAt,omitempty"`
 }
 
 type WorkoutCompletedConsumer struct {
@@ -46,14 +44,19 @@ func NewWorkoutCompletedConsumer(
 	}
 }
 
+func isSoloTrackingCompletedEvent(eventType string) bool {
+	return strings.HasSuffix(eventType, "soloTrackingCompleted") ||
+		strings.HasSuffix(eventType, "SoloTrackingCompleted") ||
+		eventType == "contracts.core.workout_execution.v1.soloTrackingCompleted"
+}
+
 func (c *WorkoutCompletedConsumer) HandleMessage(ctx context.Context, rawPayload []byte) error {
 	var env cloudEventEnvelope
 	if err := json.Unmarshal(rawPayload, &env); err != nil {
 		return fmt.Errorf("workout completed consumer: unmarshal cloudevent: %w", err)
 	}
 
-	if !strings.HasSuffix(env.Type, "workoutSessionCompleted") &&
-		env.Type != "contracts.core.workout_execution.v1.workoutSessionCompleted" {
+	if !isSoloTrackingCompletedEvent(env.Type) {
 		return nil
 	}
 
@@ -68,39 +71,41 @@ func (c *WorkoutCompletedConsumer) HandleMessage(ctx context.Context, rawPayload
 		}
 	}
 
-	var data workoutCompletedData
+	var data soloTrackingCompletedData
 	if err := json.Unmarshal(env.Data, &data); err != nil {
 		return fmt.Errorf("workout completed consumer: unmarshal data: %w", err)
 	}
 
-	matchID := data.MatchID
-	if matchID == "" {
-		matchID = env.MatchID
-	}
-	// Nếu không có matchId, đây là buổi tập thông thường, bỏ qua
-	if matchID == "" {
+	// Bỏ qua nếu event không thuộc về trận đấu nào hoặc thiếu người dùng
+	if data.MatchID == "" || data.UserID == "" {
 		return nil
 	}
 
-	score := data.ScoreValue
-	if score <= 0 {
-		score = float64(data.TotalSets)
+	completedAt := time.Now().UTC()
+	if data.CompletedAt != "" {
+		if parsed, err := time.Parse(time.RFC3339, data.CompletedAt); err == nil {
+			completedAt = parsed
+		}
 	}
 
-	log.Printf("[SoloMatch] Received WorkoutSessionCompleted for match %s, user %s, score %v", matchID, data.UserID, score)
+	log.Printf("[SoloMatch] Received %s for match %s, user %s, confirmedValue %d", env.Type, data.MatchID, data.UserID, data.ConfirmedValue)
 
 	err := c.handler.Handle(ctx, command.RecordParticipantResultCommand{
-		MatchID:     matchID,
+		MatchID:     data.MatchID,
 		UserID:      data.UserID,
-		ScoreValue:  score,
-		CompletedAt: time.Now().UTC(),
+		ScoreValue:  float64(data.ConfirmedValue),
+		CompletedAt: completedAt,
 	})
 
 	if c.outboxLogRepo != nil && env.ID != "" {
+		status := "PROCESSED"
+		errMsg := ""
 		if err != nil {
-			_ = c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, "FAILED", err.Error())
-		} else {
-			_ = c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, "PROCESSED", "")
+			status = "FAILED"
+			errMsg = err.Error()
+		}
+		if saveErr := c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, status, errMsg); saveErr != nil {
+			log.Printf("[SoloMatch] Failed to save outbox log for event %s: %v", env.ID, saveErr)
 		}
 	}
 

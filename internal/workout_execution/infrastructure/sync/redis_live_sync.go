@@ -103,13 +103,19 @@ func (h *RedisLiveSyncHub) RegisterParticipant(ctx context.Context, matchID, use
 		return apperror.ErrMatchExerciseMismatch
 	}
 
+	// If room became ready (both participants joined), publish registration to stream to wake up waiting participants
+	if ready, checkErr := h.IsMatchReady(ctx, matchID); checkErr == nil && ready {
+		streamKey := "solo_match:" + matchID + ":stream"
+		_ = h.client.Publish(ctx, streamKey, initJSON).Err()
+	}
+
 	return nil
 }
 
-// UnregisterParticipant updates a participant's status to DISCONNECTED without removing them
-// from the participants set, locking the room against 3rd parties while the match is active.
-// When all participants in the match have reached a terminal state (COMPLETED, ABORTED, or DISCONNECTED),
-// the room data in Redis is purged because the match is finished and results are safely stored in DB.
+// UnregisterParticipant updates a participant's status upon stream disconnection.
+// If the participant has not finished the workout, their status becomes DISCONNECTED while preserving their progress,
+// allowing them to reconnect as long as the match time ceiling has not expired.
+// Only when BOTH participants have reached a terminal state (COMPLETED or ABORTED) is the Redis room purged.
 func (h *RedisLiveSyncHub) UnregisterParticipant(ctx context.Context, matchID, userID string) error {
 	partKey := "solo_match:" + matchID + ":participants"
 	progKey := "solo_match:" + matchID + ":progress"
@@ -132,8 +138,11 @@ func (h *RedisLiveSyncHub) UnregisterParticipant(ctx context.Context, matchID, u
 		}
 	}
 
-	if prog.Status != "COMPLETED" && prog.Status != "ABORTED" {
+	wasFinished := prog.Status == "COMPLETED" || prog.Status == "ABORTED"
+	if !wasFinished {
+		// Chưa hoàn thành -> Đánh dấu DISCONNECTED và thời điểm mất kết nối để tính Grace Period
 		prog.Status = "DISCONNECTED"
+		prog.DisconnectedAt = time.Now().Unix()
 	}
 
 	updatedPayload, err := json.Marshal(prog)
@@ -141,11 +150,13 @@ func (h *RedisLiveSyncHub) UnregisterParticipant(ctx context.Context, matchID, u
 		return fmt.Errorf("marshal participant progress on unregister: %w", err)
 	}
 
+	streamKey := "solo_match:" + matchID + ":stream"
 	pipe := h.client.Pipeline()
 	pipe.HSet(ctx, progKey, userID, updatedPayload)
 	pipe.Expire(ctx, progKey, h.ttl)
 	pipe.Expire(ctx, partKey, h.ttl)
 	pipe.Expire(ctx, metaKey, h.ttl)
+	pipe.Publish(ctx, streamKey, updatedPayload)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("redis pipeline unregister participant: %w", err)
 	}
@@ -155,14 +166,16 @@ func (h *RedisLiveSyncHub) UnregisterParticipant(ctx context.Context, matchID, u
 		return fmt.Errorf("redis smembers on unregister check: %w", err)
 	}
 
-	if len(members) <= 1 {
-		if err := h.client.Del(ctx, partKey, progKey, metaKey).Err(); err != nil {
-			return fmt.Errorf("redis del match room on single participant exit: %w", err)
-		}
+	// Nếu trận đấu chưa đủ 2 người (đang trong giai đoạn check-in 60s) hoặc bản thân người này CHƯA hoàn thành bài tập:
+	// Bắt buộc GIỮ PHÒNG để cho phép người dùng reconnect hoặc đợi người thứ 2 vào.
+	// Quyền hủy phòng nếu quá 60s không đủ người thuộc về ready_deadline của solo_match (phát SoloMatchCancelled -> DelRoom).
+	if len(members) < 2 || !wasFinished {
 		return nil
 	}
 
-	allDone := true
+	// Nếu trận đấu đã đủ 2 người và người này ĐÃ hoàn thành -> Kiểm tra xem đối thủ cũng đã hoàn thành chưa
+
+	allFinished := true
 	for _, mUID := range members {
 		var memberProg port.ParticipantProgress
 		var mPayload string
@@ -176,24 +189,24 @@ func (h *RedisLiveSyncHub) UnregisterParticipant(ctx context.Context, matchID, u
 		}
 
 		if mPayload == "" {
-			allDone = false
+			allFinished = false
 			break
 		}
 
 		if err := json.Unmarshal([]byte(mPayload), &memberProg); err != nil {
-			allDone = false
+			allFinished = false
 			break
 		}
 
-		if memberProg.Status != "COMPLETED" &&
-			memberProg.Status != "ABORTED" &&
-			memberProg.Status != "DISCONNECTED" {
-			allDone = false
+		// Chỉ khi đối thủ đã COMPLETED hoặc ABORTED thì mới coi là xong
+		if memberProg.Status != "COMPLETED" && memberProg.Status != "ABORTED" {
+			allFinished = false
 			break
 		}
 	}
 
-	if allDone {
+	// Chỉ xóa phòng khi CẢ HAI ĐỀU ĐÃ HOÀN THÀNH / ABORTED
+	if allFinished {
 		if err := h.client.Del(ctx, partKey, progKey, metaKey).Err(); err != nil {
 			return fmt.Errorf("redis del match room on completion: %w", err)
 		}
@@ -242,6 +255,26 @@ func (h *RedisLiveSyncHub) PublishMyProgress(ctx context.Context, matchID string
 		return fmt.Errorf("redis pipeline publish progress: %w", err)
 	}
 	return nil
+}
+
+// GetMyProgress fetches the recorded progress of the specified user in the match room.
+func (h *RedisLiveSyncHub) GetMyProgress(ctx context.Context, matchID, userID string) (*port.ParticipantProgress, error) {
+	progKey := "solo_match:" + matchID + ":progress"
+	payload, err := h.client.HGet(ctx, progKey, userID).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("redis hget progress: %w", err)
+	}
+	if payload == "" {
+		return nil, nil
+	}
+	var prog port.ParticipantProgress
+	if err := json.Unmarshal([]byte(payload), &prog); err != nil {
+		return nil, fmt.Errorf("unmarshal my progress: %w", err)
+	}
+	return &prog, nil
 }
 
 // GetOpponentProgress fetches the latest recorded progress of the single opponent in the 1v1 match.
@@ -319,4 +352,12 @@ func (h *RedisLiveSyncHub) SubscribeMatchUpdates(ctx context.Context, matchID, m
 	}
 
 	return ch, unsubscribe, nil
+}
+
+// DelRoom explicitly removes all Redis room keys (participants, progress, exercise) for a match.
+func (h *RedisLiveSyncHub) DelRoom(ctx context.Context, matchID string) error {
+	partKey := "solo_match:" + matchID + ":participants"
+	progKey := "solo_match:" + matchID + ":progress"
+	metaKey := "solo_match:" + matchID + ":exercise"
+	return h.client.Del(ctx, partKey, progKey, metaKey).Err()
 }

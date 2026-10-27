@@ -28,7 +28,6 @@ func TestSoloMatch_Lifecycle(t *testing.T) {
 		"ex_pushup",
 		"Push Up",
 		valueobject.ChallengeTypeReps,
-		15*time.Minute,
 		[]*entity.MatchParticipant{p1, p2},
 		now,
 	)
@@ -36,6 +35,12 @@ func TestSoloMatch_Lifecycle(t *testing.T) {
 		t.Fatalf("NewSoloMatch err: %v", err)
 	}
 
+	if match.Status() != valueobject.MatchStatusPendingReady {
+		t.Errorf("match status got %v, want PENDING_READY", match.Status())
+	}
+	if err := match.ActivateRoom(now); err != nil {
+		t.Fatalf("ActivateRoom err: %v", err)
+	}
 	if match.Status() != valueobject.MatchStatusInProgress {
 		t.Errorf("match status got %v, want IN_PROGRESS", match.Status())
 	}
@@ -78,12 +83,15 @@ func TestSoloMatch_ForfeitParticipant(t *testing.T) {
 		"ex_pushup",
 		"Push Up",
 		valueobject.ChallengeTypeReps,
-		15*time.Minute,
 		[]*entity.MatchParticipant{p1, p2},
 		now,
 	)
 	if err != nil {
 		t.Fatalf("NewSoloMatch err: %v", err)
+	}
+
+	if err := match.ActivateRoom(now); err != nil {
+		t.Fatalf("ActivateRoom err: %v", err)
 	}
 
 	// User 2 bỏ cuộc hoặc đứt stream (Fast Forfeit)
@@ -99,7 +107,7 @@ func TestSoloMatch_ForfeitParticipant(t *testing.T) {
 		t.Errorf("match winner got %v, want user_1", match.WinnerID())
 	}
 
-	// Trường hợp người chơi đã hoàn thành bài tập (hoặc Bot đã hoàn thành từ đầu) không được phép forfeit
+	// Trường hợp người chơi đã hoàn thành bài tập không được phép forfeit
 	p3, _ := entity.NewMatchParticipant("part_3", "match_2b", "user_3")
 	p4, _ := entity.NewMatchParticipant("part_4", "match_2b", "user_4")
 	_ = p4.RecordResult(25, now) // p4 đã hoàn thành
@@ -108,93 +116,13 @@ func TestSoloMatch_ForfeitParticipant(t *testing.T) {
 		"ex_pushup",
 		"Push Up",
 		valueobject.ChallengeTypeReps,
-		15*time.Minute,
 		[]*entity.MatchParticipant{p3, p4},
 		now,
 	)
+	_ = match2b.ActivateRoom(now)
 	err = match2b.ForfeitParticipant("user_4", "give_up")
 	if err == nil {
 		t.Errorf("ForfeitParticipant on completed participant want error, got nil")
-	}
-}
-
-func TestSoloMatch_HandleTimeout(t *testing.T) {
-	now := time.Now().UTC()
-	p1, _ := entity.NewMatchParticipant("part_1", "match_3", "user_1")
-	p2, _ := entity.NewMatchParticipant("part_2", "match_3", "user_2")
-
-	match, _ := aggregate.NewSoloMatch(
-		"match_3",
-		"ex_plank",
-		"Plank",
-		valueobject.ChallengeTypeDuration,
-		10*time.Minute,
-		[]*entity.MatchParticipant{p1, p2},
-		now,
-	)
-
-	// Chưa đến timeout -> Báo lỗi
-	err := match.HandleTimeout(now.Add(5 * time.Minute))
-	if err == nil {
-		t.Errorf("HandleTimeout before timeout want error, got nil")
-	}
-
-	// Trường hợp 1: Cả 2 đều không nộp bài khi quá timeout -> CANCELLED
-	err = match.HandleTimeout(now.Add(11 * time.Minute))
-	if err != nil {
-		t.Fatalf("HandleTimeout err: %v", err)
-	}
-	if match.Status() != valueobject.MatchStatusCancelled {
-		t.Errorf("match status got %v, want CANCELLED", match.Status())
-	}
-
-	// Trường hợp 2: User 1 nộp bài, User 2 không nộp -> User 2 Forfeit, User 1 Win
-	p1b, _ := entity.NewMatchParticipant("part_1b", "match_4", "user_1")
-	p2b, _ := entity.NewMatchParticipant("part_2b", "match_4", "user_2")
-	match2, _ := aggregate.NewSoloMatch(
-		"match_4",
-		"ex_plank",
-		"Plank",
-		valueobject.ChallengeTypeDuration,
-		10*time.Minute,
-		[]*entity.MatchParticipant{p1b, p2b},
-		now,
-	)
-	_ = p1b.RecordResult(120, now.Add(2*time.Minute))
-
-	err = match2.HandleTimeout(now.Add(11 * time.Minute))
-	if err != nil {
-		t.Fatalf("HandleTimeout err: %v", err)
-	}
-	if match2.Status() != valueobject.MatchStatusForfeited {
-		t.Errorf("match status got %v, want FORFEITED", match2.Status())
-	}
-	if match2.WinnerID() == nil || *match2.WinnerID() != "user_1" {
-		t.Errorf("winner got %v, want user_1", match2.WinnerID())
-	}
-	// Trường hợp 3: User 2 nộp bài, User 1 không nộp -> User 1 Forfeit, User 2 Win
-	p1c, _ := entity.NewMatchParticipant("part_1c", "match_5", "user_1")
-	p2c, _ := entity.NewMatchParticipant("part_2c", "match_5", "user_2")
-	match3, _ := aggregate.NewSoloMatch(
-		"match_5",
-		"ex_plank",
-		"Plank",
-		valueobject.ChallengeTypeDuration,
-		10*time.Minute,
-		[]*entity.MatchParticipant{p1c, p2c},
-		now,
-	)
-	_ = p2c.RecordResult(150, now.Add(2*time.Minute))
-
-	err = match3.HandleTimeout(now.Add(11 * time.Minute))
-	if err != nil {
-		t.Fatalf("HandleTimeout err: %v", err)
-	}
-	if match3.Status() != valueobject.MatchStatusForfeited {
-		t.Errorf("match status got %v, want FORFEITED", match3.Status())
-	}
-	if match3.WinnerID() == nil || *match3.WinnerID() != "user_2" {
-		t.Errorf("winner got %v, want user_2", match3.WinnerID())
 	}
 }
 
@@ -204,19 +132,19 @@ func TestSoloMatch_EdgeCasesAndGetters(t *testing.T) {
 	p2, _ := entity.NewMatchParticipant("p_2", "m_1", "u_2")
 
 	// 1. Invalid ID
-	_, err := aggregate.NewSoloMatch("", "ex_1", "Push Up", valueobject.ChallengeTypeReps, 10*time.Minute, []*entity.MatchParticipant{p1, p2}, now)
+	_, err := aggregate.NewSoloMatch("", "ex_1", "Push Up", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p1, p2}, now)
 	if err == nil {
 		t.Errorf("NewSoloMatch empty ID want error, got nil")
 	}
 
 	// 2. Invalid count
-	_, err = aggregate.NewSoloMatch("m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, 10*time.Minute, []*entity.MatchParticipant{p1}, now)
+	_, err = aggregate.NewSoloMatch("m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p1}, now)
 	if err == nil {
 		t.Errorf("NewSoloMatch 1 participant want error, got nil")
 	}
 
 	// 3. Valid creation & Getters
-	match, err := aggregate.NewSoloMatch("m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, 10*time.Minute, []*entity.MatchParticipant{p1, p2}, now)
+	match, err := aggregate.NewSoloMatch("m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p1, p2}, now)
 	if err != nil {
 		t.Fatalf("NewSoloMatch err: %v", err)
 	}
@@ -226,8 +154,11 @@ func TestSoloMatch_EdgeCasesAndGetters(t *testing.T) {
 	if len(match.Participants()) != 2 {
 		t.Errorf("participants len got %d, want 2", len(match.Participants()))
 	}
-	if match.TimeoutAt().Before(match.StartedAt()) {
-		t.Errorf("timeoutAt should be after startedAt")
+	if match.StartedAt() != nil {
+		t.Errorf("startedAt should be nil initially in PENDING_READY, got %v", match.StartedAt())
+	}
+	if match.ReadyDeadline().Before(now) {
+		t.Errorf("readyDeadline should be after now")
 	}
 	if match.EndedAt() != nil {
 		t.Errorf("endedAt should be nil initially")
@@ -258,7 +189,7 @@ func TestSoloMatch_EdgeCasesAndGetters(t *testing.T) {
 	reconstituted := aggregate.Reconstitute(
 		"m_rec", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
 		valueobject.MatchStatusCompleted, []*entity.MatchParticipant{p1, p2},
-		&winner, false, now, now.Add(15*time.Minute), &ended,
+		&winner, false, &now, now.Add(time.Minute), &ended,
 	)
 	if reconstituted.ID() != "m_rec" || *reconstituted.WinnerID() != "u_1" || reconstituted.EndedAt() == nil {
 		t.Errorf("Reconstitute mismatch: %+v", reconstituted)
@@ -272,10 +203,6 @@ func TestSoloMatch_EdgeCasesAndGetters(t *testing.T) {
 	err = reconstituted.ForfeitParticipant("u_1", "quit")
 	if err == nil {
 		t.Errorf("ForfeitParticipant on finished match want error, got nil")
-	}
-	err = reconstituted.HandleTimeout(now.Add(20 * time.Minute))
-	if err == nil {
-		t.Errorf("HandleTimeout on finished match want error, got nil")
 	}
 }
 
@@ -312,50 +239,117 @@ func TestMatchmakingTicket(t *testing.T) {
 	}
 }
 
-func TestSoloMatch_HandleTimeout_EmitsCompletedEvent(t *testing.T) {
+func TestSoloMatch_CancelOnNoShow(t *testing.T) {
 	now := time.Now().UTC()
-	p1, _ := entity.NewMatchParticipant("p_1", "m_to", "u_1")
-	p2, _ := entity.NewMatchParticipant("p_2", "m_to", "u_2")
-
+	p1, _ := entity.NewMatchParticipant("p1", "m_ns", "u1")
+	p2, _ := entity.NewMatchParticipant("p2", "m_ns", "u2")
 	match, err := aggregate.NewSoloMatch(
-		"m_to", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
-		15*time.Minute, []*entity.MatchParticipant{p1, p2}, now,
+		"m_ns", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
+		[]*entity.MatchParticipant{p1, p2}, now,
 	)
 	if err != nil {
 		t.Fatalf("NewSoloMatch err: %v", err)
 	}
 
-	// Case 1: p1 hoàn thành, p2 quá hạn -> p1 thắng do p2 timeout
-	_ = p1.RecordResult(30, now.Add(2*time.Minute))
-
-	// Chưa đến timeout -> ErrMatchNotTimedOutYet
-	err = match.HandleTimeout(now.Add(10 * time.Minute))
-	if err == nil {
-		t.Errorf("expected error when handling timeout before timeout_at")
+	// Before 60s deadline -> ErrMatchNotTimedOutYet
+	if err := match.CancelOnNoShow(now.Add(30 * time.Second)); err == nil {
+		t.Errorf("expected error cancelling before ready_deadline, got nil")
 	}
 
-	// Đã quá timeout
-	err = match.HandleTimeout(now.Add(16 * time.Minute))
-	if err != nil {
-		t.Fatalf("HandleTimeout err: %v", err)
+	// After 60s deadline -> Cancelled
+	if err := match.CancelOnNoShow(now.Add(65 * time.Second)); err != nil {
+		t.Fatalf("CancelOnNoShow err: %v", err)
+	}
+	if match.Status() != valueobject.MatchStatusCancelled {
+		t.Errorf("got status %v, want CANCELLED", match.Status())
 	}
 
-	if match.Status() != valueobject.MatchStatusForfeited {
-		t.Errorf("got status %v, want FORFEITED", match.Status())
+	// Terminal State Rule: Cancelled match cannot be activated
+	if err := match.ActivateRoom(now.Add(70 * time.Second)); err == nil {
+		t.Errorf("expected error activating cancelled match, got nil")
 	}
-	if match.WinnerID() == nil || *match.WinnerID() != "u_1" {
-		t.Errorf("got winner %v, want u_1", match.WinnerID())
-	}
+}
 
-	// Case 2: Cả 2 đều chưa hoàn thành -> CANCELLED
-	p3, _ := entity.NewMatchParticipant("p_3", "m_c", "u_3")
-	p4, _ := entity.NewMatchParticipant("p_4", "m_c", "u_4")
-	matchCancel, _ := aggregate.NewSoloMatch(
-		"m_c", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
-		15*time.Minute, []*entity.MatchParticipant{p3, p4}, now,
-	)
-	_ = matchCancel.HandleTimeout(now.Add(16 * time.Minute))
-	if matchCancel.Status() != valueobject.MatchStatusCancelled {
-		t.Errorf("got status %v, want CANCELLED", matchCancel.Status())
-	}
+func TestSoloMatch_TimeoutInProgress(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := service.NewMatchResolver()
+
+	t.Run("p1 completed and p2 timed out awards win to p1", func(t *testing.T) {
+		p1, _ := entity.NewMatchParticipant("p1", "m_tip1", "u1")
+		p2, _ := entity.NewMatchParticipant("p2", "m_tip1", "u2")
+		match, err := aggregate.NewSoloMatch(
+			"m_tip1", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
+			[]*entity.MatchParticipant{p1, p2}, now,
+		)
+		if err != nil {
+			t.Fatalf("NewSoloMatch err: %v", err)
+		}
+		_ = match.ActivateRoom(now)
+
+		// p1 completes, p2 does not
+		_ = match.RecordParticipantResult("u1", 20, now.Add(time.Minute), resolver)
+
+		if err := match.TimeoutInProgress(now.Add(36 * time.Minute)); err != nil {
+			t.Fatalf("TimeoutInProgress error: %v", err)
+		}
+		if match.Status() != valueobject.MatchStatusForfeited {
+			t.Errorf("got status %s, want FORFEITED", match.Status())
+		}
+		if match.WinnerID() == nil || *match.WinnerID() != "u1" {
+			t.Errorf("got winner %v, want u1", match.WinnerID())
+		}
+	})
+
+	t.Run("p2 completed and p1 timed out awards win to p2", func(t *testing.T) {
+		p1, _ := entity.NewMatchParticipant("p1", "m_tip2", "u1")
+		p2, _ := entity.NewMatchParticipant("p2", "m_tip2", "u2")
+		match, _ := aggregate.NewSoloMatch(
+			"m_tip2", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
+			[]*entity.MatchParticipant{p1, p2}, now,
+		)
+		_ = match.ActivateRoom(now)
+
+		// p2 completes, p1 does not
+		_ = match.RecordParticipantResult("u2", 25, now.Add(time.Minute), resolver)
+
+		if err := match.TimeoutInProgress(now.Add(36 * time.Minute)); err != nil {
+			t.Fatalf("TimeoutInProgress error: %v", err)
+		}
+		if match.Status() != valueobject.MatchStatusForfeited {
+			t.Errorf("got status %s, want FORFEITED", match.Status())
+		}
+		if match.WinnerID() == nil || *match.WinnerID() != "u2" {
+			t.Errorf("got winner %v, want u2", match.WinnerID())
+		}
+	})
+
+	t.Run("neither completed cancels match", func(t *testing.T) {
+		p1, _ := entity.NewMatchParticipant("p1", "m_tip3", "u1")
+		p2, _ := entity.NewMatchParticipant("p2", "m_tip3", "u2")
+		match, _ := aggregate.NewSoloMatch(
+			"m_tip3", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
+			[]*entity.MatchParticipant{p1, p2}, now,
+		)
+		_ = match.ActivateRoom(now)
+
+		if err := match.TimeoutInProgress(now.Add(36 * time.Minute)); err != nil {
+			t.Fatalf("TimeoutInProgress error: %v", err)
+		}
+		if match.Status() != valueobject.MatchStatusCancelled {
+			t.Errorf("got status %s, want CANCELLED", match.Status())
+		}
+	})
+
+	t.Run("error if match not in progress", func(t *testing.T) {
+		p1, _ := entity.NewMatchParticipant("p1", "m_tip4", "u1")
+		p2, _ := entity.NewMatchParticipant("p2", "m_tip4", "u2")
+		match, _ := aggregate.NewSoloMatch(
+			"m_tip4", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
+			[]*entity.MatchParticipant{p1, p2}, now,
+		)
+		// Still in PENDING_READY
+		if err := match.TimeoutInProgress(now.Add(36 * time.Minute)); err == nil {
+			t.Errorf("expected error timing out non in-progress match, got nil")
+		}
+	})
 }

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
-	"github.com/viethung213/gym-companion/internal/solo_match/domain/derror"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/event"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/repository"
 )
@@ -39,16 +38,6 @@ func NewRecordParticipantAbortHandler(
 }
 
 func (h *RecordParticipantAbortHandler) Handle(ctx context.Context, cmd RecordParticipantAbortCommand) error {
-	if h.botRepo != nil {
-		isBot, err := h.botRepo.IsBot(ctx, cmd.UserID)
-		if err != nil {
-			return fmt.Errorf("check is bot: %w", err)
-		}
-		if isBot {
-			return derror.ErrBotCannotForfeit
-		}
-	}
-
 	match, err := h.matchRepo.FindByID(ctx, cmd.MatchID)
 	if err != nil {
 		return fmt.Errorf("find match %s: %w", cmd.MatchID, err)
@@ -68,12 +57,22 @@ func (h *RecordParticipantAbortHandler) Handle(ctx context.Context, cmd RecordPa
 
 		p1 := match.Participants()[0]
 		p2 := match.Participants()[1]
+
+		var opponentID string
+		if p1.UserID() == cmd.UserID {
+			opponentID = p2.UserID()
+		} else {
+			opponentID = p1.UserID()
+		}
+
 		var botUserID string
-		if h.botRepo != nil {
-			if isBot, _ := h.botRepo.IsBot(txCtx, p1.UserID()); isBot {
-				botUserID = p1.UserID()
-			} else if isBot, _ := h.botRepo.IsBot(txCtx, p2.UserID()); isBot {
-				botUserID = p2.UserID()
+		if h.botRepo != nil && opponentID != "" {
+			isBot, bErr := h.botRepo.IsBot(txCtx, opponentID)
+			if bErr != nil {
+				return fmt.Errorf("check opponent is bot: %w", bErr)
+			}
+			if isBot {
+				botUserID = opponentID
 			}
 		}
 

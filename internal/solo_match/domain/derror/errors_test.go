@@ -21,6 +21,7 @@ func TestDomainErrors(t *testing.T) {
 		{name: "ErrActiveMatchNotFound", err: derror.ErrActiveMatchNotFound},
 		{name: "ErrEmptyMatchID", err: derror.ErrEmptyMatchID},
 		{name: "ErrEmptyTicketID", err: derror.ErrEmptyTicketID},
+		{name: "ErrUserAlreadyInQueue", err: derror.ErrUserAlreadyInQueue},
 		{name: "ErrEmptyParticipantID", err: derror.ErrEmptyParticipantID},
 		{name: "ErrParticipantFinished", err: derror.ErrParticipantFinished},
 		{name: "ErrEmptyUserID", err: derror.ErrEmptyUserID},

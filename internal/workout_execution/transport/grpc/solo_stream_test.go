@@ -170,11 +170,20 @@ func TestStreamSoloMatchTracking(t *testing.T) {
 			t.Fatalf("unexpected stream error: %v", err)
 		}
 
-		if len(stream.sent) != 2 {
-			t.Fatalf("expected 2 responses sent, got %d", len(stream.sent))
+		if len(stream.sent) != 3 {
+			t.Fatalf("expected 3 responses sent (1 config ack + 2 frames), got %d", len(stream.sent))
 		}
 
-		firstResp := stream.sent[0]
+		// Response 0: Immediate initial config ack
+		initResp := stream.sent[0]
+		if initResp.OpponentValue != 15 {
+			t.Errorf("expected opponent value 15 in initial ack, got %d", initResp.OpponentValue)
+		}
+		if initResp.MyStatus != workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_ACTIVE {
+			t.Errorf("expected initial status ACTIVE, got %v", initResp.MyStatus)
+		}
+
+		firstResp := stream.sent[1]
 		if !firstResp.IsValidForm {
 			t.Errorf("expected frame 1 to be valid form")
 		}
@@ -385,13 +394,13 @@ func TestStreamSoloMatchTracking(t *testing.T) {
 			t.Fatalf("unexpected stream error: %v", err)
 		}
 
-		if len(stream.sent) != 1 {
-			t.Fatalf("expected 1 response sent, got %d", len(stream.sent))
+		if len(stream.sent) != 2 {
+			t.Fatalf("expected 2 responses sent (1 config ack + 1 frame), got %d", len(stream.sent))
 		}
 
 		resp := stream.sent[0]
 		if resp.MyStatus != workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_WAITING {
-			t.Errorf("expected WAITING status when alone, got %v", resp.MyStatus)
+			t.Errorf("expected WAITING status in initial config ack, got %v", resp.MyStatus)
 		}
 		if resp.MyConfirmedValue != 0 {
 			t.Errorf("expected 0 confirmed value while waiting, got %d", resp.MyConfirmedValue)
@@ -555,6 +564,142 @@ func TestStreamSoloMatchTracking(t *testing.T) {
 		// Verify Outbox events were written
 		if len(outbox.events) == 0 {
 			t.Errorf("expected outbox events to be published upon submission")
+		}
+	})
+
+	t.Run("Transient stream disconnect does not abort session, allows reconnect with progress restored", func(t *testing.T) {
+		matchID := "match-reconnect-test"
+		userID := "user-reconnector"
+		ctx := context.WithValue(context.Background(), middleware.UserIDKey, userID)
+		outbox.events = nil
+
+		// Register opponent so room is ready
+		_ = liveSync.RegisterParticipant(context.Background(), matchID, "user-opp-rec", "exercise_plank_01")
+		_ = liveSync.PublishMyProgress(context.Background(), matchID, port.ParticipantProgress{
+			UserID:    "user-opp-rec",
+			Value:     10,
+			FormScore: 88.0,
+			Status:    "ACTIVE",
+		})
+
+		validLandmarks := []*workoutexecutionv1message.SkeletonLandmark{
+			{LandmarkIndex: 11, X: -1, Y: 0, Z: 0, Visibility: 0.9},
+			{LandmarkIndex: 23, X: 0, Y: 0, Z: 0, Visibility: 0.9},
+			{LandmarkIndex: 27, X: 1, Y: 0, Z: 0, Visibility: 0.9},
+		}
+
+		// 1. Initial stream: Send Config + 2 valid frames
+		stream1 := &mockStreamServer{
+			ctx: ctx,
+			queue: []*workoutexecutionv1message.StreamSoloMatchTrackingRequest{
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config{
+						Config: &workoutexecutionv1message.SoloTrackingConfig{
+							MatchId:            matchID,
+							ExerciseId:         "exercise_plank_01",
+							ChallengeType:      workoutexecutionv1message.SoloChallengeType_SOLO_CHALLENGE_TYPE_DURATION,
+							TimeCeilingSeconds: 1800,
+							PlanId:             "plan-reconnect-101",
+						},
+					},
+				},
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Frame{
+						Frame: &workoutexecutionv1message.SoloTrackingFrame{
+							Landmarks: validLandmarks,
+							Timestamp: timestamppb.Now(),
+						},
+					},
+				},
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Frame{
+						Frame: &workoutexecutionv1message.SoloTrackingFrame{
+							Landmarks: validLandmarks,
+							Timestamp: timestamppb.Now(),
+						},
+					},
+				},
+			},
+		}
+
+		// Stream 1 terminates naturally with EOF (simulating network drop / socket close without abort)
+		err := h.StreamSoloMatchTracking(stream1)
+		if err != nil {
+			t.Fatalf("unexpected stream1 error: %v", err)
+		}
+
+		// Verify:
+		// 1) NO SoloTrackingAborted event in outbox!
+		for _, ev := range outbox.events {
+			if _, isAbort := ev.(*domainEvent.SoloTrackingAborted); isAbort {
+				t.Fatalf("expected NO SoloTrackingAborted event on transient disconnect, but got one: %+v", ev)
+			}
+		}
+
+		// 2) Redis live sync should record user as DISCONNECTED with a DisconnectedAt timestamp
+		prog, progErr := liveSync.GetMyProgress(ctx, matchID, userID)
+		if progErr != nil {
+			t.Fatalf("failed to get participant progress after disconnect: %v", progErr)
+		}
+		if prog == nil || prog.Status != "DISCONNECTED" {
+			t.Fatalf("expected status DISCONNECTED in redis, got %+v", prog)
+		}
+		if prog.DisconnectedAt == 0 {
+			t.Fatalf("expected non-zero DisconnectedAt timestamp")
+		}
+
+		// Simulate previous confirmed progress recorded before disconnection (e.g. 15s elapsed duration)
+		const previousScore int32 = 15
+		_ = liveSync.PublishMyProgress(ctx, matchID, port.ParticipantProgress{
+			UserID:         userID,
+			Value:          previousScore,
+			FormScore:      90.0,
+			Status:         "DISCONNECTED",
+			DisconnectedAt: prog.DisconnectedAt,
+		})
+
+		// 3. User reconnects (new stream with identical config)
+		stream2 := &mockStreamServer{
+			ctx: ctx,
+			queue: []*workoutexecutionv1message.StreamSoloMatchTrackingRequest{
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config{
+						Config: &workoutexecutionv1message.SoloTrackingConfig{
+							MatchId:            matchID,
+							ExerciseId:         "exercise_plank_01",
+							ChallengeType:      workoutexecutionv1message.SoloChallengeType_SOLO_CHALLENGE_TYPE_DURATION,
+							TimeCeilingSeconds: 1800,
+							PlanId:             "plan-reconnect-101",
+						},
+					},
+				},
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Frame{
+						Frame: &workoutexecutionv1message.SoloTrackingFrame{
+							Landmarks: validLandmarks,
+							Timestamp: timestamppb.Now(),
+						},
+					},
+				},
+			},
+		}
+
+		err = h.StreamSoloMatchTracking(stream2)
+		if err != nil {
+			t.Fatalf("unexpected stream2 error: %v", err)
+		}
+
+		if len(stream2.sent) == 0 {
+			t.Fatalf("expected responses sent in stream2")
+		}
+
+		// Confirm that progress was restored and continued accumulated
+		reconnectResp := stream2.sent[0]
+		if reconnectResp.MyConfirmedValue < previousScore {
+			t.Errorf("expected restored MyConfirmedValue >= %d, got %d", previousScore, reconnectResp.MyConfirmedValue)
+		}
+		if reconnectResp.MyStatus != workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_ACTIVE {
+			t.Errorf("expected reconnected status ACTIVE, got %v", reconnectResp.MyStatus)
 		}
 	})
 }

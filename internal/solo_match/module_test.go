@@ -10,8 +10,23 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	_ "github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
+	exercisev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	solomatch "github.com/viethung213/gym-companion/internal/solo_match"
 )
+
+type mockTestExerciseCaller struct{}
+
+func (mockTestExerciseCaller) GetRandomExercise(
+	_ context.Context,
+	_ *exercisev1message.GetRandomExerciseRequest,
+) (*exercisev1message.GetRandomExerciseResponse, error) {
+	return &exercisev1message.GetRandomExerciseResponse{
+		Exercise: &exercisev1message.ExerciseInfo{
+			Id:   "ex_pushup",
+			Name: "Push-Up",
+		},
+	}, nil
+}
 
 func TestSoloMatchModuleLifecycle(t *testing.T) {
 	mr := miniredis.RunT(t)
@@ -46,7 +61,7 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 			created_at TIMESTAMP NOT NULL,
 			started_at TIMESTAMP,
 			ended_at TIMESTAMP,
-			timeout_at TIMESTAMP NOT NULL
+			ready_deadline TIMESTAMP NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS solo_match.match_participants (
 			id TEXT PRIMARY KEY,
@@ -79,7 +94,7 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 			error_message TEXT
 		);
 		CREATE TABLE IF NOT EXISTS solo_match.system_bots (
-			user_id TEXT PRIMARY KEY REFERENCES user_snapshots(user_id),
+			user_id TEXT PRIMARY KEY,
 			difficulty_level TEXT,
 			is_active BOOLEAN NOT NULL DEFAULT 1,
 			created_at TIMESTAMP NOT NULL
@@ -93,9 +108,10 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 	defer cancel()
 
 	handler, shutdown, err := solomatch.Initialize(ctx, solomatch.ModuleDeps{
-		DB:            db,
-		RedisClient:   rdb,
-		KafkaRegistry: nil,
+		DB:             db,
+		RedisClient:    rdb,
+		KafkaRegistry:  nil,
+		ExerciseServer: mockTestExerciseCaller{},
 	})
 	if err != nil {
 		t.Fatalf("solomatch.Initialize failed: %v", err)

@@ -2,6 +2,7 @@ package grpc_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -40,7 +41,11 @@ func (m *mockMatchRepo) FindActiveByUserID(ctx context.Context, userID string) (
 	return nil, nil
 }
 
-func (m *mockMatchRepo) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (m *mockMatchRepo) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *mockMatchRepo) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	return nil, nil
 }
 
@@ -96,6 +101,10 @@ func (q *mockQueuePort) ListenMatch(ctx context.Context, ticketID string) (<-cha
 	return q.eventCh, nil
 }
 
+func (q *mockQueuePort) IsUserInQueue(ctx context.Context, userID string) (bool, error) {
+	return false, nil
+}
+
 func (q *mockQueuePort) Close() error {
 	return nil
 }
@@ -140,7 +149,7 @@ func TestGRPCHandler(t *testing.T) {
 	// 0. JoinQueue rejects when active match exists
 	pActive1, _ := entity.NewMatchParticipant("p_active_1", "m_active", "user_1")
 	pActive2, _ := entity.NewMatchParticipant("p_active_2", "m_active", "user_2")
-	activeMatch, _ := aggregate.NewSoloMatch("m_active", "ex_1", "Push Up", valueobject.ChallengeTypeReps, 15*time.Minute, []*entity.MatchParticipant{pActive1, pActive2}, now)
+	activeMatch, _ := aggregate.NewSoloMatch("m_active", "ex_1", "Push Up", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{pActive1, pActive2}, now)
 	matchRepo.activeMatch = activeMatch
 
 	activeErr := handler.JoinQueue(&solomatchv1message.JoinQueueRequest{}, &mockStreamServer{ctx: ctx})
@@ -157,7 +166,7 @@ func TestGRPCHandler(t *testing.T) {
 
 	p1, _ := entity.NewMatchParticipant("p_1", "m_1", "user_1")
 	p2, _ := entity.NewMatchParticipant("p_2", "m_1", "user_2")
-	match, _ := aggregate.NewSoloMatch("m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, 15*time.Minute, []*entity.MatchParticipant{p1, p2}, now)
+	match, _ := aggregate.NewSoloMatch("m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p1, p2}, now)
 	_ = matchRepo.Save(ctx, match)
 
 	// Bắn sự kiện match found sau 100ms
@@ -180,6 +189,23 @@ func TestGRPCHandler(t *testing.T) {
 	lastMsg := stream.sentMsgs[len(stream.sentMsgs)-1]
 	if lastMsg.Type != solomatchv1message.MatchStreamEventType_MATCH_STREAM_EVENT_TYPE_MATCHED {
 		t.Errorf("expected MATCHED type, got %v", lastMsg.Type)
+	}
+
+	// 1.1. JoinQueue returns codes.Internal when error occurs during matchmaking
+	errStream := &mockStreamServer{ctx: ctx}
+	errEventCh := make(chan *port.MatchFoundEvent, 1)
+	errQueuePort := &mockQueuePort{eventCh: errEventCh}
+	errJoinHandler := command.NewJoinMatchmakingQueueHandler(errQueuePort, matchRepo)
+	errHandler := transportgrpc.NewHandler(errJoinHandler, cancelQueueHandler, getMatchHandler, getHistoryHandler, snapshotRepo)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		errEventCh <- &port.MatchFoundEvent{
+			Err: errors.New("matchmaking failed: database connection lost"),
+		}
+	}()
+	errResult := errHandler.JoinQueue(&solomatchv1message.JoinQueueRequest{}, errStream)
+	if status.Code(errResult) != codes.Internal {
+		t.Fatalf("expected codes.Internal when matchmaking error occurs, got %v", errResult)
 	}
 
 	// 2. CancelQueue

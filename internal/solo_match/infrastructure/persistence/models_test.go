@@ -53,7 +53,7 @@ func TestModels_Mapping(t *testing.T) {
 	_ = part2.RecordResult(20, now)
 
 	match, err := aggregate.NewSoloMatch(
-		"m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps, 15*time.Minute,
+		"m_1", "ex_1", "Push Up", valueobject.ChallengeTypeReps,
 		[]*entity.MatchParticipant{part, part2}, now,
 	)
 	if err != nil {

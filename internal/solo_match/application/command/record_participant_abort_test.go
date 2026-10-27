@@ -8,6 +8,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/entity"
+	"github.com/viethung213/gym-companion/internal/solo_match/domain/event"
 	valueobject "github.com/viethung213/gym-companion/internal/solo_match/domain/value_object"
 )
 
@@ -28,7 +29,11 @@ func (m *abortMatchRepoMock) FindActiveByUserID(ctx context.Context, userID stri
 	return nil, nil
 }
 
-func (m *abortMatchRepoMock) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (m *abortMatchRepoMock) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *abortMatchRepoMock) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	return nil, nil
 }
 
@@ -81,10 +86,10 @@ func TestRecordParticipantAbortHandler(t *testing.T) {
 			"ex_pushup",
 			"Push-Up",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, p2},
 			now,
 		)
+		_ = match.ActivateRoom(now)
 		_ = matchRepo.Save(ctx, match)
 
 		handler := command.NewRecordParticipantAbortHandler(matchRepo, eventPub, txManager, botRepo)
@@ -111,9 +116,10 @@ func TestRecordParticipantAbortHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("fails when bot attempts to forfeit match", func(t *testing.T) {
+	t.Run("successfully identifies bot when opponent is bot", func(t *testing.T) {
 		matchRepo := &abortMatchRepoMock{matches: make(map[string]*aggregate.SoloMatch)}
 		botRepo := &abortBotRepoMock{}
+		eventPub := &abortEventPubMock{}
 		p1, _ := entity.NewMatchParticipant("p_1", "m_abort_bot", "user_1")
 		pBot, _ := entity.NewMatchParticipant("p_bot", "m_abort_bot", "u_bot")
 		match, _ := aggregate.NewSoloMatch(
@@ -121,21 +127,30 @@ func TestRecordParticipantAbortHandler(t *testing.T) {
 			"ex_pushup",
 			"Push-Up",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, pBot},
 			now,
 		)
+		_ = match.ActivateRoom(now)
 		_ = matchRepo.Save(ctx, match)
 
-		handler := command.NewRecordParticipantAbortHandler(matchRepo, &abortEventPubMock{}, &abortTxManagerMock{}, botRepo)
+		handler := command.NewRecordParticipantAbortHandler(matchRepo, eventPub, &abortTxManagerMock{}, botRepo)
 
+		// user_1 aborts -> u_bot wins, BotUserID must be identified as u_bot
 		err := handler.Handle(ctx, command.RecordParticipantAbortCommand{
 			MatchID: "m_abort_bot",
-			UserID:  "u_bot",
-			Reason:  "error",
+			UserID:  "user_1",
+			Reason:  "quit",
 		})
-		if err == nil {
-			t.Errorf("expected error when bot tries to forfeit, got nil")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(eventPub.events) != 2 {
+			t.Fatalf("expected 2 outbox events, got %d", len(eventPub.events))
+		}
+		forfeitedEv, ok := eventPub.events[0].(*event.SoloMatchForfeited)
+		if !ok || forfeitedEv.BotUserID != "u_bot" {
+			t.Errorf("expected BotUserID to be u_bot, got %v", forfeitedEv)
 		}
 	})
 

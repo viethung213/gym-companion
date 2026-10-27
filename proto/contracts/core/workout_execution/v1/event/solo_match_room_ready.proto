@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package contracts.core.workout_execution.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event;workoutexecutionv1event";
+
+message SoloMatchRoomReady {
+  string match_id = 1;
+  google.protobuf.Timestamp started_at = 2;
+}

@@ -31,6 +31,10 @@ func (q *cancelQueuePortMock) ListenMatch(ctx context.Context, ticketID string) 
 	return nil, nil
 }
 
+func (q *cancelQueuePortMock) IsUserInQueue(ctx context.Context, userID string) (bool, error) {
+	return false, nil
+}
+
 func (q *cancelQueuePortMock) Close() error {
 	return nil
 }

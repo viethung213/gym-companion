@@ -29,7 +29,11 @@ func (m *historyMatchRepoMock) FindActiveByUserID(ctx context.Context, userID st
 	return nil, nil
 }
 
-func (m *historyMatchRepoMock) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (m *historyMatchRepoMock) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *historyMatchRepoMock) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	return nil, nil
 }
 
@@ -74,7 +78,6 @@ func TestGetUserMatchHistoryHandler(t *testing.T) {
 			"ex_pushup",
 			"Push-Up",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, p2},
 			now,
 		)

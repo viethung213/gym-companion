@@ -147,3 +147,13 @@ type SoloTrackingAborted struct {
 func (e *SoloTrackingAborted) EventName() string {
 	return "contracts.core.workout_execution.v1.soloTrackingAborted"
 }
+
+// SoloMatchRoomReady is published when both participants have joined the match room and are ready.
+type SoloMatchRoomReady struct {
+	MatchID   string
+	StartedAt time.Time
+}
+
+func (e *SoloMatchRoomReady) EventName() string {
+	return "contracts.core.workout_execution.v1.soloMatchRoomReady"
+}

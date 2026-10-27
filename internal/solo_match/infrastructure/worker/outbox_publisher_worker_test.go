@@ -1,4 +1,4 @@
-package publisher_test
+package worker_test
 
 import (
 	"context"
@@ -7,12 +7,12 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/persistence"
-	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/publisher"
+	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/worker"
 	"gorm.io/gorm"
 )
 
-func TestOutboxPublisher_ProcessPendingEvents(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:publisher_test?mode=memory&cache=shared"), &gorm.Config{})
+func TestOutboxPublisherWorker_ProcessPendingEvents(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:outbox_worker_test?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestOutboxPublisher_ProcessPendingEvents(t *testing.T) {
 	}
 
 	outboxRepo := persistence.NewGORMOutboxRepository(db)
-	pub := publisher.NewOutboxPublisher(outboxRepo, nil, 100*time.Millisecond)
+	pub := worker.NewOutboxPublisherWorker(outboxRepo, nil, 100*time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

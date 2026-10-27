@@ -75,7 +75,6 @@ func TestConnectSoloMatchHandler(t *testing.T) {
 		"ex_pushup",
 		"Push Up Challenge",
 		valueobject.ChallengeTypeReps,
-		120*time.Second,
 		[]*entity.MatchParticipant{p1, p2},
 		now,
 	)

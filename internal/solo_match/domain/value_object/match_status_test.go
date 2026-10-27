@@ -12,7 +12,7 @@ func TestMatchStatus(t *testing.T) {
 		want    valueobject.MatchStatus
 		wantErr bool
 	}{
-		{give: "MATCHED", want: valueobject.MatchStatusMatched, wantErr: false},
+		{give: "PENDING_READY", want: valueobject.MatchStatusPendingReady, wantErr: false},
 		{give: "IN_PROGRESS", want: valueobject.MatchStatusInProgress, wantErr: false},
 		{give: "COMPLETED", want: valueobject.MatchStatusCompleted, wantErr: false},
 		{give: "FORFEITED", want: valueobject.MatchStatusForfeited, wantErr: false},
@@ -46,8 +46,8 @@ func TestMatchStatus(t *testing.T) {
 		if valueobject.MatchStatusInProgress.IsFinal() {
 			t.Errorf("MatchStatusInProgress.IsFinal() got true, want false")
 		}
-		if valueobject.MatchStatusMatched.IsFinal() {
-			t.Errorf("MatchStatusMatched.IsFinal() got true, want false")
+		if valueobject.MatchStatusPendingReady.IsFinal() {
+			t.Errorf("MatchStatusPendingReady.IsFinal() got true, want false")
 		}
 	})
 }

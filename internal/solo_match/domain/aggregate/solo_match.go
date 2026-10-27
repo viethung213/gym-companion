@@ -21,8 +21,8 @@ type SoloMatch struct {
 	participants  []*entity.MatchParticipant
 	winnerID      *string
 	isDraw        bool
-	startedAt     time.Time
-	timeoutAt     time.Time
+	startedAt     *time.Time
+	readyDeadline time.Time
 	endedAt       *time.Time
 	domainEvents  []event.DomainEvent
 }
@@ -32,7 +32,6 @@ func NewSoloMatch(
 	exerciseID string,
 	exerciseName string,
 	challengeType valueobject.ChallengeType,
-	timeoutDuration time.Duration,
 	participants []*entity.MatchParticipant,
 	now time.Time,
 ) (*SoloMatch, error) {
@@ -47,18 +46,16 @@ func NewSoloMatch(
 		return nil, derror.ErrNilParticipant
 	}
 
-	started := now.UTC()
-	timeout := started.Add(timeoutDuration)
+	deadline := now.UTC().Add(60 * time.Second)
 
 	return &SoloMatch{
 		id:            trimmedID,
 		exerciseID:    strings.TrimSpace(exerciseID),
 		exerciseName:  strings.TrimSpace(exerciseName),
 		challengeType: challengeType,
-		status:        valueobject.MatchStatusInProgress,
+		status:        valueobject.MatchStatusPendingReady,
 		participants:  participants,
-		startedAt:     started,
-		timeoutAt:     timeout,
+		readyDeadline: deadline,
 	}, nil
 }
 
@@ -72,8 +69,8 @@ func Reconstitute(
 	participants []*entity.MatchParticipant,
 	winnerID *string,
 	isDraw bool,
-	startedAt time.Time,
-	timeoutAt time.Time,
+	startedAt *time.Time,
+	readyDeadline time.Time,
 	endedAt *time.Time,
 ) *SoloMatch {
 	return &SoloMatch{
@@ -86,7 +83,7 @@ func Reconstitute(
 		winnerID:      winnerID,
 		isDraw:        isDraw,
 		startedAt:     startedAt,
-		timeoutAt:     timeoutAt,
+		readyDeadline: readyDeadline,
 		endedAt:       endedAt,
 	}
 }
@@ -127,12 +124,12 @@ func (m *SoloMatch) IsDraw() bool {
 	return m.isDraw
 }
 
-func (m *SoloMatch) StartedAt() time.Time {
-	return m.startedAt
-}
-
-func (m *SoloMatch) TimeoutAt() time.Time {
-	return m.timeoutAt
+func (m *SoloMatch) StartedAt() *time.Time {
+	if m.startedAt == nil {
+		return nil
+	}
+	t := *m.startedAt
+	return &t
 }
 
 func (m *SoloMatch) EndedAt() *time.Time {
@@ -211,7 +208,7 @@ func (m *SoloMatch) RecordParticipantResult(
 	return nil
 }
 
-// ForfeitParticipant xử thua ngay lập tức cho người chơi bỏ cuộc hoặc ngắt kết nối (Fast Forfeit)
+// ForfeitParticipant xử thua ngay lập tức cho người chơi bỏ cuộc
 func (m *SoloMatch) ForfeitParticipant(forfeitedUserID, _ string) error {
 	if m.status != valueobject.MatchStatusInProgress {
 		return derror.ErrMatchNotActive
@@ -249,14 +246,46 @@ func (m *SoloMatch) ForfeitParticipant(forfeitedUserID, _ string) error {
 	return nil
 }
 
-// Timeout xử lý khi trận đấu quá hạn thời gian
-func (m *SoloMatch) Timeout(now time.Time) error {
-	if m.status != valueobject.MatchStatusInProgress {
-		return derror.ErrMatchNotActive
+// ReadyDeadline returns the deadline for participants to join the match room
+func (m *SoloMatch) ReadyDeadline() time.Time {
+	return m.readyDeadline
+}
+
+// ActivateRoom transitions match from PENDING_READY to IN_PROGRESS upon receiving SoloMatchRoomReady event.
+// Crucial: If the match is already cancelled, completed, or forfeited, it MUST NEVER be reactivated.
+func (m *SoloMatch) ActivateRoom(startedAt time.Time) error {
+	if m.status != valueobject.MatchStatusPendingReady {
+		return derror.ErrMatchNotEligibleForActivation
 	}
 
-	if now.Before(m.timeoutAt) {
+	m.status = valueobject.MatchStatusInProgress
+	t := startedAt.UTC()
+	m.startedAt = &t
+	return nil
+}
+
+// CancelOnNoShow cancels the match if participants did not enter room before ready_deadline.
+func (m *SoloMatch) CancelOnNoShow(now time.Time) error {
+	if m.status != valueobject.MatchStatusPendingReady {
+		return derror.ErrMatchNotPendingReady
+	}
+	if now.Before(m.readyDeadline) {
 		return derror.ErrMatchNotTimedOutYet
+	}
+
+	m.status = valueobject.MatchStatusCancelled
+	ended := now.UTC()
+	m.endedAt = &ended
+	for _, p := range m.participants {
+		p.SetResult(valueobject.MatchResultForfeited)
+	}
+	return nil
+}
+
+// TimeoutInProgress settles or cancels an in-progress match exceeding maximum duration ceiling.
+func (m *SoloMatch) TimeoutInProgress(now time.Time) error {
+	if m.status != valueobject.MatchStatusInProgress {
+		return derror.ErrMatchNotActive
 	}
 
 	ended := now.UTC()
@@ -265,32 +294,32 @@ func (m *SoloMatch) Timeout(now time.Time) error {
 	p1 := m.participants[0]
 	p2 := m.participants[1]
 
-	if !p1.IsCompleted() && !p2.IsCompleted() {
-		m.status = valueobject.MatchStatusCancelled
-		p1.SetResult(valueobject.MatchResultForfeited)
-		p2.SetResult(valueobject.MatchResultForfeited)
+	// Case 1: p1 completed, p2 timed out / forfeited
+	if p1.IsCompleted() && !p2.IsCompleted() {
+		p2.Forfeit()
+		p1.SetResult(valueobject.MatchResultWin)
+		w := p1.UserID()
+		m.winnerID = &w
+		m.isDraw = false
+		m.status = valueobject.MatchStatusForfeited
 		return nil
 	}
 
-	m.status = valueobject.MatchStatusForfeited
-	m.isDraw = false
-
-	if p1.IsCompleted() && !p2.IsCompleted() {
-		p1.SetResult(valueobject.MatchResultWin)
-		p2.Forfeit()
-		winner := p1.UserID()
-		m.winnerID = &winner
-	} else {
-		p2.SetResult(valueobject.MatchResultWin)
+	// Case 2: p2 completed, p1 timed out / forfeited
+	if !p1.IsCompleted() && p2.IsCompleted() {
 		p1.Forfeit()
-		winner := p2.UserID()
-		m.winnerID = &winner
+		p2.SetResult(valueobject.MatchResultWin)
+		w := p2.UserID()
+		m.winnerID = &w
+		m.isDraw = false
+		m.status = valueobject.MatchStatusForfeited
+		return nil
 	}
 
+	// Case 3: Neither completed (both abandoned / timed out)
+	p1.SetResult(valueobject.MatchResultForfeited)
+	p2.SetResult(valueobject.MatchResultForfeited)
+	m.status = valueobject.MatchStatusCancelled
+	m.isDraw = false
 	return nil
-}
-
-// HandleTimeout là alias cho Timeout
-func (m *SoloMatch) HandleTimeout(now time.Time) error {
-	return m.Timeout(now)
 }

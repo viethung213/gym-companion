@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package contracts.core.solo_match.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/event;solomatchv1event";
+
+message SoloMatchCancelled {
+  string match_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp cancelled_at = 3;
+}

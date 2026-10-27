@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
@@ -12,32 +13,37 @@ import (
 )
 
 type HandleMatchTimeoutCommand struct {
-	Now   time.Time
-	Limit int
+	Now                 time.Time
+	Limit               int
+	InProgressThreshold time.Duration
 }
 
 type HandleMatchTimeoutHandler struct {
 	matchRepo repository.SoloMatchRepository
 	eventPub  port.EventPublisher
-	botRepo   repository.BotRepository
 	txManager port.TransactionManager
+	botRepo   repository.BotRepository
 }
 
 func NewHandleMatchTimeoutHandler(
 	matchRepo repository.SoloMatchRepository,
 	eventPub port.EventPublisher,
 	txManager port.TransactionManager,
-	botRepo repository.BotRepository,
+	botRepo ...repository.BotRepository,
 ) *HandleMatchTimeoutHandler {
+	var br repository.BotRepository
+	if len(botRepo) > 0 {
+		br = botRepo[0]
+	}
 	return &HandleMatchTimeoutHandler{
 		matchRepo: matchRepo,
 		eventPub:  eventPub,
-		botRepo:   botRepo,
 		txManager: txManager,
+		botRepo:   br,
 	}
 }
 
-func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchTimeoutCommand) (int, error) {
+func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchTimeoutCommand) error {
 	now := cmd.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -47,69 +53,134 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 		limit = 50
 	}
 
-	expiredMatches, err := h.matchRepo.FindExpiredMatches(ctx, now, limit)
-	if err != nil {
-		return 0, fmt.Errorf("find expired matches: %w", err)
+	// 1. Quét và hủy các trận PENDING_READY quá hạn ready_deadline (60s check-in window)
+	unreadyMatches, uErr := h.matchRepo.FindUnreadyExpiredMatches(ctx, now, limit)
+	if uErr != nil {
+		return fmt.Errorf("find unready expired matches: %w", uErr)
 	}
 
-	processedCount := 0
-	for _, match := range expiredMatches {
-		if tErr := match.Timeout(now); tErr != nil {
+	for _, match := range unreadyMatches {
+		if cErr := match.CancelOnNoShow(now); cErr != nil {
 			continue
 		}
 
-		txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 			if sErr := h.matchRepo.Save(txCtx, match); sErr != nil {
 				return sErr
 			}
 
-			if match.Status() == valueobject.MatchStatusForfeited || match.Status() == valueobject.MatchStatusCompleted {
-				p1 := match.Participants()[0]
-				p2 := match.Participants()[1]
-				var botUserID string
-				if h.botRepo != nil {
-					if isBot, _ := h.botRepo.IsBot(txCtx, p1.UserID()); isBot {
-						botUserID = p1.UserID()
-					} else if isBot, _ := h.botRepo.IsBot(txCtx, p2.UserID()); isBot {
-						botUserID = p2.UserID()
-					}
+			endedAt := now.UTC()
+			if match.EndedAt() != nil {
+				endedAt = *match.EndedAt()
+			}
+
+			cancelledEv := &event.SoloMatchCancelled{
+				MatchID:     match.ID(),
+				Reason:      "READY_TIMEOUT",
+				CancelledAt: endedAt,
+			}
+
+			return h.eventPub.PublishEvents(txCtx, []any{cancelledEv})
+		}); txErr != nil {
+			log.Printf("[SoloMatch Timeout] Failed to cancel expired match %s: %v", match.ID(), txErr)
+		}
+	}
+
+	// 2. Quét và xử lý các trận IN_PROGRESS quá hạn thời gian tối đa (mặc định 35 phút)
+	inProgressThreshold := cmd.InProgressThreshold
+	if inProgressThreshold <= 0 {
+		inProgressThreshold = 35 * time.Minute
+	}
+	startedBefore := now.Add(-inProgressThreshold)
+
+	expiredMatches, eErr := h.matchRepo.FindExpiredInProgressMatches(ctx, startedBefore, limit)
+	if eErr != nil {
+		log.Printf("[SoloMatch Timeout] Find expired in-progress matches error: %v", eErr)
+	} else {
+		for _, match := range expiredMatches {
+			if tErr := match.TimeoutInProgress(now); tErr != nil {
+				continue
+			}
+
+			if txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+				if sErr := h.matchRepo.Save(txCtx, match); sErr != nil {
+					return sErr
 				}
 
-				winnerID := ""
-				if match.WinnerID() != nil {
-					winnerID = *match.WinnerID()
-				}
-
-				endedAt := time.Now().UTC()
+				endedAt := now.UTC()
 				if match.EndedAt() != nil {
 					endedAt = *match.EndedAt()
 				}
 
-				ev := &event.SoloMatchCompleted{
-					MatchID:       match.ID(),
-					ExerciseID:    match.ExerciseID(),
-					ChallengeType: match.ChallengeType().String(),
-					WinnerID:      winnerID,
-					IsDraw:        false,
-					Player1ID:     p1.UserID(),
-					Player1Score:  p1.Score().Value(),
-					Player2ID:     p2.UserID(),
-					Player2Score:  p2.Score().Value(),
-					BotUserID:     botUserID,
-					CompletedAt:   endedAt,
+				var eventsToPublish []any
+				if match.Status() == valueobject.MatchStatusForfeited {
+					winnerID := ""
+					if match.WinnerID() != nil {
+						winnerID = *match.WinnerID()
+					}
+
+					var botUserID string
+					if h.botRepo != nil && winnerID != "" {
+						p1 := match.Participants()[0]
+						p2 := match.Participants()[1]
+						otherID := p1.UserID()
+						if otherID == winnerID {
+							otherID = p2.UserID()
+						}
+						isBot, _ := h.botRepo.IsBot(txCtx, otherID)
+						if isBot {
+							botUserID = otherID
+						}
+					}
+
+					forfeitedByID := ""
+					for _, p := range match.Participants() {
+						if p.UserID() != winnerID {
+							forfeitedByID = p.UserID()
+							break
+						}
+					}
+
+					forfeitedEv := &event.SoloMatchForfeited{
+						MatchID:       match.ID(),
+						ForfeitedByID: forfeitedByID,
+						WinnerID:      winnerID,
+						BotUserID:     botUserID,
+						Reason:        "IN_PROGRESS_TIMEOUT",
+						ForfeitedAt:   endedAt,
+					}
+
+					p1 := match.Participants()[0]
+					p2 := match.Participants()[1]
+					completedEv := &event.SoloMatchCompleted{
+						MatchID:       match.ID(),
+						ExerciseID:    match.ExerciseID(),
+						ChallengeType: match.ChallengeType().String(),
+						WinnerID:      winnerID,
+						IsDraw:        false,
+						Player1ID:     p1.UserID(),
+						Player1Score:  p1.Score().Value(),
+						Player2ID:     p2.UserID(),
+						Player2Score:  p2.Score().Value(),
+						BotUserID:     botUserID,
+						CompletedAt:   endedAt,
+					}
+					eventsToPublish = []any{forfeitedEv, completedEv}
+				} else {
+					cancelledEv := &event.SoloMatchCancelled{
+						MatchID:     match.ID(),
+						Reason:      "IN_PROGRESS_TIMEOUT",
+						CancelledAt: endedAt,
+					}
+					eventsToPublish = []any{cancelledEv}
 				}
 
-				if pErr := h.eventPub.PublishEvents(txCtx, []any{ev}); pErr != nil {
-					return pErr
-				}
+				return h.eventPub.PublishEvents(txCtx, eventsToPublish)
+			}); txErr != nil {
+				log.Printf("[SoloMatch Timeout] Failed to timeout expired in-progress match %s: %v", match.ID(), txErr)
 			}
-
-			return nil
-		})
-		if txErr == nil {
-			processedCount++
 		}
 	}
 
-	return processedCount, nil
+	return nil
 }

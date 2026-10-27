@@ -146,3 +146,54 @@
 > *Xử lý bất đồng bộ qua Eventual Consistency, không chặn UC-03.4.*
 
 **Domain Events**: `NewPersonalRecordAchieved`
+
+---
+
+### UC-03.6 StreamSoloMatchTracking (Thi Đấu Đối Kháng 1v1 Qua Camera AI)
+
+| | |
+|---|---|
+| **Actor** | User · System (AI Camera Referee / SoloBotManager) |
+| **Precondition** | User đã nhận được `matchID` từ `solo_match`. Quyền truy cập camera đã được cấp. Bài tập có bộ luật chuyển động `ExerciseMotionRule`. |
+
+**Main Flow**
+1. User mở màn hình camera thi đấu, Client kết nối Bi-directional Stream `StreamSoloMatchTracking`, gửi frame `Config` (`matchID`, `exerciseID`, `challengeType`, `planID`, `cameraAngle`, `timeCeilingSeconds`).
+2. System nạp luật `ExerciseMotionRule`, khởi tạo trọng tài số `SoloRefereeSession`, đăng ký User vào phòng Live Sync trên Redis (`RegisterParticipant`), tạo bản ghi `WorkoutSession` trong PostgreSQL ở trạng thái `IN_PROGRESS`.
+3. System kiểm tra sự hiện diện của phòng đấu:
+   - Nếu phòng đủ 2 người tham gia (Người + Người hoặc Người + Bot):
+     - System ghi sự kiện `SoloMatchRoomReady` vào Outbox để `solo_match` kích hoạt trận đấu `IN_PROGRESS`.
+     - Trọng tài ảo của cả hai bên chuyển sang trạng thái `ACTIVE`.
+4. User thực hiện động tác trước camera, Client liên tục gửi các frame chứa tọa độ xương MediaPipe (17/33 điểm).
+5. Trọng tài ảo chấm điểm từng frame:
+   - **Đối với REPS**: Máy trạng thái 3 pha tuần tự (`REST` $\rightarrow$ `TRANSITION` $\rightarrow$ `ACTIVE` $\rightarrow$ `TRANSITION` $\rightarrow$ `REST`). Phải đạt đủ 3 checkpoint tuần tự mới tăng `confirmedValue++`.
+   - **Đối với DURATION**: Tích lũy thời gian giữ đúng tư thế vào `confirmedValue`.
+6. System xuất bản tiến độ người chơi lên Redis Live Sync (`PublishMyProgress`) và đọc tiến độ mới nhất của đối thủ gửi về Client qua frame response thời gian thực.
+7. Khi hoàn thành bài tập, User gửi frame `Submit`:
+   - System chuyển User sang trạng thái `SPECTATING` (chế độ khán giả quan sát đối thủ).
+   - System lưu `WorkoutSession` hoàn thành trong PostgreSQL và ghi sự kiện `SoloTrackingCompleted` vào Outbox.
+   - Khi cả hai bên đều hoàn thành, System gửi `MatchEnded = true` và đóng stream an toàn.
+
+**Alternative Flow**
+- **A1: Thi đấu với Bot ảo thời gian thực (`SoloBotManager`)**:
+  - Khi nhận sự kiện `SoloMatchStarted` có `botUserId`, System khởi chạy Goroutine Virtual Bot Runner.
+  - Bot đọc kỷ lục cá nhân (PR) của User để đặt điểm mục tiêu `botScore` (mặc định 5 reps hoặc 300s).
+  - Khi User vào phòng, Bot chuyển `ACTIVE` và đếm nhịp đều đặn (2.5s/rep hoặc 1.0s/giây), phát tiến độ lên Redis Live Sync.
+  - Khi đạt `botScore`, Bot chuyển `COMPLETED` và phát sự kiện `SoloTrackingCompleted` vào Outbox.
+- **A2: Xử phạt vi phạm form 5 giây liên tục (Bài Duration)**:
+  - Nếu User sai tư thế liên tục $\ge 5$ giây, trọng tài xử phạt cưỡng chế kết thúc: `isCompleted = true`, lý do `FORM_VIOLATION_5S`, chuyển User sang `SPECTATING`.
+- **A3: Chạm thời gian trần tối đa (Time Ceiling Timeout)**:
+  - Khi hết thời gian trần (10 phút Reps / 30 phút Duration), trọng tài cưỡng chế kết thúc với lý do `TIMEOUT`, chuyển trạng thái `COMPLETED`.
+- **A4: Người dùng chủ động bỏ cuộc (Surrender)**:
+  - User nhấn nút "Bỏ cuộc", Client gửi frame `Abort`.
+  - System chuyển `WorkoutSession` sang `ABORTED`, phát sự kiện `SoloTrackingAborted` vào Outbox. Đối thủ lập tức giành chiến thắng.
+- **A5: Mất kết nối mạng & Cơ chế ân hạn 45 giây (Disconnect Grace Period)**:
+  - Khi stream bị đứt, System đánh dấu trạng thái Redis thành `DISCONNECTED` và kích hoạt Timer ân hạn 45 giây chạy ngầm.
+  - *Nếu Reconnect trong 45s*: Hủy Timer, System khôi phục số rep và điểm form cũ từ Redis qua `RestoreProgress`, User tiếp tục thi đấu bình thường.
+  - *Nếu quá 45s không vào lại*: Timer phát nổ, System tự động gọi `FinalizeSession("USER_DISCONNECTED")`, đánh dấu `ABORTED` và phát sự kiện `SoloTrackingAborted`.
+
+**Error / Edge Cases**
+- **E1: Phòng đấu đã đủ 2 người khác**: Từ chối với lỗi `ErrMatchRoomFull` (`PERMISSION_DENIED`).
+- **E2: Bài tập chưa cấu hình luật chuyển động**: Từ chối với lỗi `FailedPrecondition`.
+
+**Postcondition**: `WorkoutSession` được lưu trong Database (`COMPLETED` hoặc `ABORTED`). Sự kiện nghiệp vụ tương ứng được ghi vào Outbox.  
+**Domain Events**: `SoloMatchRoomReady` | `SoloTrackingCompleted` | `SoloTrackingAborted`

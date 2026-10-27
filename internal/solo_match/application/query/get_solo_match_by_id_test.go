@@ -32,7 +32,11 @@ func (m *soloMatchRepoMock) FindActiveByUserID(ctx context.Context, userID strin
 	return nil, nil
 }
 
-func (m *soloMatchRepoMock) FindExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+func (m *soloMatchRepoMock) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *soloMatchRepoMock) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
 	return nil, nil
 }
 
@@ -74,7 +78,6 @@ func TestGetSoloMatchByIDHandler(t *testing.T) {
 			"ex_pushup",
 			"Push-Up",
 			valueobject.ChallengeTypeReps,
-			15*time.Minute,
 			[]*entity.MatchParticipant{p1, p2},
 			now,
 		)

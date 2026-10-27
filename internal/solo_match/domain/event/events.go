@@ -69,3 +69,18 @@ func (e *SoloMatchForfeited) EventName() string {
 func (e *SoloMatchForfeited) OccurredAt() time.Time {
 	return e.ForfeitedAt
 }
+
+// SoloMatchCancelled phát ra khi trận đấu bị hủy do quá hạn điểm danh vào phòng
+type SoloMatchCancelled struct {
+	MatchID     string
+	Reason      string
+	CancelledAt time.Time
+}
+
+func (e *SoloMatchCancelled) EventName() string {
+	return "contracts.core.solo_match.v1.soloMatchCancelled"
+}
+
+func (e *SoloMatchCancelled) OccurredAt() time.Time {
+	return e.CancelledAt
+}

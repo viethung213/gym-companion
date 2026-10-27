@@ -30,8 +30,8 @@ type SoloMatchDTO struct {
 	Participants  []ParticipantDTO `json:"participants"`
 	WinnerID      string           `json:"winnerId,omitempty"`
 	IsDraw        bool             `json:"isDraw"`
-	StartedAt     time.Time        `json:"startedAt"`
-	TimeoutAt     time.Time        `json:"timeoutAt"`
+	StartedAt     *time.Time       `json:"startedAt,omitempty"`
+	ReadyDeadline time.Time        `json:"readyDeadline"`
 	EndedAt       *time.Time       `json:"endedAt,omitempty"`
 }
 
@@ -82,7 +82,7 @@ func ToSoloMatchDTO(m *aggregate.SoloMatch, snapshots map[string]*entity.UserSna
 		WinnerID:      winner,
 		IsDraw:        m.IsDraw(),
 		StartedAt:     m.StartedAt(),
-		TimeoutAt:     m.TimeoutAt(),
+		ReadyDeadline: m.ReadyDeadline(),
 		EndedAt:       m.EndedAt(),
 	}
 }

@@ -165,6 +165,12 @@ func extractUserID(ev interface{}) string {
 		if e != nil {
 			return e.UserID
 		}
+	case domainEvent.SoloMatchRoomReady:
+		return e.MatchID
+	case *domainEvent.SoloMatchRoomReady:
+		if e != nil {
+			return e.MatchID
+		}
 	}
 
 	v := reflect.ValueOf(ev)
@@ -270,6 +276,19 @@ func mapToProtoEvent(ev interface{}) proto.Message {
 			return nil
 		}
 		return mapSoloTrackingAbortedToProto(e)
+	case domainEvent.SoloMatchRoomReady:
+		return &workoutexecutionv1event.SoloMatchRoomReady{
+			MatchId:   e.MatchID,
+			StartedAt: timestamppb.New(e.StartedAt),
+		}
+	case *domainEvent.SoloMatchRoomReady:
+		if e == nil {
+			return nil
+		}
+		return &workoutexecutionv1event.SoloMatchRoomReady{
+			MatchId:   e.MatchID,
+			StartedAt: timestamppb.New(e.StartedAt),
+		}
 	default:
 		return nil
 	}

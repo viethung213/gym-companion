@@ -123,11 +123,6 @@ func run() error {
 	}
 	defer shutdownAuth()
 
-	// Seed system bot profiles via Auth API (skipped automatically if already created)
-	if seedErr := seeder.SeedSystemBots(ctx, db, authGRPCHandler); seedErr != nil {
-		return fmt.Errorf("seed system bots: %w", seedErr)
-	}
-
 	// Initialize Exercise Module
 	exerciseServer, shutdownExercise, err := exercise.Initialize(ctx, exercise.ModuleDeps{
 		DB:            exerciseDB,
@@ -234,14 +229,20 @@ func run() error {
 		log.Println("Initialized isolated Solo Match Database Pool successfully.")
 	}
 	soloMatchGRPCHandler, shutdownSoloMatch, err := solomatch.Initialize(ctx, solomatch.ModuleDeps{
-		DB:            soloMatchDB,
-		RedisClient:   redisClient,
-		KafkaRegistry: kafkaRegistry,
+		DB:             soloMatchDB,
+		RedisClient:    redisClient,
+		KafkaRegistry:  kafkaRegistry,
+		ExerciseServer: exerciseServer,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize solo_match module: %w", err)
 	}
 	defer shutdownSoloMatch()
+
+	// Seed system bot profiles via Auth API and wait for solo_match snapshot sync
+	if seedErr := seeder.SeedSystemBots(ctx, db, authGRPCHandler); seedErr != nil {
+		return fmt.Errorf("seed system bots: %w", seedErr)
+	}
 
 	// 2. Start Unified HTTP Server with ConnectRPC, h2c, and CORS on Port 8080
 	log.Printf("🚀 Starting Unified API Server (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)

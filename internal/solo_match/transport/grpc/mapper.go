@@ -25,6 +25,11 @@ func ToSoloMatchView(d *dto.SoloMatchDTO) *solomatchv1message.SoloMatchView {
 		})
 	}
 
+	var startedAt *timestamppb.Timestamp
+	if d.StartedAt != nil {
+		startedAt = timestamppb.New(*d.StartedAt)
+	}
+
 	var endedAt *timestamppb.Timestamp
 	if d.EndedAt != nil {
 		endedAt = timestamppb.New(*d.EndedAt)
@@ -39,8 +44,7 @@ func ToSoloMatchView(d *dto.SoloMatchDTO) *solomatchv1message.SoloMatchView {
 		Participants:  participants,
 		WinnerId:      d.WinnerID,
 		IsDraw:        d.IsDraw,
-		StartedAt:     timestamppb.New(d.StartedAt),
-		TimeoutAt:     timestamppb.New(d.TimeoutAt),
+		StartedAt:     startedAt,
 		EndedAt:       endedAt,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	authCommand "github.com/viethung213/gym-companion/internal/auth/application/command"
@@ -78,6 +79,23 @@ func setupTestDatabase(t *testing.T) (*sql.DB, *gorm.DB) {
 		VALUES ('user', 'User', 'Standard user', CURRENT_TIMESTAMP);
 		INSERT OR IGNORE INTO auth.roles (id, name, description, created_at)
 		VALUES ('User', 'User', 'Standard user', CURRENT_TIMESTAMP);
+
+		-- Solo Match schema
+		CREATE TABLE IF NOT EXISTS solo_match.user_snapshots (
+			user_id TEXT PRIMARY KEY,
+			display_name TEXT NOT NULL,
+			avatar_url TEXT NOT NULL DEFAULT '',
+			rating_score INTEGER NOT NULL DEFAULT 1000,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS solo_match.system_bots (
+			user_id TEXT PRIMARY KEY,
+			difficulty_level TEXT NOT NULL DEFAULT 'INTERMEDIATE',
+			is_active BOOLEAN NOT NULL DEFAULT 1,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
 	`
 
 	if _, err := db.Exec(initSQL); err != nil {
@@ -106,6 +124,28 @@ func TestSeedSystemBots(t *testing.T) {
 		registerHandler,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
+
+	// Simulate Solo Match Kafka consumer syncing user snapshots from auth.users
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	go func() {
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-workerCtx.Done():
+				return
+			case <-ticker.C:
+				if _, err := db.Exec(`
+					INSERT OR IGNORE INTO solo_match.user_snapshots (user_id, display_name, avatar_url, rating_score)
+					SELECT id, full_name, '', 1000 
+					FROM auth.users
+				`); err != nil {
+					t.Logf("mock sync worker error: %v", err)
+				}
+			}
+		}
+	}()
 
 	// 1. First Run: Seeds all bot profiles through the AuthService API (Transport -> Application -> Domain -> Infra)
 	err := seeder.SeedSystemBots(ctx, db, authHandler)
@@ -142,6 +182,15 @@ func TestSeedSystemBots(t *testing.T) {
 		t.Errorf("expected %d userRegistered outbox events, got %d", expectedCount, authOutboxCount)
 	}
 
+	// Verify Solo Match: System bots created
+	var systemBotsCount int
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM solo_match.system_bots").Scan(&systemBotsCount); err != nil {
+		t.Fatalf("query solo_match.system_bots count: %v", err)
+	}
+	if systemBotsCount != expectedCount {
+		t.Errorf("expected %d solo_match.system_bots, got %d", expectedCount, systemBotsCount)
+	}
+
 	// 2. Second Run: Verifies IDEMPOTENCY (checks database, skips execution without calling API)
 	err = seeder.SeedSystemBots(ctx, db, authHandler)
 	if err != nil {
@@ -163,5 +212,41 @@ func TestSeedSystemBots(t *testing.T) {
 	}
 	if authOutboxCountAfter != expectedCount {
 		t.Errorf("idempotency check failed: expected %d outbox events, got %d", expectedCount, authOutboxCountAfter)
+	}
+
+	var systemBotsCountAfter int
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM solo_match.system_bots").Scan(&systemBotsCountAfter); err != nil {
+		t.Fatalf("query solo_match.system_bots count after second run: %v", err)
+	}
+	if systemBotsCountAfter != expectedCount {
+		t.Errorf("idempotency check failed: expected %d solo_match.system_bots, got %d", expectedCount, systemBotsCountAfter)
+	}
+}
+
+func TestSeedSystemBots_SnapshotTimeout(t *testing.T) {
+	db, gormDB := setupTestDatabase(t)
+	defer db.Close()
+
+	// Context with very short timeout to trigger snapshot wait cancellation
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	userRepo := authPostgres.NewUserRepository(gormDB)
+	outboxRepo := authPostgres.NewOutboxRepository(gormDB)
+	argon2Hasher := authCrypto.NewArgon2Hasher()
+	txManager := authPostgres.NewSQLTransactionManager(gormDB)
+	eventPub := authEvent.NewOutboxWriter(outboxRepo)
+	registerHandler := authCommand.NewRegisterHandler(userRepo, argon2Hasher, eventPub, txManager)
+
+	authHandler := authGRPC.NewGRPCHandler(
+		nil, nil, nil, nil, nil, nil,
+		registerHandler,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	// Do NOT start mock consumer to simulate missing/lagging snapshot sync
+	err := seeder.SeedSystemBots(ctx, db, authHandler)
+	if err == nil {
+		t.Fatal("expected SeedSystemBots to return error on snapshot sync timeout/cancellation, got nil")
 	}
 }

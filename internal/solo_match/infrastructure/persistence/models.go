@@ -18,8 +18,8 @@ type SoloMatchModel struct {
 	Status        string             `gorm:"column:status;not null"`
 	WinnerID      *string            `gorm:"column:winner_id"`
 	IsDraw        bool               `gorm:"column:is_draw;default:false"`
-	TimeoutAt     time.Time          `gorm:"column:timeout_at;not null"`
-	StartedAt     time.Time          `gorm:"column:started_at;not null"`
+	StartedAt     *time.Time         `gorm:"column:started_at"`
+	ReadyDeadline time.Time          `gorm:"column:ready_deadline;not null"`
 	EndedAt       *time.Time         `gorm:"column:ended_at"`
 	CreatedAt     time.Time          `gorm:"column:created_at"`
 	UpdatedAt     time.Time          `gorm:"column:updated_at"`
@@ -60,7 +60,7 @@ func (m *SoloMatchModel) ToDomain() (*aggregate.SoloMatch, error) {
 		m.WinnerID,
 		m.IsDraw,
 		m.StartedAt,
-		m.TimeoutAt,
+		m.ReadyDeadline,
 		m.EndedAt,
 	), nil
 }
@@ -79,8 +79,8 @@ func FromDomainSoloMatch(m *aggregate.SoloMatch) *SoloMatchModel {
 		Status:        m.Status().String(),
 		WinnerID:      m.WinnerID(),
 		IsDraw:        m.IsDraw(),
-		TimeoutAt:     m.TimeoutAt(),
 		StartedAt:     m.StartedAt(),
+		ReadyDeadline: m.ReadyDeadline(),
 		EndedAt:       m.EndedAt(),
 		Participants:  participants,
 	}

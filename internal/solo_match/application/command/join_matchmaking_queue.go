@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,6 +48,16 @@ func (h *JoinMatchmakingQueueHandler) Handle(ctx context.Context, cmd JoinMatchm
 		}
 	}
 
+	if h.queuePort != nil {
+		inQueue, err := h.queuePort.IsUserInQueue(ctx, cmd.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("check user in queue: %w", err)
+		}
+		if inQueue {
+			return nil, derror.ErrUserAlreadyInQueue
+		}
+	}
+
 	ticketID := "ticket_" + uuid.New().String()
 	ticket, err := aggregate.NewMatchmakingTicket(ticketID, cmd.UserID, time.Now().UTC())
 	if err != nil {
@@ -59,6 +70,9 @@ func (h *JoinMatchmakingQueueHandler) Handle(ctx context.Context, cmd JoinMatchm
 	}
 
 	if err := h.queuePort.Enqueue(ctx, ticket); err != nil {
+		if errors.Is(err, derror.ErrUserAlreadyInQueue) {
+			return nil, derror.ErrUserAlreadyInQueue
+		}
 		return nil, fmt.Errorf("enqueue matchmaking ticket: %w", err)
 	}
 

@@ -1,4 +1,4 @@
-package publisher
+package worker
 
 import (
 	"context"
@@ -10,18 +10,20 @@ import (
 	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
 )
 
-type OutboxPublisher struct {
+// OutboxPublisherWorker periodically polls pending events from database outbox and pushes them to Kafka.
+type OutboxPublisherWorker struct {
 	outboxRepo port.OutboxRepository
 	writer     *kafka.Writer
 	interval   time.Duration
 	stopCh     chan struct{}
 }
 
-func NewOutboxPublisher(outboxRepo port.OutboxRepository, writer *kafka.Writer, interval time.Duration) *OutboxPublisher {
+// NewOutboxPublisherWorker constructs a new OutboxPublisherWorker instance.
+func NewOutboxPublisherWorker(outboxRepo port.OutboxRepository, writer *kafka.Writer, interval time.Duration) *OutboxPublisherWorker {
 	if interval <= 0 {
 		interval = 2 * time.Second
 	}
-	return &OutboxPublisher{
+	return &OutboxPublisherWorker{
 		outboxRepo: outboxRepo,
 		writer:     writer,
 		interval:   interval,
@@ -29,7 +31,8 @@ func NewOutboxPublisher(outboxRepo port.OutboxRepository, writer *kafka.Writer, 
 	}
 }
 
-func (p *OutboxPublisher) Start(ctx context.Context) {
+// Start begins the periodic polling sweep loop until the context or worker is stopped.
+func (p *OutboxPublisherWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
@@ -56,11 +59,12 @@ func (p *OutboxPublisher) Start(ctx context.Context) {
 	}
 }
 
-func (p *OutboxPublisher) Stop() {
+// Stop signals the worker to terminate gracefully.
+func (p *OutboxPublisherWorker) Stop() {
 	close(p.stopCh)
 }
 
-func (p *OutboxPublisher) processPendingEvents(ctx context.Context) error {
+func (p *OutboxPublisherWorker) processPendingEvents(ctx context.Context) error {
 	// ClaimBatch sử dụng SELECT ... FOR UPDATE SKIP LOCKED
 	// Khóa an toàn 50 sự kiện trong 10 giây, cho phép các instance khác bỏ qua các dòng này để xử lý song song
 	records, err := p.outboxRepo.ClaimBatch(ctx, 50, 10*time.Second)

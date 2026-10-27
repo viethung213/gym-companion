@@ -41,8 +41,8 @@ func setupSoloMatchTestDB(t *testing.T) *gorm.DB {
 			status TEXT NOT NULL,
 			winner_id TEXT,
 			is_draw NUMERIC DEFAULT 0,
-			timeout_at DATETIME NOT NULL,
-			started_at DATETIME NOT NULL,
+			ready_deadline DATETIME NOT NULL,
+			started_at DATETIME,
 			ended_at DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME
@@ -87,11 +87,12 @@ func TestGORMSoloMatchRepository_SaveAndFindByID(t *testing.T) {
 
 	match, err := aggregate.NewSoloMatch(
 		"m_1", "ex_1", "Push-ups", valueobject.ChallengeTypeReps,
-		10*time.Minute, []*entity.MatchParticipant{p1, p2}, now,
+		[]*entity.MatchParticipant{p1, p2}, now,
 	)
 	if err != nil {
 		t.Fatalf("create match: %v", err)
 	}
+	_ = match.ActivateRoom(now)
 
 	// 1. Save new match
 	err = repo.Save(ctx, match)
@@ -143,23 +144,49 @@ func TestGORMSoloMatchRepository_UpdateOnConflict(t *testing.T) {
 	p2, _ := entity.NewMatchParticipant("p_20", "m_10", "u_20")
 	match, err := aggregate.NewSoloMatch(
 		"m_10", "ex_pullup", "Pull-ups", valueobject.ChallengeTypeReps,
-		15*time.Minute, []*entity.MatchParticipant{p1, p2}, now,
+		[]*entity.MatchParticipant{p1, p2}, now,
 	)
 	if err != nil {
 		t.Fatalf("create match: %v", err)
 	}
-
+	// 1. Lưu ban đầu khi vừa tạo (PENDING_READY, startedAt là nil)
 	err = repo.Save(ctx, match)
 	if err != nil {
 		t.Fatalf("initial save: %v", err)
 	}
 
-	// Cập nhật kết quả thi đấu: p1 thắng
+	initMatch, err := repo.FindByID(ctx, "m_10")
+	if err != nil || initMatch == nil {
+		t.Fatalf("find initial match err: %v", err)
+	}
+	if initMatch.StartedAt() != nil {
+		t.Errorf("expected initial startedAt to be nil, got %v", initMatch.StartedAt())
+	}
+
+	// 2. Kích hoạt phòng thi đấu (IN_PROGRESS, startedAt được gán)
+	_ = match.ActivateRoom(now)
+	err = repo.Save(ctx, match)
+	if err != nil {
+		t.Fatalf("save activated match: %v", err)
+	}
+
+	activeMatch, err := repo.FindByID(ctx, "m_10")
+	if err != nil || activeMatch == nil {
+		t.Fatalf("find active match err: %v", err)
+	}
+	if activeMatch.Status() != valueobject.MatchStatusInProgress {
+		t.Errorf("status got %v, want IN_PROGRESS", activeMatch.Status())
+	}
+	if activeMatch.StartedAt() == nil {
+		t.Fatalf("expected startedAt to be updated on conflict, got nil")
+	}
+
+	// 3. Cập nhật kết quả thi đấu: p1 thắng
 	resolver := service.NewMatchResolver()
 	_ = match.RecordParticipantResult("u_10", 30, now.Add(2*time.Minute), resolver)
 	_ = match.RecordParticipantResult("u_20", 20, now.Add(3*time.Minute), resolver)
 
-	// Lưu lại (OnConflict Update)
+	// Lưu lại (OnConflict Update sang COMPLETED)
 	err = repo.Save(ctx, match)
 	if err != nil {
 		t.Fatalf("save updated match: %v", err)
@@ -187,7 +214,8 @@ func TestGORMSoloMatchRepository_UpdateOnConflict(t *testing.T) {
 			if p.Score().Value() != 30 {
 				t.Errorf("u_10 score got %v, want 30", p.Score().Value())
 			}
-		} else if p.UserID() == "u_20" {
+		}
+		if p.UserID() == "u_20" {
 			if p.Result() != valueobject.MatchResultLose {
 				t.Errorf("u_20 result got %v, want LOSE", p.Result())
 			}
@@ -208,8 +236,9 @@ func TestGORMSoloMatchRepository_FindActiveByUserID(t *testing.T) {
 	p2, _ := entity.NewMatchParticipant("p_active_2", "m_active", "u_opponent")
 	matchActive, _ := aggregate.NewSoloMatch(
 		"m_active", "ex_1", "Plank", valueobject.ChallengeTypeDuration,
-		5*time.Minute, []*entity.MatchParticipant{p1, p2}, now,
+		[]*entity.MatchParticipant{p1, p2}, now,
 	)
+	_ = matchActive.ActivateRoom(now)
 	_ = repo.Save(ctx, matchActive)
 
 	t.Run("returns active match for participant", func(t *testing.T) {
@@ -248,67 +277,67 @@ func TestGORMSoloMatchRepository_FindActiveByUserID(t *testing.T) {
 	})
 }
 
-func TestGORMSoloMatchRepository_FindExpiredMatches(t *testing.T) {
+func TestGORMSoloMatchRepository_FindUnreadyExpiredMatches(t *testing.T) {
 	db := setupSoloMatchTestDB(t)
 	repo := persistence.NewGORMSoloMatchRepository(db)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 
-	// Match 1: Expired earlier (timeout_at = now - 10m)
-	p1_1, _ := entity.NewMatchParticipant("p1_1", "m_exp_1", "u1")
-	p1_2, _ := entity.NewMatchParticipant("p1_2", "m_exp_1", "u2")
-	m1, _ := aggregate.NewSoloMatch("m_exp_1", "ex_1", "Squats", valueobject.ChallengeTypeReps, 5*time.Minute, []*entity.MatchParticipant{p1_1, p1_2}, now.Add(-15*time.Minute))
-	_ = repo.Save(ctx, m1)
+	pUnready1, _ := entity.NewMatchParticipant("pu_1", "m_unready_exp", "u9")
+	pUnready2, _ := entity.NewMatchParticipant("pu_2", "m_unready_exp", "u10")
+	mUnready, _ := aggregate.NewSoloMatch("m_unready_exp", "ex_1", "Squats", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{pUnready1, pUnready2}, now.Add(-2*time.Minute))
+	// stays PENDING_READY, ready_deadline is now - 1m
+	_ = repo.Save(ctx, mUnready)
 
-	// Match 2: Expired later (timeout_at = now - 2m)
-	p2_1, _ := entity.NewMatchParticipant("p2_1", "m_exp_2", "u3")
-	p2_2, _ := entity.NewMatchParticipant("p2_2", "m_exp_2", "u4")
-	m2, _ := aggregate.NewSoloMatch("m_exp_2", "ex_1", "Squats", valueobject.ChallengeTypeReps, 5*time.Minute, []*entity.MatchParticipant{p2_1, p2_2}, now.Add(-7*time.Minute))
-	_ = repo.Save(ctx, m2)
+	unreadyMatches, err := repo.FindUnreadyExpiredMatches(ctx, now, 10)
+	if err != nil {
+		t.Fatalf("find unready expired matches: %v", err)
+	}
+	if len(unreadyMatches) != 1 {
+		t.Fatalf("got %d unready matches, want 1", len(unreadyMatches))
+	}
+	if unreadyMatches[0].ID() != "m_unready_exp" {
+		t.Errorf("got %s, want m_unready_exp", unreadyMatches[0].ID())
+	}
+}
 
-	// Match 3: Future timeout (timeout_at = now + 10m) -> Should not be expired
-	p3_1, _ := entity.NewMatchParticipant("p3_1", "m_future", "u5")
-	p3_2, _ := entity.NewMatchParticipant("p3_2", "m_future", "u6")
-	m3, _ := aggregate.NewSoloMatch("m_future", "ex_1", "Squats", valueobject.ChallengeTypeReps, 15*time.Minute, []*entity.MatchParticipant{p3_1, p3_2}, now.Add(-5*time.Minute))
-	_ = repo.Save(ctx, m3)
+func TestGORMSoloMatchRepository_FindExpiredInProgressMatches(t *testing.T) {
+	db := setupSoloMatchTestDB(t)
+	repo := persistence.NewGORMSoloMatchRepository(db)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
 
-	// Match 4: Already completed -> Should not be returned even if timeout_at <= now
-	p4_1, _ := entity.NewMatchParticipant("p4_1", "m_exp_completed", "u7")
-	p4_2, _ := entity.NewMatchParticipant("p4_2", "m_exp_completed", "u8")
-	m4, _ := aggregate.NewSoloMatch("m_exp_completed", "ex_1", "Squats", valueobject.ChallengeTypeReps, 5*time.Minute, []*entity.MatchParticipant{p4_1, p4_2}, now.Add(-20*time.Minute))
-	res := service.NewMatchResolver()
-	_ = m4.RecordParticipantResult("u7", 10, now.Add(-18*time.Minute), res)
-	_ = m4.RecordParticipantResult("u8", 8, now.Add(-18*time.Minute), res)
-	_ = repo.Save(ctx, m4)
+	// Match 1: IN_PROGRESS started 40 minutes ago (expired for 35m threshold)
+	p1A, _ := entity.NewMatchParticipant("p_inprog_1a", "m_inprog_exp", "u21")
+	p1B, _ := entity.NewMatchParticipant("p_inprog_1b", "m_inprog_exp", "u22")
+	mExpired, _ := aggregate.NewSoloMatch("m_inprog_exp", "ex_1", "Push-ups", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p1A, p1B}, now.Add(-50*time.Minute))
+	_ = mExpired.ActivateRoom(now.Add(-40 * time.Minute))
+	_ = repo.Save(ctx, mExpired)
 
-	t.Run("finds expired matches sorted by timeout_at ASC", func(t *testing.T) {
-		expired, err := repo.FindExpiredMatches(ctx, now, 10)
-		if err != nil {
-			t.Fatalf("find expired matches: %v", err)
-		}
-		if len(expired) != 2 {
-			t.Fatalf("got %d expired matches, want 2", len(expired))
-		}
-		if expired[0].ID() != "m_exp_1" {
-			t.Errorf("first match got %s, want m_exp_1 (earlier timeout)", expired[0].ID())
-		}
-		if expired[1].ID() != "m_exp_2" {
-			t.Errorf("second match got %s, want m_exp_2", expired[1].ID())
-		}
-	})
+	// Match 2: IN_PROGRESS started 10 minutes ago (not expired)
+	p2A, _ := entity.NewMatchParticipant("p_inprog_2a", "m_inprog_fresh", "u23")
+	p2B, _ := entity.NewMatchParticipant("p_inprog_2b", "m_inprog_fresh", "u24")
+	mFresh, _ := aggregate.NewSoloMatch("m_inprog_fresh", "ex_1", "Push-ups", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p2A, p2B}, now.Add(-15*time.Minute))
+	_ = mFresh.ActivateRoom(now.Add(-10 * time.Minute))
+	_ = repo.Save(ctx, mFresh)
 
-	t.Run("respects limit", func(t *testing.T) {
-		limited, err := repo.FindExpiredMatches(ctx, now, 1)
-		if err != nil {
-			t.Fatalf("find expired matches with limit 1: %v", err)
-		}
-		if len(limited) != 1 {
-			t.Fatalf("got %d matches, want 1", len(limited))
-		}
-		if limited[0].ID() != "m_exp_1" {
-			t.Errorf("got %s, want m_exp_1", limited[0].ID())
-		}
-	})
+	// Match 3: PENDING_READY (should not match)
+	p3A, _ := entity.NewMatchParticipant("p_inprog_3a", "m_unready_other", "u25")
+	p3B, _ := entity.NewMatchParticipant("p_inprog_3b", "m_unready_other", "u26")
+	mPending, _ := aggregate.NewSoloMatch("m_unready_other", "ex_1", "Push-ups", valueobject.ChallengeTypeReps, []*entity.MatchParticipant{p3A, p3B}, now.Add(-50*time.Minute))
+	_ = repo.Save(ctx, mPending)
+
+	startedBefore := now.Add(-35 * time.Minute)
+	expiredMatches, err := repo.FindExpiredInProgressMatches(ctx, startedBefore, 10)
+	if err != nil {
+		t.Fatalf("find expired in-progress matches: %v", err)
+	}
+	if len(expiredMatches) != 1 {
+		t.Fatalf("got %d expired matches, want 1", len(expiredMatches))
+	}
+	if expiredMatches[0].ID() != "m_inprog_exp" {
+		t.Errorf("got %s, want m_inprog_exp", expiredMatches[0].ID())
+	}
 }
 
 func TestGORMSoloMatchRepository_ListByUserID(t *testing.T) {
@@ -323,7 +352,7 @@ func TestGORMSoloMatchRepository_ListByUserID(t *testing.T) {
 		pB, _ := entity.NewMatchParticipant("p_l_b_"+string(rune('0'+i)), "m_list_"+string(rune('0'+i)), "u_other")
 		m, _ := aggregate.NewSoloMatch(
 			"m_list_"+string(rune('0'+i)), "ex_1", "Push-ups", valueobject.ChallengeTypeReps,
-			10*time.Minute, []*entity.MatchParticipant{pA, pB}, now.Add(time.Duration(i)*time.Hour),
+			[]*entity.MatchParticipant{pA, pB}, now.Add(time.Duration(i)*time.Hour),
 		)
 		_ = repo.Save(ctx, m)
 		_ = db.Exec("UPDATE solo_match.solo_matches SET created_at = ? WHERE id = ?", now.Add(time.Duration(i)*time.Minute), m.ID()).Error

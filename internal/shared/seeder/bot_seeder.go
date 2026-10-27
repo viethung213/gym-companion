@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
 	"google.golang.org/grpc/codes"
@@ -127,9 +128,9 @@ type AuthRegistrar interface {
 }
 
 // SeedSystemBots seeds bot accounts by calling the AuthService API:
-// 1. Checks if all default bot profiles already exist; if so, skips execution to prevent redundant operations.
+// 1. Checks if all default bot profiles already exist in auth and system_bots; if so, skips execution.
 // 2. Calls authService.Register for each bot profile through the API layer (Transport -> Application -> Domain -> Infrastructure).
-// 3. The system's event-driven pipeline (Outbox -> Kafka -> Consumers) handles downstream profile creation & synchronization.
+// 3. Retrieves each bot's user_id from auth.user_identities and inserts/upserts into solo_match.system_bots.
 func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) error {
 	if authService == nil {
 		return errors.New("authService cannot be nil")
@@ -137,26 +138,40 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 
 	profiles := DefaultBotProfiles()
 
-	// 1. Kiểm tra nếu tất cả bot đã được tạo rùi thì không cần chạy lại
+	// 1. Kiểm tra nếu tất cả bot đã được tạo trong cả auth và solo_match.system_bots thì bỏ qua
 	if db != nil {
 		allSeeded := true
 		for _, bot := range profiles {
-			var exists bool
+			var authExists bool
 			err := db.QueryRowContext(ctx, `
 				SELECT EXISTS (
 					SELECT 1 
 					FROM auth.user_identities 
 					WHERE identity_type = 'email' AND identifier = $1
 				)
-			`, bot.Email).Scan(&exists)
-			if err != nil || !exists {
+			`, bot.Email).Scan(&authExists)
+			if err != nil || !authExists {
+				allSeeded = false
+				break
+			}
+
+			var botExists bool
+			err = db.QueryRowContext(ctx, `
+				SELECT EXISTS (
+					SELECT 1 
+					FROM solo_match.system_bots b
+					JOIN auth.user_identities i ON b.user_id = i.user_id
+					WHERE i.identity_type = 'email' AND i.identifier = $1
+				)
+			`, bot.Email).Scan(&botExists)
+			if err != nil || !botExists {
 				allSeeded = false
 				break
 			}
 		}
 
 		if allSeeded {
-			log.Printf("🤖 System bots already created (%d bots exist). Skipping bot seeder.", len(profiles))
+			log.Printf("🤖 System bots already created and synced in solo_match.system_bots (%d bots exist). Skipping bot seeder.", len(profiles))
 			return nil
 		}
 	}
@@ -177,15 +192,77 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 		if err != nil {
 			st, ok := status.FromError(err)
 			if ok && st.Code() == codes.AlreadyExists {
-				log.Printf("  ℹ️ Bot already exists: %s (%s)", bot.FullName, bot.Email)
-				continue
+				log.Printf("  ℹ️ Bot already exists in Auth: %s (%s)", bot.FullName, bot.Email)
+			} else {
+				return fmt.Errorf("register bot %s via auth API: %w", bot.Email, err)
 			}
-			return fmt.Errorf("register bot %s via auth API: %w", bot.Email, err)
+		} else {
+			log.Printf("  ✅ Bot registered via Auth API: %s (%s)", bot.FullName, bot.Email)
 		}
 
-		log.Printf("  ✅ Bot registered via Auth API: %s (%s)", bot.FullName, bot.Email)
+		// Nạp dữ liệu vào bảng solo_match.system_bots
+		if db != nil {
+			var userID string
+			err = db.QueryRowContext(ctx, `
+				SELECT user_id 
+				FROM auth.user_identities 
+				WHERE identity_type = 'email' AND identifier = $1
+			`, bot.Email).Scan(&userID)
+			if err != nil {
+				return fmt.Errorf("lookup user_id for bot %s: %w", bot.Email, err)
+			}
+
+			// Chờ sự kiện UserRegistered được Solo Match consumer đồng bộ vào solo_match.user_snapshots
+			if waitErr := waitForUserSnapshot(ctx, db, userID, 15*time.Second); waitErr != nil {
+				return fmt.Errorf("wait for snapshot sync for bot %s (user_id %s): %w", bot.Email, userID, waitErr)
+			}
+
+			// Thêm/cập nhật vào solo_match.system_bots
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO solo_match.system_bots (user_id, difficulty_level, is_active, created_at)
+				VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+				ON CONFLICT (user_id) DO UPDATE 
+				SET difficulty_level = EXCLUDED.difficulty_level, is_active = EXCLUDED.is_active
+			`, userID, bot.DifficultyLevel, true)
+			if err != nil {
+				return fmt.Errorf("upsert solo_match.system_bots for bot %s: %w", bot.Email, err)
+			}
+
+			log.Printf("  🎯 Bot synced to solo_match.system_bots: %s (ID: %s, Difficulty: %s)", bot.FullName, userID, bot.DifficultyLevel)
+		}
 	}
 
-	log.Printf("🎉 Successfully seeded %d System Bots via Auth API.", len(profiles))
+	log.Printf("🎉 Successfully seeded and synced %d System Bots.", len(profiles))
 	return nil
+}
+
+// waitForUserSnapshot polls solo_match.user_snapshots until the snapshot with the given userID is created,
+// or until the timeout is reached or context is cancelled.
+func waitForUserSnapshot(ctx context.Context, db *sql.DB, userID string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		var exists bool
+		err := db.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1 
+				FROM solo_match.user_snapshots 
+				WHERE user_id = $1
+			)
+		`, userID).Scan(&exists)
+		if err == nil && exists {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for snapshot sync of user_id %s in solo_match.user_snapshots (%v elapsed)", userID, timeout)
+			}
+		}
+	}
 }

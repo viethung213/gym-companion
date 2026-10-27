@@ -18,15 +18,13 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/service/solomatchv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
-	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/query"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/service"
 	infraEvent "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/event"
 	exerciseclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/exercise_client"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/matchmaker"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/persistence"
-	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/publisher"
-	workoutclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/workout_client"
+	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/worker"
 	"github.com/viethung213/gym-companion/internal/solo_match/transport/consumer"
 	"github.com/viethung213/gym-companion/internal/solo_match/transport/grpc"
 	gormPostgres "gorm.io/driver/postgres"
@@ -36,11 +34,10 @@ import (
 
 // ModuleDeps contains external dependencies required to boot the Solo Match module.
 type ModuleDeps struct {
-	DB               *sql.DB
-	RedisClient      *redis.Client
-	KafkaRegistry    *sharedKafka.Registry
-	ExerciseProvider port.ExerciseProvider
-	UserPRProvider   port.UserPRProvider
+	DB             *sql.DB
+	RedisClient    *redis.Client
+	KafkaRegistry  *sharedKafka.Registry
+	ExerciseServer exerciseclient.RandomExerciseCaller
 }
 
 // Initialize wires dependencies, registers services, and starts background workers.
@@ -85,26 +82,19 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 
 	// Domain Services
 	matchResolver := service.NewMatchResolver()
-	botCalc := service.NewBotBenchmarkCalculator()
 
-	exerciseProvider := deps.ExerciseProvider
-	if exerciseProvider == nil {
-		exerciseProvider = exerciseclient.NewStubExerciseClient()
+	if deps.ExerciseServer == nil {
+		return nil, nil, errors.New("solo_match requires a non-nil ExerciseServer in ModuleDeps")
 	}
-
-	prProvider := deps.UserPRProvider
-	if prProvider == nil {
-		prProvider = workoutclient.NewStubWorkoutClient()
-	}
+	exerciseProvider := exerciseclient.NewExerciseClient(deps.ExerciseServer)
 
 	// Matchmaker Queue Port (Pure Redis In-Memory)
 	queuePort := matchmaker.NewRedisMatchmakerAdapter(
 		redisClient,
 		matchRepo,
-		botCalc,
 		botRepo,
 		exerciseProvider,
-		prProvider,
+		eventPub,
 		250*time.Millisecond,
 		5*time.Minute,
 	)
@@ -155,7 +145,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	var wg sync.WaitGroup
 
 	// 1. Outbox Publisher Worker
-	outboxPub := publisher.NewOutboxPublisher(outboxRepo, kafkaWriter, 2*time.Second)
+	outboxPub := worker.NewOutboxPublisherWorker(outboxRepo, kafkaWriter, 2*time.Second)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -168,6 +158,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	}()
 
 	// 2. Fallback Match Timeout Worker (Safety net every 15 seconds)
+	matchTimeoutWorker := worker.NewMatchTimeoutWorker(timeoutHandler, 15*time.Second)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -176,160 +167,78 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 				log.Printf("PANIC RECOVERED in SoloMatch Match Timeout Worker: %v", r)
 			}
 		}()
-
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-workerCtx.Done():
-				return
-			case <-ticker.C:
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							log.Printf("PANIC in SoloMatch timeout check tick: %v", r)
-						}
-					}()
-					if _, tErr := timeoutHandler.Handle(workerCtx, command.HandleMatchTimeoutCommand{}); tErr != nil {
-						log.Printf("[SoloMatch] Timeout worker sweep error: %v", tErr)
-					}
-				}()
-			}
-		}
+		matchTimeoutWorker.Start(workerCtx)
 	}()
 
 	// 3. Kafka Consumers (Workout & User events)
 	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
 		workoutCompletedConsumer := consumer.NewWorkoutCompletedConsumer(recordResultHandler, outboxLogRepo)
 		workoutAbortedConsumer := consumer.NewWorkoutAbortedConsumer(recordAbortHandler, outboxLogRepo)
+		soloMatchRoomReadyConsumer := consumer.NewSoloMatchRoomReadyConsumer(matchRepo, outboxLogRepo)
 		userRegisteredConsumer := consumer.NewUserRegisteredConsumer(syncSnapshotHandler, outboxLogRepo)
 		userIdentityUpdatedConsumer := consumer.NewUserIdentityUpdatedConsumer(syncSnapshotHandler, outboxLogRepo)
 
 		// Consumer 3A: Workout Execution Events
 		workoutReader, rErr := deps.KafkaRegistry.GetReader("solo_match_workout_consumer", "workout_execution.events", kafkaBrokers)
 		if rErr == nil && workoutReader != nil {
+			workoutWorker := worker.NewKafkaConsumerWorker(
+				"Workout Events Consumer",
+				workoutReader,
+				workoutCompletedConsumer,
+				workoutAbortedConsumer,
+				soloMatchRoomReadyConsumer,
+			)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in SoloMatch Workout Events Consumer: %v", r)
-					}
-					_ = workoutReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := workoutReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									log.Printf("PANIC in processing workout execution event: %v", r)
-								}
-							}()
-							_ = workoutCompletedConsumer.HandleMessage(workerCtx, msg.Value)
-							_ = workoutAbortedConsumer.HandleMessage(workerCtx, msg.Value)
-						}()
-					}
-				}
+				workoutWorker.Start(workerCtx)
 			}()
+		} else if rErr != nil {
+			log.Printf("[SoloMatch] Warning: failed to obtain workout events reader: %v", rErr)
 		}
 
 		// Consumer 3B: Auth Events (User Registered)
 		authReader, aErr := deps.KafkaRegistry.GetReader("solo_match_user_consumer", "auth.events", kafkaBrokers)
 		if aErr == nil && authReader != nil {
+			authWorker := worker.NewKafkaConsumerWorker(
+				"Auth Events Consumer",
+				authReader,
+				userRegisteredConsumer,
+			)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in SoloMatch Auth Events Consumer: %v", r)
-					}
-					_ = authReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := authReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									log.Printf("PANIC in processing auth event: %v", r)
-								}
-							}()
-							_ = userRegisteredConsumer.HandleMessage(workerCtx, msg.Value)
-						}()
-					}
-				}
+				authWorker.Start(workerCtx)
 			}()
+		} else if aErr != nil {
+			log.Printf("[SoloMatch] Warning: failed to obtain auth events reader: %v", aErr)
 		}
 
 		// Consumer 3C: Profile Events (User Identity Updated)
 		profileReader, pErr := deps.KafkaRegistry.GetReader("solo_match_profile_consumer", "profile.events", kafkaBrokers)
 		if pErr == nil && profileReader != nil {
+			profileWorker := worker.NewKafkaConsumerWorker(
+				"Profile Events Consumer",
+				profileReader,
+				userIdentityUpdatedConsumer,
+			)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in SoloMatch Profile Events Consumer: %v", r)
-					}
-					_ = profileReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := profileReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									log.Printf("PANIC in processing profile event: %v", r)
-								}
-							}()
-							_ = userIdentityUpdatedConsumer.HandleMessage(workerCtx, msg.Value)
-						}()
-					}
-				}
+				profileWorker.Start(workerCtx)
 			}()
+		} else if pErr != nil {
+			log.Printf("[SoloMatch] Warning: failed to obtain profile events reader: %v", pErr)
 		}
 	}
 
 	shutdown := func() {
 		log.Println("Shutting down Solo Match Bounded Context background workers...")
+		if queuePort != nil {
+			if qErr := queuePort.Close(); qErr != nil {
+				log.Printf("[SoloMatch] Warning: error closing matchmaker queue: %v", qErr)
+			}
+		}
 		outboxPub.Stop()
 		cancelWorkers()
 		wg.Wait()

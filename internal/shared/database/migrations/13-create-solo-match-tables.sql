@@ -21,15 +21,15 @@ CREATE TABLE IF NOT EXISTS solo_match.solo_matches (
     status VARCHAR(32) NOT NULL,
     winner_id UUID NULL,
     is_draw BOOLEAN NOT NULL DEFAULT FALSE,
-    timeout_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    ready_deadline TIMESTAMP WITH TIME ZONE NOT NULL,
+    started_at TIMESTAMP WITH TIME ZONE NULL,
     ended_at TIMESTAMP WITH TIME ZONE NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_solo_matches_status ON solo_match.solo_matches(status);
-CREATE INDEX IF NOT EXISTS idx_solo_matches_timeout ON solo_match.solo_matches(timeout_at) WHERE status = 'IN_PROGRESS';
+CREATE INDEX IF NOT EXISTS idx_solo_matches_ready_deadline ON solo_match.solo_matches(ready_deadline) WHERE status = 'PENDING_READY';
 
 -- 3. Table: match_participants (Participants details: real user or AI bot)
 CREATE TABLE IF NOT EXISTS solo_match.match_participants (

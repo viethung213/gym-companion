@@ -1,22 +1,20 @@
-# Phân Tích Hệ Thống — Module Solo Match (System Analysis)
+# Phân Tích Hệ Thống — Bounded Context Solo Match (System Analysis)
 
-Tài liệu này trình bày phân tích ca sử dụng (Use Cases), tác nhân (Actors), dữ liệu khởi tạo trận & các cổng tích hợp đồng bộ (Match Data Provisioning), phân tích sự kiện (Event Storming), sơ đồ tuần tự (Sequence Diagrams) và máy trạng thái (State Machine) của Bounded Context **Solo Match**.
+Tài liệu này trình bày phân tích chi tiết về ca sử dụng (Use Cases), tác nhân (Actors), sơ đồ tuần tự (Sequence Diagrams), phân tích sự kiện liên module (Event Storming) và máy trạng thái hữu hạn (FSM) thuộc phạm vi quản lý của Bounded Context **Solo Match**.
 
 ---
 
 ## 1. Tác Nhân Hệ Thống (Actors)
 
-| Tác nhân | Phân loại | Vai trò trong hệ thống |
+| Tác nhân | Phân loại | Vai trò và tương tác với Solo Match |
 | :--- | :--- | :--- |
-| **Gym User (Player)** | Con người (User) | Người dùng đăng ký tìm trận, hủy tìm trận, thực hiện bài tập đối kháng, xem kết quả và xem lịch sử thi đấu. |
-| **System Bot (AI Opponent)** | Tác nhân hệ thống | Tài khoản gymer mẫu cấu hình sẵn trong DB (`solo_match.system_bots`), bốc ngẫu nhiên qua In-Memory Cache tham gia trận đấu khi thời gian chờ của người dùng vượt quá 5 phút. |
-| **Redis Matchmaker Engine** | Hạ tầng thời gian thực | Quản lý vé chờ (ZSet), phân giải vé nguyên tử bằng Lua script, và phát thông báo qua Redis Pub/Sub. |
-| **Match Timeout Worker** | Tác nhân nền (Daemon) | Worker chạy ngầm định kỳ quét và xử lý các trận đấu `IN_PROGRESS` đã vượt quá mốc `timeout_at`. |
-| **Exercise Management Service** | Module bên ngoài / Port | Cung cấp danh mục bài tập thi đấu đối kháng ngẫu nhiên (`ExerciseID`, `ExerciseName`, `ChallengeType` REPS/DURATION, thời lượng `Duration`) qua cổng `port.ExerciseProvider`. |
-| **Workout History / Execution Service** | Module bên ngoài / Port | Cung cấp kỷ lục cá nhân (Personal Record - PR) của người dùng qua cổng `port.UserPRProvider` để tính toán độ khó của Bot. |
-| **Workout Execution Module** | Module bên ngoài (Event) | Đơn vị tracking camera AI, phát sự kiện hoàn thành (`workoutSessionCompleted`) hoặc hủy bỏ (`workoutSessionAborted`). |
-| **Auth & Identity Module** | Module bên ngoài (Event) | Phát sự kiện `UserRegistered` trên topic `auth.events` khi người dùng đăng ký tài khoản mới. |
-| **Profile Module** | Module bên ngoài (Event) | Phát sự kiện `UserIdentityUpdated` trên topic `profile.events` khi người dùng cập nhật thông tin cá nhân (họ tên, avatar). |
+| **Gym User (Player)** | Con người (User) | Gửi yêu cầu tìm trận (`JoinQueue`), hủy tìm trận (`CancelQueue`), tra cứu chi tiết trận (`GetMatch`), xem lịch sử (`GetMatchHistory`). |
+| **Redis Matchmaker Engine** | Hạ tầng thời gian thực | Lưu trữ vé chờ trong ZSet, thực thi Lua script bốc vé nguyên tử, phát thông báo qua kênh Pub/Sub. |
+| **System Bot Pool** | Tài nguyên hệ thống | Bảng cơ sở dữ liệu `solo_match.system_bots` cung cấp danh sách Bot hợp lệ khi kích hoạt Bot Fallback sau 5 phút. |
+| **MatchTimeoutWorker** | Daemon Worker | Chạy ngầm định kỳ: quét trận `PENDING_READY` quá hạn 60s điểm danh (`CancelOnNoShow`) và quét trận `IN_PROGRESS` treo quá 35 phút (`TimeoutInProgress`). |
+| **Exercise Provider** | Outbound Port (Service) | Cung cấp bài tập thể lực thi đấu ngẫu nhiên kèm thể thức `REPS` hoặc `DURATION`. |
+| **Workout Execution Module** | Module bên ngoài (Event) | Nơi diễn ra buổi tập camera thực tế; phát các sự kiện `SoloMatchRoomReady`, `SoloTrackingCompleted`, `SoloTrackingAborted` về cho `solo_match`. |
+| **Auth & Profile Modules** | Module bên ngoài (Event) | Phát sự kiện `UserRegistered`, `UserIdentityUpdated` để `solo_match` duy trì bản sao danh tính `user_snapshots`. |
 
 ---
 
@@ -25,372 +23,250 @@ Tài liệu này trình bày phân tích ca sử dụng (Use Cases), tác nhân 
 ```mermaid
 flowchart LR
     User([Gym User])
-    TimeoutWorker([Timeout Daemon Worker])
-    ExerciseMod([Exercise Service])
-    WorkoutQuery([Workout History / Service])
-    WorkoutMod([Workout Execution])
-    AuthMod([Auth / Identity])
-    ProfileMod([Profile Module])
+    TimeoutWorker([Match Timeout Worker])
+    WorkoutMod([Workout Execution Module])
+    AuthMod([Auth / Profile Modules])
 
-    subgraph Solo_Match_Bounded_Context [Module Solo Match]
-        UC1[Vào hàng đợi tìm trận\nJoin Queue via gRPC Stream]
-        UC2[Hủy tìm trận\nCancel Queue]
-        UC3[Xem chi tiết trận đấu\nGet Match by ID]
-        UC4[Lấy trận đang diễn ra\nGet Active Match]
-        UC5[Xem lịch sử đấu\nGet Match History]
-        
-        UC6[Ghép cặp nguyên tử 2 User\nLua Script Atomic Match]
-        UC7[Kích hoạt Bot Fallback 5 phút\nBốc Random Bot DB & Tính PR]
-        UC8[Tiếp nhận kết quả bài tập\nRecord Participant Result]
-        UC9[Xử thua tức thì khi đối thủ thoát\nFast Forfeit via Workout Aborted]
-        UC10[Quét xử lý trận quá hạn chót\nHandle Expired Matches]
-        UC11[Đồng bộ User Snapshot\nSync User Identity]
-
-        UC12[Lấy thử thách bài tập ngẫu nhiên\nFetch Random Exercise Challenge]
-        UC13[Truy vấn kỷ lục cá nhân Gymer\nFetch User Best PR]
+    subgraph Solo_Match_Bounded_Context [Bounded Context: Solo Match]
+        UC1[UC-SM.1: Vào hàng đợi tìm trận\nJoin Queue via gRPC Stream]
+        UC2[UC-SM.2: Hủy tìm trận\nCancel Queue]
+        UC3[UC-SM.3: Ghép cặp 2 Người chơi\nPvP Atomic Match]
+        UC4[UC-SM.4: Ghép cặp với Bot sau 5 phút\nBot Fallback from System Pool]
+        UC5[UC-SM.5: Kích hoạt trận đấu\nActivate Match on Room Ready]
+        UC6[UC-SM.6: Hủy trận do quá 60s không vào\nCancel on Ready Deadline Timeout]
+        UC7[UC-SM.7: Tiếp nhận kết quả & Chấm điểm\nRecord Result & Resolve Outcome]
+        UC8[UC-SM.8: Xử thua tức thì khi đối thủ bỏ cuộc\nFast Forfeit on Tracking Aborted]
+        UC9[UC-SM.9: Cưỡng chế trận treo quá 35 phút\nIn-Progress Safety Net Timeout]
+        UC10[UC-SM.10: Đồng bộ bản sao danh tính\nSync User Snapshot]
     end
 
     User --> UC1
     User --> UC2
-    User --> UC3
-    User --> UC4
-    User --> UC5
+    
+    UC1 -.-> UC3
+    UC1 -.-> UC4
+    
+    TimeoutWorker --> UC6
+    TimeoutWorker --> UC9
 
-    UC1 -.-> UC6
-    UC1 -.-> UC7
+    WorkoutMod -->|Event: SoloMatchRoomReady| UC5
+    WorkoutMod -->|Event: SoloTrackingCompleted| UC7
+    WorkoutMod -->|Event: SoloTrackingAborted| UC8
 
-    UC6 -.-> UC12
-    UC7 -.-> UC12
-    UC7 -.-> UC13
-
-    ExerciseMod -.->|Sync Port: GetRandomChallenge| UC12
-    WorkoutQuery -.->|Sync Port: GetBestPR| UC13
-
-    WorkoutMod -->|Kafka: workoutSessionCompleted| UC8
-    WorkoutMod -->|Kafka: workoutSessionAborted| UC9
-    TimeoutWorker --> UC10
-    AuthMod -->|Kafka: UserRegistered| UC11
-    ProfileMod -->|Kafka: UserIdentityUpdated| UC11
+    AuthMod -->|Event: UserRegistered / UserIdentityUpdated| UC10
 ```
 
 ---
 
-## 3. Phân Tích Dữ Liệu Khởi Tạo Trận & Các Cổng Tích Hợp Đồng Bộ (Match Data Provisioning)
+## 3. Sơ Đồ Tuần Tự Chi Tiết (Sequence Diagrams)
 
-Bên cạnh việc lắng nghe các sự kiện bất đồng bộ qua Kafka, việc khởi tạo một trận đấu (cả PvP lẫn Bot) đòi hỏi quá trình tổng hợp dữ liệu đồng bộ từ các dịch vụ bên ngoài thông qua các cổng **Outbound Ports**:
-
-```mermaid
-flowchart TD
-    subgraph Match_Creation_Engine [Động Cơ Tạo Trận Đấu]
-        M1[Bốc 2 vé hoặc 1 vé quá 5 phút]
-        M2[Tổng hợp dữ liệu khởi tạo trận]
-        M3[Khởi tạo Aggregate SoloMatch]
-    end
-
-    subgraph Outbound_Ports [Các Cổng Tích Hợp Đồng Bộ]
-        P_Ex[ExerciseProvider: GetRandomChallenge]
-        P_PR[UserPRProvider: GetBestPR]
-        P_Snap[UserSnapshotRepository: FindByID]
-        P_Bot[BotRepository: GetRandomBotUserID]
-    end
-
-    subgraph Data_Sources [Nguồn Dữ Liệu Cung Cấp]
-        S_Ex[Exercise Catalog Service: Bài tập, ChallengeType, Thời lượng]
-        S_Work[Workout History Service: Kỷ lục cá nhân PR của User]
-        S_Snap[(solo_match.user_snapshots: Tên & Avatar)]
-        S_Bot[(solo_match.system_bots: Danh sách Bot)]
-    end
-
-    M1 --> M2
-    M2 -->|Gọi đồng bộ| P_Ex --> S_Ex
-    M2 -->|Ghép Bot: Gọi đồng bộ| P_PR --> S_Work
-    M2 -->|Đọc danh tính đối thủ| P_Snap --> S_Snap
-    M2 -->|Ghép Bot: Lấy ID Bot| P_Bot --> S_Bot
-
-    M2 --> M3
-```
-
-### 3.1. Danh mục thông tin cần thu thập để tạo trận đấu
-Để khởi tạo thành công một Aggregate Root `SoloMatch`, hệ thống bắt buộc phải thu thập đủ 4 nhóm dữ liệu cốt lõi:
-1. **Thông tin thử thách bài tập (`ExerciseChallenge`)**:
-   - `ExerciseID` & `ExerciseName`: Mã và tên bài tập đối kháng (ví dụ: `ex_pushup` - `Push-Up`).
-   - `ChallengeType`: Hình thức thi đấu (`REPS` - đếm số lượt, hoặc `DURATION` - giữ thời gian tư thế).
-   - `Duration`: Thời lượng tối đa cho phép làm bài (ví dụ: 15 phút), dùng để tính mốc `timeout_at = now + duration`.
-2. **Kỷ lục cá nhân Gymer (`UserPR`) - Phục vụ riêng cho trận đấu với Bot**:
-   - Kỷ lục thành tích cao nhất của người dùng đối với bài tập được chọn (`*float64`).
-3. **Danh tính người chơi (`User Identity Snapshot`)**:
-   - `DisplayName` và `AvatarURL` của cả 2 đấu thủ (lấy từ bảng cô lập `solo_match.user_snapshots`) để phản hồi ngay lập tức cho gRPC stream mà không cần query chéo DB.
-4. **Tài khoản Bot hệ thống (`System Bot`) - Phục vụ riêng cho Bot Fallback**:
-   - `BotUserID`: Được bốc ngẫu nhiên từ In-Memory Cache $O(1)$ của bảng `solo_match.system_bots`.
-
----
-
-### 3.2. Cổng cung cấp thử thách bài tập (`port.ExerciseProvider`)
-- **Giao diện Port**:
-  ```go
-  type ExerciseProvider interface {
-      GetRandomChallenge(ctx context.Context) (*ExerciseChallenge, error)
-  }
-  ```
-- **Vai trò**:
-  - Chọn ngẫu nhiên một bài tập trong danh mục thi đấu để hai đấu thủ tranh tài công bằng.
-  - Cung cấp luật chấm điểm (`ChallengeType`) và hạn chót thi đấu (`Duration`).
-- **Triển khai kiến trúc**:
-  - Môi trường phát triển & kiểm thử: Sử dụng `StubExerciseClient` (mặc định thử thách `Push-Up`, `ChallengeTypeReps`, thời lượng 15 phút).
-  - Môi trường Production: Kết nối qua gRPC/HTTP Client gọi sang module `exercise`.
-
----
-
-### 3.3. Cổng truy vấn PR & Chiến lược cân bằng sức mạnh Bot (`port.UserPRProvider`)
-- **Giao diện Port**:
-  ```go
-  type UserPRProvider interface {
-      GetBestPR(ctx context.Context, userID, exerciseID string) (*float64, error)
-  }
-  ```
-- **Thời điểm kích hoạt**:
-  - **Chỉ kích hoạt khi người dùng chờ quá 5 phút** và chuyển sang ghép cặp với Bot.
-- **Chiến lược tính toán điểm số Bot (`BotBenchmarkCalculator`)**:
-  - **Trường hợp 1 (Người dùng đã có PR)**:
-    - Bot sao chép chỉ số `botScore = *userPR`.
-    - **Ý nghĩa nghiệp vụ**: Tạo ra trận đấu "đối đầu với kỷ lục tốt nhất của chính mình" (Ghost Runner), vừa tạo động lực vượt ngưỡng vừa đảm bảo trận đấu có tính cạnh tranh cao.
-  - **Trường hợp 2 (Người dùng mới chưa có PR hoặc lỗi mạng kết nối)**:
-    - Tự động fallback về điểm chuẩn mặc định của hệ thống (`DefaultBenchmark`):
-      + Bài tập `REPS`: **5 reps**.
-      + Bài tập `DURATION`: **300 giây (5 phút)**.
-  - **Đặc điểm trận đấu Bot**: Kết quả của Bot được chốt ngay tại thời điểm tạo trận (`COMPLETED` với điểm `botScore`), còn Gymer ở trạng thái `PENDING` và biết trước mục tiêu cần đánh bại.
-
----
-
-## 4. Phân Tích Sự Kiện (Event Storming & Event Integration)
-
-Module `solo_match` là điểm giao thoa giữa giao tiếp đồng bộ thời gian thực (In-Memory Redis + gRPC Stream) và giao tiếp bất đồng bộ chịu lỗi cao (Transactional Outbox + Kafka CloudEvents):
-
-```mermaid
-flowchart TD
-    subgraph External_Inbound_Events [Sự Kiện Tiếp Nhận Từ Kafka]
-        E_Reg[auth.v1.userRegistered]
-        E_Ident[profile.v1.userIdentityUpdated]
-        E_WorkDone[workout_execution.v1.workoutSessionCompleted]
-        E_WorkAbort[workout_execution.v1.workoutSessionAborted]
-    end
-
-    subgraph Solo_Match_Processing [Xử Lý Nội Bộ Module]
-        C_Sync[UserSnapshot Repository: Cập nhật tên & Avatar]
-        C_Record[Match Aggregate: RecordParticipantResult & ResolveOutcome]
-        C_Forfeit[Match Aggregate: ForfeitParticipant & Fast Settle]
-    end
-
-    subgraph Solo_Match_Outbound_Events [Sự Kiện Xuất Bản Qua Outbox Kafka]
-        E_Started[contracts.core.solo_match.v1.soloMatchStarted]
-        E_Completed[contracts.core.solo_match.v1.soloMatchCompleted]
-        E_Forfeited[contracts.core.solo_match.v1.soloMatchForfeited]
-    end
-
-    E_Reg --> C_Sync
-    E_Ident --> C_Sync
-    E_WorkDone --> C_Record
-    E_WorkAbort --> C_Forfeit
-
-    C_Record -->|Tạo trận xong| E_Started
-    C_Record -->|Phân định thắng/thua/hòa| E_Completed
-    C_Forfeit -->|Đối thủ bỏ cuộc| E_Forfeited
-    C_Forfeit -->|Đồng thời chốt kết quả thắng| E_Completed
-```
-
-### 4.1. Danh mục CloudEvents Tiếp Nhận (Inbound)
-1. `contracts.core.workout_execution.v1.workoutSessionCompleted`:
-   - Mang thông tin buổi tập đã hoàn thành của người dùng, bao gồm tổng số rep hoặc thời gian thực hiện (`score_value` hoặc `total_sets`).
-   - Consumer đối chiếu trận đấu `IN_PROGRESS` của `user_id` để ghi nhận thành tích.
-2. `contracts.core.workout_execution.v1.workoutSessionAborted`:
-   - Mang thông báo người chơi đã bỏ cuộc hoặc bị ngắt kết nối khi đang tập.
-   - Kích hoạt luồng **Fast Forfeit**, xử thắng ngay cho đối thủ còn lại.
-3. `contracts.generic.auth.v1.event.UserRegistered` (Module `auth`, Topic: `auth.events`):
-   - Phát ra khi người dùng đăng ký tài khoản mới, mang `userId`, `displayName`, `avatarUrl` khởi tạo bản ghi trong `solo_match.user_snapshots`.
-4. `contracts.supporting.profile.v1.event.UserIdentityUpdated` (Module `profile`, Topic: `profile.events`):
-   - Phát ra khi người dùng chỉnh sửa hồ sơ cá nhân (đổi tên hiển thị `fullName`, cập nhật ảnh đại diện `avatarUrl`).
-   - Consumer `UserIdentityUpdatedConsumer` tự động `Upsert` cập nhật lại bản ghi trong bảng cô lập `solo_match.user_snapshots`.
-
-### 4.2. Danh mục CloudEvents Xuất Bản (Outbound qua Transactional Outbox)
-1. `contracts.core.solo_match.v1.soloMatchCompleted`:
-   - Phát ra khi trận đấu kết thúc chính thức (cả 2 bên hoàn thành, hoặc sau khi xử Forfeit).
-   - Payload chứa: `matchId`, `winnerId`, `isDraw`, `exerciseId`, `botUserId`, điểm số của từng bên.
-   - Phục vụ module Gamification cộng cúp, tính điểm xếp hạng Elo, và gửi push notification chúc mừng.
-2. `contracts.core.solo_match.v1.soloMatchForfeited`:
-   - Phát ra khi có bên bị xử thua do bỏ cuộc (`workoutSessionAborted`) hoặc quá hạn chót (`timeout_at`).
-   - Chứa `forfeitedUserId`, `opponentUserId`, `botUserId`.
-*(Lưu ý: Sự kiện `soloMatchStarted` được chuẩn bị sẵn trong contract/packer, nhưng trong luồng tạo trận hiện tại thông báo bắt đầu trận được đẩy trực tiếp thời gian thực qua Redis Pub/Sub đến gRPC Server-Streaming cho 2 client).*
-
----
-
-## 5. Sơ Đồ Tuần Tự (Sequence Diagrams)
-
-### 5.1. Luồng Tìm Trận Thời Gian Thực & Ghép Cặp 2 Người Chơi (P2P Matchmaking)
-
-Cơ chế điều phối Worker hoạt động theo mô hình **Hybrid Trigger (Kích hoạt kép)**:
-1. **Event-driven Trigger (Tức thì khi tạo vé)**: Khi API tiếp nhận lệnh `JoinQueue` và `ZADD` vé vào Redis, API gửi tín hiệu nội bộ qua Go channel `triggerCh <- struct{}{}` để đánh thức Matchmaker Worker chạy ghép trận ngay tức thì (Zero-latency).
-2. **Periodic Ticker (Định kỳ mỗi 250ms)**: Ticker `time.NewTicker(pollInterval)` (cấu hình mặc định 250 miligiây trong `module.go`) định kỳ quét lại để chống sót vé (phòng trường hợp race condition hoặc channel buffer đầy) và quét vé phục vụ bot fallback.
+### 3.1. Luồng Ghép Cặp PvP & Kích Hoạt Trận Đấu
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User1 as Gymer A
-    actor User2 as Gymer B
-    participant API as SoloMatch gRPC Service
-    participant Redis as Redis In-Memory (ZSet + PubSub)
-    participant Worker as Matchmaker Worker (workerLoop)
-    participant DB as PostgreSQL (solo_match.*)
+    actor User1 as Gymer 1
+    actor User2 as Gymer 2
+    participant Handler as SoloMatch gRPC Handler
+    participant Redis as Redis (ZSet & Pub/Sub)
+    participant Worker as Matchmaker Worker
+    participant DB as PostgreSQL (solo_match)
+    participant RoomConsumer as SoloMatchRoomReadyConsumer
 
-    Note over Worker: Worker chạy nền liên tục (Lắng nghe triggerCh & Ticker định kỳ 250ms)
+    User1->>Handler: JoinQueue (gRPC Stream)
+    Handler->>Redis: ZADD solo_match:queue:waiting (ticket_1:user_1)
+    Handler->>Redis: SUBSCRIBE solo_match:events:ticket_1
 
-    User1->>API: JoinQueue (gRPC Stream)
-    API->>Redis: ZADD solo_match:queue:waiting (Ticket A, Score=Now)
-    API->>Worker: Gửi tín hiệu đánh thức (triggerCh <- struct{})
-    API->>Redis: SUBSCRIBE solo_match:events:ticket_A (Ngủ chờ)
-    
-    Worker->>Redis: EVAL Lua Script (Kiểm tra cặp >= 2 vé)
-    Redis-->>Worker: Trả về nil (Mới chỉ có 1 vé A, tiếp tục chờ)
+    User2->>Handler: JoinQueue (gRPC Stream)
+    Handler->>Redis: ZADD solo_match:queue:waiting (ticket_2:user_2)
+    Handler->>Redis: SUBSCRIBE solo_match:events:ticket_2
 
-    User2->>API: JoinQueue (gRPC Stream)
-    API->>Redis: ZADD solo_match:queue:waiting (Ticket B, Score=Now)
-    API->>Worker: Gửi tín hiệu đánh thức (triggerCh <- struct{})
-    API->>Redis: SUBSCRIBE solo_match:events:ticket_B (Ngủ chờ)
+    Note over Worker,Redis: Worker phát hiện >= 2 vé khác user_id
+    Worker->>Redis: EVAL Lua Script (Bốc 2 vé nguyên tử)
+    Redis-->>Worker: Trả về {ticket_1, ticket_2}
+    Worker->>DB: Lưu SoloMatch (status=PENDING_READY, ready_deadline=now+60s)
+    Worker->>DB: Ghi Outbox event SoloMatchStarted
+    Worker->>Redis: PUBLISH solo_match:events:ticket_1 (matchID)
+    Worker->>Redis: PUBLISH solo_match:events:ticket_2 (matchID)
 
-    Worker->>Redis: EVAL Lua Script (Bốc 2 vé đầu tiên)
-    Redis-->>Worker: Trả về [Ticket A, Ticket B] nguyên tử (ZREM cả 2 vé)
-    
-    Worker->>DB: INSERT solo_matches & match_participants
-    
-    Worker->>Redis: PUBLISH solo_match:events:ticket_A (MatchID)
-    Worker->>Redis: PUBLISH solo_match:events:ticket_B (MatchID)
-    
-    Redis-->>API: Đánh thức stream của User A
-    API-->>User1: Push MatchFound (MatchID, Opponent Info, Exercise, Timeout)
-    
-    Redis-->>API: Đánh thức stream của User B
-    API-->>User2: Push MatchFound (MatchID, Opponent Info, Exercise, Timeout)
+    Handler-->>User1: Stream Event: MATCHED (SoloMatchView)
+    Handler-->>User2: Stream Event: MATCHED (SoloMatchView)
 
-    Note over Worker: [Ticker định kỳ 250ms]: Chạy quét dọn vé sót lại & kiểm tra Bot fallback
+    Note over RoomConsumer,DB: Khi cả 2 người chơi vào phòng camera tại workout_execution
+    RoomConsumer->>RoomConsumer: Nhận CloudEvent SoloMatchRoomReady
+    RoomConsumer->>DB: ActivateRoom() -> Chuyển PENDING_READY sang IN_PROGRESS
+    Note over DB: started_at = now
 ```
 
 ---
 
-### 5.2. Luồng Ghép Trận Với Bot Sau 5 Phút (Bot Fallback)
-
-Khi người dùng đợi mà không có đối thủ thực tế, nhịp định kỳ của Matchmaker Worker sẽ phát hiện và chuyển hướng sang Bot:
+### 3.2. Luồng Bot Fallback Sau 5 Phút
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Gymer A
-    participant API as SoloMatch gRPC Service
-    participant Redis as Redis ZSet
-    participant BotWorker as Matchmaker Worker (Ticker 250ms)
-    participant BotRepo as GORMBotRepository
-    participant PRProvider as UserPRProvider
-    participant BotCalc as BotBenchmarkCalculator
-    participant DB as PostgreSQL
-    
-    User->>API: JoinQueue (gRPC Stream)
-    API->>Redis: ZADD solo_match:queue:waiting (Score = JoinedTime)
-    
-    Note over User,Redis: Chờ đối thủ thực tế... (Gymer A chờ trong hàng đợi)
-    Note over BotWorker: Ticker định kỳ mỗi 250ms chạy workerLoop -> fallbackBots()
-    
-    BotWorker->>Redis: EVAL Lua (ZRANGEBYSCORE <= Now - 5 phút & ZREM)
-    Redis-->>BotWorker: Trả về TicketID & UserID của Gymer A (Vé đã chờ >= 5 phút)
-    
-    BotWorker->>BotRepo: GetRandomBotUserID(ctx) (Bốc từ In-Memory Cache O(1))
-    BotRepo-->>BotWorker: Trả về BotUserID từ bảng solo_match.system_bots
-    
-    BotWorker->>PRProvider: GetBestPR(ctx, UserID, ExerciseID)
-    PRProvider-->>BotWorker: userPR
-    
-    BotWorker->>BotCalc: CalculateBotScore(ChallengeType, userPR)
-    BotCalc-->>BotWorker: botScore (= userPR hoặc fallback 5 reps / 300s)
-    
-    BotWorker->>DB: INSERT solo_matches (Gymer A vs Bot)
-    BotWorker->>DB: INSERT match_participants (User A: Pending, Bot: Completed sẵn với botScore)
-    
-    BotWorker->>Redis: PUBLISH solo_match:events:ticket_A (MatchID)
-    Redis-->>API: Đánh thức stream của Gymer A
-    API-->>User: Push MatchFound (Hiện đối thủ từ user_snapshots như người thật)
+    actor User as Gymer
+    participant Handler as SoloMatch gRPC Handler
+    participant Redis as Redis (ZSet & Pub/Sub)
+    participant Worker as Matchmaker Worker
+    participant DB as PostgreSQL (solo_match)
+
+    User->>Handler: JoinQueue (Chờ trong hàng đợi > 5 phút)
+    Note over Worker,Redis: Worker quét vé có score <= now - 5m
+    Worker->>Redis: EVAL Lua Script (Bốc 1 vé quá hạn)
+    Redis-->>Worker: Trả về ticket của User
+    Worker->>DB: Bốc ngẫu nhiên Bot ID từ solo_match.system_bots (In-Memory Cache O(1))
+    Worker->>DB: Lưu SoloMatch (User vs Bot, status=PENDING_READY, ready_deadline=now+60s)
+    Worker->>DB: Ghi Outbox event SoloMatchStarted (botUserId != "")
+    Worker->>Redis: PUBLISH solo_match:events:ticket (matchID)
+    Handler-->>User: Stream Event: MATCHED (Thông tin trận đấu, ẩn danh tính Bot)
 ```
 
 ---
 
-### 5.3. Luồng Xử Thua Tức Thì Khi Bỏ Cuộc (Fast Forfeit)
+### 3.3. Luồng Quá Hạn 60s Điểm Danh Không Vào Phòng (Check-in No-Show)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User1 as Gymer A (Bỏ cuộc)
-    actor User2 as Gymer B (Đang tập)
-    participant Workout as Workout Execution
+    participant TimeoutWorker as MatchTimeoutWorker
+    participant DB as PostgreSQL (solo_match)
+    participant OutboxPub as OutboxPublisherWorker
+    participant Kafka as Kafka Event Bus
+
+    Note over DB: Trận đấu ở PENDING_READY, ready_deadline = T + 60s
+    Note over TimeoutWorker: Worker định kỳ 15s quét ready_deadline
+    TimeoutWorker->>DB: FindUnreadyExpiredMatches(now)
+    DB-->>TimeoutWorker: Danh sách trận quá hạn
+
+    loop Duyệt từng trận
+        TimeoutWorker->>DB: CancelOnNoShow(now)
+        Note over DB: status chuyển sang CANCELLED, cả 2 bên bị FORFEITED
+        TimeoutWorker->>DB: Ghi Outbox event SoloMatchCancelled (reason: READY_TIMEOUT)
+    end
+
+    OutboxPub->>DB: ClaimBatch FOR UPDATE SKIP LOCKED
+    OutboxPub->>Kafka: Xuất bản CloudEvent SoloMatchCancelled
+    Note over Kafka: Module workout_execution nhận event để dọn phòng Redis
+```
+
+---
+
+### 3.4. Luồng Phân Định Thắng Thua Khi Cả Hai Cùng Hoàn Thành
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Kafka as Kafka Event Bus
+    participant Consumer as WorkoutCompletedConsumer
+    participant DB as PostgreSQL (solo_match)
+    participant Resolver as MatchResolver
+
+    Kafka->>Consumer: Nhận SoloTrackingCompleted (P1, score=25)
+    Consumer->>DB: Kiểm tra Idempotency qua outbox_logs
+    Consumer->>DB: RecordParticipantResult(P1) -> P1 completed
+    Note over Consumer: P2 chưa hoàn thành -> Chờ tiếp
+
+    Kafka->>Consumer: Nhận SoloTrackingCompleted (P2, score=20)
+    Consumer->>DB: RecordParticipantResult(P2) -> Cả P1 và P2 đã xong!
+
+    Consumer->>Resolver: ResolveOutcome(REPS, P1, P2)
+    Note over Resolver: So sánh 25 > 20 -> Winner: P1 (WIN), P2 (LOSE)
+    Consumer->>DB: Cập nhật SoloMatch (status=COMPLETED, winner_id=P1)
+    Consumer->>DB: Ghi Outbox event SoloMatchCompleted
+```
+
+---
+
+### 3.5. Luồng Xử Thua Tức Thì Khi Có Bên Bỏ Cuộc (Fast Forfeit)
+
+```mermaid
+sequenceDiagram
+    autonumber
     participant Kafka as Kafka Event Bus
     participant Consumer as WorkoutAbortedConsumer
-    participant MatchApp as RecordParticipantResultHandler
-    participant DB as PostgreSQL
-    participant Outbox as Transactional Outbox
+    participant DB as PostgreSQL (solo_match)
 
-    User1->>Workout: Bấm "Thoát trận / Hủy buổi tập"
-    Workout->>Kafka: Phát sự kiện WorkoutSessionAborted (UserID_A)
-    
-    Kafka->>Consumer: WorkoutAbortedConsumer nhận thông điệp
-    Consumer->>MatchApp: FastForfeitMatchCommand (UserID_A)
-    
-    MatchApp->>DB: Tìm trận active của UserID_A (IN_PROGRESS)
-    MatchApp->>DB: UPDATE User A -> FORFEITED
-    MatchApp->>DB: UPDATE User B -> WIN, Match Status -> COMPLETED
-    MatchApp->>Outbox: Lưu SoloMatchForfeited & SoloMatchCompleted (Winner: B)
-    
-    Note over User2: Gymer B được thông báo chiến thắng ngay lập tức
+    Kafka->>Consumer: Nhận SoloTrackingAborted (P1, reason: USER_FORFEITED)
+    Consumer->>DB: Kiểm tra Idempotency qua outbox_logs
+    Consumer->>DB: RecordParticipantAbortHandler(P1)
+    Note over DB: match.ForfeitParticipant(P1)
+    Note over DB: P1 = FORFEITED, P2 = WIN, status = FORFEITED, winner_id = P2
+    Consumer->>DB: Ghi Outbox SoloMatchForfeited (P1 forfeited)
+    Consumer->>DB: Ghi Outbox SoloMatchCompleted (winner_id = P2)
+    Note over Kafka: Các module Gamification/Profile nhận event để trao thưởng cho P2
 ```
 
 ---
 
-### 5.4. Luồng Đồng Bộ User Snapshot Khi Đổi Tên / Avatar (Profile Synchronizer)
+### 3.6. Luồng Lưới An Toàn Cưỡng Chế Trận Treo Quá 35 Phút
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Người dùng
-    participant Profile as Profile Module
-    participant Kafka as Kafka (profile.events)
-    participant Consumer as UserIdentityUpdatedConsumer
-    participant Handler as SyncUserSnapshotHandler
-    participant DB as PostgreSQL (solo_match.user_snapshots)
+    participant TimeoutWorker as MatchTimeoutWorker
+    participant DB as PostgreSQL (solo_match)
 
-    User->>Profile: Cập nhật thông tin (Họ tên mới, Avatar mới)
-    Profile->>Kafka: Phát sự kiện UserIdentityUpdated (CloudEvent)
-    
-    Kafka->>Consumer: Consumer nhận message từ group solo_match_profile_consumer
-    Consumer->>Consumer: Kiểm tra tính lũy đẳng (outbox_log.IsProcessed)
-    Consumer->>Handler: SyncUserSnapshotCommand (UserID, FullName, AvatarURL)
-    
-    Handler->>DB: UPSERT solo_match.user_snapshots ON CONFLICT (user_id) DO UPDATE
-    DB-->>Handler: Thành công
-    Consumer->>Consumer: Đánh dấu event PROCESSED vào outbox_log
+    Note over DB: Trận đấu ở IN_PROGRESS kéo dài > 35 phút
+    TimeoutWorker->>DB: FindExpiredInProgressMatches(startedBefore = now - 35m)
+    DB-->>TimeoutWorker: Danh sách các trận treo
+
+    loop Duyệt từng trận treo
+        alt Trường hợp 1: P1 đã xong, P2 treo
+            TimeoutWorker->>DB: TimeoutInProgress() -> P1 WIN, P2 FORFEITED, status FORFEITED
+            TimeoutWorker->>DB: Ghi Outbox SoloMatchForfeited + SoloMatchCompleted
+        else Trường hợp 2: Cả hai bên cùng treo
+            TimeoutWorker->>DB: TimeoutInProgress() -> Cả 2 FORFEITED, status CANCELLED
+            TimeoutWorker->>DB: Ghi Outbox SoloMatchCancelled
+        end
+    end
 ```
 
 ---
 
-## 6. Máy Trạng Thái Trận Đấu (Match State Machine)
+## 4. Phân Tích Sự Kiện Liên Module (Event Storming)
 
-Trạng thái của Aggregate Root `SoloMatch` được bảo vệ nghiêm ngặt qua các quy tắc nghiệp vụ:
+### 4.1. Sự Kiện Xuất Bản (Outbound CloudEvents từ `solo_match`)
+
+| Tên sự kiện | CloudEvent Type | Thời điểm phát sinh | Đích đến |
+| :--- | :--- | :--- | :--- |
+| **`SoloMatchStarted`** | `contracts.core.solo_match.v1.soloMatchStarted` | Ngay khi tạo xong trận đấu (`PENDING_READY`) | `workout_execution` (chuẩn bị phòng & khởi chạy Bot nếu có) |
+| **`SoloMatchCancelled`** | `contracts.core.solo_match.v1.soloMatchCancelled` | Khi quá 60s không vào phòng hoặc cả 2 cùng treo quá 35m | `workout_execution` (dọn phòng Redis & hủy bot runner) |
+| **`SoloMatchCompleted`** | `contracts.core.solo_match.v1.soloMatchCompleted` | Khi có kết quả chung cuộc (Thắng, Thua, Hòa) | `gamification`, `social`, `coaching` |
+| **`SoloMatchForfeited`** | `contracts.core.solo_match.v1.soloMatchForfeited` | Khi có người chơi bị xử thua do bỏ cuộc hoặc timeout | `gamification`, `profile` |
+
+### 4.2. Sự Kiện Lắng Nghe (Inbound CloudEvents tới `solo_match`)
+
+| Tên sự kiện | CloudEvent Type | Nguồn gửi | Hành động tương ứng của `solo_match` |
+| :--- | :--- | :--- | :--- |
+| **`SoloMatchRoomReady`** | `contracts.core.workout_execution.v1.soloMatchRoomReady` | `workout_execution` | Kích hoạt trận đấu: chuyển từ `PENDING_READY` sang `IN_PROGRESS`. |
+| **`SoloTrackingCompleted`** | `contracts.core.workout_execution.v1.soloTrackingCompleted` | `workout_execution` | Ghi nhận điểm số thành tích của người chơi và phân định thắng thua khi đủ 2 bên. |
+| **`SoloTrackingAborted`** | `contracts.core.workout_execution.v1.soloTrackingAborted` | `workout_execution` | Xử thua tức thì cho bên bỏ cuộc, trao chiến thắng cho đối thủ còn lại. |
+| **`UserRegistered`** | `contracts.generic.auth.v1.userRegistered` | `auth` | Tạo bản ghi định danh ban đầu trong `solo_match.user_snapshots`. |
+| **`UserIdentityUpdated`** | `contracts.supporting.profile.v1.userIdentityUpdated` | `profile` | Cập nhật `display_name` và `avatar_url` trong `user_snapshots`. |
+
+---
+
+## 5. Máy Trạng Thái Hữu Hạn Của Trận Đấu (`SoloMatch.Status`)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> IN_PROGRESS: Tạo trận đấu thành công (P2P hoặc Bot)
+    [*] --> PENDING_READY: Khởi tạo trận (ready_deadline = now + 60s)
 
-    IN_PROGRESS --> COMPLETED: Cả 2 bên hoàn thành nộp bài (Phân định Win/Lose/Draw)
-    IN_PROGRESS --> FORFEITED: Một bên bỏ cuộc (Fast Forfeit) hoặc quá hạn (Timeout)
-    IN_PROGRESS --> CANCELLED: Cả 2 bên đều không nộp bài khi hết giờ (AFK/No-show)
+    PENDING_READY --> IN_PROGRESS: Nhận SoloMatchRoomReady (Cả 2 đã vào phòng)
+    PENDING_READY --> CANCELLED: Quá 60s không vào phòng (CancelOnNoShow)
 
-    FORFEITED --> COMPLETED: Xử thắng cho bên còn lại & trao thưởng
+    IN_PROGRESS --> COMPLETED: Cả 2 nộp điểm hợp lệ (MatchResolver)
+    IN_PROGRESS --> FORFEITED: Có 1 bên bỏ cuộc / đứt mạng quá hạn / timeout 35m
+    IN_PROGRESS --> CANCELLED: Cả 2 cùng treo quá 35m không ai nộp bài
 
     COMPLETED --> [*]
+    FORFEITED --> [*]
     CANCELLED --> [*]
-```
 
-- **Tính bất biến (Immutability)**: Khi trận đấu đã chuyển sang `COMPLETED`, `FORFEITED` hoặc `CANCELLED`, mọi yêu cầu ghi nhận điểm số tiếp theo đều bị chặn với lỗi `ErrMatchNotActive` hoặc `ErrParticipantFinished`.
+    note right of CANCELLED
+        Quy tắc trạng thái hữu hạn (Terminal State Rule):
+        Một khi trận đã CANCELLED, COMPLETED hoặc FORFEITED,
+        tuyệt đối KHÔNG BAO GIỜ được kích hoạt lại.
+    end note
+```
