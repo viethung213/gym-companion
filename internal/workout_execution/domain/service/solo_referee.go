@@ -173,6 +173,12 @@ func (s *SoloRefereeSession) ProcessFrame(result vo.EvaluationResult, delta time
 		if s.completionReason == "" {
 			s.completionReason = "TIMEOUT"
 		}
+		if s.challengeType == vo.ChallengeTypeDuration && result.Passed {
+			if s.accumulatedDuration+delta >= s.timeCeiling {
+				s.accumulatedDuration = s.timeCeiling
+				s.confirmedValue = int32(s.timeCeiling.Seconds())
+			}
+		}
 	}
 }
 
