@@ -41,6 +41,7 @@ func (s *SoloTrackingService) emitRoomReadyEvent(ctx context.Context, matchID st
 		StartedAt: time.Now().UTC(),
 	}
 	if err := s.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{readyEvt}); err != nil {
+		s.readyEmitted.Delete(matchID)
 		slog.WarnContext(ctx, "failed to write SoloMatchRoomReady event to outbox",
 			slog.String("match_id", matchID),
 			slog.Any("err", err),

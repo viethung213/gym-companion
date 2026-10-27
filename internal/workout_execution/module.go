@@ -222,6 +222,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
+							log.Printf("[WorkoutExecution] Exercise reader error: %v", err)
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -239,6 +240,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 					}
 				}
 			}()
+		} else if err != nil {
+			log.Printf("[WorkoutExecution] Warning: failed to obtain exercise events reader: %v", err)
 		}
 
 		// Start WorkoutSessionCompleted event consumer worker (listening to topic 'workout_execution.events')
@@ -264,6 +267,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
+							log.Printf("[WorkoutExecution] PR consumer reader error: %v", err)
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -281,6 +285,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 					}
 				}
 			}()
+		} else if err != nil {
+			log.Printf("[WorkoutExecution] Warning: failed to obtain PR consumer reader: %v", err)
 		}
 
 		// Start SoloMatchStarted event consumer worker (listening to topic 'solo_match.events')
@@ -306,6 +312,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
+							log.Printf("[WorkoutExecution] Solo match reader error: %v", err)
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -326,6 +333,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 					}
 				}
 			}()
+		} else if err != nil {
+			log.Printf("[WorkoutExecution] Warning: failed to obtain solo match reader: %v", err)
 		}
 	}
 

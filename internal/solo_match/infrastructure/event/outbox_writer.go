@@ -35,7 +35,7 @@ func (w *OutboxWriter) PublishEvents(ctx context.Context, events []any) error {
 func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 	dev, ok := ev.(domainEvent.DomainEvent)
 	if !ok {
-		return nil
+		return fmt.Errorf("unsupported event type %T: must implement domainEvent.DomainEvent", ev)
 	}
 
 	eventID, eventType, payload, partitionKey, err := PackCloudEvent(dev)

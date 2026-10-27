@@ -394,7 +394,10 @@ func runSoloMatchTrackingLoop(
 											MatchEnded:              false,
 											Timestamp:               timestamppb.Now(),
 										}
-										_ = safeSend(resp)
+										if sendErr := safeSend(resp); sendErr != nil {
+											cancelStream()
+											return
+										}
 									}
 								}
 

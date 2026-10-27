@@ -154,12 +154,18 @@ func (s *SoloTrackingService) InitializeSession(
 			referee.SetStatus(service.ParticipantStatusWaiting)
 		} else {
 			referee.Activate()
-			_ = s.liveSync.PublishMyProgress(ctx, matchID, port.ParticipantProgress{
+			if pubErr := s.liveSync.PublishMyProgress(ctx, matchID, port.ParticipantProgress{
 				UserID:    userID,
 				Value:     referee.ConfirmedValue(),
 				FormScore: referee.AverageFormScore(),
 				Status:    "ACTIVE",
-			})
+			}); pubErr != nil {
+				slog.WarnContext(ctx, "failed to publish initial active progress to live sync",
+					slog.String("match_id", matchID),
+					slog.String("user_id", userID),
+					slog.Any("err", pubErr),
+				)
+			}
 		}
 	}
 

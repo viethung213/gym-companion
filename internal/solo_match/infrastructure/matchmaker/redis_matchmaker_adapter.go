@@ -484,6 +484,8 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 	if a.eventPub != nil {
 		if pubErr := a.eventPub.PublishEvents(ctx, []any{startEvt}); pubErr != nil {
 			log.Printf("[SoloMatch Matchmaker] Failed to publish SoloMatchStarted event for bot match %s: %v", matchID, pubErr)
+			a.notifyTicketsError(ctx, []string{ticketID}, "failed to initialize bot match event")
+			return
 		}
 	}
 

@@ -106,7 +106,12 @@ func (h *RedisLiveSyncHub) RegisterParticipant(ctx context.Context, matchID, use
 	// If room became ready (both participants joined), publish registration to stream to wake up waiting participants
 	if ready, checkErr := h.IsMatchReady(ctx, matchID); checkErr == nil && ready {
 		streamKey := "solo_match:" + matchID + ":stream"
-		_ = h.client.Publish(ctx, streamKey, initJSON).Err()
+		if pubErr := h.client.Publish(ctx, streamKey, initJSON).Err(); pubErr != nil {
+			slog.WarnContext(ctx, "failed to publish room ready wakeup to stream",
+				slog.String("match_id", matchID),
+				slog.Any("err", pubErr),
+			)
+		}
 	}
 
 	return nil

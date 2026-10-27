@@ -61,6 +61,7 @@ func (w *KafkaConsumerWorker) Start(ctx context.Context) {
 				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 					return
 				}
+				log.Printf("[SoloMatch] Kafka reader error in %s: %v", w.name, err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
