@@ -387,10 +387,10 @@ func (s *SoloRefereeSession) RemainingCeilingSeconds() int32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rem := s.timeCeiling - s.getElapsedLocked()
-	if rem < 0 {
+	if rem <= 0 {
 		return 0
 	}
-	return int32(rem.Seconds())
+	return int32((rem + time.Second - time.Nanosecond) / time.Second)
 }
 
 // ChallengeType returns the normalized ChallengeType for this session.
