@@ -17,6 +17,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise"
+	"github.com/viethung213/gym-companion/internal/gamification"
 	"github.com/viethung213/gym-companion/internal/notification"
 	"github.com/viethung213/gym-companion/internal/nutrition"
 	"github.com/viethung213/gym-companion/internal/profile"
@@ -244,6 +245,21 @@ func run() error {
 		return fmt.Errorf("seed system bots: %w", seedErr)
 	}
 
+	// Initialize Gamification Module
+	gamificationDB, err := dbRegistry.GetPool("gamification")
+	if err != nil {
+		log.Println("Warning: gamification database pool not found, falling back to auth pool.")
+		gamificationDB = db
+	}
+	gamificationGRPCHandler, shutdownGamification, err := gamification.Initialize(ctx, gamification.ModuleDeps{
+		DB:            gamificationDB,
+		KafkaRegistry: kafkaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize gamification module: %w", err)
+	}
+	defer shutdownGamification()
+
 	// 2. Start Unified HTTP Server with ConnectRPC, h2c, and CORS on Port 8080
 	log.Printf("🚀 Starting Unified API Server (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
@@ -264,6 +280,7 @@ func run() error {
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
 	social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors)
 	solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors)
+	gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors)
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 
