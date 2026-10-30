@@ -9,32 +9,30 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/event"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
 )
 
-// RecordStreakActivityCommand carries parameters to record a daily active streak entry.
 type RecordStreakActivityCommand struct {
 	UserID       string
-	ActivityDate string // YYYY-MM-DD
-	ActivityType string // "WORKOUT", "NUTRITION"
+	ActivityDate string
+	ActivityType string
 	RecordedAt   time.Time
 }
 
-// RecordStreakActivityResult contains the updated streak state.
 type RecordStreakActivityResult struct {
 	CurrentStreak int32
 	LongestStreak int32
 	Advanced      bool
+	Events        []event.Event
 }
 
-// RecordStreakActivityHandler coordinates updating the user's streak in a short atomic transaction.
 type RecordStreakActivityHandler struct {
 	userStreakRepo repository.UserStreakRepository
 	txManager      port.TransactionManager
 	outboxWriter   port.OutboxWriter
 }
 
-// NewRecordStreakActivityHandler constructs RecordStreakActivityHandler.
 func NewRecordStreakActivityHandler(
 	userStreakRepo repository.UserStreakRepository,
 	txManager port.TransactionManager,
@@ -47,7 +45,43 @@ func NewRecordStreakActivityHandler(
 	}
 }
 
-// Handle evaluates and persists the streak update.
+func (h *RecordStreakActivityHandler) HandleEvents(
+	ctx context.Context,
+	events []event.Event,
+) ([]event.Event, error) {
+	if h == nil {
+		return nil, nil
+	}
+	var emitted []event.Event
+	for _, ev := range events {
+		switch e := ev.(type) {
+		case *event.WorkoutActivityIngested:
+			res, err := h.Handle(ctx, RecordStreakActivityCommand{
+				UserID:       e.UserID,
+				ActivityDate: e.ActivityDate,
+				ActivityType: "WORKOUT",
+				RecordedAt:   e.CompletedAt,
+			})
+			if err != nil {
+				return nil, err
+			}
+			emitted = append(emitted, res.Events...)
+		case *event.NutritionActivityIngested:
+			res, err := h.Handle(ctx, RecordStreakActivityCommand{
+				UserID:       e.UserID,
+				ActivityDate: e.ActivityDate,
+				ActivityType: "NUTRITION",
+				RecordedAt:   e.RecordedAt,
+			})
+			if err != nil {
+				return nil, err
+			}
+			emitted = append(emitted, res.Events...)
+		}
+	}
+	return emitted, nil
+}
+
 func (h *RecordStreakActivityHandler) Handle(
 	ctx context.Context,
 	cmd RecordStreakActivityCommand,
@@ -71,12 +105,12 @@ func (h *RecordStreakActivityHandler) Handle(
 			return fmt.Errorf("record streak activity: %w", err)
 		}
 
-		// If no events emitted, this was an idempotent same-day activity
 		if len(events) == 0 {
 			result = RecordStreakActivityResult{
 				CurrentStreak: userStreak.CurrentStreak(),
 				LongestStreak: userStreak.LongestStreak(),
 				Advanced:      false,
+				Events:        nil,
 			}
 			return nil
 		}
@@ -109,10 +143,10 @@ func (h *RecordStreakActivityHandler) Handle(
 			CurrentStreak: userStreak.CurrentStreak(),
 			LongestStreak: userStreak.LongestStreak(),
 			Advanced:      true,
+			Events:        events,
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

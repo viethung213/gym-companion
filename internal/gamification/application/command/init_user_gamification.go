@@ -23,6 +23,7 @@ type InitUserGamificationHandler struct {
 	userXpRepo      repository.UserXpRepository
 	userStreakRepo  repository.UserStreakRepository
 	leaderboardRepo repository.LeaderboardRepository
+	userWalletRepo  repository.UserWalletRepository
 	txManager       port.TransactionManager
 }
 
@@ -41,12 +42,18 @@ func NewInitUserGamificationHandler(
 	}
 }
 
-// Handle sets up initial UserStreak, UserXp, and UserSnapshot records.
-// Lock acquisition order strictly adheres to user_streak -> user_xp to eliminate
-// deadlock cycles with ActivityIngestionCoordinator.
+// WithWalletRepository attaches an optional UserWalletRepository for eager wallet initialization.
+func (h *InitUserGamificationHandler) WithWalletRepository(
+	userWalletRepo repository.UserWalletRepository,
+) *InitUserGamificationHandler {
+	h.userWalletRepo = userWalletRepo
+	return h
+}
+
+// Handle sets up initial UserStreak, UserXp, UserWallet, and UserSnapshot records.
 func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGamificationCommand) error {
 	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		existingStreak, findStreakErr := h.userStreakRepo.FindByID(txCtx, cmd.UserID)
+		existingStreak, findStreakErr := h.userStreakRepo.FindByIDForUpdate(txCtx, cmd.UserID)
 		if findStreakErr != nil {
 			return findStreakErr
 		}
@@ -60,7 +67,7 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 			}
 		}
 
-		existingXp, findXpErr := h.userXpRepo.FindByID(txCtx, cmd.UserID)
+		existingXp, findXpErr := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
 		if findXpErr != nil {
 			return findXpErr
 		}
@@ -71,6 +78,22 @@ func (h *InitUserGamificationHandler) Handle(ctx context.Context, cmd InitUserGa
 			}
 			if saveXpErr := h.userXpRepo.Save(txCtx, newXp); saveXpErr != nil {
 				return saveXpErr
+			}
+		}
+
+		if h.userWalletRepo != nil {
+			existingWallet, findWalletErr := h.userWalletRepo.FindByIDForUpdate(txCtx, cmd.UserID)
+			if findWalletErr != nil {
+				return findWalletErr
+			}
+			if existingWallet == nil {
+				newWallet, createWalletErr := aggregate.NewUserWallet(cmd.UserID)
+				if createWalletErr != nil {
+					return createWalletErr
+				}
+				if saveWalletErr := h.userWalletRepo.Save(txCtx, newWallet); saveWalletErr != nil {
+					return saveWalletErr
+				}
 			}
 		}
 

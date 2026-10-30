@@ -2,34 +2,34 @@
 
 ## 1. Kiến Trúc Hexagonal (Ports & Adapters)
 
-Phân hệ FitCoins vận hành như một **Micro-Ledger Engine** khép kín, hỗ trợ cả 2 cổng tiếp nhận nạp tiền: In-Process Call nội bộ trong cùng tiến trình/transaction và Kafka Consumers bất đồng bộ từ các module phân tán:
+Phân hệ FitCoins vận hành như một **Micro-Ledger Engine** khép kín bên trong module `gamification`, sử dụng cổng nội bộ `WalletRewarder` để cộng thưởng đồng bộ trong cùng transaction với `ActivityIngestionCoordinator` và các Command Handlers:
 
 ```mermaid
 flowchart TD
     subgraph DrivingAdapters["Transport & Callers (Driving)"]
-        IN_PROC["In-Process Callers<br/>(ActivityCoordinator, AchievementService)"]
-        KAFKA_IN["Kafka Consumers<br/>(Nutrition, External Events)"]
-        GRPC["WalletGrpcHandler<br/>(ConnectRPC: Spend, Balance, History)"]
+        IN_PROC["In-Process Callers<br/>(ActivityIngestionCoordinator,<br/>ProcessNutritionActivityHandler,<br/>ProcessPersonalRecordHandler)"]
+        GRPC["Handler (ConnectRPC)<br/>(GetWallet, ListTransactions,<br/>SpendCoins, AdminAdjustCoins)"]
     end
 
     subgraph ApplicationLayer["Application Layer (Use Cases & Ports)"]
-        PORT_REWARD["WalletRewarder (Input Port)"]
-        CMD_EARN["AwardCoinsCommandHandler"]
-        CMD_SPEND["SpendCoinsCommandHandler"]
-        QRY_BAL["GetWalletBalanceQueryHandler"]
-        QRY_TX["ListLedgerTransactionsQueryHandler"]
-        PORT_REPO["WalletRepository (Output Port)"]
+        PORT_REWARD["WalletRewarder (In-Process Port)"]
+        CMD_EARN["AwardCoinsHandler"]
+        CMD_SPEND["SpendCoinsHandler"]
+        CMD_ADMIN["AdminAdjustCoinsHandler"]
+        QRY_BAL["GetWalletHandler"]
+        QRY_TX["ListTransactionsHandler"]
+        PORT_REPO["UserWalletRepository (Domain Port)"]
     end
 
     subgraph DomainLayer["Domain Layer (Core Logic)"]
-        AGG["UserWallet Aggregate<br/>(Balance, Daily Caps, Domain Invariants)"]
+        AGG["UserWallet Aggregate<br/>(Balance, O(1) Daily Caps, Invariants)"]
         ENTITY["CoinLedgerEntry Entity<br/>(Immutable Transaction Log)"]
         VO["CoinTransactionReason VO"]
     end
 
     subgraph DrivenAdapters["Infrastructure Layer (Driven)"]
-        REPO_IMPL["PostgresWalletRepository<br/>(GORM / raw SQL with Row Lock)"]
-        OUTBOX["Transactional Outbox Writer"]
+        REPO_IMPL["GormUserWalletRepository<br/>(Fast-Path FOR UPDATE + Seed Fallback)"]
+        OUTBOX["OutboxWriter (CloudEvents 1.0)"]
     end
 
     subgraph Storage["Database Storage"]
@@ -37,37 +37,16 @@ flowchart TD
         DB_OUTBOX[(gamification.outbox)]
     end
 
-    subgraph Dispatcher["Async Event Dispatcher"]
-        WORKER["Transactional Outbox Worker"]
-        EVT_BUS["Kafka Topic: gamification.events"]
-    end
-
-    IN_PROC -->|Award Synchronously| PORT_REWARD
-    KAFKA_IN -->|Delegate Event| PORT_REWARD
-    PORT_REWARD --> CMD_EARN
-    GRPC -->|Dispatch Spend/Query| CMD_SPEND & QRY_BAL & QRY_TX
-    CMD_EARN & CMD_SPEND -->|Mutate| AGG
-    AGG -->|Generate Record| ENTITY
-    CMD_EARN & CMD_SPEND -->|Persist Atomic| PORT_REPO
+    IN_PROC -->|AwardCoinsBatch(txCtx)| PORT_REWARD --> CMD_EARN
+    GRPC --> CMD_SPEND & CMD_ADMIN & QRY_BAL & QRY_TX
+    CMD_EARN & CMD_SPEND & CMD_ADMIN -->|Mutate| AGG
+    AGG -->|Create| ENTITY
+    CMD_EARN & CMD_SPEND & CMD_ADMIN -->|Persist Atomic| PORT_REPO
     QRY_BAL & QRY_TX -->|Read| PORT_REPO
     PORT_REPO -.->|Implement| REPO_IMPL
     REPO_IMPL -->|SELECT FOR UPDATE / INSERT| DB
-    REPO_IMPL -->|Write Events| OUTBOX --> DB_OUTBOX
-    DB_OUTBOX --> WORKER --> EVT_BUS
+    CMD_EARN & CMD_SPEND & CMD_ADMIN -->|WriteEvents| OUTBOX --> DB_OUTBOX
 ```
-
-### Ranh giới & Trách nhiệm các tầng:
-1. **Domain Layer**:
-   - `UserWallet`: Quản lý số dư, thực thi nghiệp vụ tích lũy theo từng trường hợp (Level Up, Workout, PR, Nutrition, Streak, Onboarding, Achievement) và kiểm tra bất biến `Balance >= Amount`.
-   - `CoinLedgerEntry`: Biểu diễn bản ghi sổ cái bất biến, tính toán phương trình cân bằng `BalanceAfter = BalanceBefore + Amount`.
-2. **Application Layer**:
-   - `WalletRewarder`: Input Port nội bộ cung cấp giao thức thưởng coin đồng bộ trong cùng tiến trình (ADR-0004).
-   - Điều phối transaction ACID, kiểm tra Idempotency Key, nạp và lưu trữ Aggregate qua Output Port `WalletRepository`.
-3. **Infrastructure Layer**:
-   - Hiện thực hóa `PostgresWalletRepository`: Sử dụng khóa dòng bi quan `SELECT ... FOR UPDATE` trên bảng `user_wallet`, lưu đồng thời ví và sổ cái trong 1 transaction cục bộ.
-4. **Transport Layer**:
-   - Kafka Consumers: Chuyển đổi các CloudEvents từ domain ngoài thành lời gọi `WalletRewarder.AwardCoins(...)`.
-   - ConnectRPC Server: Cung cấp API tra cứu số dư, lịch sử giao dịch và cổng chi tiêu `SpendCoins`.
 
 ---
 
@@ -91,30 +70,31 @@ erDiagram
     user_wallet {
         uuid user_id PK "Khóa chính, 1-1 với người dùng"
         bigint balance "Số dư tức thời, CHECK >= 0"
-        date last_workout_reward_date "Ngày nhận thưởng tập gần nhất (Daily Cap)"
-        date last_pr_reward_date "Ngày nhận thưởng PR gần nhất (Daily Cap)"
-        date last_nutrition_reward_date "Ngày nhận thưởng dinh dưỡng gần nhất (Daily Cap)"
+        date last_workout_reward_date "Ngày nhận thưởng tập gần nhất (O(1) Daily Cap)"
+        date last_pr_reward_date "Ngày nhận thưởng PR gần nhất (O(1) Daily Cap)"
+        date last_nutrition_reward_date "Ngày nhận thưởng dinh dưỡng gần nhất (O(1) Daily Cap)"
         timestamptz created_at "Thời điểm tạo ví"
         timestamptz updated_at "Thời điểm cập nhật số dư"
     }
 
     coin_ledger {
         uuid id PK "Khóa chính dòng sổ cái"
-        uuid user_id FK "ID người dùng sở hữu"
-        int amount "Số coin biến động (+ nạp, - tiêu, CHECK <> 0)"
+        uuid user_id FK "Tham chiếu gamification.user_wallet(user_id)"
+        bigint amount "Số coin biến động (+ nạp, - tiêu, CHECK <> 0)"
         bigint balance_after "Số dư sau giao dịch, CHECK >= 0"
-        varchar reason "Mã nghiệp vụ: EARN_WORKOUT, EARN_ACHIEVEMENT, SPEND_DOUBLE_XP..."
-        varchar source_event_id "Mã CloudEvent hoặc Request ID nguồn"
-        varchar idempotency_key UK "Khóa lũy đẳng duy nhất chống duplicate"
-        jsonb metadata "Dữ liệu ngữ cảnh giao dịch"
+        varchar reason "Mã nghiệp vụ: EARN_*, SPEND_*, ADMIN_ADJUST"
+        varchar reference_id "Mã tham chiếu (session_id, badge_code, voucher_id)"
+        varchar idempotency_key "Khóa lũy đẳng UNIQUE (user_id, idempotency_key)"
+        date activity_date "Ngày hoạt động YYYY-MM-DD"
+        uuid admin_id "ID quản trị viên (nếu là ADMIN_ADJUST)"
+        text note "Ghi chú giao dịch / kiểm toán"
         timestamptz created_at "Thời điểm ghi sổ (bất biến)"
     }
 ```
 
-### 3.2. DDL PostgreSQL Schema `gamification.*`
+### 3.2. DDL PostgreSQL Schema `gamification.*` (`13-create-gamification-tables.sql`)
 
 ```sql
--- 1. Bảng Ví Người Dùng (User Wallet)
 CREATE TABLE IF NOT EXISTS gamification.user_wallet (
     user_id UUID PRIMARY KEY,
     balance BIGINT NOT NULL DEFAULT 0,
@@ -126,101 +106,104 @@ CREATE TABLE IF NOT EXISTS gamification.user_wallet (
     CONSTRAINT chk_user_wallet_balance_non_negative CHECK (balance >= 0)
 );
 
--- 2. Bảng Sổ Cái Kiểm Toán Bất Biến (Coin Ledger - Append Only)
 CREATE TABLE IF NOT EXISTS gamification.coin_ledger (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    amount INT NOT NULL,
+    user_id UUID NOT NULL REFERENCES gamification.user_wallet(user_id) ON DELETE CASCADE,
+    amount BIGINT NOT NULL,
     balance_after BIGINT NOT NULL,
-    reason VARCHAR(64) NOT NULL, -- EARN_LEVEL_UP, EARN_WORKOUT, EARN_PR, EARN_NUTRITION, EARN_STREAK_MILESTONE, EARN_ONBOARDING, EARN_ACHIEVEMENT, SPEND_...
-    source_event_id VARCHAR(128),
-    idempotency_key VARCHAR(128) NOT NULL,
-    metadata JSONB DEFAULT '{}'::jsonb,
+    reason VARCHAR(50) NOT NULL,
+    reference_id VARCHAR(100),
+    idempotency_key VARCHAR(150) NOT NULL,
+    activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    admin_id UUID,
+    note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_coin_ledger_amount_nonzero CHECK (amount <> 0),
+    CONSTRAINT chk_coin_ledger_amount_non_zero CHECK (amount <> 0),
     CONSTRAINT chk_coin_ledger_balance_after_non_negative CHECK (balance_after >= 0),
-    CONSTRAINT uq_coin_ledger_idempotency_key UNIQUE (idempotency_key)
+    CONSTRAINT uq_coin_ledger_user_idempotency UNIQUE (user_id, idempotency_key)
 );
 
--- 3. Chỉ mục tối ưu hóa hiệu năng
-CREATE INDEX IF NOT EXISTS idx_coin_ledger_user_created 
-ON gamification.coin_ledger (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_coin_ledger_user_created
+    ON gamification.coin_ledger (user_id, created_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coin_ledger_daily_cap
+    ON gamification.coin_ledger (user_id, reason, activity_date)
+    WHERE reason IN ('EARN_WORKOUT', 'EARN_PR', 'EARN_NUTRITION');
 ```
 
 ---
 
 ## 4. Luồng Xử Lý Nghiệp Vụ (Sequence Diagrams)
 
-### 4.1. Luồng Thưởng Coin Đồng Bộ Trong Cùng Transaction (In-Process Rewarder Flow)
+### 4.1. Luồng Thưởng Coin Theo Lô Qua In-Memory Domain Event Pipeline (`AwardCoinsBatch`)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Caller as Coordinator / AchievementService
-    participant Port as WalletRewarder (award_coins.go)
-    participant Repo as PostgresWalletRepository
+    participant Coord as ActivityIngestionCoordinator
+    participant Handler as AwardCoinsHandler
+    participant Repo as GormUserWalletRepository
     participant DB as PostgreSQL (gamification)
 
-    Caller->>Port: AwardCoins(txCtx, cmd {user_id, amount, reason="EARN_ACHIEVEMENT", idempotency_key})
-    
-    Note over Port: Kiểm tra idempotency_key trong sổ cái
-    Port->>Repo: CheckIdempotency(txCtx, cmd.IdempotencyKey)
-    alt Đã từng nhận thưởng trước đó
-        Repo-->>Port: true (Already Exists)
-        Port-->>Caller: AwardCoinsResult {AlreadyAwarded: true, NewBalance: current}
-    else Chưa nhận thưởng
-        Port->>Repo: GetWalletForUpdate(txCtx, user_id)
-        Repo->>DB: SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE
-        DB-->>Repo: return wallet row (Locked)
-        Repo-->>Port: wallet Aggregate
-        
-        Port->>Port: wallet.ApplyAward(cmd.Amount, cmd.Reason)
-        Port->>Repo: SaveWalletAndLedger(txCtx, wallet, ledgerEntry)
-        Repo->>DB: UPDATE gamification.user_wallet SET balance = balance + amount
-        Repo->>DB: INSERT INTO gamification.coin_ledger (amount, balance_after, reason, idempotency_key)
-        Repo->>DB: INSERT INTO gamification.outbox (Event: CoinsEarned)
-        Port-->>Caller: AwardCoinsResult {AlreadyAwarded: false, NewBalance: new_bal}
+    Note over Coord: Bước 1-3: Streak, XP, Badges phát Domain Events trong RAM
+    Coord->>Handler: AwardCoinsBatch(txCtx, user_id, []AwardCoinsItem)
+    Handler->>Repo: FindByIDForUpdate(txCtx, user_id) (1 lần duy nhất cho cả lô)
+    Repo->>DB: SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE
+    DB-->>Repo: locked wallet row
+    Repo-->>Handler: UserWallet Aggregate
+
+    loop Với mỗi AwardCoinsItem trong lô
+        Handler->>Handler: wallet.IsDailyCapReached(reason, activityDate) (O(1) RAM trước khi chạm DB)
+        alt Đạt giới hạn ngày (Daily Cap Reached)
+            Handler->>Handler: Bỏ qua ngay trong RAM (0 SQL query vào coin_ledger)
+        else Chưa đạt giới hạn ngày
+            Handler->>Repo: FindLedgerEntryByIdempotencyKey(txCtx, user_id, key)
+            alt Chưa tồn tại IdempotencyKey
+                Handler->>Handler: wallet.Award(...) (cộng dồn vào UserWallet trên RAM)
+            end
+        end
     end
+
+    alt Có ít nhất 1 khoản thưởng hợp lệ (len(ledgerEntries) > 0)
+        Handler->>Repo: Save(txCtx, wallet) (1 câu UPDATE duy nhất)
+        Handler->>Repo: SaveLedgerEntries(txCtx, entries) (1 câu Batch INSERT duy nhất)
+        Handler->>DB: WriteEvents(txCtx, "user_wallet", []CoinsEarned) (1 lần ghi Outbox)
+    end
+    Handler-->>Coord: []AwardCoinsOutput
 ```
 
-### 4.2. Luồng Chi Tiêu Coin (Spending Outflow & Double-Spending Guard)
+### 4.2. Luồng Chi Tiêu Coin (`SpendCoins` & Idempotent Replay)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Caller as Caller Service (Shop / Perks)
-    participant Handler as SpendCoinsCommandHandler
-    participant Tx as TransactionManager (tx.go)
-    participant Repo as PostgresWalletRepository
+    participant Client as Client / Service
+    participant Handler as SpendCoinsHandler
+    participant Repo as GormUserWalletRepository
     participant DB as PostgreSQL (gamification)
 
-    Caller->>Handler: SpendCoins(user_id, amount=100, reason="SPEND_DOUBLE_XP", idempotency_key)
-    
-    Handler->>Tx: WithTransaction(ctx, fn)
-    Tx->>DB: BEGIN TRANSACTION (txCtx)
-    Handler->>Repo: CheckIdempotency(txCtx, idempotency_key)
-    alt Idempotency Key đã tồn tại
-        Tx->>DB: ROLLBACK TRANSACTION
-        Handler-->>Caller: 200 OK (Return kết quả cũ)
-    else Chưa xử lý
-        Handler->>Repo: GetWalletForUpdate(txCtx, user_id)
-        Repo->>DB: SELECT balance FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE
-        DB-->>Repo: return wallet row (Locked)
-        
-        alt Số dư không đủ (wallet.Balance < amount)
-            Tx->>DB: ROLLBACK TRANSACTION
-            Handler-->>Caller: ERR_INSUFFICIENT_FUNDS (Rollback)
-        else Số dư hợp lệ
-            Handler->>Handler: wallet.Spend(amount, reason)
-            Handler->>Repo: SaveWalletAndLedger(txCtx, wallet, ledgerEntry)
-            Repo->>DB: UPDATE gamification.user_wallet SET balance = balance - 100
-            Repo->>DB: INSERT INTO gamification.coin_ledger (amount=-100, balance_after=...)
-            Repo->>DB: INSERT INTO gamification.outbox (Event: CoinsSpent)
-            Tx->>DB: COMMIT TRANSACTION
-            Handler-->>Caller: 200 OK (Giao dịch thành công, new_balance)
-            par Async Dispatch
-                DB->>Caller: Outbox Worker quét bản ghi & publish CloudEvent sang gamification.events
-            end
+    Client->>Handler: SpendCoins(ctx, SpendCoinsCommand)
+    Handler->>DB: BEGIN TRANSACTION
+    Handler->>Repo: FindByIDForUpdate(txCtx, user_id)
+    Repo->>DB: SELECT * FROM gamification.user_wallet WHERE user_id = $1 FOR UPDATE
+    DB-->>Repo: locked wallet row
+
+    Handler->>Repo: FindLedgerEntryByIdempotencyKey(txCtx, user_id, key)
+    alt IdempotencyKey đã tồn tại (Retry)
+        Repo-->>Handler: existing CoinLedgerEntry
+        Handler->>DB: COMMIT
+        Handler-->>Client: SpendCoinsResult {BalanceAfter: existing.BalanceAfter, TransactionID: existing.ID}
+    else Giao dịch mới
+        Handler->>Handler: wallet.Spend(...)
+        alt Số dư không đủ (ErrInsufficientFunds)
+            Handler->>DB: ROLLBACK
+            Handler-->>Client: CodeFailedPrecondition (ErrInsufficientFunds)
+        else Đủ số dư
+            Handler->>Repo: Save(txCtx, wallet)
+            Handler->>Repo: SaveLedgerEntry(txCtx, entry)
+            Handler->>DB: WriteEvents(txCtx, "user_wallet", CoinsSpent)
+            Handler->>DB: COMMIT
+            Handler-->>Client: SpendCoinsResult {BalanceAfter, TransactionID}
         end
     end
 ```
@@ -229,118 +212,60 @@ sequenceDiagram
 
 ## 5. Hợp Đồng Giao Diện API (Protobuf ConnectRPC)
 
-Tệp hợp đồng dịch vụ: `proto/contracts/supporting/gamification/v1/service/gamification_service.proto`  
-Tệp thông điệp: `proto/contracts/supporting/gamification/v1/message/gamification_messages.proto`
+- Tệp dịch vụ: `proto/contracts/supporting/gamification/v1/service/gamification_service.proto`
+- Tệp thông điệp: `proto/contracts/supporting/gamification/v1/message/gamification_messages.proto`
 
-```protobuf
-syntax = "proto3";
-
-package contracts.supporting.gamification.v1.service;
-
-import "google/api/annotations.proto";
-import "protoc-gen-openapiv2/options/annotations.proto";
-import "contracts/supporting/gamification/v1/message/gamification_messages.proto";
-
-option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service;gamificationservicev1";
-
-service GamificationService {
-  // Tra cứu số dư ví hiện tại
-  rpc GetWallet(contracts.supporting.gamification.v1.message.GetWalletRequest) 
-      returns (contracts.supporting.gamification.v1.message.GetWalletResponse) {
-    option (google.api.http) = {
-      get: "/api/v1/gamification/wallet"
-    };
-  }
-
-  // Tra cứu lịch sử biến động sổ cái phân trang
-  rpc ListLedgerTransactions(contracts.supporting.gamification.v1.message.ListLedgerTransactionsRequest) 
-      returns (contracts.supporting.gamification.v1.message.ListLedgerTransactionsResponse) {
-    option (google.api.http) = {
-      get: "/api/v1/gamification/wallet/transactions"
-    };
-  }
-
-  // Cổng chi tiêu coin (Generic Spending Seam)
-  rpc SpendCoins(contracts.supporting.gamification.v1.message.SpendCoinsRequest) 
-      returns (contracts.supporting.gamification.v1.message.SpendCoinsResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/gamification/wallet/spend"
-      body: "*"
-    };
-  }
-}
-```
+Các RPC được bổ sung vào `GamificationService`:
+- `GetWallet` (`GET /api/v1/gamification/wallet/me`)
+- `ListTransactions` (`GET /api/v1/gamification/wallet/transactions`)
+- `SpendCoins` (`POST /api/v1/gamification/wallet/spend`)
+- `AdminAdjustCoins` (`POST /api/v1/gamification/admin/wallet/adjust`)
 
 ---
 
-## 6. Tổ Chức Thư Mục Mã Nguồn Triển Khai (Package Tree)
-
-> Cấu trúc tổng thể của toàn module tuân thủ theo [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters). Các thành phần triển khai cho tính năng Tiền Tệ FitCoins & Sổ Cái:
+## 6. Tổ Chức Thư Mục Mã Nguồn Triển Khai
 
 ```text
 internal/gamification/
 ├── domain/
 │   ├── aggregate/
-│   │   ├── user_wallet.go                # Aggregate Root: Balance, Daily Caps, Invariants
-│   │   └── user_wallet_test.go           # Unit Test TDD: Kiểm tra âm tiền, trần nạp
+│   │   ├── user_wallet.go                 # Aggregate Root: Balance, O(1) Daily Caps, Invariants
+│   │   └── user_wallet_test.go            # Unit Tests cho UserWallet Aggregate
 │   ├── entity/
-│   │   ├── coin_ledger_entry.go          # Entity bản ghi sổ cái bất biến (Append-only)
-│   │   └── coin_ledger_entry_test.go     # Unit Test kiểm toán cân bằng sổ cái
+│   │   └── coin_ledger_entry.go           # Entity bản ghi sổ cái bất biến (Append-only)
+│   ├── event/
+│   │   └── events.go                      # Bổ sung CoinsEarned, CoinsSpent & In-Memory Seed Events
+│   ├── repository/
+│   │   └── user_wallet_repository.go      # Output Port: UserWalletRepository
 │   └── vo/
-│       ├── coin_transaction_reason.go    # Reason Enum: EARN_*, SPEND_*
-│       └── transaction_idempotency_key.go# Value Object xác thực định dạng khóa
+│       └── coin_transaction_reason.go     # Enum CoinTransactionReason & hằng số mức thưởng
 ├── application/
 │   ├── command/
-│   │   ├── award_coins.go                # Use Case thưởng coin (triển khai WalletRewarder)
-│   │   └── spend_coins.go                # Use Case trừ coin (bọc TransactionManager)
+│   │   ├── award_coins.go                 # Hiện thực hóa WalletRewarder Port (AwardCoinsBatch & HandleEvents)
+│   │   ├── evaluate_badges.go             # Handler độc lập đánh giá & mở khóa huy hiệu từ []event.Event
+│   │   ├── spend_coins.go                 # Use Case trừ xu (Idempotent Replay)
+│   │   └── admin_adjust_coins.go          # Use Case điều chỉnh số dư bởi Admin
 │   ├── query/
-│   │   ├── get_wallet_balance.go         # Use Case đọc số dư tức thời
-│   │   └── list_ledger_transactions.go   # Use Case đọc lịch sử sổ cái phân trang
-│   └── port/
-│       ├── wallet_rewarder.go            # Input Port thưởng coin đồng bộ trong tiến trình
-│       └── wallet_repository.go          # Output Port: GetWalletForUpdate, SaveWalletAndLedger
+│   │   ├── get_wallet.go                  # Use Case đọc số dư ví
+│   │   └── list_transactions.go           # Use Case phân trang Cursor sổ cái
+│   ├── port/
+│   │   └── wallet_rewarder.go             # Input Port thưởng xu đồng bộ trong tiến trình
+│   └── service/
+│       └── activity_ingestion_coordinator.go # Điều phối In-Memory Event Pipeline chung cho Workout, Nutrition, PR
 ├── infrastructure/
-│   └── persistence/postgres/
-│       └── wallet_repository.go          # Postgres implementation với SELECT FOR UPDATE
+│   ├── event/
+│   │   └── outbox_writer.go               # Ánh xạ CoinsEarned & CoinsSpent sang Protobuf (Batch Outbox)
+│   └── persistence/
+│       ├── models.go                      # UserWalletModel & CoinLedgerModel
+│       └── user_wallet_repository.go      # GORM implementation với Fast-Path FOR UPDATE, Batch Insert & Keyset Cursor
 └── transport/
-    ├── grpc/
-    │   └── wallet_handler.go             # ConnectRPC Server Handler
-    └── consumer/                         # Consumers cho các sự kiện độc lập
+    └── grpc/
+        └── handler.go                     # ConnectRPC Handlers: GetWallet, ListTransactions, SpendCoins, AdminAdjustCoins
 ```
 
 ---
 
-## 7. Đặc Tả Sự Kiện CloudEvents (`proto/contracts/supporting/gamification/v1/event/gamification_events.proto`)
+## 7. Đặc Tả Sự Kiện CloudEvents (`proto/contracts/supporting/gamification/v1/event/`)
 
-> [!NOTE]
-> Toàn bộ hạ tầng xuất bản sự kiện bất đồng bộ qua Transactional Outbox Pattern tuân thủ chặt chẽ theo đặc tả dùng chung duy nhất (SSOT) tại [architecture.md#4](../../architecture.md#4-chuẩn-transactional-outbox-dùng-chung-module-wide-outbox---ssot).
-
-```protobuf
-syntax = "proto3";
-
-package contracts.supporting.gamification.v1.event;
-
-import "google/protobuf/timestamp.proto";
-
-option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event;gamificationeventv1";
-
-// Sự kiện phát sinh khi người dùng tích lũy FitCoins thành công
-message CoinsEarned {
-  string user_id = 1;
-  int64 amount = 2;              // Số coin được thưởng (> 0)
-  int64 balance_after = 3;       // Số dư ví sau khi cộng
-  string reason = 4;             // EARN_LEVEL_UP, EARN_WORKOUT, EARN_PR, EARN_ACHIEVEMENT, etc.
-  string source_ref_id = 5;      // Mã tham chiếu (level, session_id, achievement_id)
-  google.protobuf.Timestamp occurred_at = 6;
-}
-
-// Sự kiện phát sinh khi người dùng chi tiêu FitCoins thành công
-message CoinsSpent {
-  string user_id = 1;
-  int64 amount = 2;              // Số coin đã tiêu (> 0)
-  int64 balance_after = 3;       // Số dư ví sau khi trừ
-  string reason = 4;             // SPEND_DOUBLE_XP, SPEND_VOUCHER, etc.
-  string idempotency_key = 5;    // Khóa chống trừ trùng lặp
-  google.protobuf.Timestamp occurred_at = 6;
-}
-```
+- `coins_earned.proto`: `contracts.supporting.gamification.v1.coinsEarned` (`user_id`, `amount`, `balance_after`, `reason`, `reference_id`, `earned_at`).
+- `coins_spent.proto`: `contracts.supporting.gamification.v1.coinsSpent` (`user_id`, `amount`, `balance_after`, `reason`, `reference_id`, `spent_at`).

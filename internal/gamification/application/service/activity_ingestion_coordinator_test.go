@@ -136,7 +136,6 @@ func TestActivityIngestionCoordinator_IngestWorkoutSession(t *testing.T) {
 	coordinator := appService.NewActivityIngestionCoordinator(
 		xpHandler,
 		streakHandler,
-		streakRepo,
 		badgeRepo,
 		tx,
 		writer,
@@ -200,7 +199,6 @@ func TestActivityIngestionCoordinator_StreakAdvancesMultiplierImmediately(t *tes
 	coordinator := appService.NewActivityIngestionCoordinator(
 		command.NewProcessWorkoutXpHandler(xpRepo, tx, writer),
 		command.NewRecordStreakActivityHandler(streakRepo, tx, writer),
-		streakRepo,
 		badgeRepo,
 		tx,
 		writer,
@@ -254,7 +252,6 @@ func TestActivityIngestionCoordinator_BadgeErrorFailsAtomicTransaction(t *testin
 	coordinator := appService.NewActivityIngestionCoordinator(
 		command.NewProcessWorkoutXpHandler(xpRepo, tx, writer),
 		command.NewRecordStreakActivityHandler(streakRepo, tx, writer),
-		streakRepo,
 		badgeRepo,
 		tx,
 		writer,
@@ -273,5 +270,79 @@ func TestActivityIngestionCoordinator_BadgeErrorFailsAtomicTransaction(t *testin
 	})
 	if err == nil {
 		t.Fatalf("expected IngestWorkoutSession to fail when evaluateBadges fails, got nil")
+	}
+}
+
+func TestActivityIngestionCoordinator_InsufficientSetsSkipsXpWithoutFailingPipeline(t *testing.T) {
+	xpRepo := &mockUserXpRepo{users: make(map[string]*aggregate.UserXp)}
+	streakRepo := &mockUserStreakRepo{streaks: make(map[string]*aggregate.UserStreak)}
+	badgeRepo := &mockBadgeRepo{badges: make(map[string][]*aggregate.UserBadge)}
+	tx := &mockTxManager{}
+	writer := &mockOutboxWriter{}
+
+	coordinator := appService.NewActivityIngestionCoordinator(
+		command.NewProcessWorkoutXpHandler(xpRepo, tx, writer),
+		command.NewRecordStreakActivityHandler(streakRepo, tx, writer),
+		badgeRepo,
+		tx,
+		writer,
+	)
+
+	now := time.Now().UTC()
+	err := coordinator.IngestWorkoutSession(context.Background(), &command.ProcessWorkoutXpCommand{
+		UserID:        "user-short-workout",
+		SessionID:     "sess-short",
+		ActivityDate:  "2026-10-13",
+		TotalSets:     2, // < 3 sets
+		TotalVolumeKg: 500,
+		CompletedAt:   now,
+	})
+	if err != nil {
+		t.Fatalf("expected < 3 sets workout not to fail pipeline, got: %v", err)
+	}
+
+	if streakRepo.streaks["user-short-workout"] == nil || streakRepo.streaks["user-short-workout"].CurrentStreak() != 1 {
+		t.Errorf("expected streak to advance to 1 even on short workout")
+	}
+	if xpRepo.users["user-short-workout"] != nil && xpRepo.users["user-short-workout"].Xp() != 0 {
+		t.Errorf("expected 0 XP for workout with < 3 sets")
+	}
+}
+
+func TestActivityIngestionCoordinator_IngestNutritionActivity(t *testing.T) {
+	xpRepo := &mockUserXpRepo{users: make(map[string]*aggregate.UserXp)}
+	streakRepo := &mockUserStreakRepo{streaks: make(map[string]*aggregate.UserStreak)}
+	badgeRepo := &mockBadgeRepo{badges: make(map[string][]*aggregate.UserBadge)}
+	tx := &mockTxManager{}
+	writer := &mockOutboxWriter{}
+
+	xpHandler := command.NewProcessWorkoutXpHandler(xpRepo, tx, writer)
+	streakHandler := command.NewRecordStreakActivityHandler(streakRepo, tx, writer)
+	nutritionHandler := command.NewProcessNutritionXpHandler(xpRepo, tx, writer)
+	prHandler := command.NewProcessPersonalRecordHandler(xpRepo, tx, writer)
+
+	coordinator := appService.NewActivityIngestionCoordinator(
+		xpHandler,
+		streakHandler,
+		badgeRepo,
+		tx,
+		writer,
+	).WithNutritionAndPRHandlers(nutritionHandler, prHandler)
+
+	now := time.Now().UTC()
+	err := coordinator.IngestNutritionActivity(context.Background(), command.ProcessNutritionActivityCommand{
+		UserID:       "u-nut-1",
+		ActivityDate: "2026-10-22",
+		RecordedAt:   now,
+	})
+	if err != nil {
+		t.Fatalf("IngestNutritionActivity error: %v", err)
+	}
+
+	if streakRepo.streaks["u-nut-1"] == nil || streakRepo.streaks["u-nut-1"].CurrentStreak() != 1 {
+		t.Errorf("expected streak to advance to 1")
+	}
+	if xpRepo.users["u-nut-1"] == nil || xpRepo.users["u-nut-1"].Xp() != 30 {
+		t.Errorf("expected 30 XP for nutrition")
 	}
 }

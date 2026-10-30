@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package contracts.supporting.gamification.v1.event;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/event;gamificationv1event";
+
+message CoinsEarned {
+  string user_id = 1;
+  int64 amount = 2;
+  int64 balance_after = 3;
+  string reason = 4;
+  string reference_id = 5;
+  google.protobuf.Timestamp earned_at = 6;
+}

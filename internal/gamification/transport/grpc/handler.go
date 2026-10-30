@@ -2,10 +2,13 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/vo"
 	gamificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
@@ -15,12 +18,17 @@ import (
 
 // Handler implements the Gamification gRPC/Connect service.
 type Handler struct {
+	gamificationv1serviceconnect.UnimplementedGamificationServiceHandler
 	getMyXpHandler              *query.GetMyXpHandler
 	getXpHistoryHandler         *query.GetXpHistoryHandler
 	getStreakHandler            *query.GetStreakHandler
 	getStreakHistoryHandler     *query.GetStreakHistoryHandler
 	getGlobalLeaderboardHandler *query.GetGlobalLeaderboardHandler
 	getMyBadgesHandler          *query.GetMyBadgesHandler
+	getWalletHandler            *query.GetWalletHandler
+	listTransactionsHandler     *query.ListTransactionsHandler
+	spendCoinsHandler           *command.SpendCoinsHandler
+	adminAdjustCoinsHandler     *command.AdminAdjustCoinsHandler
 }
 
 // Compile-time interface check.
@@ -64,6 +72,20 @@ func NewGRPCHandler(
 	)
 }
 
+// WithWalletHandlers attaches the FitCoins wallet query and command handlers to the transport Handler.
+func (h *Handler) WithWalletHandlers(
+	getWalletHandler *query.GetWalletHandler,
+	listTransactionsHandler *query.ListTransactionsHandler,
+	spendCoinsHandler *command.SpendCoinsHandler,
+	adminAdjustCoinsHandler *command.AdminAdjustCoinsHandler,
+) *Handler {
+	h.getWalletHandler = getWalletHandler
+	h.listTransactionsHandler = listTransactionsHandler
+	h.spendCoinsHandler = spendCoinsHandler
+	h.adminAdjustCoinsHandler = adminAdjustCoinsHandler
+	return h
+}
+
 // GetMyXp fetches current XP, level, and next-level progress.
 func (h *Handler) GetMyXp(
 	ctx context.Context,
@@ -104,6 +126,8 @@ func (h *Handler) GetXpHistory(
 	pageSize := int(req.Msg.PageSize)
 	if pageSize <= 0 {
 		pageSize = 20
+	} else if pageSize > 100 {
+		pageSize = 100
 	}
 	page := int(req.Msg.Page)
 	if page <= 0 {
@@ -185,6 +209,8 @@ func (h *Handler) GetStreakHistory(
 	limit := int(req.Msg.LimitDays)
 	if limit <= 0 {
 		limit = 30
+	} else if limit > 365 {
+		limit = 365
 	}
 
 	res, err := h.getStreakHistoryHandler.Handle(ctx, query.GetStreakHistoryQuery{
@@ -225,6 +251,8 @@ func (h *Handler) GetGlobalLeaderboard(
 	limit := int(req.Msg.Limit)
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 100 {
+		limit = 100
 	}
 
 	res, err := h.getGlobalLeaderboardHandler.Handle(ctx, query.GetGlobalLeaderboardQuery{
@@ -238,6 +266,10 @@ func (h *Handler) GetGlobalLeaderboard(
 
 	topEntries := make([]*gamificationv1message.LeaderboardEntry, 0, len(res.TopUsers))
 	for _, u := range res.TopUsers {
+		updatedAt := u.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = time.Now().UTC()
+		}
 		topEntries = append(topEntries, &gamificationv1message.LeaderboardEntry{
 			Rank:        int32(u.Rank),
 			UserId:      u.UserID,
@@ -245,12 +277,16 @@ func (h *Handler) GetGlobalLeaderboard(
 			AvatarUrl:   u.AvatarURL,
 			Xp:          u.Xp,
 			Level:       u.Level,
-			UpdatedAt:   timestamppb.Now(),
+			UpdatedAt:   timestamppb.New(updatedAt),
 		})
 	}
 
 	var myStanding *gamificationv1message.LeaderboardEntry
 	if res.MyEntry != nil {
+		updatedAt := res.MyEntry.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = time.Now().UTC()
+		}
 		myStanding = &gamificationv1message.LeaderboardEntry{
 			Rank:        int32(res.MyRank),
 			UserId:      res.MyEntry.UserID,
@@ -258,7 +294,7 @@ func (h *Handler) GetGlobalLeaderboard(
 			AvatarUrl:   res.MyEntry.AvatarURL,
 			Xp:          res.MyEntry.Xp,
 			Level:       res.MyEntry.Level,
-			UpdatedAt:   timestamppb.Now(),
+			UpdatedAt:   timestamppb.New(updatedAt),
 		}
 	}
 
@@ -313,6 +349,208 @@ func (h *Handler) GetMyBadges(
 		TotalUnlocked:  int32(len(res.Badges)),
 		TotalAvailable: int32(len(catalog)),
 	}), nil
+}
+
+// GetWallet returns the FitCoins wallet balance for the authenticated user,
+// or for a target user if requested by an Administrator.
+func (h *Handler) GetWallet(
+	ctx context.Context,
+	req *connect.Request[gamificationv1message.GetWalletRequest],
+) (*connect.Response[gamificationv1message.GetWalletResponse], error) {
+	userID, err := resolveWalletTargetUserID(ctx, req.Msg.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	if h.getWalletHandler == nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.New("get wallet handler is not initialized"))
+	}
+
+	res, err := h.getWalletHandler.Handle(ctx, query.GetWalletQuery{UserID: userID})
+	if err != nil {
+		return nil, mapWalletDomainError(err)
+	}
+
+	return connect.NewResponse(&gamificationv1message.GetWalletResponse{
+		UserId:    res.UserID,
+		Balance:   res.Balance,
+		UpdatedAt: timestamppb.New(res.UpdatedAt),
+	}), nil
+}
+
+// ListTransactions returns cursor-paginated FitCoins ledger entries for the authenticated user,
+// or for a target user if requested by an Administrator.
+func (h *Handler) ListTransactions(
+	ctx context.Context,
+	req *connect.Request[gamificationv1message.ListTransactionsRequest],
+) (*connect.Response[gamificationv1message.ListTransactionsResponse], error) {
+	userID, err := resolveWalletTargetUserID(ctx, req.Msg.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	if h.listTransactionsHandler == nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.New("list transactions handler is not initialized"))
+	}
+
+	res, err := h.listTransactionsHandler.Handle(ctx, query.ListTransactionsQuery{
+		UserID: userID,
+		Limit:  int(req.Msg.Limit),
+		Cursor: req.Msg.Cursor,
+	})
+	if err != nil {
+		return nil, mapWalletDomainError(err)
+	}
+
+	entries := make([]*gamificationv1message.LedgerEntry, 0, len(res.Entries))
+	for _, e := range res.Entries {
+		entries = append(entries, &gamificationv1message.LedgerEntry{
+			Id:             e.ID,
+			UserId:         e.UserID,
+			Amount:         e.Amount,
+			BalanceAfter:   e.BalanceAfter,
+			Reason:         string(e.Reason),
+			ReferenceId:    e.ReferenceID,
+			IdempotencyKey: e.IdempotencyKey,
+			ActivityDate:   e.ActivityDate,
+			AdminId:        e.AdminID,
+			Note:           e.Note,
+			CreatedAt:      timestamppb.New(e.CreatedAt),
+		})
+	}
+
+	return connect.NewResponse(&gamificationv1message.ListTransactionsResponse{
+		Entries:    entries,
+		NextCursor: res.NextCursor,
+	}), nil
+}
+
+// SpendCoins deducts FitCoins from the authenticated user's wallet with idempotency protection.
+func (h *Handler) SpendCoins(
+	ctx context.Context,
+	req *connect.Request[gamificationv1message.SpendCoinsRequest],
+) (*connect.Response[gamificationv1message.SpendCoinsResponse], error) {
+	userID, err := getUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if h.spendCoinsHandler == nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.New("spend coins handler is not initialized"))
+	}
+
+	var refID *string
+	if req.Msg.ReferenceId != "" {
+		r := req.Msg.ReferenceId
+		refID = &r
+	}
+	var note *string
+	if req.Msg.Note != "" {
+		n := req.Msg.Note
+		note = &n
+	}
+
+	res, err := h.spendCoinsHandler.Handle(ctx, command.SpendCoinsCommand{
+		UserID:         userID,
+		Amount:         req.Msg.Amount,
+		Reason:         vo.CoinTransactionReason(req.Msg.Reason),
+		ReferenceID:    refID,
+		IdempotencyKey: req.Msg.IdempotencyKey,
+		Note:           note,
+		SpentAt:        time.Now().UTC(),
+	})
+	if err != nil {
+		return nil, mapWalletDomainError(err)
+	}
+
+	return connect.NewResponse(&gamificationv1message.SpendCoinsResponse{
+		BalanceAfter:  res.BalanceAfter,
+		TransactionId: res.TransactionID,
+	}), nil
+}
+
+// AdminAdjustCoins adjusts a target user's FitCoins balance after verifying Admin RBAC permissions.
+func (h *Handler) AdminAdjustCoins(
+	ctx context.Context,
+	req *connect.Request[gamificationv1message.AdminAdjustCoinsRequest],
+) (*connect.Response[gamificationv1message.AdminAdjustCoinsResponse], error) {
+	actor, err := middleware.RequireAdmin(ctx)
+	if err != nil {
+		if errors.Is(err, middleware.ErrForbidden) {
+			return nil, connect.NewError(connect.CodePermissionDenied, err)
+		}
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if h.adminAdjustCoinsHandler == nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.New("admin adjust coins handler is not initialized"))
+	}
+
+	reason := vo.CoinTransactionReason(req.Msg.Reason)
+	note := req.Msg.Note
+	if !reason.IsAdmin() {
+		if req.Msg.Reason != "" && note == "" {
+			note = "[" + req.Msg.Reason + "]"
+		} else if req.Msg.Reason != "" {
+			prefix := "[" + req.Msg.Reason + "] "
+			if len(note) < len(prefix) || note[:len(prefix)] != prefix {
+				note = prefix + note
+			}
+		}
+		reason = vo.ReasonAdminAdjust
+	}
+	if note == "" {
+		note = "Admin manual balance adjustment"
+	}
+
+	res, err := h.adminAdjustCoinsHandler.Handle(ctx, command.AdminAdjustCoinsCommand{
+		AdminID:        actor.UserID,
+		TargetUserID:   req.Msg.TargetUserId,
+		Amount:         req.Msg.Amount,
+		Reason:         reason,
+		IdempotencyKey: req.Msg.IdempotencyKey,
+		Note:           note,
+		AdjustedAt:     time.Now().UTC(),
+	})
+	if err != nil {
+		return nil, mapWalletDomainError(err)
+	}
+
+	return connect.NewResponse(&gamificationv1message.AdminAdjustCoinsResponse{
+		BalanceAfter:  res.BalanceAfter,
+		TransactionId: res.TransactionID,
+	}), nil
+}
+
+func mapWalletDomainError(err error) error {
+	switch {
+	case errors.Is(err, aggregate.ErrInsufficientFunds):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, aggregate.ErrInvalidCoinAmount),
+		errors.Is(err, aggregate.ErrInvalidTransactionReason),
+		errors.Is(err, aggregate.ErrEmptyIdempotencyKey),
+		errors.Is(err, aggregate.ErrInvalidReferenceID),
+		errors.Is(err, aggregate.ErrEmptyAdminID),
+		errors.Is(err, aggregate.ErrEmptyAdjustmentNote),
+		errors.Is(err, aggregate.ErrEmptyUserID),
+		errors.Is(err, aggregate.ErrInvalidCursor),
+		errors.Is(err, aggregate.ErrBalanceOverflow):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	default:
+		return connect.NewError(connect.CodeInternal, err)
+	}
+}
+
+func resolveWalletTargetUserID(ctx context.Context, requestedUserID string) (string, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return "", connect.NewError(connect.CodeUnauthenticated, middleware.ErrUnauthorized)
+	}
+
+	if requestedUserID != "" && requestedUserID != actor.UserID {
+		if !actor.IsAdmin() {
+			return "", connect.NewError(connect.CodePermissionDenied, errors.New("access denied: only administrators can query another user's wallet"))
+		}
+		return requestedUserID, nil
+	}
+
+	return actor.UserID, nil
 }
 
 func getUserIDFromContext(ctx context.Context) (string, error) {

@@ -66,6 +66,57 @@ func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 	return nil
 }
 
+// SaveBatch stores multiple OutboxRecords in a single batch INSERT.
+func (r *GormOutboxRepository) SaveBatch(ctx context.Context, records []*port.OutboxRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	models := make([]*OutboxModel, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		id := record.ID
+		if id == "" {
+			id = uuid.NewString()
+		}
+		eventID := record.EventID
+		if eventID == "" {
+			eventID = uuid.NewString()
+		}
+		models = append(models, &OutboxModel{
+			ID:            id,
+			EventID:       eventID,
+			AggregateType: record.AggregateType,
+			AggregateID:   record.AggregateID,
+			EventType:     record.EventType,
+			Payload:       record.Payload,
+			PartitionKey:  record.PartitionKey,
+			Published:     false,
+			CreatedAt:     now,
+			Status:        "PENDING",
+			MaxRetries:    5,
+		})
+	}
+
+	if len(models) == 0 {
+		return nil
+	}
+
+	db := GetDB(ctx, r.db)
+	err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "event_id"}},
+		DoNothing: true,
+	}).Create(&models).Error
+	if err != nil {
+		return fmt.Errorf("batch create outbox records: %w", err)
+	}
+
+	return nil
+}
+
 // ClaimBatch selects unpublished records using SELECT ... FOR UPDATE SKIP LOCKED
 // and sets their status to PROCESSING with a locked_until lease.
 func (r *GormOutboxRepository) ClaimBatch(
@@ -90,7 +141,11 @@ func (r *GormOutboxRepository) ClaimBatch(
 
 		// SELECT ... FOR UPDATE SKIP LOCKED prevents lock contention across multiple workers.
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
-			Where("published = ? AND (status = 'PENDING' OR locked_until IS NULL OR locked_until < ?)", false, now).
+			Where(
+				"published = ? AND (status = 'PENDING' OR (status = 'PROCESSING' AND (locked_until IS NULL OR locked_until < ?)))",
+				false,
+				now,
+			).
 			Order("created_at ASC").
 			Limit(limit).
 			Find(&models).Error

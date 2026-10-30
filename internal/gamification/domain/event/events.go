@@ -4,13 +4,11 @@ import (
 	"time"
 )
 
-// Event is the marker interface for domain events.
 type Event interface {
 	EventName() string
 	PartitionKey() string
 }
 
-// XpEarned represents the domain event when a user gains XP.
 type XpEarned struct {
 	UserID   string
 	DeltaXp  int32
@@ -24,11 +22,11 @@ func (XpEarned) EventName() string {
 	return "contracts.supporting.gamification.v1.xpEarned"
 }
 
-func (e *XpEarned) PartitionKey() string {
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e XpEarned) PartitionKey() string {
 	return e.UserID
 }
 
-// UserLeveledUp represents the domain event when a user levels up.
 type UserLeveledUp struct {
 	UserID      string
 	OldLevel    int32
@@ -41,11 +39,11 @@ func (UserLeveledUp) EventName() string {
 	return "contracts.supporting.gamification.v1.userLeveledUp"
 }
 
-func (e *UserLeveledUp) PartitionKey() string {
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e UserLeveledUp) PartitionKey() string {
 	return e.UserID
 }
 
-// StreakAdvanced represents the domain event when a user's streak advances.
 type StreakAdvanced struct {
 	UserID        string
 	NewStreak     int32
@@ -59,11 +57,11 @@ func (StreakAdvanced) EventName() string {
 	return "contracts.supporting.gamification.v1.streakAdvanced"
 }
 
-func (e *StreakAdvanced) PartitionKey() string {
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e StreakAdvanced) PartitionKey() string {
 	return e.UserID
 }
 
-// StreakReset represents the domain event when a user's streak resets.
 type StreakReset struct {
 	UserID         string
 	PreviousStreak int32
@@ -75,11 +73,11 @@ func (StreakReset) EventName() string {
 	return "contracts.supporting.gamification.v1.streakReset"
 }
 
-func (e *StreakReset) PartitionKey() string {
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e StreakReset) PartitionKey() string {
 	return e.UserID
 }
 
-// StreakMilestoneReached represents the domain event when a user reaches a streak milestone.
 type StreakMilestoneReached struct {
 	UserID        string
 	MilestoneDays int32
@@ -90,11 +88,11 @@ func (StreakMilestoneReached) EventName() string {
 	return "contracts.supporting.gamification.v1.streakMilestoneReached"
 }
 
-func (e *StreakMilestoneReached) PartitionKey() string {
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e StreakMilestoneReached) PartitionKey() string {
 	return e.UserID
 }
 
-// BadgeUnlocked represents the domain event when a user unlocks a badge.
 type BadgeUnlocked struct {
 	UserID     string
 	BadgeCode  string
@@ -107,6 +105,97 @@ func (BadgeUnlocked) EventName() string {
 	return "contracts.supporting.gamification.v1.badgeUnlocked"
 }
 
-func (e *BadgeUnlocked) PartitionKey() string {
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e BadgeUnlocked) PartitionKey() string {
+	return e.UserID
+}
+
+type CoinsEarned struct {
+	UserID       string
+	Amount       int64
+	BalanceAfter int64
+	Reason       string
+	ReferenceID  string
+	EarnedAt     time.Time
+}
+
+func (CoinsEarned) EventName() string {
+	return "contracts.supporting.gamification.v1.coinsEarned"
+}
+
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e CoinsEarned) PartitionKey() string {
+	return e.UserID
+}
+
+type CoinsSpent struct {
+	UserID       string
+	Amount       int64
+	BalanceAfter int64
+	Reason       string
+	ReferenceID  string
+	SpentAt      time.Time
+}
+
+func (CoinsSpent) EventName() string {
+	return "contracts.supporting.gamification.v1.coinsSpent"
+}
+
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e CoinsSpent) PartitionKey() string {
+	return e.UserID
+}
+
+type WorkoutActivityIngested struct {
+	UserID           string
+	SessionID        string
+	ActivityDate     string
+	TotalSets        int32
+	TotalVolumeKg    float64
+	VolumeRatio      *float64
+	AverageFormScore *float32
+	HasNewPR         bool
+	CompletedAt      time.Time
+}
+
+func (WorkoutActivityIngested) EventName() string {
+	return "internal.gamification.workoutActivityIngested"
+}
+
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e WorkoutActivityIngested) PartitionKey() string {
+	return e.UserID
+}
+
+type NutritionActivityIngested struct {
+	UserID       string
+	ActivityDate string
+	RecordedAt   time.Time
+}
+
+func (NutritionActivityIngested) EventName() string {
+	return "internal.gamification.nutritionActivityIngested"
+}
+
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e NutritionActivityIngested) PartitionKey() string {
+	return e.UserID
+}
+
+type PersonalRecordIngested struct {
+	UserID       string
+	ExerciseID   string
+	Weight       float64
+	Reps         int32
+	ActivityDate string
+	AchievedAt   time.Time
+}
+
+func (PersonalRecordIngested) EventName() string {
+	return "internal.gamification.personalRecordIngested"
+}
+
+//nolint:gocritic // hugeParam: domain event PartitionKey value receiver
+func (e PersonalRecordIngested) PartitionKey() string {
 	return e.UserID
 }
