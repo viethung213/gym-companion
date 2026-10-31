@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
@@ -18,9 +19,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type mockClock struct {
+	now time.Time
+}
+
+func (c *mockClock) Now() time.Time {
+	return c.now
+}
+
+type mockIDs struct {
+	id string
+}
+
+func (i *mockIDs) NewID() (string, error) {
+	return i.id, nil
+}
+
 func TestNewExerciseServer(t *testing.T) {
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -33,7 +50,7 @@ func TestNewExerciseServer(t *testing.T) {
 
 func TestNewConnectExerciseHandler(t *testing.T) {
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -200,7 +217,13 @@ func (m *mockRepoForHandler) Save(_ context.Context, _ *domain.Exercise, _ *doma
 }
 
 func (m *mockRepoForHandler) FindByID(_ context.Context, _ string) (*domain.Exercise, error) {
-	return nil, nil
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.exercise != nil {
+		return m.exercise, nil
+	}
+	return nil, domain.ErrExerciseNotFound
 }
 
 func (m *mockRepoForHandler) SearchActive(_ context.Context, _ *port.SearchFilters) ([]*domain.Exercise, int32, error) {
@@ -331,7 +354,7 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 	repo := &mockRepoForHandler{exercise: ex}
 	getRandomHdlr := query.NewGetRandomExerciseHandler(repo)
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, getRandomHdlr, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, getRandomHdlr, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -362,7 +385,7 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 	// Test Error case
 	repoErr := &mockRepoForHandler{err: domain.ErrExerciseNotFound}
 	srvErr := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, query.NewGetRandomExerciseHandler(repoErr), nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, query.NewGetRandomExerciseHandler(repoErr), nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -400,7 +423,7 @@ func TestSearchExercises_TotalCountAndStatus(t *testing.T) {
 	repo := &mockRepoForHandler{exercise: ex}
 	searchHdlr := query.NewSearchExercisesHandler(repo)
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, searchHdlr,
+		nil, nil, nil, nil, nil, nil, nil, nil, searchHdlr,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -438,5 +461,67 @@ func TestSearchExercises_TotalCountAndStatus(t *testing.T) {
 	}
 	if cResp.Msg.GetTotalCount() != 1 {
 		t.Errorf("got connect TotalCount %d, want 1", cResp.Msg.GetTotalCount())
+	}
+}
+
+func TestRestoreExercise_RPC(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+
+	ex, err := domain.NewExercise(domain.Info{
+		ID:              "ex-restore-test",
+		Name:            "Barbell Squat",
+		BodyPartID:      "bp-legs",
+		EquipmentID:     "eq-barbell",
+		TargetMuscleID:  "m-quads",
+		Instructions:    "Squat down and stand up",
+		Difficulty:      "INTERMEDIATE",
+		Status:          domain.StatusArchived,
+		MeasurementType: domain.MeasurementTypeReps,
+	}, now)
+	if err != nil {
+		t.Fatalf("create exercise: %v", err)
+	}
+
+	repo := &mockRepoForHandler{exercise: ex}
+	clock := &mockClock{now: now}
+	ids := &mockIDs{id: "evt-restore-1"}
+	restoreHdlr := command.NewRestoreExerciseHandler(repo, clock, ids)
+
+	srv := NewExerciseServer(
+		nil, nil, nil, nil, nil, restoreHdlr, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+	)
+
+	// Admin context
+	adminCtx := context.WithValue(context.Background(), middleware.UserRoleKey, "Admin")
+	adminCtx = context.WithValue(adminCtx, middleware.UserIDKey, "admin-123")
+
+	req := &exercisemsg.RestoreExerciseRequest{Id: "ex-restore-test"}
+	resp, err := srv.RestoreExercise(adminCtx, req)
+	if err != nil {
+		t.Fatalf("RestoreExercise failed: %v", err)
+	}
+
+	if resp.GetExercise().GetStatus() != exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE {
+		t.Errorf("got status %v, want ACTIVE", resp.GetExercise().GetStatus())
+	}
+
+	// Re-archive exercise to test ConnectRPC restore
+	if err := ex.Archive(now.Add(3 * time.Minute)); err != nil {
+		t.Fatalf("re-archive failed: %v", err)
+	}
+
+	// ConnectRPC wrapper
+	connectHdlr := NewConnectExerciseHandler(srv)
+	cResp, err := connectHdlr.RestoreExercise(adminCtx, connect.NewRequest(req))
+	if err != nil {
+		t.Fatalf("Connect.RestoreExercise failed: %v", err)
+	}
+	if cResp.Msg.GetExercise().GetStatus() != exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE {
+		t.Errorf("got connect status %v, want ACTIVE", cResp.Msg.GetExercise().GetStatus())
 	}
 }

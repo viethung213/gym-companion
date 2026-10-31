@@ -16,4 +16,5 @@ const (
 		"exerciseSubmittedForApproval"
 	EventTypeExerciseApproved = "contracts.supporting.exercise.v1.exerciseApproved"
 	EventTypeExerciseArchived = "contracts.supporting.exercise.v1.exerciseArchived"
+	EventTypeExerciseRestored = "contracts.supporting.exercise.v1.exerciseRestored"
 )

@@ -46,9 +46,27 @@ func TestExerciseInvalidTransitions(t *testing.T) {
 		give func(*Exercise) error
 	}{
 		{
-			name: "approve draft",
+			name: "approve active",
 			give: func(exercise *Exercise) error {
+				if err := exercise.Approve(now); err != nil {
+					return err
+				}
 				return exercise.Approve(now)
+			},
+		},
+		{
+			name: "restore draft",
+			give: func(exercise *Exercise) error {
+				return exercise.Restore(now)
+			},
+		},
+		{
+			name: "restore active",
+			give: func(exercise *Exercise) error {
+				if err := exercise.Approve(now); err != nil {
+					return err
+				}
+				return exercise.Restore(now)
 			},
 		},
 		{
@@ -349,4 +367,45 @@ func TestMeasurementType(t *testing.T) {
 			t.Fatalf("got error %v, want %v", err, ErrInvalidExercise)
 		}
 	})
+}
+
+func TestExerciseRestoreCycle(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
+	exercise := newValidExercise(t, now)
+
+	// 1. Direct approve from Draft to Active
+	if err := exercise.Approve(now); err != nil {
+		t.Fatalf("direct approve from draft: %v", err)
+	}
+	if got := exercise.Info().Status; got != StatusActive {
+		t.Fatalf("got status %q, want %q", got, StatusActive)
+	}
+
+	// 2. Archive Active exercise
+	archiveTime := now.Add(time.Minute)
+	if err := exercise.Archive(archiveTime); err != nil {
+		t.Fatalf("archive active: %v", err)
+	}
+	if got := exercise.Info().Status; got != StatusArchived {
+		t.Fatalf("got status %q, want %q", got, StatusArchived)
+	}
+	if exercise.Info().ArchivedAt == nil || !exercise.Info().ArchivedAt.Equal(archiveTime) {
+		t.Fatalf("expected archived_at %v, got %v", archiveTime, exercise.Info().ArchivedAt)
+	}
+
+	// 3. Restore Archived exercise back to Active
+	restoreTime := now.Add(2 * time.Minute)
+	if err := exercise.Restore(restoreTime); err != nil {
+		t.Fatalf("restore archived: %v", err)
+	}
+	if got := exercise.Info().Status; got != StatusActive {
+		t.Fatalf("got status %q, want %q", got, StatusActive)
+	}
+	if exercise.Info().ArchivedAt != nil {
+		t.Fatalf("expected archived_at nil, got %v", exercise.Info().ArchivedAt)
+	}
+	if !exercise.Info().UpdatedAt.Equal(restoreTime) {
+		t.Fatalf("expected updated_at %v, got %v", restoreTime, exercise.Info().UpdatedAt)
+	}
 }
