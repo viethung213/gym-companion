@@ -203,8 +203,14 @@ func (m *mockRepoForHandler) FindByID(_ context.Context, _ string) (*domain.Exer
 	return nil, nil
 }
 
-func (m *mockRepoForHandler) SearchActive(_ context.Context, _ *port.SearchFilters) ([]*domain.Exercise, error) {
-	return nil, nil
+func (m *mockRepoForHandler) SearchActive(_ context.Context, _ *port.SearchFilters) ([]*domain.Exercise, int32, error) {
+	if m.err != nil {
+		return nil, 0, m.err
+	}
+	if m.exercise != nil {
+		return []*domain.Exercise{m.exercise}, 1, nil
+	}
+	return nil, 0, nil
 }
 
 func (m *mockRepoForHandler) GetRandomAISupported(_ context.Context) (*domain.Exercise, error) {
@@ -368,5 +374,69 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 	}
 	if s, ok := status.FromError(err); !ok || s.Code() != codes.NotFound {
 		t.Errorf("got status %v, want NotFound", err)
+	}
+}
+
+func TestSearchExercises_TotalCountAndStatus(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	ex, err := domain.NewExercise(domain.Info{
+		ID:              "ex-search-1",
+		Name:            "Barbell Bench Press",
+		BodyPartID:      "bp-chest",
+		EquipmentID:     "eq-barbell",
+		TargetMuscleID:  "m-pectoralis",
+		Instructions:    "Press the bar up",
+		Difficulty:      "INTERMEDIATE",
+		Status:          domain.StatusActive,
+		MeasurementType: domain.MeasurementTypeReps,
+	}, now)
+	if err != nil {
+		t.Fatalf("create exercise: %v", err)
+	}
+
+	repo := &mockRepoForHandler{exercise: ex}
+	searchHdlr := query.NewSearchExercisesHandler(repo)
+	srv := NewExerciseServer(
+		nil, nil, nil, nil, nil, nil, nil, searchHdlr,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+	)
+
+	req := &exercisemsg.SearchExercisesRequest{
+		Keyword:            "Bench",
+		Status:             exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE,
+		IncludeAllStatuses: false,
+		Limit:              10,
+		Offset:             0,
+	}
+
+	resp, err := srv.SearchExercises(ctx, req)
+	if err != nil {
+		t.Fatalf("SearchExercises failed: %v", err)
+	}
+
+	if resp.GetTotalCount() != 1 {
+		t.Errorf("got TotalCount %d, want 1", resp.GetTotalCount())
+	}
+	if len(resp.GetExercises()) != 1 {
+		t.Fatalf("got %d exercises, want 1", len(resp.GetExercises()))
+	}
+	if resp.GetExercises()[0].GetId() != "ex-search-1" {
+		t.Errorf("got id %q, want ex-search-1", resp.GetExercises()[0].GetId())
+	}
+
+	// ConnectRPC wrapper
+	connectHdlr := NewConnectExerciseHandler(srv)
+	cResp, err := connectHdlr.SearchExercises(ctx, connect.NewRequest(req))
+	if err != nil {
+		t.Fatalf("ConnectExerciseHandler.SearchExercises failed: %v", err)
+	}
+	if cResp.Msg.GetTotalCount() != 1 {
+		t.Errorf("got connect TotalCount %d, want 1", cResp.Msg.GetTotalCount())
 	}
 }
