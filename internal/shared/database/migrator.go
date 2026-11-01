@@ -54,7 +54,11 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 		}
 	}
 
+	hasCore := false
 	for _, dir := range dirs {
+		if dir == "core" {
+			hasCore = true
+		}
 		subDirPath := "migrations/" + dir
 		entries, readDirErr := migrationFS.ReadDir(subDirPath)
 		if readDirErr != nil {
@@ -88,8 +92,10 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 		}
 	}
 
-	if seedErr := runSeedsOnConn(ctx, conn); seedErr != nil {
-		return fmt.Errorf("run seeds: %w", seedErr)
+	if hasCore {
+		if seedErr := runSeedsOnConn(ctx, conn); seedErr != nil {
+			return fmt.Errorf("run seeds: %w", seedErr)
+		}
 	}
 
 	return nil

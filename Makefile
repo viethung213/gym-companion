@@ -1,4 +1,4 @@
-.PHONY: proto-gen proto-lint build-prod build-gateway build-test run-prod run-prod-d stop-prod run-gateway stop-gateway logs-prod test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
+.PHONY: proto-gen proto-lint build-prod build-core build-ai build-gateway build-test run-prod run-prod-d stop-prod run-gateway stop-gateway run-core stop-core run-ai stop-ai logs-prod test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
 
 # Lệnh chạy docker compose của Buf CLI
 BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
@@ -42,10 +42,18 @@ build-gateway:
 	@echo "Building API Gateway Docker Image..."
 	docker build -f infra/gateway/Dockerfile -t fitai-gateway:latest .
 
-# Build toàn bộ production target images (cả Backend API và API Gateway)
-build-prod: build-gateway
-	@echo "Building Backend Production Docker Image..."
-	docker build --target prod -t fitai-app:latest .
+# Build Core Fitness Service Docker image độc lập
+build-core:
+	@echo "Building Core Fitness Service Docker Image..."
+	docker build --target prod-core -t fitai-core:latest .
+
+# Build AI & Notification Service Docker image độc lập
+build-ai:
+	@echo "Building AI & Notification Service Docker Image..."
+	docker build --target prod-ai -t fitai-ai:latest .
+
+# Build toàn bộ production target images (cả Backend Services và API Gateway)
+build-prod: build-gateway build-core build-ai
 
 # Khởi chạy riêng API Gateway Container trên port 8000 & 8001
 run-gateway:
@@ -58,27 +66,53 @@ stop-gateway:
 	@echo "Stopping API Gateway Container..."
 	docker compose -f infra/gateway/docker-compose.yml down
 
-# Khởi chạy toàn bộ hệ thống Production (cả Gateway và Backend API) chạy ngầm dưới nền (Detached mode)
-run-prod: run-gateway
-	@-cp -n .env.example .env 2>/dev/null
-	@echo "Starting Backend Production Container in background..."
-	docker run -d --name fitai-backend --network fitai-network --network-alias app --network-alias api --env-file .env -p 8080:8080 -p 9090:9090 fitai-app:latest
+# Khởi chạy riêng Core Fitness Service Container trên port 8080 & 9090
+run-core:
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.core.example .env.core 2>/dev/null
+	@echo "Starting Core Fitness Service Container in background..."
+	docker run -d --name fitai-core --network fitai-network --network-alias core --network-alias app --env-file .env.core -p 8080:8080 -p 9090:9090 fitai-core:latest
+
+# Dừng riêng Core Fitness Service Container
+stop-core:
+	@echo "Stopping Core Fitness Service Container..."
+	docker stop fitai-core || true
+	docker rm fitai-core || true
+
+# Khởi chạy riêng AI & Notification Service Container trên port 8082 & 9092
+run-ai:
+	@-docker network create fitai-network 2>/dev/null
+	@-cp -n .env.ai.example .env.ai 2>/dev/null
+	@echo "Starting AI & Notification Service Container in background..."
+	docker run -d --name fitai-ai --network fitai-network --network-alias ai -e GATEWAY_URL=http://fitai-gateway:8000 --env-file .env.ai -p 8082:8082 -p 9092:9092 fitai-ai:latest
+
+# Dừng riêng AI & Notification Service Container
+stop-ai:
+	@echo "Stopping AI & Notification Service Container..."
+	docker stop fitai-ai || true
+	docker rm fitai-ai || true
+
+# Khởi chạy toàn bộ hệ thống Production (cả 3: Gateway, Core Service và AI Service) chạy ngầm dưới nền
+run-prod: run-gateway run-core run-ai
 	@echo "======================================================================"
-	@echo "🟢 Hệ thống đã khởi chạy thành công dưới nền (xem trong Docker Desktop):"
+	@echo "🟢 Hệ thống đã khởi chạy thành công cả 3 dịch vụ dưới nền:"
 	@echo "   - API Gateway Data Plane:    http://localhost:8000"
 	@echo "   - API Gateway Control Plane: http://localhost:8001"
-	@echo "   - Backend App API:           http://localhost:8080"
+	@echo "   - Core Fitness Service:      http://localhost:8080"
+	@echo "   - AI & Notification Service: http://localhost:8082"
 	@echo "======================================================================"
 	@echo "👉 Xem logs Gateway: docker logs -f fitai-gateway"
-	@echo "👉 Dừng hệ thống:    make stop-prod"
+	@echo "👉 Xem logs Core:    docker logs -f fitai-core"
+	@echo "👉 Xem logs AI:      docker logs -f fitai-ai"
+	@echo "👉 Dừng toàn bộ:     make stop-prod"
 
-# Dừng toàn bộ hệ thống Production (cả Backend API và API Gateway)
-stop-prod:
-	@echo "Stopping Backend Production Container..."
-	docker stop fitai-backend || true
-	docker rm fitai-backend || true
-	@echo "Stopping API Gateway Container..."
-	docker compose -f infra/gateway/docker-compose.yml down || true
+# Dừng toàn bộ hệ thống Production (cả 3 containers: Gateway, Core và AI)
+stop-prod: stop-core stop-ai stop-gateway
+	@docker stop fitai-backend 2>/dev/null || true
+	@docker rm fitai-backend 2>/dev/null || true
+	@echo "======================================================================"
+	@echo "🛑 Đã dừng toàn bộ 3 dịch vụ thành công."
+	@echo "======================================================================"
 
 # Build test target image (chứa toàn bộ môi trường Go để chạy test)
 build-test:
@@ -89,7 +123,7 @@ build-test:
 # Khởi chạy toàn bộ môi trường hạ tầng kiểm thử (Postgres + Kafka + Redis) dưới Docker
 test-env-up:
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	docker compose -f infra/db/postgres/docker-compose.yml up -d
 	docker compose -f infra/kafka/docker-compose.yml up -d
 	docker compose -f infra/redis/docker-compose.yml up -d
@@ -119,7 +153,7 @@ lint:
 # Chạy toàn bộ các bài test (Unit, Integration, E2E) của toàn dự án bên trong Docker
 test-all: build-test
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running all tests (Unit, Integration, E2E) inside Docker..."
 	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
 		OUT=$$(go test -v -race -p=1 -tags="unit,integration,e2e" ./... 2>&1); \
@@ -137,14 +171,14 @@ test-all: build-test
 # Chạy tất cả các Unit Tests của toàn dự án bên trong Docker
 test-unit: build-test
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running all Unit Tests inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=unit ./...
 
 # Chạy tất cả các Integration Tests của toàn dự án bên trong Docker
 test-integration: build-test
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running all Integration Tests inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=integration ./...
 
@@ -156,7 +190,7 @@ ifndef MODULE
 	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-module MODULE=auth)
 endif
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running all tests (Unit, Integration, E2E) for module $(MODULE) sequentially inside Docker..."
 	@docker run --rm --network fitai-network --env-file .env fitai-app:test sh -c ' \
 		if [ ! -d "./internal/$(MODULE)" ] || ! find ./internal/$(MODULE) -name "*.go" 2>/dev/null | grep -q .; then \
@@ -181,7 +215,7 @@ ifndef MODULE
 	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-unit-module MODULE=auth)
 endif
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running Unit Tests for module $(MODULE) inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=unit ./internal/$(MODULE)/...
 
@@ -191,7 +225,7 @@ ifndef MODULE
 	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-integration-module MODULE=auth)
 endif
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running Integration Tests for module $(MODULE) inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=integration ./internal/$(MODULE)/...
 
@@ -201,7 +235,7 @@ ifndef MODULE
 	$(error Lỗi: Vui lòng khai báo MODULE. Ví dụ: make test-e2e-module MODULE=auth)
 endif
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
+	@-cat .env.core .env.ai > .env 2>/dev/null || cat .env.core.example .env.ai.example > .env 2>/dev/null
 	@echo "Running E2E Tests for module $(MODULE) inside Docker..."
 	docker run --rm --network fitai-network --env-file .env fitai-app:test go test -v -race -tags=e2e ./internal/$(MODULE)/...
 

@@ -1,4 +1,4 @@
-name: Module Selective Tests CI
+name: Module Selective Tests & GHCR Publish CI
 
 on:
   push:
@@ -21,6 +21,8 @@ jobs:
       global: ${{ steps.filter.outputs.global }}
       modules: ${{ steps.set-modules.outputs.modules }}
       has_modules: ${{ steps.set-modules.outputs.has_modules }}
+      build_core: ${{ steps.set-modules.outputs.build_core }}
+      build_ai: ${{ steps.set-modules.outputs.build_ai }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,7 +40,13 @@ jobs:
               - 'proto/buf.*'
               - 'proto/buf.gen.yaml'
               - 'internal/gen/**'
-              - '.github/workflows/**'
+              - '.github/workflows/module-tests.yml'
+            core_extra:
+              - 'cmd/core/**'
+              - 'migrations/core/**'
+            ai_extra:
+              - 'cmd/ai/**'
+              - 'migrations/ai/**'
             audio:
               - 'internal/audio/**'
               - 'proto/contracts/generic/audio/**'
@@ -51,6 +59,9 @@ jobs:
             exercise:
               - 'internal/exercise/**'
               - 'proto/contracts/supporting/exercise/**'
+            gamification:
+              - 'internal/gamification/**'
+              - 'proto/contracts/core/gamification/**'
             notification:
               - 'internal/notification/**'
               - 'proto/contracts/generic/notification/**'
@@ -65,6 +76,9 @@ jobs:
             social:
               - 'internal/social/**'
               - 'proto/contracts/supporting/social/**'
+            solo_match:
+              - 'internal/solo_match/**'
+              - 'proto/contracts/core/solo_match/**'
             workout_execution:
               - 'internal/workout_execution/**'
               - 'proto/contracts/core/workout_execution/**'
@@ -72,24 +86,55 @@ jobs:
       - name: Compute Target Modules Matrix
         id: set-modules
         run: |
-          ALL_MODULES='["audio","auth","coaching","exercise","notification","nutrition","profile","shared","social","workout_execution"]'
+          ALL_MODULES='["audio","auth","coaching","exercise","gamification","notification","nutrition","profile","shared","social","solo_match","workout_execution"]'
           
+          BUILD_CORE=false
+          BUILD_AI=false
+
           if [ "${{ steps.filter.outputs.global }}" == "true" ]; then
             echo "Global or core shared files changed. Running tests for ALL modules."
             echo "modules=${ALL_MODULES}" >> $GITHUB_OUTPUT
             echo "has_modules=true" >> $GITHUB_OUTPUT
+            BUILD_CORE=true
+            BUILD_AI=true
           else
             SELECTED=()
             [ "${{ steps.filter.outputs.audio }}" == "true" ] && SELECTED+=('"audio"')
             [ "${{ steps.filter.outputs.auth }}" == "true" ] && SELECTED+=('"auth"')
             [ "${{ steps.filter.outputs.coaching }}" == "true" ] && SELECTED+=('"coaching"')
             [ "${{ steps.filter.outputs.exercise }}" == "true" ] && SELECTED+=('"exercise"')
+            [ "${{ steps.filter.outputs.gamification }}" == "true" ] && SELECTED+=('"gamification"')
             [ "${{ steps.filter.outputs.notification }}" == "true" ] && SELECTED+=('"notification"')
             [ "${{ steps.filter.outputs.nutrition }}" == "true" ] && SELECTED+=('"nutrition"')
             [ "${{ steps.filter.outputs.profile }}" == "true" ] && SELECTED+=('"profile"')
             [ "${{ steps.filter.outputs.shared }}" == "true" ] && SELECTED+=('"shared"')
             [ "${{ steps.filter.outputs.social }}" == "true" ] && SELECTED+=('"social"')
+            [ "${{ steps.filter.outputs.solo_match }}" == "true" ] && SELECTED+=('"solo_match"')
             [ "${{ steps.filter.outputs.workout_execution }}" == "true" ] && SELECTED+=('"workout_execution"')
+
+            if [ "${{ steps.filter.outputs.shared }}" == "true" ]; then
+              BUILD_CORE=true
+              BUILD_AI=true
+            fi
+
+            if [ "${{ steps.filter.outputs.core_extra }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.audio }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.auth }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.exercise }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.gamification }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.profile }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.social }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.solo_match }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.workout_execution }}" == "true" ]; then
+              BUILD_CORE=true
+            fi
+
+            if [ "${{ steps.filter.outputs.ai_extra }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.coaching }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.notification }}" == "true" ] || \
+               [ "${{ steps.filter.outputs.nutrition }}" == "true" ]; then
+              BUILD_AI=true
+            fi
 
             if [ ${#SELECTED[@]} -eq 0 ]; then
               echo "No module code changes detected. Skipping module tests."
@@ -102,6 +147,9 @@ jobs:
               echo "has_modules=true" >> $GITHUB_OUTPUT
             fi
           fi
+
+          echo "build_core=${BUILD_CORE}" >> $GITHUB_OUTPUT
+          echo "build_ai=${BUILD_AI}" >> $GITHUB_OUTPUT
 
   build-test-image:
     name: Build Base Test Image
@@ -179,11 +227,19 @@ jobs:
             echo "=================================================="; \
             if [ $STATUS -ne 0 ] || [ $FAILED -gt 0 ]; then exit 1; fi'
 
-  build-production-image:
-    name: Build & Push Production Image
+  publish-core-image:
+    name: Build & Push Core Image to GHCR
     needs: [detect-changes, run-module-tests]
-    if: ${{ needs.detect-changes.outputs.has_modules == 'true' }}
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.build_core == 'true' &&
+      (needs.run-module-tests.result == 'success' || needs.detect-changes.outputs.has_modules == 'false')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -198,11 +254,75 @@ jobs:
       - name: Generate Protobuf Stubs
         run: make proto-gen
 
-      - name: Build & Push Production Image to GHCR
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare Image Tags
+        id: prep
         run: |
-          IMAGE_ID=ghcr.io/${{ github.repository }}
-          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
-          
-          docker build --target prod -t $IMAGE_ID:latest -t $IMAGE_ID:${{ github.sha }} .
-          docker push $IMAGE_ID:latest
-          docker push $IMAGE_ID:${{ github.sha }}
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_tag=ghcr.io/${REPO_OWNER}/fitai-core:latest" >> $GITHUB_OUTPUT
+          echo "sha_tag=ghcr.io/${REPO_OWNER}/fitai-core:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Core Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: prod-core
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.prep.outputs.image_tag }}
+            ${{ steps.prep.outputs.sha_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish-ai-image:
+    name: Build & Push AI Image to GHCR
+    needs: [detect-changes, run-module-tests]
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.build_ai == 'true' &&
+      (needs.run-module-tests.result == 'success' || needs.detect-changes.outputs.has_modules == 'false')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Protobuf Stubs
+        run: make proto-gen
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare Image Tags
+        id: prep
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_tag=ghcr.io/${REPO_OWNER}/fitai-ai:latest" >> $GITHUB_OUTPUT
+          echo "sha_tag=ghcr.io/${REPO_OWNER}/fitai-ai:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push AI Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: prod-ai
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.prep.outputs.image_tag }}
+            ${{ steps.prep.outputs.sha_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

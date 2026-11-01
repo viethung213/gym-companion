@@ -14,7 +14,7 @@
         "/contracts.generic.notification."
       ],
       "upstreams": [
-        "http://app:8080"
+        "http://ai:8082"
       ]
     },
     {
@@ -30,7 +30,7 @@
         "/contracts.generic.audio."
       ],
       "upstreams": [
-        "http://app:8080"
+        "http://core:8080"
       ]
     }
   ]

@@ -25,17 +25,15 @@ import (
 	nutritionConsumer "github.com/viethung213/gym-companion/internal/nutrition/transport/consumer"
 	nutritionGRPC "github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	"google.golang.org/grpc"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
-	DB            *sql.DB
-	KafkaRegistry *sharedKafka.Registry
-	// ProfileConn là kết nối gRPC in-process đến ProfileService để lấy dữ liệu sinh trắc học.
-	// Có thể nil — khi đó DailyMenuCronWorker dùng fallback metrics.
-	ProfileConn grpc.ClientConnInterface
+	DB             *sql.DB
+	KafkaRegistry  *sharedKafka.Registry
+	GatewayURL     string
+	InternalSecret string
 }
 
 type Module struct {
@@ -145,9 +143,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 		gormDB = gdb
 	}
 
-	var profileCli *profileclient.GRPCProfileClient
-	if deps.ProfileConn != nil {
-		profileCli = profileclient.NewGRPCProfileClient(deps.ProfileConn)
+	var profileCli repository.ProfileClient
+	if deps.GatewayURL != "" {
+		profileCli = profileclient.NewConnectProfileClient(deps.GatewayURL, deps.InternalSecret, nil)
 	}
 
 	mod := NewModule(ctx, gormDB, "", deps.KafkaRegistry, profileCli)
