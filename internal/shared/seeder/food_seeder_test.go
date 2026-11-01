@@ -111,4 +111,3 @@ func TestSeedFoodItems_ContextCancellation(t *testing.T) {
 		t.Errorf("expected context.Canceled error, got %v", err)
 	}
 }
-

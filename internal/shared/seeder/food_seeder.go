@@ -87,7 +87,8 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 	adminCtx = context.WithValue(adminCtx, middleware.UserRoleKey, "Admin")
 
 	createdCount := 0
-	for i, record := range records {
+	for i := range records {
+		record := &records[i]
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

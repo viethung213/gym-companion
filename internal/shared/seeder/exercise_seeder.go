@@ -125,7 +125,8 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 	log.Printf("🏋️ Starting Exercise catalog seeding (%d total entries, %d already existing)...", totalRecords, len(existingNames))
 
 	createdCount := 0
-	for i, record := range records {
+	for i := range records {
+		record := &records[i]
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -316,7 +317,7 @@ func queryExistingMap(ctx context.Context, db *sql.DB, tableName string) map[str
 		return result
 	}
 
-	query := fmt.Sprintf("SELECT id, LOWER(name) FROM %s", tableName)
+	query := "SELECT id, LOWER(name) FROM " + tableName
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return result
