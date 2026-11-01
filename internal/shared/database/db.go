@@ -118,7 +118,10 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 	// Ensure embedded database schema migrations and seeds are automatically applied
 	// for this module's target group safely across processes/pods using a PostgreSQL distributed advisory lock.
 	onceVal, _ := r.migrationOnces.LoadOrStore(group, &sync.Once{})
-	groupOnce := onceVal.(*sync.Once)
+	groupOnce, ok := onceVal.(*sync.Once)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type for migration once: %T", onceVal)
+	}
 
 	var migErr error
 	groupOnce.Do(func() {
