@@ -66,27 +66,18 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	if deps.ProfileReader == nil {
-		if gormDB != nil {
-			deps.ProfileReader = adapters.NewPostgresUserProfileReader(gormDB)
-		} else {
-			deps.ProfileReader = &adapters.MockUserProfileReader{}
-		}
+		// Temporary mock: use MockUserProfileReader to decouple from profile tables until API client is integrated.
+		deps.ProfileReader = &adapters.MockUserProfileReader{}
 	}
 
 	if deps.SessionReader == nil {
-		if gormDB != nil {
-			deps.SessionReader = adapters.NewPostgresWorkoutSessionReader(gormDB)
-		} else {
-			deps.SessionReader = &adapters.MockWorkoutSessionReader{}
-		}
+		// Temporary mock: use MockWorkoutSessionReader to decouple from workout_execution tables until API client is integrated.
+		deps.SessionReader = &adapters.MockWorkoutSessionReader{}
 	}
 
 	if deps.CatalogReader == nil {
-		if gormDB != nil {
-			deps.CatalogReader = adapters.NewPostgresExerciseCatalogReader(gormDB)
-		} else {
-			deps.CatalogReader = &adapters.MockExerciseCatalogReader{}
-		}
+		// Temporary mock: use MockExerciseCatalogReader to decouple from exercise tables until API client is integrated.
+		deps.CatalogReader = &adapters.MockExerciseCatalogReader{}
 	}
 
 	if deps.RoadmapRepo == nil && gormDB != nil {

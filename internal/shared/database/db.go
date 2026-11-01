@@ -14,9 +14,9 @@ import (
 
 // Registry manages and isolates database connection pools for all modules.
 type Registry struct {
-	mu            sync.RWMutex
-	pools         map[string]*sql.DB
-	migrationOnce sync.Once
+	mu             sync.RWMutex
+	pools          map[string]*sql.DB
+	migrationOnces sync.Map
 }
 
 var (
@@ -66,21 +66,26 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 	envKey := strings.ToUpper(module) + "_DATABASE_URL"
 	dbURL := os.Getenv(envKey)
 
+	group := getModuleGroup(module)
+
+	if dbURL == "" {
+		// Look up group-level URL (e.g., CORE_DATABASE_URL or AI_DATABASE_URL)
+		groupEnvKey := strings.ToUpper(group) + "_DATABASE_URL"
+		dbURL = os.Getenv(groupEnvKey)
+	}
+
 	if dbURL == "" {
 		// Fallback to global DATABASE_URL
 		globalURL := os.Getenv("DATABASE_URL")
 		if globalURL == "" {
 			globalURL = "postgres://postgres:postgres@localhost:5432/fitai?sslmode=disable"
 		}
+		dbURL = globalURL
+	}
 
-		// Inject search_path parameter to enforce module schema isolation at query time
-		// while allowing fallback to public schema for shared extensions and functions
-		if strings.Contains(globalURL, "?") {
-			dbURL = fmt.Sprintf("%s&search_path=%s,public", globalURL, module)
-		} else {
-			dbURL = fmt.Sprintf("%s?search_path=%s,public", globalURL, module)
-		}
-	} else if !strings.Contains(dbURL, "search_path") {
+	// Inject search_path parameter to enforce module schema isolation at query time
+	// while allowing fallback to public schema for shared extensions and functions
+	if !strings.Contains(dbURL, "search_path") {
 		if strings.Contains(dbURL, "?") {
 			dbURL = fmt.Sprintf("%s&search_path=%s,public", dbURL, module)
 		} else {
@@ -111,18 +116,33 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 	r.pools[module] = conn
 
 	// Ensure embedded database schema migrations and seeds are automatically applied
-	// safely across processes/pods using a PostgreSQL distributed advisory lock.
+	// for this module's target group safely across processes/pods using a PostgreSQL distributed advisory lock.
+	onceVal, _ := r.migrationOnces.LoadOrStore(group, &sync.Once{})
+	groupOnce, ok := onceVal.(*sync.Once)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type for migration once: %T", onceVal)
+	}
+
 	var migErr error
-	r.migrationOnce.Do(func() {
+	groupOnce.Do(func() {
 		migCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		migErr = RunAutoMigrations(migCtx, conn)
+		migErr = RunAutoMigrations(migCtx, conn, group)
 	})
 	if migErr != nil {
-		return nil, fmt.Errorf("auto-migrate database on pool initialization for module %s: %w", module, migErr)
+		return nil, fmt.Errorf("auto-migrate database on pool initialization for module %s (%s): %w", module, group, migErr)
 	}
 
 	return conn, nil
+}
+
+func getModuleGroup(module string) string {
+	switch strings.ToLower(module) {
+	case "coaching", "nutrition", "notification":
+		return "ai"
+	default:
+		return "core"
+	}
 }
 
 // CloseAll closes all open database connection pools in the registry.

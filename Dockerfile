@@ -23,30 +23,53 @@ FROM builder AS tester
 CMD ["go", "test", "-v", "-race", "./..."]
 
 # =====================================================================
-# Build Binary cho Production
+# Build Binary cho Core Service
 # =====================================================================
-FROM builder AS prod-builder
+FROM builder AS core-builder
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/fitai-api ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/fitai-core ./cmd/core/main.go
 
 # =====================================================================
-# Trạng thái 2: Production Stage (Image chạy thực tế siêu nhẹ)
+# Target: Core Production Stage
 # =====================================================================
-FROM alpine:3.20 AS prod
+FROM alpine:3.20 AS prod-core
 
 RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy binary từ prod-builder
-COPY --from=prod-builder /bin/fitai-api /app/fitai-api
+COPY --from=core-builder /bin/fitai-core /app/fitai-core
+
+EXPOSE 8080
+EXPOSE 9090
+
+CMD ["/app/fitai-core"]
+
+# =====================================================================
+# Build Binary cho AI & Notification Service
+# =====================================================================
+FROM builder AS ai-builder
+
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/fitai-ai ./cmd/ai/main.go
+
+# =====================================================================
+# Target: AI Production Stage
+# =====================================================================
+FROM alpine:3.20 AS prod-ai
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+COPY --from=ai-builder /bin/fitai-ai /app/fitai-ai
 
 # Copy ADK prompts và skills (cần thiết cho coaching agent)
 COPY internal/coaching/infrastructure/ai/adk/prompts ./internal/coaching/infrastructure/ai/adk/prompts
 COPY internal/coaching/infrastructure/ai/adk/skills ./internal/coaching/infrastructure/ai/adk/skills
 
+EXPOSE 8082
+EXPOSE 9092
 
-EXPOSE 8080
-EXPOSE 9090
+CMD ["/app/fitai-ai"]
 
-CMD ["/app/fitai-api"]
+

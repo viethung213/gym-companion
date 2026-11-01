@@ -1,4 +1,4 @@
-// Package main provides the entrypoint for the API server.
+// Package main provides the entrypoint for the Core API service.
 package main
 
 import (
@@ -13,12 +13,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
-	"github.com/viethung213/gym-companion/internal/coaching"
-	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise"
 	"github.com/viethung213/gym-companion/internal/gamification"
-	"github.com/viethung213/gym-companion/internal/notification"
-	"github.com/viethung213/gym-companion/internal/nutrition"
 	"github.com/viethung213/gym-companion/internal/profile"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -39,26 +35,10 @@ func main() {
 }
 
 func run() error {
-	loadEnvFile()
+	loadEnvFiles(".env.core", ".env")
 
 	dir, _ := os.Getwd()
-	aiProvider := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
-	if aiProvider == "" {
-		aiProvider = "groq"
-	}
-	groqKey := os.Getenv("GROQ_API_KEY")
-	groqModel := os.Getenv("GROQ_MODEL")
-	if groqModel == "" {
-		groqModel = "openai/gpt-oss-120b"
-	}
-	coachingKey := os.Getenv("GOOGLE_API_KEY_COACHING")
-	nutritionKey := os.Getenv("GOOGLE_API_KEY_NUTRITION")
-
-	log.Printf("📂 Working Directory: %s", dir)
-	log.Printf("🤖 [AI Provider] Active: %s (Groq Model: %s)", aiProvider, groqModel)
-	log.Printf("🔑 [Env Check] GROQ_API_KEY: %s", maskKey(groqKey))
-	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_COACHING: %s", maskKey(coachingKey))
-	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_NUTRITION: %s", maskKey(nutritionKey))
+	log.Printf("📂 [Core Service] Working Directory: %s", dir)
 
 	appPort := os.Getenv("APP_PORT")
 	if appPort == "" {
@@ -91,9 +71,9 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Run embedded SQL migrations (idempotent CREATE TABLE IF NOT EXISTS / ON CONFLICT)
-	if migErr := database.RunAutoMigrations(ctx, db); migErr != nil {
-		return fmt.Errorf("run database auto migrations: %w", migErr)
+	// Explicitly ensure core SQL migrations and seeds are executed
+	if migErr := database.RunAutoMigrations(ctx, db, "core"); migErr != nil {
+		return fmt.Errorf("run core database auto migrations: %w", migErr)
 	}
 
 	exerciseDB, err := dbRegistry.GetPool("exercise")
@@ -146,21 +126,6 @@ func run() error {
 	}
 	defer shutdownWorkout()
 
-	// Initialize Nutrition Module
-	nutritionDB, err := dbRegistry.GetPool("nutrition")
-	if err != nil {
-		log.Println("Warning: nutrition database pool not found, falling back to auth pool.")
-		nutritionDB = db
-	}
-	nutritionGRPCHandler, shutdownNutrition, err := nutrition.Initialize(ctx, nutrition.ModuleDeps{
-		DB:            nutritionDB,
-		KafkaRegistry: kafkaRegistry,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize nutrition module: %w", err)
-	}
-	defer shutdownNutrition()
-
 	// Initialize Profile Module
 	profileDB, err := dbRegistry.GetPool("profile")
 	if err != nil {
@@ -175,37 +140,6 @@ func run() error {
 		return fmt.Errorf("initialize profile module: %w", err)
 	}
 	defer shutdownProfile()
-
-	// Initialize Notification Module
-	notificationDB, err := dbRegistry.GetPool("notification")
-	if err != nil {
-		log.Println("Warning: notification database pool not found, falling back to auth pool.")
-		notificationDB = db
-	}
-	notificationGRPCHandler, shutdownNotification, err := notification.Initialize(ctx, notification.ModuleDeps{
-		DB:            notificationDB,
-		KafkaRegistry: kafkaRegistry,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize notification module: %w", err)
-	}
-	defer shutdownNotification()
-
-	// Initialize Coaching Module.
-	coachingDB, err := dbRegistry.GetPool("coaching")
-	if err != nil {
-		log.Println("Warning: coaching database pool not found, falling back to auth pool.")
-		coachingDB = db
-	}
-	coachGRPCHandler, _, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
-		DB:            coachingDB,
-		KafkaRegistry: kafkaRegistry,
-		IDGenerator:   coachingpersistence.UUIDGenerator{},
-	})
-	if err != nil {
-		return fmt.Errorf("initialize coaching module: %w", err)
-	}
-	defer shutdownCoaching()
 
 	// Initialize Social Module
 	socialDB, err := dbRegistry.GetPool("social")
@@ -256,8 +190,8 @@ func run() error {
 	}
 	defer shutdownGamification()
 
-	// 2. Start Unified HTTP Server with ConnectRPC, h2c, and CORS on Port 8080
-	log.Printf("🚀 Starting Unified API Server (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
+	// Start HTTP Server with ConnectRPC, h2c, and CORS
+	log.Printf("🚀 Starting Core Service (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
 
 	connectInterceptors := connect.WithInterceptors(
@@ -267,25 +201,22 @@ func run() error {
 		middleware.NewConnectInternalAuthInterceptor(internalSecret),
 	)
 
-	// Mount ConnectRPC Service Handlers directly onto HTTP multiplexer
+	// Mount Core ConnectRPC Service Handlers
 	auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors)
 	exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors)
 	workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)
-	nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors)
 	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
 	social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors)
 	solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors)
 	gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors)
-	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
-	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK (Core Service)"))
 	})
 
-	// Wrap multiplexer with CORS middleware for browser clients
+	// Wrap multiplexer with CORS middleware
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -299,7 +230,7 @@ func run() error {
 		MaxAge:           7200,
 	}).Handler(mux)
 
-	// Wrap with h2c for unencrypted HTTP/2 support (allows gRPC CLI & standard gRPC clients over HTTP/2)
+	// Wrap with h2c for unencrypted HTTP/2 support
 	h2cHandler := h2c.NewHandler(corsHandler, &http2.Server{})
 
 	server := &http.Server{
@@ -307,18 +238,15 @@ func run() error {
 		Handler: h2cHandler,
 	}
 
-	// Run background seeder tasks without blocking server startup or incoming API traffic
+	// Run background seeder tasks for Core
 	go func() {
 		seedCtx := context.Background()
-		log.Println("🌱 Triggering background seeding for System Bots, Exercise catalog, and Food items...")
+		log.Println("🌱 Triggering background seeding for System Bots and Exercise catalog...")
 		if seedErr := seeder.SeedSystemBots(seedCtx, db, authGRPCHandler); seedErr != nil {
 			log.Printf("⚠️ Background seeding system bots error: %v", seedErr)
 		}
 		if seedErr := seeder.SeedExercises(seedCtx, exerciseDB, exerciseServer); seedErr != nil {
 			log.Printf("⚠️ Background seeding exercise catalog error: %v", seedErr)
-		}
-		if seedErr := seeder.SeedFoodItems(seedCtx, nutritionDB, nutritionGRPCHandler); seedErr != nil {
-			log.Printf("⚠️ Background seeding food catalog error: %v", seedErr)
 		}
 	}()
 
@@ -332,38 +260,30 @@ func run() error {
 	return <-errChan
 }
 
-func loadEnvFile() {
+func loadEnvFiles(files ...string) {
 	if strings.EqualFold(os.Getenv("APP_ENV"), "production") {
 		return
 	}
-	data, err := os.ReadFile(".env")
-	if err != nil {
-		return
-	}
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
 			continue
 		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			val = strings.Trim(val, `"'`)
-			if key != "" && os.Getenv(key) == "" {
-				os.Setenv(key, val)
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				val := strings.TrimSpace(parts[1])
+				val = strings.Trim(val, `"'`)
+				if key != "" && os.Getenv(key) == "" {
+					os.Setenv(key, val)
+				}
 			}
 		}
 	}
-}
-
-func maskKey(k string) string {
-	if k == "" {
-		return "<EMPTY>"
-	}
-	if len(k) <= 8 {
-		return k[:2] + "****"
-	}
-	return k[:6] + "..." + k[len(k)-4:] + fmt.Sprintf(" (len=%d)", len(k))
 }
