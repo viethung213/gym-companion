@@ -84,7 +84,7 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 		t.Fatalf("save active exercise: %v", err)
 	}
 
-	exercises, err := repo.SearchActive(ctx, &port.SearchFilters{
+	exercises, totalCount, err := repo.SearchActive(ctx, &port.SearchFilters{
 		TagIDs: []string{"strength"},
 	})
 	if err != nil {
@@ -92,6 +92,9 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 	}
 	if got := len(exercises); got != 1 {
 		t.Fatalf("got exercises %d, want 1", got)
+	}
+	if totalCount != 1 {
+		t.Fatalf("got total count %d, want 1", totalCount)
 	}
 
 	metadata, err := repo.GetMetadata(ctx)

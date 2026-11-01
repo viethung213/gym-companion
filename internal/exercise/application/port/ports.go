@@ -18,6 +18,8 @@ type SearchFilters struct {
 	Limit              int32
 	Offset             int32
 	MeasurementType    string
+	Status             domain.Status
+	IncludeAllStatuses bool
 }
 
 type Metadata struct {
@@ -51,7 +53,7 @@ type Tag struct {
 type Repository interface {
 	Save(ctx context.Context, exercise *domain.Exercise, event *domain.Event) error
 	FindByID(ctx context.Context, id string) (*domain.Exercise, error)
-	SearchActive(ctx context.Context, filters *SearchFilters) ([]*domain.Exercise, error)
+	SearchActive(ctx context.Context, filters *SearchFilters) ([]*domain.Exercise, int32, error)
 	GetRandomAISupported(ctx context.Context) (*domain.Exercise, error)
 	GetMetadata(ctx context.Context) (Metadata, error)
 

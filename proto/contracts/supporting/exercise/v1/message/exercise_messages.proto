@@ -129,10 +129,13 @@ message SearchExercisesRequest {
   int32 limit = 9;
   int32 offset = 10;
   ExerciseMeasurementType measurement_type = 11;
+  ExerciseStatus status = 12;
+  bool include_all_statuses = 13;
 }
 
 message SearchExercisesResponse {
   repeated ExerciseInfo exercises = 1;
+  int32 total_count = 2;
 }
 
 // Lookup metadata definitions
