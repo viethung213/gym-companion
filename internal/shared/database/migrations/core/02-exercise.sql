@@ -1,33 +1,62 @@
--- ==========================================
--- SCHEMA: exercise - Tables definitions
--- ==========================================
+-- =====================================================================
+-- BOUNDED CONTEXT: exercise (Exercise Catalog & Metadata Engine)
+-- Initial Schema, Transactional Outbox, Master Tables, and Trigram Search
+-- =====================================================================
 
--- 1. Table: body_parts
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE SCHEMA IF NOT EXISTS exercise;
+
+-- 1. TRANSACTIONAL OUTBOX & AUDIT LOG
+CREATE TABLE IF NOT EXISTS exercise.outbox (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS exercise.outbox_log (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_exercise_outbox_log_event_status ON exercise.outbox_log (event_id, status);
+
+-- 2. MASTER LOOKUP TABLES
 CREATE TABLE IF NOT EXISTS exercise.body_parts (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL
 );
 
--- 2. Table: equipments
 CREATE TABLE IF NOT EXISTS exercise.equipments (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL
 );
 
--- 3. Table: muscles
 CREATE TABLE IF NOT EXISTS exercise.muscles (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     body_part_id VARCHAR(255) NOT NULL REFERENCES exercise.body_parts(id)
 );
 
--- 4. Table: tags
 CREATE TABLE IF NOT EXISTS exercise.tags (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL
 );
 
--- 5. Table: exercises
+-- 3. EXERCISES
 CREATE TABLE IF NOT EXISTS exercise.exercises (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -54,7 +83,6 @@ CREATE TABLE IF NOT EXISTS exercise.exercises (
     )
 );
 
--- Indexing for Exercises Foreign Keys & Name Search
 CREATE INDEX IF NOT EXISTS idx_exercises_body_part ON exercise.exercises(body_part_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercise.exercises(equipment_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_target_muscle ON exercise.exercises(target_muscle_id);
@@ -62,7 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_exercises_status ON exercise.exercises(status);
 CREATE INDEX IF NOT EXISTS idx_exercises_measurement_type ON exercise.exercises(measurement_type);
 CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm ON exercise.exercises USING gin (name gin_trgm_ops);
 
--- 6. Table: exercise_secondary_muscles (Many-to-Many)
+-- 4. EXERCISE SECONDARY MUSCLES (Many-to-Many)
 CREATE TABLE IF NOT EXISTS exercise.exercise_secondary_muscles (
     exercise_id VARCHAR(255) NOT NULL REFERENCES exercise.exercises(id) ON DELETE CASCADE,
     muscle_id VARCHAR(255) NOT NULL REFERENCES exercise.muscles(id) ON DELETE CASCADE,
@@ -71,7 +99,7 @@ CREATE TABLE IF NOT EXISTS exercise.exercise_secondary_muscles (
 
 CREATE INDEX IF NOT EXISTS idx_ex_sec_muscle_muscle ON exercise.exercise_secondary_muscles(muscle_id);
 
--- 7. Table: exercise_tags (Many-to-Many)
+-- 5. EXERCISE TAGS (Many-to-Many)
 CREATE TABLE IF NOT EXISTS exercise.exercise_tags (
     exercise_id VARCHAR(255) NOT NULL REFERENCES exercise.exercises(id) ON DELETE CASCADE,
     tag_id VARCHAR(255) NOT NULL REFERENCES exercise.tags(id) ON DELETE CASCADE,
@@ -80,15 +108,12 @@ CREATE TABLE IF NOT EXISTS exercise.exercise_tags (
 
 CREATE INDEX IF NOT EXISTS idx_ex_tag_tag ON exercise.exercise_tags(tag_id);
 
--- 8. Table: motion_specifications
-CREATE TABLE IF NOT EXISTS exercise.motion_specifications (
+-- 6. EXERCISE STATS (One-to-One Performance Tracking)
+CREATE TABLE IF NOT EXISTS exercise.exercise_stats (
     exercise_id VARCHAR(255) PRIMARY KEY REFERENCES exercise.exercises(id) ON DELETE CASCADE,
-    min_rom_percent INT DEFAULT 70,
-    calibration_distance_min NUMERIC(5, 2) DEFAULT 1.5,
-    calibration_distance_max NUMERIC(5, 2) DEFAULT 2.0,
-    calibration_angle NUMERIC(5, 2) DEFAULT 0.0,
+    total_logs INT NOT NULL DEFAULT 0,
+    average_rating NUMERIC(3, 2) NOT NULL DEFAULT 0.0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_exercise_outbox_log_event_status ON exercise.outbox_log (event_id, status);

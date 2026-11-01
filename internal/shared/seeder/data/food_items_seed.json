@@ -1,0 +1,1874 @@
+[
+  {
+    "name": "Ức gà không da tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 165,
+    "protein_per_100g": 31,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 3.6,
+    "allergen_tags": [],
+    "protein_source": "CHICKEN",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đùi gà tháo da",
+    "category": "PROTEIN",
+    "calories_per_100g": 209,
+    "protein_per_100g": 26,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 10.9,
+    "allergen_tags": [],
+    "protein_source": "CHICKEN",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cánh gà nướng",
+    "category": "PROTEIN",
+    "calories_per_100g": 290,
+    "protein_per_100g": 27,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 19.5,
+    "allergen_tags": [],
+    "protein_source": "CHICKEN",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt gà xay nạc",
+    "category": "PROTEIN",
+    "calories_per_100g": 143,
+    "protein_per_100g": 23,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 5.7,
+    "allergen_tags": [],
+    "protein_source": "CHICKEN",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Gà tây phi lê",
+    "category": "PROTEIN",
+    "calories_per_100g": 135,
+    "protein_per_100g": 30,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 1.5,
+    "allergen_tags": [],
+    "protein_source": "TURKEY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt bò nạc mông",
+    "category": "PROTEIN",
+    "calories_per_100g": 250,
+    "protein_per_100g": 26,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 15,
+    "allergen_tags": [],
+    "protein_source": "BEEF",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thăn bò Úc",
+    "category": "PROTEIN",
+    "calories_per_100g": 217,
+    "protein_per_100g": 26.1,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 11.8,
+    "allergen_tags": [],
+    "protein_source": "BEEF",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bắp bò tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 201,
+    "protein_per_100g": 34,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 6.3,
+    "allergen_tags": [],
+    "protein_source": "BEEF",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt bò xay 90/10",
+    "category": "PROTEIN",
+    "calories_per_100g": 176,
+    "protein_per_100g": 20,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 10,
+    "allergen_tags": [],
+    "protein_source": "BEEF",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Sườn bò nướng",
+    "category": "PROTEIN",
+    "calories_per_100g": 290,
+    "protein_per_100g": 24,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 21,
+    "allergen_tags": [],
+    "protein_source": "BEEF",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt heo thăn nạc",
+    "category": "PROTEIN",
+    "calories_per_100g": 143,
+    "protein_per_100g": 26,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 3.5,
+    "allergen_tags": [],
+    "protein_source": "PORK",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt heo vai nạc",
+    "category": "PROTEIN",
+    "calories_per_100g": 186,
+    "protein_per_100g": 21,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 11,
+    "allergen_tags": [],
+    "protein_source": "PORK",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Ba chỉ heo tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 518,
+    "protein_per_100g": 9,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 53,
+    "allergen_tags": [],
+    "protein_source": "PORK",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Chả lụa heo nạc",
+    "category": "PROTEIN",
+    "calories_per_100g": 136,
+    "protein_per_100g": 15,
+    "carbs_per_100g": 2,
+    "fat_per_100g": 7.5,
+    "allergen_tags": [],
+    "protein_source": "PORK",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt heo xay nạc",
+    "category": "PROTEIN",
+    "calories_per_100g": 210,
+    "protein_per_100g": 19,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 14.5,
+    "allergen_tags": [],
+    "protein_source": "PORK",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá hồi phi lê tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 208,
+    "protein_per_100g": 20,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 13,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá ngừ đại dương tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 130,
+    "protein_per_100g": 28,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 1,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá ngừ ngâm nước khoáng (Hộp)",
+    "category": "PROTEIN",
+    "calories_per_100g": 116,
+    "protein_per_100g": 26,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 1,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá thu tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 205,
+    "protein_per_100g": 19,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 13.9,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá bass (Cá chẽm)",
+    "category": "PROTEIN",
+    "calories_per_100g": 124,
+    "protein_per_100g": 23,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 3,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá lóc đồng",
+    "category": "PROTEIN",
+    "calories_per_100g": 97,
+    "protein_per_100g": 18.2,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 2.7,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá chép tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 127,
+    "protein_per_100g": 16,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 5.6,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá rô phi phi lê",
+    "category": "PROTEIN",
+    "calories_per_100g": 96,
+    "protein_per_100g": 20,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 1.7,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cá tuyết (Cod)",
+    "category": "PROTEIN",
+    "calories_per_100g": 82,
+    "protein_per_100g": 18,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 0.7,
+    "allergen_tags": [
+      "FISH"
+    ],
+    "protein_source": "FISH",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Tôm sú tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 99,
+    "protein_per_100g": 24,
+    "carbs_per_100g": 0.2,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [
+      "SEAFOOD"
+    ],
+    "protein_source": "SEAFOOD",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Mực ống tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 92,
+    "protein_per_100g": 15.6,
+    "carbs_per_100g": 3.1,
+    "fat_per_100g": 1.4,
+    "allergen_tags": [
+      "SEAFOOD"
+    ],
+    "protein_source": "SEAFOOD",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Mực lá hấp",
+    "category": "PROTEIN",
+    "calories_per_100g": 105,
+    "protein_per_100g": 18,
+    "carbs_per_100g": 2,
+    "fat_per_100g": 1.8,
+    "allergen_tags": [
+      "SEAFOOD"
+    ],
+    "protein_source": "SEAFOOD",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bạch tuộc nướng",
+    "category": "PROTEIN",
+    "calories_per_100g": 82,
+    "protein_per_100g": 14.9,
+    "carbs_per_100g": 2.2,
+    "fat_per_100g": 1,
+    "allergen_tags": [
+      "SEAFOOD"
+    ],
+    "protein_source": "SEAFOOD",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cua biển hấp",
+    "category": "PROTEIN",
+    "calories_per_100g": 97,
+    "protein_per_100g": 19,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 1.5,
+    "allergen_tags": [
+      "SEAFOOD"
+    ],
+    "protein_source": "SEAFOOD",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Sò điệp tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 88,
+    "protein_per_100g": 16.8,
+    "carbs_per_100g": 2.4,
+    "fat_per_100g": 0.8,
+    "allergen_tags": [
+      "SEAFOOD"
+    ],
+    "protein_source": "SEAFOOD",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Trứng gà tươi (Cả quả)",
+    "category": "PROTEIN",
+    "calories_per_100g": 155,
+    "protein_per_100g": 13,
+    "carbs_per_100g": 1.1,
+    "fat_per_100g": 11,
+    "allergen_tags": [
+      "EGG"
+    ],
+    "protein_source": "EGG",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Lòng trắng trứng gà",
+    "category": "PROTEIN",
+    "calories_per_100g": 52,
+    "protein_per_100g": 11,
+    "carbs_per_100g": 0.7,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [
+      "EGG"
+    ],
+    "protein_source": "EGG",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Trứng vịt",
+    "category": "PROTEIN",
+    "calories_per_100g": 185,
+    "protein_per_100g": 12.8,
+    "carbs_per_100g": 1.4,
+    "fat_per_100g": 13.8,
+    "allergen_tags": [
+      "EGG"
+    ],
+    "protein_source": "EGG",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Trứng cút",
+    "category": "PROTEIN",
+    "calories_per_100g": 158,
+    "protein_per_100g": 13,
+    "carbs_per_100g": 0.4,
+    "fat_per_100g": 11,
+    "allergen_tags": [
+      "EGG"
+    ],
+    "protein_source": "EGG",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu phụ mềm tươi",
+    "category": "PROTEIN",
+    "calories_per_100g": 76,
+    "protein_per_100g": 8,
+    "carbs_per_100g": 1.9,
+    "fat_per_100g": 4.8,
+    "allergen_tags": [
+      "SOY"
+    ],
+    "protein_source": "SOY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu phụ chiên sơ",
+    "category": "PROTEIN",
+    "calories_per_100g": 156,
+    "protein_per_100g": 14,
+    "carbs_per_100g": 3,
+    "fat_per_100g": 9.5,
+    "allergen_tags": [
+      "SOY"
+    ],
+    "protein_source": "SOY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu nành luộc (Edamame)",
+    "category": "PROTEIN",
+    "calories_per_100g": 122,
+    "protein_per_100g": 11,
+    "carbs_per_100g": 10,
+    "fat_per_100g": 5,
+    "allergen_tags": [
+      "SOY"
+    ],
+    "protein_source": "SOY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Tempeh đậu nành",
+    "category": "PROTEIN",
+    "calories_per_100g": 193,
+    "protein_per_100g": 19,
+    "carbs_per_100g": 9,
+    "fat_per_100g": 11,
+    "allergen_tags": [
+      "SOY"
+    ],
+    "protein_source": "SOY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Seitan (Mì căn đạm lúa mì)",
+    "category": "PROTEIN",
+    "calories_per_100g": 370,
+    "protein_per_100g": 75,
+    "carbs_per_100g": 14,
+    "fat_per_100g": 1.9,
+    "allergen_tags": [
+      "WHEAT"
+    ],
+    "protein_source": "WHEAT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt cừu nạc",
+    "category": "PROTEIN",
+    "calories_per_100g": 206,
+    "protein_per_100g": 20,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 13.5,
+    "allergen_tags": [],
+    "protein_source": "LAMB",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thịt vịt bỏ da",
+    "category": "PROTEIN",
+    "calories_per_100g": 201,
+    "protein_per_100g": 23.5,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 11.2,
+    "allergen_tags": [],
+    "protein_source": "DUCK",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa chua Hy Lạp không đường",
+    "category": "PROTEIN",
+    "calories_per_100g": 59,
+    "protein_per_100g": 10,
+    "carbs_per_100g": 3.6,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Phô mai Cottage Cheese",
+    "category": "PROTEIN",
+    "calories_per_100g": 98,
+    "protein_per_100g": 11,
+    "carbs_per_100g": 3.4,
+    "fat_per_100g": 4.3,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cơm gạo lứt luộc",
+    "category": "CARB",
+    "calories_per_100g": 110,
+    "protein_per_100g": 2.6,
+    "carbs_per_100g": 23,
+    "fat_per_100g": 0.9,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cơm trắng nấu chín",
+    "category": "CARB",
+    "calories_per_100g": 130,
+    "protein_per_100g": 2.7,
+    "carbs_per_100g": 28,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cơm gạo đỏ Huyết Rồng",
+    "category": "CARB",
+    "calories_per_100g": 112,
+    "protein_per_100g": 2.5,
+    "carbs_per_100g": 24,
+    "fat_per_100g": 0.8,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Khoai lang mật luộc",
+    "category": "CARB",
+    "calories_per_100g": 90,
+    "protein_per_100g": 2,
+    "carbs_per_100g": 21,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "carb_source": "SWEET_POTATO",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Khoai lang tím luộc",
+    "category": "CARB",
+    "calories_per_100g": 86,
+    "protein_per_100g": 1.6,
+    "carbs_per_100g": 20,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "carb_source": "SWEET_POTATO",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Khoai tây luộc nguyên vỏ",
+    "category": "CARB",
+    "calories_per_100g": 87,
+    "protein_per_100g": 1.9,
+    "carbs_per_100g": 20,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "carb_source": "POTATO",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Khoai tây nướng thảo mộc",
+    "category": "CARB",
+    "calories_per_100g": 93,
+    "protein_per_100g": 2.5,
+    "carbs_per_100g": 21,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "carb_source": "POTATO",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Khoai môn hấp",
+    "category": "CARB",
+    "calories_per_100g": 112,
+    "protein_per_100g": 1.5,
+    "carbs_per_100g": 26,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "carb_source": "ROOT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Khoai mì (Sắn) luộc",
+    "category": "CARB",
+    "calories_per_100g": 160,
+    "protein_per_100g": 1.4,
+    "carbs_per_100g": 38,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "carb_source": "ROOT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Yến mạch cán vỡ Quick Oats",
+    "category": "CARB",
+    "calories_per_100g": 389,
+    "protein_per_100g": 16.9,
+    "carbs_per_100g": 66,
+    "fat_per_100g": 6.9,
+    "allergen_tags": [],
+    "carb_source": "OATS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Yến mạch nguyên hạt Rolled Oats",
+    "category": "CARB",
+    "calories_per_100g": 379,
+    "protein_per_100g": 13,
+    "carbs_per_100g": 67,
+    "fat_per_100g": 6.5,
+    "allergen_tags": [],
+    "carb_source": "OATS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt diêm mạch (Quinoa) nấu chín",
+    "category": "CARB",
+    "calories_per_100g": 120,
+    "protein_per_100g": 4.4,
+    "carbs_per_100g": 21,
+    "fat_per_100g": 1.9,
+    "allergen_tags": [],
+    "carb_source": "QUINOA",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt kiều mạch (Buckwheat)",
+    "category": "CARB",
+    "calories_per_100g": 343,
+    "protein_per_100g": 13,
+    "carbs_per_100g": 71,
+    "fat_per_100g": 3.4,
+    "allergen_tags": [],
+    "carb_source": "GRAIN",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bánh mì đen lúa mạch (Rye Bread)",
+    "category": "CARB",
+    "calories_per_100g": 259,
+    "protein_per_100g": 8.5,
+    "carbs_per_100g": 48,
+    "fat_per_100g": 3.3,
+    "allergen_tags": [
+      "WHEAT"
+    ],
+    "carb_source": "WHEAT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bánh mì nguyên cám Whole Wheat",
+    "category": "CARB",
+    "calories_per_100g": 247,
+    "protein_per_100g": 13,
+    "carbs_per_100g": 41,
+    "fat_per_100g": 3.4,
+    "allergen_tags": [
+      "WHEAT"
+    ],
+    "carb_source": "WHEAT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bánh mì sandwich trắng",
+    "category": "CARB",
+    "calories_per_100g": 265,
+    "protein_per_100g": 9,
+    "carbs_per_100g": 49,
+    "fat_per_100g": 3.2,
+    "allergen_tags": [
+      "WHEAT"
+    ],
+    "carb_source": "WHEAT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bún tươi lứt",
+    "category": "CARB",
+    "calories_per_100g": 130,
+    "protein_per_100g": 2.2,
+    "carbs_per_100g": 28,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bún trắng tươi",
+    "category": "CARB",
+    "calories_per_100g": 110,
+    "protein_per_100g": 1.7,
+    "carbs_per_100g": 25,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Phở tươi lứt",
+    "category": "CARB",
+    "calories_per_100g": 135,
+    "protein_per_100g": 2.4,
+    "carbs_per_100g": 29,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Mì Ý nguyên cám (Whole Wheat Pasta)",
+    "category": "CARB",
+    "calories_per_100g": 124,
+    "protein_per_100g": 5.3,
+    "carbs_per_100g": 26,
+    "fat_per_100g": 0.5,
+    "allergen_tags": [
+      "WHEAT"
+    ],
+    "carb_source": "WHEAT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Mì Shirataki (Bún Konjac 0 calo)",
+    "category": "CARB",
+    "calories_per_100g": 10,
+    "protein_per_100g": 0.2,
+    "carbs_per_100g": 2,
+    "fat_per_100g": 0,
+    "allergen_tags": [],
+    "carb_source": "KONJAC",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Mì chũ Bắc Giang",
+    "category": "CARB",
+    "calories_per_100g": 350,
+    "protein_per_100g": 7,
+    "carbs_per_100g": 78,
+    "fat_per_100g": 0.5,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Miến dong riềng",
+    "category": "CARB",
+    "calories_per_100g": 330,
+    "protein_per_100g": 0.7,
+    "carbs_per_100g": 82,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "carb_source": "ROOT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bánh phở khô",
+    "category": "CARB",
+    "calories_per_100g": 348,
+    "protein_per_100g": 6,
+    "carbs_per_100g": 79,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "carb_source": "RICE",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Nổ bắp ngô luộc (Corn)",
+    "category": "CARB",
+    "calories_per_100g": 96,
+    "protein_per_100g": 3.4,
+    "carbs_per_100g": 21,
+    "fat_per_100g": 1.5,
+    "allergen_tags": [],
+    "carb_source": "CORN",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu đen luộc",
+    "category": "CARB",
+    "calories_per_100g": 132,
+    "protein_per_100g": 8.9,
+    "carbs_per_100g": 23.7,
+    "fat_per_100g": 0.5,
+    "allergen_tags": [],
+    "carb_source": "BEANS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu đỏ luộc",
+    "category": "CARB",
+    "calories_per_100g": 127,
+    "protein_per_100g": 8.7,
+    "carbs_per_100g": 22.8,
+    "fat_per_100g": 0.5,
+    "allergen_tags": [],
+    "carb_source": "BEANS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu xanh luộc",
+    "category": "CARB",
+    "calories_per_100g": 105,
+    "protein_per_100g": 7,
+    "carbs_per_100g": 19,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "carb_source": "BEANS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu Lăng đỏ (Lentils)",
+    "category": "CARB",
+    "calories_per_100g": 116,
+    "protein_per_100g": 9,
+    "carbs_per_100g": 20,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "carb_source": "LENTILS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu Gà luộc (Chickpeas)",
+    "category": "CARB",
+    "calories_per_100g": 164,
+    "protein_per_100g": 8.9,
+    "carbs_per_100g": 27,
+    "fat_per_100g": 2.6,
+    "allergen_tags": [],
+    "carb_source": "BEANS",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Chuối tiêu chín",
+    "category": "CARB",
+    "calories_per_100g": 89,
+    "protein_per_100g": 1.1,
+    "carbs_per_100g": 23,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Táo đỏ Mỹ",
+    "category": "CARB",
+    "calories_per_100g": 52,
+    "protein_per_100g": 0.3,
+    "carbs_per_100g": 14,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cam sành Việt Nam",
+    "category": "CARB",
+    "calories_per_100g": 47,
+    "protein_per_100g": 0.9,
+    "carbs_per_100g": 12,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Thơm (Dứa) chín",
+    "category": "CARB",
+    "calories_per_100g": 50,
+    "protein_per_100g": 0.5,
+    "carbs_per_100g": 13,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Xoài chín",
+    "category": "CARB",
+    "calories_per_100g": 60,
+    "protein_per_100g": 0.8,
+    "carbs_per_100g": 15,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dưa hấu tươi",
+    "category": "CARB",
+    "calories_per_100g": 30,
+    "protein_per_100g": 0.6,
+    "carbs_per_100g": 7.5,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dâu tây tươi",
+    "category": "CARB",
+    "calories_per_100g": 32,
+    "protein_per_100g": 0.7,
+    "carbs_per_100g": 7.7,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Việt quất tươi (Blueberry)",
+    "category": "CARB",
+    "calories_per_100g": 57,
+    "protein_per_100g": 0.7,
+    "carbs_per_100g": 14,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bưởi da xanh",
+    "category": "CARB",
+    "calories_per_100g": 38,
+    "protein_per_100g": 0.8,
+    "carbs_per_100g": 9.5,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Kiwi xanh",
+    "category": "CARB",
+    "calories_per_100g": 61,
+    "protein_per_100g": 1.1,
+    "carbs_per_100g": 15,
+    "fat_per_100g": 0.5,
+    "allergen_tags": [],
+    "carb_source": "FRUIT",
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bông cải xanh (Broccoli)",
+    "category": "VEGGIE",
+    "calories_per_100g": 34,
+    "protein_per_100g": 2.8,
+    "carbs_per_100g": 7,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bông cải trắng (Cauliflower)",
+    "category": "VEGGIE",
+    "calories_per_100g": 25,
+    "protein_per_100g": 1.9,
+    "carbs_per_100g": 5,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Măng tây tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 20,
+    "protein_per_100g": 2.2,
+    "carbs_per_100g": 3.8,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Rau bina (Cải bó xôi)",
+    "category": "VEGGIE",
+    "calories_per_100g": 23,
+    "protein_per_100g": 2.9,
+    "carbs_per_100g": 3.6,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cải kale (Xoăn)",
+    "category": "VEGGIE",
+    "calories_per_100g": 49,
+    "protein_per_100g": 4.3,
+    "carbs_per_100g": 8.8,
+    "fat_per_100g": 0.9,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cải thìa tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 13,
+    "protein_per_100g": 1.5,
+    "carbs_per_100g": 2.2,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cải ngọt luộc",
+    "category": "VEGGIE",
+    "calories_per_100g": 16,
+    "protein_per_100g": 1.7,
+    "carbs_per_100g": 2.8,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cải thảo tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 16,
+    "protein_per_100g": 1.2,
+    "carbs_per_100g": 3.2,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Rau muống luộc",
+    "category": "VEGGIE",
+    "calories_per_100g": 19,
+    "protein_per_100g": 3.2,
+    "carbs_per_100g": 2.1,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Rau ngót luộc",
+    "category": "VEGGIE",
+    "calories_per_100g": 35,
+    "protein_per_100g": 5.3,
+    "carbs_per_100g": 3.4,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Rau mồng tơi",
+    "category": "VEGGIE",
+    "calories_per_100g": 14,
+    "protein_per_100g": 2,
+    "carbs_per_100g": 2.4,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Rau dền đỏ",
+    "category": "VEGGIE",
+    "calories_per_100g": 23,
+    "protein_per_100g": 2.5,
+    "carbs_per_100g": 4,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cần tây tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 16,
+    "protein_per_100g": 0.7,
+    "carbs_per_100g": 3,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Xà lách Lô-măng (Romaine)",
+    "category": "VEGGIE",
+    "calories_per_100g": 17,
+    "protein_per_100g": 1.2,
+    "carbs_per_100g": 3.3,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Xà lách mỡ tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 14,
+    "protein_per_100g": 1.3,
+    "carbs_per_100g": 2.2,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cà chua ripe tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 18,
+    "protein_per_100g": 0.9,
+    "carbs_per_100g": 3.9,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dưa leo (Dưa chuột)",
+    "category": "VEGGIE",
+    "calories_per_100g": 15,
+    "protein_per_100g": 0.7,
+    "carbs_per_100g": 3.6,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cà rốt tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 41,
+    "protein_per_100g": 0.9,
+    "carbs_per_100g": 9.6,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Ớt chuông đỏ",
+    "category": "VEGGIE",
+    "calories_per_100g": 31,
+    "protein_per_100g": 1,
+    "carbs_per_100g": 6,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Ớt chuông vàng",
+    "category": "VEGGIE",
+    "calories_per_100g": 27,
+    "protein_per_100g": 1,
+    "carbs_per_100g": 6.3,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Ớt chuông xanh",
+    "category": "VEGGIE",
+    "calories_per_100g": 20,
+    "protein_per_100g": 0.9,
+    "carbs_per_100g": 4.6,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bí ngòi xanh (Zucchini)",
+    "category": "VEGGIE",
+    "calories_per_100g": 17,
+    "protein_per_100g": 1.2,
+    "carbs_per_100g": 3.1,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bí đỏ (Bí rợ) hấp",
+    "category": "VEGGIE",
+    "calories_per_100g": 26,
+    "protein_per_100g": 1,
+    "carbs_per_100g": 6.5,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bắp cải tím",
+    "category": "VEGGIE",
+    "calories_per_100g": 31,
+    "protein_per_100g": 1.4,
+    "carbs_per_100g": 7.4,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bắp cải trắng",
+    "category": "VEGGIE",
+    "calories_per_100g": 25,
+    "protein_per_100g": 1.3,
+    "carbs_per_100g": 5.8,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Cà tím nướng",
+    "category": "VEGGIE",
+    "calories_per_100g": 25,
+    "protein_per_100g": 1,
+    "carbs_per_100g": 6,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu đũa luộc",
+    "category": "VEGGIE",
+    "calories_per_100g": 47,
+    "protein_per_100g": 2.8,
+    "carbs_per_100g": 8,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Đậu cô ve luộc",
+    "category": "VEGGIE",
+    "calories_per_100g": 31,
+    "protein_per_100g": 1.8,
+    "carbs_per_100g": 7,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Nấm đùi gà tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 35,
+    "protein_per_100g": 3.1,
+    "carbs_per_100g": 6,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Nấm kim châm",
+    "category": "VEGGIE",
+    "calories_per_100g": 37,
+    "protein_per_100g": 2.7,
+    "carbs_per_100g": 7.8,
+    "fat_per_100g": 0.3,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Nấm rơm tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 32,
+    "protein_per_100g": 3.8,
+    "carbs_per_100g": 5,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Nấm đông cô (Hương) tươi",
+    "category": "VEGGIE",
+    "calories_per_100g": 34,
+    "protein_per_100g": 2.2,
+    "carbs_per_100g": 6.8,
+    "fat_per_100g": 0.5,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Nấm bào ngư xám",
+    "category": "VEGGIE",
+    "calories_per_100g": 33,
+    "protein_per_100g": 3.3,
+    "carbs_per_100g": 6.1,
+    "fat_per_100g": 0.4,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Mộc nhĩ (Nấm mèo) ngâm nở",
+    "category": "VEGGIE",
+    "calories_per_100g": 25,
+    "protein_per_100g": 1,
+    "carbs_per_100g": 6.5,
+    "fat_per_100g": 0.2,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dầu Oliu nguyên chất Extra Virgin",
+    "category": "FAT",
+    "calories_per_100g": 884,
+    "protein_per_100g": 0,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 100,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dầu bơ (Avocado Oil)",
+    "category": "FAT",
+    "calories_per_100g": 884,
+    "protein_per_100g": 0,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 100,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dầu dừa tinh khiết",
+    "category": "FAT",
+    "calories_per_100g": 862,
+    "protein_per_100g": 0,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 100,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Dầu mè (Sesame Oil)",
+    "category": "FAT",
+    "calories_per_100g": 884,
+    "protein_per_100g": 0,
+    "carbs_per_100g": 0,
+    "fat_per_100g": 100,
+    "allergen_tags": [
+      "SESAME"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Quả bơ sáp tươi",
+    "category": "FAT",
+    "calories_per_100g": 160,
+    "protein_per_100g": 2,
+    "carbs_per_100g": 8.5,
+    "fat_per_100g": 14.7,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt hạnh nhân (Almond)",
+    "category": "FAT",
+    "calories_per_100g": 579,
+    "protein_per_100g": 21,
+    "carbs_per_100g": 22,
+    "fat_per_100g": 49.9,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt óc chó (Walnut)",
+    "category": "FAT",
+    "calories_per_100g": 654,
+    "protein_per_100g": 15,
+    "carbs_per_100g": 13.7,
+    "fat_per_100g": 65.2,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt điều rang muối",
+    "category": "FAT",
+    "calories_per_100g": 553,
+    "protein_per_100g": 18,
+    "carbs_per_100g": 30,
+    "fat_per_100g": 44,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt Macca Úc",
+    "category": "FAT",
+    "calories_per_100g": 718,
+    "protein_per_100g": 7.9,
+    "carbs_per_100g": 13.8,
+    "fat_per_100g": 75.8,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt chia tươi (Chia Seeds)",
+    "category": "FAT",
+    "calories_per_100g": 486,
+    "protein_per_100g": 16.5,
+    "carbs_per_100g": 42,
+    "fat_per_100g": 30.7,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt lanh (Flaxseeds)",
+    "category": "FAT",
+    "calories_per_100g": 534,
+    "protein_per_100g": 18,
+    "carbs_per_100g": 29,
+    "fat_per_100g": 42,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt hướng dương tách vỏ",
+    "category": "FAT",
+    "calories_per_100g": 584,
+    "protein_per_100g": 20,
+    "carbs_per_100g": 20,
+    "fat_per_100g": 51,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Hạt bí tách vỏ",
+    "category": "FAT",
+    "calories_per_100g": 559,
+    "protein_per_100g": 30,
+    "carbs_per_100g": 10.7,
+    "fat_per_100g": 49,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bơ đậu phộng nguyên chất (Mịn)",
+    "category": "FAT",
+    "calories_per_100g": 588,
+    "protein_per_100g": 25,
+    "carbs_per_100g": 20,
+    "fat_per_100g": 50,
+    "allergen_tags": [
+      "PEANUT"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Bơ hạnh nhân (Almond Butter)",
+    "category": "FAT",
+    "calories_per_100g": 614,
+    "protein_per_100g": 21,
+    "carbs_per_100g": 19,
+    "fat_per_100g": 56,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Socola đen 85% Cacao",
+    "category": "FAT",
+    "calories_per_100g": 600,
+    "protein_per_100g": 7.8,
+    "carbs_per_100g": 36,
+    "fat_per_100g": 46,
+    "allergen_tags": [],
+    "is_nutifood_product": false,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood Varna Complete 250ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 80,
+    "protein_per_100g": 4,
+    "carbs_per_100g": 10,
+    "fat_per_100g": 2.5,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood Varna Elite Hoàng Gia 237ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 95,
+    "protein_per_100g": 5,
+    "carbs_per_100g": 11.5,
+    "fat_per_100g": 3,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood Varna Diabetes 237ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 75,
+    "protein_per_100g": 4.2,
+    "carbs_per_100g": 8.5,
+    "fat_per_100g": 2.6,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood LeanMax High Protein Shake",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 100,
+    "protein_per_100g": 8,
+    "carbs_per_100g": 12,
+    "fat_per_100g": 2,
+    "allergen_tags": [
+      "WHEY"
+    ],
+    "protein_source": "WHEY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood Enplus Gold Dinh Dưỡng Cao",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 100,
+    "protein_per_100g": 4.5,
+    "carbs_per_100g": 13,
+    "fat_per_100g": 3.2,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood GrowPLUS+ Đỏ 110ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 85,
+    "protein_per_100g": 3.5,
+    "carbs_per_100g": 11,
+    "fat_per_100g": 2.8,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood GrowPLUS+ Trắng giảm cân",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 65,
+    "protein_per_100g": 4.5,
+    "carbs_per_100g": 8,
+    "fat_per_100g": 1.5,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa NutiFood CaloPic Phục Hồi Thể Lực",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 110,
+    "protein_per_100g": 6,
+    "carbs_per_100g": 14,
+    "fat_per_100g": 3.5,
+    "allergen_tags": [
+      "WHEY"
+    ],
+    "protein_source": "WHEY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa Tiệt Trùng NutiFood 100% Sữa Tươi 220ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 62,
+    "protein_per_100g": 3,
+    "carbs_per_100g": 4.8,
+    "fat_per_100g": 3.3,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa Đậu Nành NutiFood Nguyên Chất",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 45,
+    "protein_per_100g": 3.2,
+    "carbs_per_100g": 4,
+    "fat_per_100g": 1.8,
+    "allergen_tags": [
+      "SOY"
+    ],
+    "protein_source": "SOY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa Hạt Óc Chó NutiFood Varna 200ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 58,
+    "protein_per_100g": 2,
+    "carbs_per_100g": 7.5,
+    "fat_per_100g": 2.2,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "protein_source": "NUTS",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa Hạt Hạnh Nhân NutiFood 200ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 52,
+    "protein_per_100g": 1.8,
+    "carbs_per_100g": 6.8,
+    "fat_per_100g": 2,
+    "allergen_tags": [
+      "NUTS"
+    ],
+    "protein_source": "NUTS",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Bánh Dinh Dưỡng NutiFood FitBar Protein Granola",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 350,
+    "protein_per_100g": 15,
+    "carbs_per_100g": 45,
+    "fat_per_100g": 10,
+    "allergen_tags": [
+      "SOY",
+      "OATS"
+    ],
+    "protein_source": "SOY",
+    "carb_source": "OATS",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Bánh Ngũ Cốc Dinh Dưỡng NutiFood NuVi",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 380,
+    "protein_per_100g": 8,
+    "carbs_per_100g": 65,
+    "fat_per_100g": 9,
+    "allergen_tags": [
+      "WHEAT"
+    ],
+    "carb_source": "WHEAT",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Bột Ngũ Cốc Dinh Dưỡng NutiFood 20T",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 400,
+    "protein_per_100g": 10,
+    "carbs_per_100g": 70,
+    "fat_per_100g": 8,
+    "allergen_tags": [
+      "SOY"
+    ],
+    "protein_source": "SOY",
+    "carb_source": "RICE",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa Chua Uống NutiFood NuVi Trái Cây 100ml",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 60,
+    "protein_per_100g": 1.2,
+    "carbs_per_100g": 12.5,
+    "fat_per_100g": 0.6,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Sữa Chua Ăn NutiFood Nha Đam 100g",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 90,
+    "protein_per_100g": 3,
+    "carbs_per_100g": 15,
+    "fat_per_100g": 2,
+    "allergen_tags": [
+      "DAIRY"
+    ],
+    "protein_source": "DAIRY",
+    "is_nutifood_product": true,
+    "status": "Active"
+  },
+  {
+    "name": "Thạch Dinh Dưỡng NutiFood NuVi Jelly Pro",
+    "category": "NUTIFOOD",
+    "calories_per_100g": 50,
+    "protein_per_100g": 0.5,
+    "carbs_per_100g": 12,
+    "fat_per_100g": 0.1,
+    "allergen_tags": [],
+    "is_nutifood_product": true,
+    "status": "Active"
+  }
+]

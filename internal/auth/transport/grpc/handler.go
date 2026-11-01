@@ -18,7 +18,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -126,14 +125,7 @@ func (h *GRPCHandler) Logout(
 	ctx context.Context,
 	req *authv1message.LogoutRequest,
 ) (*authv1message.LogoutResponse, error) {
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
-	if userID == "" {
-		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			if vals := md.Get("x-user-id"); len(vals) > 0 {
-				userID = vals[0]
-			}
-		}
-	}
+	userID := extractUserID(ctx)
 
 	err := h.logoutHandler.Handle(ctx, command.LogoutCommand{
 		RefreshToken: req.RefreshToken,
@@ -363,14 +355,7 @@ func (h *GRPCHandler) ChangePassword(
 	if h.changePasswordHandler == nil {
 		return nil, status.Errorf(codes.Unimplemented, "method ChangePassword not implemented")
 	}
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
-	if userID == "" {
-		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			if vals := md.Get("x-user-id"); len(vals) > 0 {
-				userID = vals[0]
-			}
-		}
-	}
+	userID := extractUserID(ctx)
 	res, err := h.changePasswordHandler.Handle(ctx, command.ChangePasswordCommand{
 		UserID:          userID,
 		OldPassword:     req.OldPassword,
@@ -697,40 +682,15 @@ func toProtoUserInfo(u *aggregate.User) *authv1message.UserInfo {
 
 func extractUserID(ctx context.Context) string {
 	userID, _ := ctx.Value(middleware.UserIDKey).(string)
-	if userID != "" {
-		return userID
-	}
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if vals := md.Get("x-user-id"); len(vals) > 0 {
-			return vals[0]
-		}
-	}
-	return ""
+	return userID
 }
 
 func extractActor(ctx context.Context) (middleware.Actor, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
-	if err == nil && actor.UserID != "" {
-		return actor, nil
+	if err != nil || actor.UserID == "" {
+		return middleware.Actor{}, middleware.ErrUnauthorized
 	}
-	// Fallback to incoming metadata
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		userID := ""
-		if vals := md.Get("x-user-id"); len(vals) > 0 {
-			userID = vals[0]
-		}
-		role := ""
-		if vals := md.Get("x-user-role"); len(vals) > 0 {
-			role = vals[0]
-		}
-		if userID != "" {
-			return middleware.Actor{
-				UserID: userID,
-				Role:   role,
-			}, nil
-		}
-	}
-	return middleware.Actor{}, middleware.ErrUnauthorized
+	return actor, nil
 }
 
 func toProtoBrandRequest(r *entity.BrandRequest) *authv1message.BrandRequest {
@@ -798,9 +758,6 @@ func (c *ConnectAuthHandler) Logout(
 	ctx context.Context,
 	req *connect.Request[authv1message.LogoutRequest],
 ) (*connect.Response[authv1message.LogoutResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
 	res, err := c.grpcHandler.Logout(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -900,9 +857,6 @@ func (c *ConnectAuthHandler) ChangePassword(
 	ctx context.Context,
 	req *connect.Request[authv1message.ChangePasswordRequest],
 ) (*connect.Response[authv1message.ChangePasswordResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
 	res, err := c.grpcHandler.ChangePassword(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -925,9 +879,6 @@ func (c *ConnectAuthHandler) RegisterBrand(
 	ctx context.Context,
 	req *connect.Request[authv1message.RegisterBrandRequest],
 ) (*connect.Response[authv1message.RegisterBrandResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
 	res, err := c.grpcHandler.RegisterBrand(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -939,12 +890,6 @@ func (c *ConnectAuthHandler) ApproveBrand(
 	ctx context.Context,
 	req *connect.Request[authv1message.ApproveBrandRequest],
 ) (*connect.Response[authv1message.ApproveBrandResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
-	if role := req.Header().Get("X-User-Role"); role != "" && ctx.Value(middleware.UserRoleKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-	}
 	res, err := c.grpcHandler.ApproveBrand(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -956,12 +901,6 @@ func (c *ConnectAuthHandler) RejectBrand(
 	ctx context.Context,
 	req *connect.Request[authv1message.RejectBrandRequest],
 ) (*connect.Response[authv1message.RejectBrandResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
-	if role := req.Header().Get("X-User-Role"); role != "" && ctx.Value(middleware.UserRoleKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-	}
 	res, err := c.grpcHandler.RejectBrand(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -973,12 +912,6 @@ func (c *ConnectAuthHandler) ListBrandRequests(
 	ctx context.Context,
 	req *connect.Request[authv1message.ListBrandRequestsRequest],
 ) (*connect.Response[authv1message.ListBrandRequestsResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
-	if role := req.Header().Get("X-User-Role"); role != "" && ctx.Value(middleware.UserRoleKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-	}
 	res, err := c.grpcHandler.ListBrandRequests(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -990,12 +923,6 @@ func (c *ConnectAuthHandler) ListUsers(
 	ctx context.Context,
 	req *connect.Request[authv1message.ListUsersRequest],
 ) (*connect.Response[authv1message.ListUsersResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
-	if role := req.Header().Get("X-User-Role"); role != "" && ctx.Value(middleware.UserRoleKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-	}
 	res, err := c.grpcHandler.ListUsers(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -1007,12 +934,6 @@ func (c *ConnectAuthHandler) LockUser(
 	ctx context.Context,
 	req *connect.Request[authv1message.LockUserRequest],
 ) (*connect.Response[authv1message.LockUserResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
-	if role := req.Header().Get("X-User-Role"); role != "" && ctx.Value(middleware.UserRoleKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-	}
 	res, err := c.grpcHandler.LockUser(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -1024,12 +945,6 @@ func (c *ConnectAuthHandler) UnlockUser(
 	ctx context.Context,
 	req *connect.Request[authv1message.UnlockUserRequest],
 ) (*connect.Response[authv1message.UnlockUserResponse], error) {
-	if userID := req.Header().Get("X-User-Id"); userID != "" && ctx.Value(middleware.UserIDKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
-	}
-	if role := req.Header().Get("X-User-Role"); role != "" && ctx.Value(middleware.UserRoleKey) == nil {
-		ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-	}
 	res, err := c.grpcHandler.UnlockUser(ctx, req.Msg)
 	if err != nil {
 		return nil, err

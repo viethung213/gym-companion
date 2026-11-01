@@ -96,11 +96,26 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 		t.Fatalf("Failed to initialize Auth module: %v", err)
 	}
 
+	testAuthInterceptor := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if userID := req.Header().Get("X-User-Id"); userID != "" {
+				ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
+			}
+			if role := req.Header().Get("X-User-Role"); role != "" {
+				ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
+			}
+			return next(ctx, req)
+		}
+	})
+
 	mux := http.NewServeMux()
 	auth.RegisterConnectHandler(
 		mux,
 		grpcHandler,
-		connect.WithInterceptors(middleware.NewConnectErrorMappingInterceptor()),
+		connect.WithInterceptors(
+			middleware.NewConnectErrorMappingInterceptor(),
+			testAuthInterceptor,
+		),
 	)
 	httpServer := &http.Server{Handler: mux}
 

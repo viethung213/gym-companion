@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed migrations/*.sql
+//go:embed migrations/*/*.sql
 var migrationFS embed.FS
 
 //go:embed seeds/*.sql
@@ -22,8 +22,9 @@ var seedFS embed.FS
 const migrationAdvisoryLockID = 0x4649544149
 
 // RunAutoMigrations executes versioned SQL migration scripts and seeds embedded in the binary.
+// targets specifies which subdirectories to run ("core", "ai"). If omitted or empty, all targets ("core", "ai") are run.
 // It is protected by a PostgreSQL distributed advisory lock to guarantee concurrency safety across multiple pods/processes.
-func RunAutoMigrations(ctx context.Context, db *sql.DB) error {
+func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error {
 	conn, connErr := db.Conn(ctx)
 	if connErr != nil {
 		return fmt.Errorf("acquire dedicated connection for migrations: %w", connErr)
@@ -39,34 +40,52 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB) error {
 		}
 	}()
 
-	entries, readDirErr := migrationFS.ReadDir("migrations")
-	if readDirErr != nil {
-		return fmt.Errorf("read embedded migrations directory: %w", readDirErr)
-	}
-
-	var files []string
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
-			files = append(files, entry.Name())
+	var dirs []string
+	if len(targets) == 0 {
+		dirs = []string{"core", "ai"}
+	} else {
+		for _, t := range targets {
+			t = strings.ToLower(strings.TrimSpace(t))
+			if t == "all" || t == "" {
+				dirs = []string{"core", "ai"}
+				break
+			}
+			dirs = append(dirs, t)
 		}
 	}
-	sort.Strings(files)
 
-	log.Printf("Executing %d embedded SQL migrations...", len(files))
-
-	for _, file := range files {
-		content, readFileErr := migrationFS.ReadFile("migrations/" + file)
-		if readFileErr != nil {
-			return fmt.Errorf("read embedded migration file %s: %w", file, readFileErr)
+	for _, dir := range dirs {
+		subDirPath := "migrations/" + dir
+		entries, readDirErr := migrationFS.ReadDir(subDirPath)
+		if readDirErr != nil {
+			return fmt.Errorf("read embedded migrations directory %s: %w", subDirPath, readDirErr)
 		}
 
-		// Strip UTF-8 Byte Order Mark (BOM) if present to avoid syntax errors in PostgreSQL parser
-		content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
-
-		if _, execErr := conn.ExecContext(ctx, string(content)); execErr != nil {
-			return fmt.Errorf("execute embedded migration %s: %w", file, execErr)
+		var files []string
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+				files = append(files, entry.Name())
+			}
 		}
-		log.Printf("Successfully applied SQL migration: %s", file)
+		sort.Strings(files)
+
+		log.Printf("Executing %d embedded SQL migrations for [%s]...", len(files), dir)
+
+		for _, file := range files {
+			filePath := subDirPath + "/" + file
+			content, readFileErr := migrationFS.ReadFile(filePath)
+			if readFileErr != nil {
+				return fmt.Errorf("read embedded migration file %s: %w", filePath, readFileErr)
+			}
+
+			// Strip UTF-8 Byte Order Mark (BOM) if present to avoid syntax errors in PostgreSQL parser
+			content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
+
+			if _, execErr := conn.ExecContext(ctx, string(content)); execErr != nil {
+				return fmt.Errorf("execute embedded migration %s: %w", filePath, execErr)
+			}
+			log.Printf("Successfully applied SQL migration: [%s/%s]", dir, file)
+		}
 	}
 
 	if seedErr := runSeedsOnConn(ctx, conn); seedErr != nil {
