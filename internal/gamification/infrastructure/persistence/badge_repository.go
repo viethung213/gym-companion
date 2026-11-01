@@ -110,8 +110,14 @@ func (r *GormBadgeRepository) Save(ctx context.Context, badge *aggregate.UserBad
 
 // SaveBatch persists multiple UserBadge entries into user_badges in a single atomic batch insert.
 func (r *GormBadgeRepository) SaveBatch(ctx context.Context, badges []*aggregate.UserBadge) error {
+	_, err := r.SaveBatchReturningInserted(ctx, badges)
+	return err
+}
+
+// SaveBatchReturningInserted persists multiple UserBadge entries and returns the badge codes that were newly inserted.
+func (r *GormBadgeRepository) SaveBatchReturningInserted(ctx context.Context, badges []*aggregate.UserBadge) ([]string, error) {
 	if len(badges) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	models := make([]*UserBadgeModel, 0, len(badges))
@@ -139,17 +145,37 @@ func (r *GormBadgeRepository) SaveBatch(ctx context.Context, badges []*aggregate
 	}
 
 	if len(models) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	db := GetDB(ctx, r.db)
-	err := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "badge_code"}},
-		DoNothing: true,
-	}).Create(&models).Error
-	if err != nil {
-		return fmt.Errorf("batch save user badges: %w", err)
+	if len(models) == 1 {
+		res := db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "badge_code"}},
+			DoNothing: true,
+		}).Create(models[0])
+		if res.Error != nil {
+			return nil, fmt.Errorf("batch save user badges: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return nil, nil
+		}
+		return []string{models[0].BadgeCode}, nil
 	}
 
-	return nil
+	insertedCodes := make([]string, 0, len(models))
+	for _, m := range models {
+		res := db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "badge_code"}},
+			DoNothing: true,
+		}).Create(m)
+		if res.Error != nil {
+			return nil, fmt.Errorf("batch save user badges: %w", res.Error)
+		}
+		if res.RowsAffected > 0 {
+			insertedCodes = append(insertedCodes, m.BadgeCode)
+		}
+	}
+
+	return insertedCodes, nil
 }

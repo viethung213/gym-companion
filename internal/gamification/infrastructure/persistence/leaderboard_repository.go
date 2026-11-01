@@ -49,11 +49,6 @@ func (r *GormLeaderboardRepository) GetGlobalTop(
 
 	db := GetDB(ctx, r.db)
 
-	var total int64
-	if err := db.Model(&UserXpModel{}).Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count leaderboard total: %w", err)
-	}
-
 	var rows []leaderboardRow
 	err := db.Table("gamification.user_xp u").
 		Select("u.user_id, u.xp, u.level, u.updated_at, s.display_name, s.avatar_url").
@@ -84,10 +79,11 @@ func (r *GormLeaderboardRepository) GetGlobalTop(
 			AvatarURL:   avatarURL,
 			Xp:          row.Xp,
 			Level:       row.Level,
+			UpdatedAt:   row.UpdatedAt,
 		})
 	}
 
-	return result, total, nil
+	return result, int64(len(result)), nil
 }
 
 // GetUserRank calculates a specific user's rank using the indexed tie-breaking ordering.
@@ -146,6 +142,7 @@ func (r *GormLeaderboardRepository) GetUserRank(
 		AvatarURL:   avatarURL,
 		Xp:          userRow.Xp,
 		Level:       userRow.Level,
+		UpdatedAt:   userRow.UpdatedAt,
 	}
 
 	return rank, leaderboardUser, nil

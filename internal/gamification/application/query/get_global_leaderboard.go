@@ -53,10 +53,11 @@ func (h *GetGlobalLeaderboardHandler) Handle(
 
 	if q.UserID != "" {
 		rank, entry, err := h.leaderboardRepo.GetUserRank(ctx, q.UserID)
-		if err == nil {
-			myRank = rank
-			myEntry = entry
+		if err != nil {
+			return nil, fmt.Errorf("get user leaderboard rank: %w", err)
 		}
+		myRank = rank
+		myEntry = entry
 	}
 
 	return &GetGlobalLeaderboardResult{

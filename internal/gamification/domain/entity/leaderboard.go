@@ -12,6 +12,7 @@ type LeaderboardUser struct {
 	AvatarURL   string
 	Xp          int64
 	Level       int32
+	UpdatedAt   time.Time
 }
 
 // UserSnapshot represents cached profile identity stored locally to avoid cross-schema JOINs.
