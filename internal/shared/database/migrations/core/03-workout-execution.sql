@@ -11,6 +11,8 @@ CREATE SCHEMA IF NOT EXISTS workout_execution;
 CREATE TABLE IF NOT EXISTS workout_execution.outbox (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
+    aggregate_type VARCHAR(255),
+    aggregate_id VARCHAR(255),
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -20,6 +22,9 @@ CREATE TABLE IF NOT EXISTS workout_execution.outbox (
     status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
     locked_until TIMESTAMP WITH TIME ZONE
 );
+
+ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_type VARCHAR(255);
+ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);
 
 CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
     id UUID PRIMARY KEY,
