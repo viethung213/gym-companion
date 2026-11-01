@@ -41,7 +41,7 @@ COPY --from=builder /bin/fitai-gateway /app/fitai-gateway
 
 # Copy gateway routing configurations and environment template
 COPY configs ./configs
-COPY .env.gateway ./.env.gateway
+COPY .env.gateway.example ./.env.gateway.example
 
 # Data Plane (8000) & Control Plane (8001)
 EXPOSE 8000
