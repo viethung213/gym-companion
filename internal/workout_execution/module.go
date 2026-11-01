@@ -29,7 +29,9 @@ import (
 	workoutSync "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/sync"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/worker"
 	workoutConsumer "github.com/viethung213/gym-companion/internal/workout_execution/transport/consumer"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	workoutGRPC "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/workout_execution/transport/webtransport"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -109,9 +111,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	if deps.RedisClient != nil {
 		liveSync = workoutSync.NewRedisLiveSyncHub(deps.RedisClient, 2*time.Hour)
 	}
+	ruleEvaluator := service.NewDefaultRuleEvaluator()
 	soloTrackingService := command.NewSoloTrackingService(
 		ruleProvider,
-		service.NewDefaultRuleEvaluator(),
+		ruleEvaluator,
 		liveSync,
 		outboxWriter,
 		sessionRepo,
@@ -140,6 +143,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		patchMotionSpecAssetHandler,
 		soloTrackingService,
 	)
+	workoutTrackingService := command.NewWorkoutTrackingService(ruleProvider, ruleEvaluator)
+	grpcHandler.SetWorkoutTrackingService(workoutTrackingService)
 
 	// Kafka Setup
 	appCfg := workoutConfig.LoadConfig()
@@ -362,4 +367,46 @@ func RegisterConnectHandler(
 
 	adminPath, adminHandler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(connectHandler, opts...)
 	mux.Handle(adminPath, adminHandler)
+}
+
+// RegisterWebTransport mounts the WebTransport config endpoint & WebSocket fallback on mux,
+// starts the HTTP/3 QUIC WebTransport server in the background, and returns a shutdown function.
+func RegisterWebTransport(
+	mux *http.ServeMux,
+	grpcHandler *workoutGRPC.GRPCHandler,
+	keyProvider middleware.KeyProvider,
+	wtAddr string,
+) (func(), error) {
+	if grpcHandler == nil || grpcHandler.SoloTrackingService() == nil {
+		return func() {}, fmt.Errorf("solo tracking service is not configured")
+	}
+
+	validator := middleware.NewTokenValidator(keyProvider)
+	wtServer, err := webtransport.New(webtransport.Config{
+		Addr:        wtAddr,
+		Validator:   validator,
+		WorkoutService: grpcHandler.WorkoutTrackingService(),
+		Service:        grpcHandler.SoloTrackingService(),
+		IdleTimeout: 30 * time.Second,
+	})
+	if err != nil {
+		return func() {}, fmt.Errorf("create webtransport server: %w", err)
+	}
+
+	if err := wtServer.Start(); err != nil {
+		return func() {}, fmt.Errorf("start webtransport server on %s: %w", wtAddr, err)
+	}
+
+	// Mount HTTP config endpoint and WebSocket fallback on the shared HTTP mux
+	mux.Handle(webtransport.ConfigPath, wtServer.ConfigHandler())
+	mux.Handle(webtransport.WebSocketPath, wtServer.WebSocketHandler())
+
+	log.Printf("WebTransport HTTP/3 server listening on %s (UDP)", wtAddr)
+	log.Printf("WebTransport config mounted at %s, fallback at %s", webtransport.ConfigPath, webtransport.WebSocketPath)
+
+	return func() {
+		log.Println("Shutting down WebTransport server...")
+		_ = wtServer.Close()
+		log.Println("WebTransport server stopped.")
+	}, nil
 }

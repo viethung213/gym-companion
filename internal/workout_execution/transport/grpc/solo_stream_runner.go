@@ -142,13 +142,14 @@ func runSoloMatchTrackingLoop(
 	defer cancelStream()
 
 	var (
-		session       *service.SoloRefereeSession
+		session       *service.MotionRefereeSession
 		rule          *vo.ExerciseMotionRule
 		matchID       string
 		exerciseID    string
 		planID        string
 		cameraAngle   string
 		lastTimestamp time.Time
+		lastClientTS  time.Time
 		sendMu        sync.Mutex
 		subCancel     context.CancelFunc
 	)
@@ -578,9 +579,9 @@ func runSoloMatchTrackingLoop(
 			}
 
 			now := time.Now()
-			delta := now.Sub(lastTimestamp)
-			if delta <= 0 {
-				delta = 50 * time.Millisecond
+			delta := frameDelta(frm.Timestamp, lastClientTS, now.Sub(lastTimestamp))
+			if frm.Timestamp != nil && frm.Timestamp.IsValid() {
+				lastClientTS = frm.Timestamp.AsTime()
 			}
 			lastTimestamp = now
 
@@ -626,6 +627,9 @@ func runSoloMatchTrackingLoop(
 				RemainingCeilingSeconds: result.RemainingCeilingSeconds,
 				MatchEnded:              result.MatchEnded,
 				Timestamp:               timestamppb.Now(),
+				CurrentAngle:            result.CurrentAngle,
+				RepPhase:                result.RepPhase,
+				PersonDetected:          result.PersonDetected,
 			}
 
 			if err := safeSend(resp); err != nil {
@@ -642,4 +646,41 @@ func runSoloMatchTrackingLoop(
 			continue
 		}
 	}
+}
+
+// frameDelta derives the elapsed time for a frame. It prefers the client capture timestamps (immune to network jitter),
+// and falls back to server arrival time when the timestamp is missing, invalid, or non-monotonic.
+// The result is clamped to [1ms, 500ms] so a stalled or replayed client cannot inflate hold time or rep timing.
+func frameDelta(ts *timestamppb.Timestamp, lastClient time.Time, serverDelta time.Duration) time.Duration {
+	const (
+		minDelta     = time.Millisecond
+		maxDelta     = 500 * time.Millisecond
+		defaultDelta = 50 * time.Millisecond
+	)
+	d := serverDelta
+	if ts != nil && ts.IsValid() && !lastClient.IsZero() {
+		if cd := ts.AsTime().Sub(lastClient); cd > 0 {
+			d = cd
+		}
+	}
+	if d <= 0 {
+		return defaultDelta
+	}
+	if d < minDelta {
+		return minDelta
+	}
+	if d > maxDelta {
+		return maxDelta
+	}
+	return d
+}
+
+// SoloMatchStream is the transport-agnostic bidirectional stream consumed by the tracking loop.
+// WebTransport and WebSocket adapters implement it to share the exact referee pipeline used by gRPC/ConnectRPC.
+type SoloMatchStream = soloMatchStreamServer
+
+// RunSoloMatchTrackingLoop runs the authoritative referee loop over any SoloMatchStream.
+// ctx must already carry the authenticated actor (see middleware.WithActor / UserIDKey).
+func RunSoloMatchTrackingLoop(ctx context.Context, stream SoloMatchStream, svc *command.SoloTrackingService) error {
+	return runSoloMatchTrackingLoop(ctx, stream, svc, connectStreamErrorFactory{})
 }

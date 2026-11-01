@@ -29,6 +29,9 @@ type StreamFrameResult struct {
 	AudioCue                string
 	RemainingCeilingSeconds int32
 	MatchEnded              bool
+	CurrentAngle            float32
+	RepPhase                string
+	PersonDetected          bool
 }
 
 // SoloTrackingService coordinates streaming sessions, referee evaluation, live sync, session persistence, and outbox event publishing.
@@ -45,6 +48,7 @@ type SoloTrackingService struct {
 }
 
 const defaultDisconnectGracePeriod = 45 * time.Second
+
 
 // NewSoloTrackingService constructs a SoloTrackingService with all required dependencies.
 func NewSoloTrackingService(
@@ -81,7 +85,7 @@ func (s *SoloTrackingService) InitializeSession(
 	challengeType vo.ChallengeType,
 	timeCeilingSeconds int32,
 	planID string,
-) (referee *service.SoloRefereeSession, rule *vo.ExerciseMotionRule, err error) {
+) (referee *service.MotionRefereeSession, rule *vo.ExerciseMotionRule, err error) {
 	planID = strings.TrimSpace(planID)
 	if planID == "" {
 		return nil, nil, fmt.Errorf("%w: plan_id is required", apperror.ErrInvalidInput)
@@ -127,7 +131,7 @@ func (s *SoloTrackingService) InitializeSession(
 		ceiling = time.Duration(timeCeilingSeconds) * time.Second
 	}
 
-	referee, err = service.NewSoloRefereeSession(exerciseID, challengeType, ceiling, rule)
+	referee, err = service.NewMotionRefereeSession(exerciseID, challengeType, ceiling, rule)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create referee session: %w", err)
 	}
@@ -180,7 +184,7 @@ func (s *SoloTrackingService) InitializeSession(
 // ProcessFrame evaluates landmarks against the rule, updates referee state, syncs progress, and returns realtime feedback.
 func (s *SoloTrackingService) ProcessFrame(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	rule *vo.ExerciseMotionRule,
 	landmarks []vo.SkeletonPoint,
 	delta time.Duration,
@@ -275,7 +279,7 @@ func (s *SoloTrackingService) ProcessFrame(
 		}
 	}
 
-	audioCue := evalResult.AudioCue
+	audioCue := referee.ConfirmedAudioCue()
 	if referee.IsWaiting() {
 		if audioCue == "" {
 			audioCue = "Đang chờ đối thủ vào phòng..."
@@ -290,16 +294,19 @@ func (s *SoloTrackingService) ProcessFrame(
 	return StreamFrameResult{
 		MyConfirmedValue:        referee.ConfirmedValue(),
 		MyFormScore:             evalResult.FormScore,
-		IsValidForm:             evalResult.Passed,
+		IsValidForm:             len(referee.ConfirmedErrors()) == 0,
 		MyStatus:                string(referee.Status()),
 		IsCompleted:             referee.IsCompleted(),
 		OpponentValue:           oppVal,
 		OpponentFormScore:       oppScore,
 		OpponentStatus:          oppStatus,
-		DetectedErrors:          evalResult.DetectedErrors,
+		DetectedErrors:          referee.ConfirmedErrors(),
 		AudioCue:                audioCue,
 		RemainingCeilingSeconds: referee.RemainingCeilingSeconds(),
 		MatchEnded:              matchEnded,
+		CurrentAngle:            referee.CurrentAngle(),
+		RepPhase:                string(referee.RepPhase()),
+		PersonDetected:          referee.PersonDetected(),
 	}, nil
 }
 
@@ -309,7 +316,7 @@ func (s *SoloTrackingService) ProcessFrame(
 // it auto-aborts the session in DB, emits SoloTrackingAborted, and marks the participant ABORTED.
 func (s *SoloTrackingService) HandleParticipantDisconnect(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID, planID string,
 ) error {
 	if referee == nil || referee.IsFinalized() || referee.IsCompleted() {
@@ -380,7 +387,7 @@ func (s *SoloTrackingService) HandleParticipantDisconnect(
 // It is called ONLY when the session has actually concluded (Submitted, Timed Out, or Aborted).
 func (s *SoloTrackingService) FinalizeSession(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID string,
 	planID string,
 ) error {
@@ -435,7 +442,7 @@ func (s *SoloTrackingService) FinalizeSession(
 // Case 2: If both participants have submitted/completed, marks MatchEnded = true to stop stream immediately and finalize.
 func (s *SoloTrackingService) SubmitSession(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID string,
 	planID string,
 ) (StreamFrameResult, error) {
@@ -515,7 +522,7 @@ func (s *SoloTrackingService) SubmitSession(
 // AbortSession handles an explicit abort/forfeit from the user.
 func (s *SoloTrackingService) AbortSession(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID, reason, planID string,
 ) error {
 	if referee == nil {
@@ -559,7 +566,7 @@ func (s *SoloTrackingService) AbortSession(
 // ForceCompleteSessionOnCeiling cưỡng chế hoàn thành session và phát SoloTrackingCompleted khi chạm thời gian trần.
 func (s *SoloTrackingService) ForceCompleteSessionOnCeiling(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID, planID string,
 ) error {
 	if referee == nil {

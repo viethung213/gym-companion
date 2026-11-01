@@ -284,6 +284,18 @@ func run() error {
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 
+	// Register WebTransport HTTP/3 and WebSocket fallback handlers
+	wtPort := os.Getenv("WT_PORT")
+	if wtPort == "" {
+		wtPort = "8443"
+	}
+	shutdownWT, err := workoutexecution.RegisterWebTransport(mux, workoutServer, lazyKP, ":" + wtPort)
+	if err != nil {
+		log.Printf("Warning: failed to start WebTransport server: %v", err)
+	} else {
+		defer shutdownWT()
+	}
+
 	// Register Coaching REST HTTP Handler
 	coachingHandler := coaching.NewCoachingHandler(coachAgent)
 	coaching.RegisterHandlers(mux, coachingHandler)

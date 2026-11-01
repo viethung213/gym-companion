@@ -17,7 +17,7 @@ import (
 // - If it belongs to a different planID, aborts it first to ensure only 1 active session exists.
 func (s *SoloTrackingService) initWorkoutSessionInDB(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	userID, planID string,
 ) error {
 	if s.sessionRepo == nil {
@@ -82,7 +82,7 @@ func (s *SoloTrackingService) initWorkoutSessionInDB(
 // completeWorkoutSessionInDB logs final set, completes the WorkoutSession, and publishes SoloTrackingCompleted event.
 func (s *SoloTrackingService) completeWorkoutSessionInDB(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID, planID string,
 ) error {
 	if referee == nil {
@@ -158,7 +158,7 @@ func (s *SoloTrackingService) completeWorkoutSessionInDB(
 // abortWorkoutSessionInDB aborts the WorkoutSession and publishes SoloTrackingAborted event.
 func (s *SoloTrackingService) abortWorkoutSessionInDB(
 	ctx context.Context,
-	referee *service.SoloRefereeSession,
+	referee *service.MotionRefereeSession,
 	matchID, userID, exerciseID, reason, planID string,
 ) error {
 	if referee == nil {

@@ -1,0 +1,53 @@
+{
+  "exercise": "squat",
+  "display_name": "Squat",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Squat",
+  "voice_feedbacks": {
+    "torso_lean": {
+      "metric_name": "torso_lean",
+      "description": "Đổ người về phía trước quá mức",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Mở ngực và giữ thẳng lưng hơn khi hạ trọng tâm!",
+              "url": ""
+            },
+            "strict": {
+              "text": "Thẳng lưng lên! Đừng cúi gập người về phía trước!",
+              "url": ""
+            }
+          }
+        },
+        "danger": {
+          "severity_level": 2,
+          "status": "Danger",
+          "styles": {
+            "normal": {
+              "text": "Cảnh báo! Lưng đổ quá sâu về trước, hãy đẩy ngực lên ngay!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "knee_over_toe": {
+      "metric_name": "knee_over_toe",
+      "description": "Đầu gối nhô quá xa cổ chân",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Đẩy hông ra sau nhiều hơn, đừng dồn hết lực về mũi chân!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

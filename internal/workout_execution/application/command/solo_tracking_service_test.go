@@ -314,7 +314,7 @@ func TestSoloTrackingService_ForceCompleteSessionOnCeiling(t *testing.T) {
 	outbox := &mockOutboxWriter{}
 
 	svc := NewSoloTrackingService(ruleProv, nil, nil, outbox, nil, nil)
-	referee, err := service.NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 300*time.Second, rule)
+	referee, err := service.NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 300*time.Second, rule)
 	if err != nil {
 		t.Fatalf("create referee session error: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestSoloTrackingService_ForceCompleteSessionOnCeiling_WhenSpectating(t *tes
 	outbox := &mockOutboxWriter{}
 
 	svc := NewSoloTrackingService(ruleProv, nil, nil, outbox, nil, nil)
-	referee, err := service.NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 300*time.Second, rule)
+	referee, err := service.NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 300*time.Second, rule)
 	if err != nil {
 		t.Fatalf("create referee session error: %v", err)
 	}

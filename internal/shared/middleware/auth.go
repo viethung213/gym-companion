@@ -335,3 +335,20 @@ func extractToken(ctx context.Context) (string, error) {
 
 	return parts[1], nil
 }
+// TokenValidator validates a raw JWT and returns the authenticated identity.
+type TokenValidator func(ctx context.Context, token string) (userID, role string, err error)
+
+// NewTokenValidator builds a TokenValidator backed by the same RSA key cache as the gRPC/Connect interceptors.
+// It is for transports that cannot carry an Authorization header (e.g. browser WebTransport handshakes).
+func NewTokenValidator(kp KeyProvider) TokenValidator {
+	keyCache := newRSAKeyCache(kp)
+	return func(ctx context.Context, token string) (string, string, error) {
+		return parseAndValidateToken(ctx, token, keyCache)
+	}
+}
+
+// WithActor returns a context carrying the authenticated actor, as read by RequireAuthenticated.
+func WithActor(ctx context.Context, userID, role string) context.Context {
+	ctx = context.WithValue(ctx, UserIDKey, userID)
+	return context.WithValue(ctx, UserRoleKey, role)
+}

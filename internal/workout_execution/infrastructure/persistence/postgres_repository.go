@@ -379,6 +379,14 @@ func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Con
 	err := db.First(&model, "exercise_id = ?", exerciseID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			slugErr := db.Where("LOWER(REPLACE(REPLACE(exercise_name, '-', '_'), ' ', '_')) = LOWER(REPLACE(REPLACE(?, '-', '_'), ' ', '_')) OR local_rules_url LIKE ?", exerciseID, "%/"+strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(exerciseID, "-", "_"), " ", "_"))+"_rule.json").First(&model).Error
+			if slugErr == nil {
+				return aggregate.RestoreMotionSpecification(
+					model.ExerciseID, model.ExerciseName, model.OnnxDetectorURL, model.OnnxSkeletonURL,
+					model.LocalRulesURL, model.DialogueEngineURL, model.RecommendedCameraAngle, model.IsReady,
+					model.CreatedAt, model.UpdatedAt,
+				), nil
+			}
 			return nil, derror.ErrMotionSpecNotFound
 		}
 		return nil, fmt.Errorf("failed to find motion specification: %w", err)

@@ -51,6 +51,7 @@ message CreateExerciseRequest {
   int32 default_rest_seconds = 11;
   repeated string tag_ids = 12;
   ExerciseMeasurementType measurement_type = 13;
+  ExerciseStatus status = 14;
 }
 
 message CreateExerciseResponse {
@@ -85,6 +86,14 @@ message DeleteExerciseRequest {
 
 message DeleteExerciseResponse {
   bool success = 1;
+}
+
+message RestoreExerciseRequest {
+  string id = 1;
+}
+
+message RestoreExerciseResponse {
+  ExerciseInfo exercise = 1;
 }
 
 message SubmitExerciseForApprovalRequest {
@@ -129,10 +138,13 @@ message SearchExercisesRequest {
   int32 limit = 9;
   int32 offset = 10;
   ExerciseMeasurementType measurement_type = 11;
+  ExerciseStatus status = 12;
+  bool include_all_statuses = 13;
 }
 
 message SearchExercisesResponse {
   repeated ExerciseInfo exercises = 1;
+  int32 total_count = 2;
 }
 
 // Lookup metadata definitions
