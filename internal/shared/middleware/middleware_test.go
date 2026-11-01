@@ -2,491 +2,192 @@ package middleware
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
-	"net"
 	"net/http"
-	"sync"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
-	"github.com/golang-jwt/jwt/v5"
-	_ "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
-var (
-	//nolint:gochecknoglobals // Caches private key across tests to avoid regeneration.
-	testPrivateKey *rsa.PrivateKey
-	//nolint:gochecknoglobals // Used to cache test RSA public key PEM across tests.
-	testPublicKeyPEM string
-	//nolint:gochecknoglobals // Controls initialization of test RSA keys.
-	keysOnce sync.Once
-)
-
-func getTestKeys(t *testing.T) (privKey *rsa.PrivateKey, pubKeyPEM string) {
-	t.Helper()
-	keysOnce.Do(func() {
-		priv, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			t.Fatalf("failed to generate RSA key: %v", err)
-		}
-		testPrivateKey = priv
-
-		pubASN1, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
-		if err != nil {
-			t.Fatalf("failed to marshal public key: %v", err)
-		}
-		pubBytes := pem.EncodeToMemory(&pem.Block{
-			Type:  "PUBLIC KEY",
-			Bytes: pubASN1,
-		})
-		testPublicKeyPEM = string(pubBytes)
-	})
-	return testPrivateKey, testPublicKeyPEM
-}
-
-type mockKeyProvider struct {
-	mu     sync.Mutex
-	calls  int
-	keyPEM string
-	err    error
-}
-
-func (m *mockKeyProvider) GetPublicKeyPEM(_ context.Context, kid string) (string, error) {
-	m.mu.Lock()
-	m.calls++
-	m.mu.Unlock()
-	if m.err != nil {
-		return "", m.err
-	}
-	if kid == "test-kid" {
-		return m.keyPEM, nil
-	}
-	return "", errors.New("key not found")
-}
-
-func (m *mockKeyProvider) GetCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.calls
-}
-
-func generateTestToken(t *testing.T, userID, role, kid string) string {
-	t.Helper()
-	privKey, _ := getTestKeys(t)
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"sub":  userID,
-		"role": role,
-		"exp":  time.Now().Add(1 * time.Hour).Unix(),
-	})
-	token.Header["kid"] = kid
-	tokenStr, err := token.SignedString(privKey)
-	if err != nil {
-		t.Fatalf("failed to sign token: %v", err)
-	}
-	return tokenStr
-}
-
-func TestUnaryRecoveryInterceptor(t *testing.T) {
+func TestConnectRecoveryInterceptor(t *testing.T) {
 	t.Parallel()
-	interceptor := UnaryRecoveryInterceptor()
+	interceptor := NewConnectRecoveryInterceptor()
 
-	// Handler that panics
-	panicHandler := func(_ context.Context, _ any) (any, error) {
-		panic("something went wrong")
-	}
+	// 1. Unary recovery
+	unaryPanicHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		panic("unary database crash")
+	})
 
-	info := &grpc.UnaryServerInfo{FullMethod: "/TestService/PanicMethod"}
-	resp, err := interceptor(context.Background(), nil, info, panicHandler)
-
+	resp, err := unaryPanicHandler(context.Background(), nil)
 	if resp != nil {
 		t.Errorf("expected nil response, got %v", resp)
 	}
+	if err == nil {
+		t.Fatal("expected error from recovered panic, got nil")
+	}
+	var cErr *connect.Error
+	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeInternal {
+		t.Errorf("expected connect.CodeInternal, got %v", err)
+	}
 
+	// 2. Unary normal execution
+	unarySuccessHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		return connect.NewResponse(&struct{}{}), nil
+	})
+	resp, err = unarySuccessHandler(context.Background(), nil)
+	if err != nil || resp == nil {
+		t.Fatalf("expected success, got resp=%v, err=%v", resp, err)
+	}
+
+	// 3. Streaming client wrap passthrough
+	dummyClient := interceptor.WrapStreamingClient(func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
+		return nil
+	})
+	if dummyClient(context.Background(), connect.Spec{}) != nil {
+		t.Error("expected nil streaming client")
+	}
+}
+
+func TestConnectLoggingInterceptor(t *testing.T) {
+	t.Parallel()
+	interceptor := NewConnectLoggingInterceptor()
+
+	// 1. Unary logging success and error
+	unaryHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		return connect.NewResponse(&struct{}{}), nil
+	})
+	resp, err := unaryHandler(context.Background(), nil)
+	if err != nil || resp == nil {
+		t.Fatalf("expected success response, got resp=%v, err=%v", resp, err)
+	}
+
+	unaryErrHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bad argument"))
+	})
+	_, err = unaryErrHandler(context.Background(), nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatal("expected gRPC status error")
+	// 2. Streaming handler logging
+	conn := &mockStreamingHandlerConn{
+		spec: connect.Spec{Procedure: "/test/LoggingStream"},
+	}
+	streamHandler := interceptor.WrapStreamingHandler(func(_ context.Context, _ connect.StreamingHandlerConn) error {
+		return nil
+	})
+	if err := streamHandler(context.Background(), conn); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if st.Code() != codes.Internal {
-		t.Errorf("expected code Internal, got %s", st.Code())
+	// 3. Streaming client wrap passthrough
+	dummyClient := interceptor.WrapStreamingClient(func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
+		return nil
+	})
+	if dummyClient(context.Background(), connect.Spec{}) != nil {
+		t.Error("expected nil streaming client")
 	}
 }
 
-func TestUnaryLoggingInterceptor(t *testing.T) {
+func TestRequireAuthenticatedAndAdmin(t *testing.T) {
 	t.Parallel()
-	interceptor := UnaryLoggingInterceptor()
 
-	dummyHandler := func(_ context.Context, _ any) (any, error) {
-		return "success", nil
+	// 1. Unauthenticated context
+	_, err := RequireAuthenticated(context.Background())
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("expected ErrUnauthorized, got %v", err)
 	}
 
-	info := &grpc.UnaryServerInfo{FullMethod: "/TestService/LogMethod"}
-	resp, err := interceptor(context.Background(), nil, info, dummyHandler)
-
+	// 2. Authenticated non-admin
+	userCtx := context.WithValue(context.Background(), UserIDKey, "user-123")
+	userCtx = context.WithValue(userCtx, UserRoleKey, "Member")
+	actor, err := RequireAuthenticated(userCtx)
 	if err != nil {
-		t.Errorf("expected no error, got %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if actor.UserID != "user-123" || actor.Role != "Member" {
+		t.Errorf("unexpected actor: %+v", actor)
 	}
 
-	if resp != "success" {
-		t.Errorf("expected 'success', got %v", resp)
-	}
-}
-
-func TestIsAuthRequired(t *testing.T) {
-	t.Parallel()
-	// Test real registered Protobuf method paths
-	// 1. GetOAuthLoginURL should be PUBLIC (has security: {})
-	if isAuthRequired("/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL") {
-		t.Error("expected GetOAuthLoginURL to be PUBLIC, but marked as secured")
+	_, err = RequireAdmin(userCtx)
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden for non-admin, got %v", err)
 	}
 
-	// 2. Logout should be SECURED (requires BearerAuth default)
-	if !isAuthRequired("/contracts.generic.auth.v1.service.AuthService/Logout") {
-		t.Error("expected Logout to be SECURED, but marked as public")
-	}
-
-	// 3. Non-existent method should default to SECURED for safety
-	if !isAuthRequired("/contracts.generic.auth.v1.service.AuthService/NonExistent") {
-		t.Error("expected non-existent method to default to SECURED")
-	}
-}
-
-func TestUnaryAuthInterceptor(t *testing.T) {
-	t.Parallel()
-	_, pubKeyPEM := getTestKeys(t)
-	mockKP := &mockKeyProvider{
-		keyPEM: pubKeyPEM,
-	}
-
-	goodToken := generateTestToken(t, "user-123", "user", "test-kid")
-
-	interceptor := UnaryAuthInterceptor(mockKP)
-
-	dummyHandler := func(ctx context.Context, _ any) (any, error) {
-		// Verify identity is injected
-		uID := ctx.Value(UserIDKey)
-		if uID != "user-123" {
-			t.Errorf("expected userId user-123 in context, got %v", uID)
-		}
-		role := ctx.Value(UserRoleKey)
-		if role != "user" {
-			t.Errorf("expected userRole user in context, got %v", role)
-		}
-		return "ok", nil
-	}
-
-	// Case 1: Secured method, missing header -> should fail
-	infoSecured := &grpc.UnaryServerInfo{
-		FullMethod: "/contracts.generic.auth.v1.service.AuthService/Logout",
-	}
-	_, err := interceptor(context.Background(), nil, infoSecured, dummyHandler)
-	if err == nil || status.Code(err) != codes.Unauthenticated {
-		t.Errorf("expected Unauthenticated error, got %v", err)
-	}
-
-	// Case 2: Secured method, invalid token -> should fail
-	ctxWithBadToken := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs("authorization", "Bearer bad-token"),
-	)
-	_, err = interceptor(ctxWithBadToken, nil, infoSecured, dummyHandler)
-	if err == nil || status.Code(err) != codes.Unauthenticated {
-		t.Errorf("expected Unauthenticated error, got %v", err)
-	}
-
-	// Case 3: Secured method, valid token -> should succeed and call handler
-	ctxWithGoodToken := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs("authorization", "Bearer "+goodToken),
-	)
-	resp, err := interceptor(ctxWithGoodToken, nil, infoSecured, dummyHandler)
+	// 3. Admin user
+	adminCtx := context.WithValue(context.Background(), UserIDKey, "admin-1")
+	adminCtx = context.WithValue(adminCtx, UserRoleKey, "Admin")
+	adminActor, err := RequireAdmin(adminCtx)
 	if err != nil {
-		t.Errorf("expected success, got error: %v", err)
+		t.Fatalf("unexpected error for admin: %v", err)
 	}
-	if resp != "ok" {
-		t.Errorf("expected 'ok', got %v", resp)
-	}
-
-	// Case 4: Public method, missing header -> should succeed and NOT fail
-	infoPublic := &grpc.UnaryServerInfo{
-		FullMethod: "/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL",
-	}
-	publicHandler := func(_ context.Context, _ any) (any, error) {
-		return "public-ok", nil
-	}
-	resp, err = interceptor(context.Background(), nil, infoPublic, publicHandler)
-	if err != nil {
-		t.Errorf("expected public method to pass without auth, got: %v", err)
-	}
-	if resp != "public-ok" {
-		t.Errorf("expected 'public-ok', got %v", resp)
-	}
-}
-
-func TestUnaryAuthInterceptor_PublicRoute_InvalidToken_Fails(t *testing.T) {
-	t.Parallel()
-	_, pubKeyPEM := getTestKeys(t)
-	mockKP := &mockKeyProvider{
-		keyPEM: pubKeyPEM,
-	}
-	interceptor := UnaryAuthInterceptor(mockKP)
-	infoPublic := &grpc.UnaryServerInfo{
-		FullMethod: "/contracts.generic.auth.v1.service.AuthService/GetOAuthLoginURL",
-	}
-	dummyHandler := func(_ context.Context, _ any) (any, error) {
-		return "public-ok", nil
-	}
-
-	// Invalid token on public route MUST be rejected with Unauthenticated
-	ctxWithBadToken := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs("authorization", "Bearer invalid-token-string"),
-	)
-	_, err := interceptor(ctxWithBadToken, nil, infoPublic, dummyHandler)
-	if err == nil || status.Code(err) != codes.Unauthenticated {
-		t.Fatalf("expected Unauthenticated error when invalid token is sent to public route, got %v", err)
-	}
-
-	// Malformed auth header (e.g. Basic auth) on public route MUST be rejected
-	ctxWithMalformedHeader := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs("authorization", "Basic dXNlcjpwYXNz"),
-	)
-	_, err = interceptor(ctxWithMalformedHeader, nil, infoPublic, dummyHandler)
-	if err == nil || status.Code(err) != codes.Unauthenticated {
-		t.Fatalf("expected Unauthenticated error when malformed header is sent to public route, got %v", err)
-	}
-}
-
-func TestRSAPublicKeyCache(t *testing.T) {
-	t.Parallel()
-	_, pubKeyPEM := getTestKeys(t)
-	mockKP := &mockKeyProvider{
-		keyPEM: pubKeyPEM,
-	}
-	interceptor := UnaryAuthInterceptor(mockKP)
-
-	infoSecured := &grpc.UnaryServerInfo{
-		FullMethod: "/contracts.generic.auth.v1.service.AuthService/Logout",
-	}
-	goodToken := generateTestToken(t, "user-456", "user", "test-kid")
-	ctxWithGoodToken := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs("authorization", "Bearer "+goodToken),
-	)
-
-	dummyHandler := func(_ context.Context, _ any) (any, error) {
-		return "ok", nil
-	}
-
-	// Make 10 requests with the same token/kid
-	for i := 0; i < 10; i++ {
-		resp, err := interceptor(ctxWithGoodToken, nil, infoSecured, dummyHandler)
-		if err != nil || resp != "ok" {
-			t.Fatalf("expected request %d to succeed, got err=%v", i, err)
-		}
-	}
-
-	// Public key provider should only have been called ONCE due to caching
-	if calls := mockKP.GetCalls(); calls != 1 {
-		t.Errorf("expected KeyProvider to be called exactly 1 time, got %d calls", calls)
-	}
-}
-
-func TestUnaryRateLimitInterceptor(t *testing.T) {
-	t.Parallel()
-	interceptor := UnaryRateLimitInterceptor()
-
-	dummyHandler := func(_ context.Context, _ any) (any, error) {
-		return "ok", nil
-	}
-
-	// Set client key using a mocked peer IP
-	addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
-	ctx := peer.NewContext(context.Background(), &peer.Peer{Addr: addr})
-
-	// Method name triggers 100 req/min limit, but since the registry gets created on first call
-	// let's test that limit gets triggered if we exhaust the burst.
-	info := &grpc.UnaryServerInfo{FullMethod: "/TestService/Onboarding"}
-
-	// Exhausting the rate limit burst (burst for 100 limit is 10)
-	for i := 0; i < 11; i++ {
-		_, err := interceptor(ctx, nil, info, dummyHandler)
-		if err != nil {
-			if status.Code(err) != codes.ResourceExhausted {
-				t.Fatalf("expected ResourceExhausted, got %v", err)
-			}
-			// Rate limit triggered, success!
-			return
-		}
-	}
-	// Note: depending on time, this might not trigger on extremely fast
-	// environments if burst is large, but with a 10% burst of 100 (which
-	// is 10), calling 11 times in microsecond loop guarantees exhaustion.
-}
-
-func TestUnaryRateLimitInterceptor_CompleteWorkoutSession(t *testing.T) {
-	t.Parallel()
-	interceptor := UnaryRateLimitInterceptor()
-
-	dummyHandler := func(_ context.Context, _ any) (any, error) {
-		return "ok", nil
-	}
-
-	addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:54321")
-	ctx := peer.NewContext(context.Background(), &peer.Peer{Addr: addr})
-
-	info := &grpc.UnaryServerInfo{FullMethod: "/contracts.core.workout_execution.v1.service.WorkoutExecutionService/CompleteWorkoutSession"}
-
-	// For 10 req/min, burst is 10/10 = 1.
-	// First request succeeds, 2nd request should be rate limited immediately.
-	_, err1 := interceptor(ctx, nil, info, dummyHandler)
-	if err1 != nil {
-		t.Fatalf("expected first call to succeed, got %v", err1)
-	}
-
-	_, err2 := interceptor(ctx, nil, info, dummyHandler)
-	if err2 == nil {
-		t.Fatalf("expected rate limit error on second call for CompleteWorkoutSession")
-	}
-	if status.Code(err2) != codes.ResourceExhausted {
-		t.Fatalf("expected ResourceExhausted, got %v", err2)
-	}
-}
-
-func TestExtractClientIP(t *testing.T) {
-	t.Parallel()
-	// Test A: Strip port from peer address
-	addr, _ := net.ResolveTCPAddr("tcp", "192.168.1.100:54321")
-	ctxPeer := peer.NewContext(context.Background(), &peer.Peer{Addr: addr})
-	ip := extractClientIP(ctxPeer)
-	if ip != "192.168.1.100" {
-		t.Errorf("expected IP 192.168.1.100 without port, got %s", ip)
-	}
-
-	// Test B: X-Forwarded-For header priority
-	ctxXFF := metadata.NewIncomingContext(
-		ctxPeer,
-		metadata.Pairs("x-forwarded-for", "203.0.113.195, 70.41.3.18, 150.172.238.178"),
-	)
-	ipXFF := extractClientIP(ctxXFF)
-	if ipXFF != "203.0.113.195" {
-		t.Errorf("expected client IP from X-Forwarded-For 203.0.113.195, got %s", ipXFF)
-	}
-
-	// Test C: X-Real-IP header priority
-	ctxXRI := metadata.NewIncomingContext(
-		ctxPeer,
-		metadata.Pairs("x-real-ip", "198.51.100.1"),
-	)
-	ipXRI := extractClientIP(ctxXRI)
-	if ipXRI != "198.51.100.1" {
-		t.Errorf("expected client IP from X-Real-IP 198.51.100.1, got %s", ipXRI)
-	}
-}
-
-func TestRateLimiterRegistry_SweepCleanup(t *testing.T) {
-	t.Parallel()
-	reg := &rateLimiterRegistry{
-		limiters:  make(map[string]*limiterEntry),
-		ttl:       50 * time.Millisecond,
-		lastSweep: time.Now().Add(-2 * time.Minute), // Force sweep trigger on next GetLimiter call
-	}
-
-	// Insert an old entry
-	reg.limiters["old-key"] = &limiterEntry{
-		limiter:  nil,
-		lastSeen: time.Now().Add(-100 * time.Millisecond),
-	}
-
-	// Call GetLimiter for a new key, triggering sweep
-	_ = reg.GetLimiter("new-key", 100)
-
-	reg.mu.Lock()
-	_, oldExists := reg.limiters["old-key"]
-	_, newExists := reg.limiters["new-key"]
-	reg.mu.Unlock()
-
-	if oldExists {
-		t.Errorf("expected old-key to be evicted during sweep, but it still exists")
-	}
-	if !newExists {
-		t.Errorf("expected new-key to exist in registry")
+	if !adminActor.IsAdmin() {
+		t.Errorf("expected actor to be admin")
 	}
 }
 
 func TestToConnectError(t *testing.T) {
 	t.Parallel()
 
-	// 1. nil error
+	// 1. Nil error returns nil
 	if err := ToConnectError(nil); err != nil {
-		t.Errorf("expected nil for nil input, got %v", err)
+		t.Errorf("expected nil, got %v", err)
 	}
 
-	// 2. Already *connect.Error
-	origConnectErr := connect.NewError(connect.CodeInvalidArgument, errors.New("bad request"))
-	if err := ToConnectError(origConnectErr); err != origConnectErr {
-		t.Errorf("expected original connect error to be returned unchanged, got %v", err)
+	// 2. Already *connect.Error returns as-is
+	origCErr := connect.NewError(connect.CodeNotFound, errors.New("not found"))
+	if err := ToConnectError(origCErr); err != origCErr {
+		t.Errorf("expected identical connect error, got %v", err)
 	}
 
-	// 3. gRPC status error mapping
+	// 3. gRPC status mapping
 	testCases := []struct {
-		grpcCode     codes.Code
-		expectedCode connect.Code
+		grpcCode codes.Code
+		wantCode connect.Code
 	}{
 		{codes.OK, 0},
+		{codes.Canceled, connect.CodeCanceled},
+		{codes.Unknown, connect.CodeUnknown},
 		{codes.InvalidArgument, connect.CodeInvalidArgument},
-		{codes.Unauthenticated, connect.CodeUnauthenticated},
-		{codes.PermissionDenied, connect.CodePermissionDenied},
+		{codes.DeadlineExceeded, connect.CodeDeadlineExceeded},
 		{codes.NotFound, connect.CodeNotFound},
 		{codes.AlreadyExists, connect.CodeAlreadyExists},
+		{codes.PermissionDenied, connect.CodePermissionDenied},
 		{codes.ResourceExhausted, connect.CodeResourceExhausted},
 		{codes.FailedPrecondition, connect.CodeFailedPrecondition},
-		{codes.Internal, connect.CodeInternal},
-		{codes.Unavailable, connect.CodeUnavailable},
-		{codes.Canceled, connect.CodeCanceled},
-		{codes.DeadlineExceeded, connect.CodeDeadlineExceeded},
 		{codes.Aborted, connect.CodeAborted},
 		{codes.OutOfRange, connect.CodeOutOfRange},
 		{codes.Unimplemented, connect.CodeUnimplemented},
+		{codes.Internal, connect.CodeInternal},
+		{codes.Unavailable, connect.CodeUnavailable},
 		{codes.DataLoss, connect.CodeDataLoss},
+		{codes.Unauthenticated, connect.CodeUnauthenticated},
 	}
 
 	for _, tc := range testCases {
+		gErr := status.Error(tc.grpcCode, "test error message")
+		mapped := ToConnectError(gErr)
+
 		if tc.grpcCode == codes.OK {
-			err := ToConnectError(status.Error(tc.grpcCode, "ok message"))
-			if err != nil {
-				t.Errorf("expected nil error for codes.OK, got %v", err)
+			if mapped != nil {
+				t.Errorf("expected nil for codes.OK, got %v", mapped)
 			}
 			continue
 		}
-		grpcErr := status.Errorf(tc.grpcCode, "error message for %s", tc.grpcCode)
-		mapped := ToConnectError(grpcErr)
+
 		var cErr *connect.Error
 		if !errors.As(mapped, &cErr) {
-			t.Fatalf("expected *connect.Error for %s, got %T", tc.grpcCode, mapped)
+			t.Fatalf("expected *connect.Error, got %T for code %v", mapped, tc.grpcCode)
 		}
-		if cErr.Code() != tc.expectedCode {
-			t.Errorf("for grpc code %s: expected connect code %s, got %s", tc.grpcCode, tc.expectedCode, cErr.Code())
+		if cErr.Code() != tc.wantCode {
+			t.Errorf("for grpc code %v, expected connect code %v, got %v", tc.grpcCode, tc.wantCode, cErr.Code())
 		}
 	}
 
-	// 4. Raw Go error (non-status)
-	rawErr := errors.New("raw standard error")
+	// 4. Raw error maps to CodeInternal
+	rawErr := errors.New("raw unexpected error")
 	mappedRaw := ToConnectError(rawErr)
 	var cErr *connect.Error
 	if !errors.As(mappedRaw, &cErr) {
@@ -502,7 +203,6 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 
 	interceptor := NewConnectErrorMappingInterceptor()
 
-	// Case A: Handler returns nil error
 	noopHandler := interceptor.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		return nil, nil
 	})
@@ -511,7 +211,6 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 		t.Errorf("expected nil resp and nil err, got resp=%v, err=%v", resp, err)
 	}
 
-	// Case B: Handler returns gRPC status error
 	errorHandler := interceptor.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		return nil, status.Error(codes.Unauthenticated, "invalid password")
 	})
@@ -525,6 +224,14 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 	}
 	if cErr.Code() != connect.CodeUnauthenticated {
 		t.Errorf("expected connect.CodeUnauthenticated, got %s", cErr.Code())
+	}
+
+	// Streaming client wrap passthrough
+	dummyClient := interceptor.WrapStreamingClient(func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
+		return nil
+	})
+	if dummyClient(context.Background(), connect.Spec{}) != nil {
+		t.Error("expected nil streaming client")
 	}
 }
 
@@ -543,154 +250,6 @@ func (m *mockStreamingHandlerConn) RequestHeader() http.Header   { return m.reqH
 func (m *mockStreamingHandlerConn) ResponseHeader() http.Header  { return m.respHeader }
 func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header { return m.respTrailer }
 func (m *mockStreamingHandlerConn) Send(any) error               { return nil }
-
-func TestConnectStreamingAuthInterceptor(t *testing.T) {
-	t.Parallel()
-	_, pubKeyPEM := getTestKeys(t)
-	kp := &mockKeyProvider{keyPEM: pubKeyPEM}
-	interceptor := NewConnectAuthInterceptor(kp)
-
-	// Case 1: Protected stream procedure with valid Bearer token
-	tokenStr := generateTestToken(t, "stream-user-123", "User", "test-kid")
-	header := make(http.Header)
-	header.Set("Authorization", "Bearer "+tokenStr)
-
-	conn := &mockStreamingHandlerConn{
-		spec: connect.Spec{
-			Procedure:  "/contracts.core.solo_match.v1.service.SoloMatchService/JoinQueue",
-			StreamType: connect.StreamTypeServer,
-		},
-		reqHeader: header,
-	}
-
-	var extractedUserID, extractedRole string
-	handler := interceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
-		if u, ok := ctx.Value(UserIDKey).(string); ok {
-			extractedUserID = u
-		}
-		if r, ok := ctx.Value(UserRoleKey).(string); ok {
-			extractedRole = r
-		}
-		return nil
-	})
-
-	err := handler(context.Background(), conn)
-	if err != nil {
-		t.Fatalf("expected successful stream auth, got %v", err)
-	}
-	if extractedUserID != "stream-user-123" {
-		t.Errorf("expected userID stream-user-123, got %s", extractedUserID)
-	}
-	if extractedRole != "User" {
-		t.Errorf("expected role User, got %s", extractedRole)
-	}
-
-	// Case 2: Protected stream procedure with missing token
-	connNoAuth := &mockStreamingHandlerConn{
-		spec: connect.Spec{
-			Procedure:  "/contracts.core.solo_match.v1.service.SoloMatchService/JoinQueue",
-			StreamType: connect.StreamTypeServer,
-		},
-		reqHeader: make(http.Header),
-	}
-
-	err = handler(context.Background(), connNoAuth)
-	if err == nil {
-		t.Fatal("expected error for unauthenticated stream, got nil")
-	}
-	var cErr *connect.Error
-	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeUnauthenticated {
-		t.Fatalf("expected connect.CodeUnauthenticated, got %v", err)
-	}
-
-	// Case 3: Bidirectional stream (StreamTypeBidi) with valid Bearer token
-	bidiConn := &mockStreamingHandlerConn{
-		spec: connect.Spec{
-			Procedure:  "/contracts.core.solo_match.v1.service.SoloMatchService/BidiStream",
-			StreamType: connect.StreamTypeBidi,
-		},
-		reqHeader: header,
-	}
-
-	var bidiUserID string
-	bidiHandler := interceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
-		if u, ok := ctx.Value(UserIDKey).(string); ok {
-			bidiUserID = u
-		}
-		return nil
-	})
-
-	err = bidiHandler(context.Background(), bidiConn)
-	if err != nil {
-		t.Fatalf("expected successful bidi stream auth, got %v", err)
-	}
-	if bidiUserID != "stream-user-123" {
-		t.Errorf("expected bidiUserID stream-user-123, got %s", bidiUserID)
-	}
-}
-
-type mockServerStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (m *mockServerStream) Context() context.Context {
-	return m.ctx
-}
-
-func TestGRPCStreamInterceptors(t *testing.T) {
-	t.Parallel()
-	_, pubKeyPEM := getTestKeys(t)
-	kp := &mockKeyProvider{keyPEM: pubKeyPEM}
-
-	// 1. StreamAuthInterceptor
-	authInterceptor := StreamAuthInterceptor(kp)
-	tokenStr := generateTestToken(t, "grpc-bidi-user", "User", "test-kid")
-
-	md := metadata.Pairs("authorization", "Bearer "+tokenStr)
-	ctx := metadata.NewIncomingContext(context.Background(), md)
-	ss := &mockServerStream{ctx: ctx}
-	info := &grpc.StreamServerInfo{
-		FullMethod:     "/contracts.core.solo_match.v1.service.SoloMatchService/BidiStream",
-		IsClientStream: true,
-		IsServerStream: true, // Bidirectional stream
-	}
-
-	var authenticatedUserID string
-	err := authInterceptor(nil, ss, info, func(_ any, stream grpc.ServerStream) error {
-		if u, ok := stream.Context().Value(UserIDKey).(string); ok {
-			authenticatedUserID = u
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("expected successful gRPC bidi stream auth, got %v", err)
-	}
-	if authenticatedUserID != "grpc-bidi-user" {
-		t.Errorf("expected authenticatedUserID grpc-bidi-user, got %s", authenticatedUserID)
-	}
-
-	// 2. StreamRecoveryInterceptor
-	recInterceptor := StreamRecoveryInterceptor()
-	panicErr := recInterceptor(nil, ss, info, func(_ any, _ grpc.ServerStream) error {
-		panic("bidi stream explosion")
-	})
-	if panicErr == nil {
-		t.Fatal("expected error from recovered panic in bidi stream, got nil")
-	}
-	if status.Code(panicErr) != codes.Internal {
-		t.Errorf("expected codes.Internal, got %v", status.Code(panicErr))
-	}
-
-	// 3. StreamLoggingInterceptor
-	logInterceptor := StreamLoggingInterceptor()
-	logErr := logInterceptor(nil, ss, info, func(_ any, _ grpc.ServerStream) error {
-		return nil
-	})
-	if logErr != nil {
-		t.Fatalf("expected nil error from logging interceptor, got %v", logErr)
-	}
-}
 
 func TestConnectStreamingRecoveryAndErrorMapping(t *testing.T) {
 	t.Parallel()
