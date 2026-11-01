@@ -39,9 +39,8 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /bin/fitai-gateway /app/fitai-gateway
 
-# Copy gateway routing configurations and environment template
+# Copy gateway routing configurations
 COPY configs ./configs
-COPY .env.gateway.example ./.env.gateway.example
 
 # Data Plane (8000) & Control Plane (8001)
 EXPOSE 8000
