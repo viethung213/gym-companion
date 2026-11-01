@@ -26,6 +26,7 @@ type ExerciseServer struct {
 	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler
 	approveHandler           *command.ApproveExerciseHandler
 	archiveHandler           *command.ArchiveExerciseHandler
+	restoreHandler           *command.RestoreExerciseHandler
 	getHandler               *query.GetExerciseHandler
 	getRandomHandler         *query.GetRandomExerciseHandler
 	searchHandler            *query.SearchExercisesHandler
@@ -64,6 +65,7 @@ func NewExerciseServer(
 	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler,
 	approveHandler *command.ApproveExerciseHandler,
 	archiveHandler *command.ArchiveExerciseHandler,
+	restoreHandler *command.RestoreExerciseHandler,
 	getHandler *query.GetExerciseHandler,
 	getRandomHandler *query.GetRandomExerciseHandler,
 	searchHandler *query.SearchExercisesHandler,
@@ -95,6 +97,7 @@ func NewExerciseServer(
 		submitForApprovalHandler: submitForApprovalHandler,
 		approveHandler:           approveHandler,
 		archiveHandler:           archiveHandler,
+		restoreHandler:           restoreHandler,
 		getHandler:               getHandler,
 		getRandomHandler:         getRandomHandler,
 		searchHandler:            searchHandler,
@@ -228,6 +231,7 @@ func (s *ExerciseServer) CreateExercise(
 			DefaultRestSeconds: req.GetDefaultRestSeconds(),
 			TagIDs:             req.GetTagIds(),
 			MeasurementType:    toDomainMeasurementType(req.GetMeasurementType()),
+			Status:             toDomainStatus(req.GetStatus()),
 		},
 	})
 	if err != nil {
@@ -330,6 +334,27 @@ func (s *ExerciseServer) DeleteExercise(
 	}
 
 	return &exercisemsg.DeleteExerciseResponse{Success: true}, nil
+}
+
+func (s *ExerciseServer) RestoreExercise(
+	ctx context.Context,
+	req *exercisemsg.RestoreExerciseRequest,
+) (*exercisemsg.RestoreExerciseResponse, error) {
+	if req == nil || req.GetId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "exercise id is required")
+	}
+
+	exercise, err := s.restoreHandler.Handle(ctx, command.RestoreExerciseCommand{
+		ID: req.GetId(),
+	})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+
+	info := exercise.Info()
+	return &exercisemsg.RestoreExerciseResponse{
+		Exercise: toProtoExercise(&info),
+	}, nil
 }
 
 func toProtoExercise(info *domain.Info) *exercisemsg.ExerciseInfo {
@@ -865,6 +890,17 @@ func (c *ConnectExerciseHandler) DeleteExercise(
 	req *connect.Request[exercisemsg.DeleteExerciseRequest],
 ) (*connect.Response[exercisemsg.DeleteExerciseResponse], error) {
 	res, err := c.server.DeleteExercise(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectExerciseHandler) RestoreExercise(
+	ctx context.Context,
+	req *connect.Request[exercisemsg.RestoreExerciseRequest],
+) (*connect.Response[exercisemsg.RestoreExerciseResponse], error) {
+	res, err := c.server.RestoreExercise(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}
