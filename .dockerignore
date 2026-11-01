@@ -1,0 +1,10 @@
+.git
+.github
+.agents
+bin
+tmp
+docs
+tests
+*.exe
+*.log
+

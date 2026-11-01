@@ -1,0 +1,30 @@
+services:
+  gateway:
+    image: fitai-gateway:latest
+    build:
+      context: ../..
+      dockerfile: infra/gateway/Dockerfile
+    container_name: fitai-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    environment:
+      APP_ENV: "production"
+      GATEWAY_PORT: "8000"
+      GATEWAY_CONFIG_PATH: "configs/gateway_routes.docker.json"
+      GATEWAY_ADMIN_PORT: "8001"
+      GATEWAY_ADMIN_KEY: "gym-companion-admin-secret-2026"
+      GATEWAY_ADMIN_ENABLED: "true"
+      INTERNAL_SECRET: "gym-companion-internal-secret-2026-key"
+      TOKEN_TTL: "1m"
+      WATCH_INTERVAL: "5s"
+      ENFORCE_TLS: "false"
+    networks:
+      - fitai-network
+
+networks:
+  fitai-network:
+    name: fitai-network
+    external: true
+

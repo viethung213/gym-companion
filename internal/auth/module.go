@@ -27,16 +27,14 @@ import (
 	authGRPC "github.com/viethung213/gym-companion/internal/auth/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 // ModuleDeps holds the external database connection and gRPC server instances needed by Auth.
 type ModuleDeps struct {
-	DB                *sql.DB
-	AssignKeyProvider func(middleware.KeyProvider)
-	KafkaRegistry     *sharedKafka.Registry
+	DB            *sql.DB
+	KafkaRegistry *sharedKafka.Registry
 }
 
 // Initialize bootstraps all layers of the Auth Bounded Context.
@@ -84,9 +82,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	oauthServ := oauth.NewOAuthProvider(googleConfig, facebookConfig, cfg.StateSecret)
 
 	tokenServ := jwt.NewJWTSigner(keyRepo, cfg.JWTIssuer, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	if deps.AssignKeyProvider != nil {
-		deps.AssignKeyProvider(&authGRPC.AuthKeyProvider{KeyRepo: keyRepo})
-	}
 	keyGen := crypto.NewRSAKeyGenerator()
 	txManager := postgres.NewSQLTransactionManager(gormDB)
 	eventPub := authEvent.NewOutboxWriter(outboxRepo)

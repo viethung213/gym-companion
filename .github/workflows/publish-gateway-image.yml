@@ -1,0 +1,91 @@
+name: Test & Publish Gateway Docker Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cmd/gateway/**'
+      - 'internal/gateway/**'
+      - '!internal/gateway/docs/**'
+      - 'infra/gateway/**'
+      - 'configs/gateway_routes*.json'
+      - '.github/workflows/publish-gateway-image.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'cmd/gateway/**'
+      - 'internal/gateway/**'
+      - '!internal/gateway/docs/**'
+      - 'infra/gateway/**'
+      - 'configs/gateway_routes*.json'
+      - '.github/workflows/publish-gateway-image.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: fitai-gateway
+
+jobs:
+  test-gateway:
+    name: Test Gateway (Unit & E2E)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Run Gateway Unit & E2E Tests
+        run: go test -v -race -cover ./internal/gateway/...
+
+  build-and-push-gateway:
+    name: Build & Push Gateway Image to GHCR
+    needs: test-gateway
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Image Tags
+        id: prep
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_tag=${{ env.REGISTRY }}/${REPO_OWNER}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "sha_tag=${{ env.REGISTRY }}/${REPO_OWNER}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Gateway Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./infra/gateway/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ steps.prep.outputs.image_tag }}
+            ${{ steps.prep.outputs.sha_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
