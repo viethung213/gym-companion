@@ -1,17 +1,11 @@
 -- =====================================================================
--- Migration: 13-create-gamification-tables.sql
--- Bounded Context: Gamification Engine (XP, Streaks, Leaderboard, Outbox)
--- Standards: SSOT PostgreSQL Schema gamification.*, Zero Cross-Schema JOINs
+-- BOUNDED CONTEXT: gamification (XP, Levels, Badges, Streaks & FitCoins Wallet)
+-- Initial Schema, Transactional Outbox, Tables, and High-Performance Indexes
 -- =====================================================================
 
--- ---------------------------------------------------------------------
--- 1. SCHEMA: gamification
--- ---------------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS gamification;
 
--- ---------------------------------------------------------------------
--- 2. TRANSACTIONAL OUTBOX & AUDIT LOG (Module-wide SSOT)
--- ---------------------------------------------------------------------
+-- 1. TRANSACTIONAL OUTBOX & AUDIT LOG
 CREATE TABLE IF NOT EXISTS gamification.outbox (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL UNIQUE,
@@ -51,9 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_gamification_outbox_log_event_status
 CREATE UNIQUE INDEX IF NOT EXISTS ux_gamification_outbox_log_event_id
     ON gamification.outbox_log (event_id);
 
--- ---------------------------------------------------------------------
--- 3. XP & LEVEL PROGRESSION (XP, Level 1-100, Append-Only History)
--- ---------------------------------------------------------------------
+-- 2. XP & LEVEL PROGRESSION
 CREATE TABLE IF NOT EXISTS gamification.user_xp (
     user_id UUID PRIMARY KEY,
     xp BIGINT NOT NULL DEFAULT 0,
@@ -65,8 +57,6 @@ CREATE TABLE IF NOT EXISTS gamification.user_xp (
     CONSTRAINT chk_user_level_range CHECK (level >= 1 AND level <= 100)
 );
 
--- Chỉ mục B-tree tối ưu hóa truy vấn Leaderboard Top 50 theo thời gian thực (< 5ms)
--- Tie-breaking: xp DESC, updated_at ASC, user_id ASC để đảm bảo thứ tự phân trang tất định tuyệt đối
 CREATE INDEX IF NOT EXISTS idx_user_xp_leaderboard
     ON gamification.user_xp (xp DESC, updated_at ASC, user_id ASC);
 
@@ -85,14 +75,11 @@ CREATE TABLE IF NOT EXISTS gamification.xp_history (
 CREATE INDEX IF NOT EXISTS idx_xp_history_user_created
     ON gamification.xp_history (user_id, created_at DESC);
 
--- Khóa chặn 100% rủi ro cộng điểm dinh dưỡng lặp trong cùng 1 ngày (PostgreSQL Partial Unique Index)
 CREATE UNIQUE INDEX IF NOT EXISTS uq_xp_history_nutrition_daily
     ON gamification.xp_history (user_id, activity_date)
     WHERE source = 'NUTRITION';
 
--- ---------------------------------------------------------------------
--- 4. STREAKS & HABITS ENGINE (Continuous Discipline, Activity Tracking)
--- ---------------------------------------------------------------------
+-- 3. STREAKS & HABITS ENGINE
 CREATE TABLE IF NOT EXISTS gamification.user_streak (
     user_id UUID PRIMARY KEY,
     current_streak INT NOT NULL DEFAULT 0,
@@ -116,9 +103,7 @@ CREATE TABLE IF NOT EXISTS gamification.streak_history (
 CREATE INDEX IF NOT EXISTS idx_streak_history_user_date
     ON gamification.streak_history (user_id, activity_date DESC);
 
--- ---------------------------------------------------------------------
--- 5. LEADERBOARD USER SNAPSHOTS (Decoupled Identity for Top 50 Views)
--- ---------------------------------------------------------------------
+-- 4. LEADERBOARD USER SNAPSHOTS
 CREATE TABLE IF NOT EXISTS gamification.user_snapshots (
     user_id UUID PRIMARY KEY,
     display_name VARCHAR(100) NOT NULL DEFAULT 'Gymer',
@@ -126,9 +111,7 @@ CREATE TABLE IF NOT EXISTS gamification.user_snapshots (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ---------------------------------------------------------------------
--- 6. BADGES & ACHIEVEMENTS (Milestone Honors & Collection)
--- ---------------------------------------------------------------------
+-- 5. BADGES & ACHIEVEMENTS
 CREATE TABLE IF NOT EXISTS gamification.user_badges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES gamification.user_xp(user_id) ON DELETE CASCADE,
@@ -141,10 +124,7 @@ CREATE TABLE IF NOT EXISTS gamification.user_badges (
 CREATE INDEX IF NOT EXISTS idx_user_badges_user_unlocked
     ON gamification.user_badges (user_id, unlocked_at DESC);
 
-
--- ---------------------------------------------------------------------
--- 7. FITCOINS VIRTUAL WALLET & IMMUTABLE LEDGER
--- ---------------------------------------------------------------------
+-- 6. FITCOINS VIRTUAL WALLET & IMMUTABLE LEDGER
 CREATE TABLE IF NOT EXISTS gamification.user_wallet (
     user_id UUID PRIMARY KEY,
     balance BIGINT NOT NULL DEFAULT 0,
@@ -179,3 +159,4 @@ CREATE INDEX IF NOT EXISTS idx_coin_ledger_user_created
 CREATE UNIQUE INDEX IF NOT EXISTS uq_coin_ledger_daily_cap
     ON gamification.coin_ledger (user_id, reason, activity_date)
     WHERE reason IN ('EARN_WORKOUT', 'EARN_PR', 'EARN_NUTRITION');
+

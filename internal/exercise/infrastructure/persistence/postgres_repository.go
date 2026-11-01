@@ -156,6 +156,7 @@ func saveExercise(tx *gorm.DB, info *domain.Info) error {
 			"default_rest_seconds",
 			"status",
 			"has_ai_supported",
+			"measurement_type",
 			"archived_at",
 			"updated_at",
 		}),

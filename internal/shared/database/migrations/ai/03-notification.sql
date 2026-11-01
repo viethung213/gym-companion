@@ -1,10 +1,38 @@
--- ==========================================
--- NOTIFICATION BOUNDED CONTEXT TABLES
--- ==========================================
+-- =====================================================================
+-- BOUNDED CONTEXT: notification (In-App, Push Notifications & User Settings)
+-- Initial Schema, Transactional Outbox, Tables, and Delivery Indexes
+-- =====================================================================
 
 CREATE SCHEMA IF NOT EXISTS notification;
 
--- 1. Devices table (User Device Tokens for FCM/APNs)
+-- 1. TRANSACTIONAL OUTBOX & AUDIT LOG
+CREATE TABLE IF NOT EXISTS notification.outbox (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS notification.outbox_log (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_event_status ON notification.outbox_log (event_id, status);
+
+-- 2. USER DEVICES (Device Tokens for FCM/APNs)
 CREATE TABLE IF NOT EXISTS notification.user_devices (
     id UUID PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
@@ -20,7 +48,7 @@ CREATE TABLE IF NOT EXISTS notification.user_devices (
 CREATE INDEX IF NOT EXISTS idx_notification_user_devices_user_id 
     ON notification.user_devices (user_id, is_active);
 
--- 2. Notification User Settings table
+-- 3. USER SETTINGS
 CREATE TABLE IF NOT EXISTS notification.user_settings (
     user_id VARCHAR(255) PRIMARY KEY,
     enable_push BOOLEAN DEFAULT TRUE NOT NULL,
@@ -32,7 +60,7 @@ CREATE TABLE IF NOT EXISTS notification.user_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
--- 3. In-App Notifications table (History)
+-- 4. IN-APP NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS notification.in_app_notifications (
     id UUID PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
@@ -45,3 +73,4 @@ CREATE TABLE IF NOT EXISTS notification.in_app_notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notification_in_app_notifications_user_id 
     ON notification.in_app_notifications (user_id, created_at DESC);
+

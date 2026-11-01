@@ -1,11 +1,39 @@
--- ==========================================
--- SCHEMA: coaching - Tables definitions
--- 4-tier DDD: Roadmap -> WeekPlan -> DayPlan -> SessionPlan
--- ==========================================
+-- =====================================================================
+-- BOUNDED CONTEXT: coaching (AI Coach, 4-tier DDD: Roadmap -> WeekPlan -> DayPlan -> SessionPlan)
+-- Initial Schema, Transactional Outbox, Tables, and Invariant Indexes
+-- =====================================================================
 
 CREATE SCHEMA IF NOT EXISTS coaching;
 
--- 1. Table: roadmaps (Aggregate Root, 4-week program)
+-- 1. TRANSACTIONAL OUTBOX & AUDIT LOG
+CREATE TABLE IF NOT EXISTS coaching.outbox (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS coaching.outbox_log (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_outbox_log_event_status ON coaching.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_coaching_outbox_log_event_id ON coaching.outbox_log (event_id);
+
+-- 2. ROADMAPS (Aggregate Root, 4-week program)
 CREATE TABLE IF NOT EXISTS coaching.roadmaps (
     roadmap_id  VARCHAR(255) PRIMARY KEY,
     user_id     VARCHAR(255) NOT NULL,
@@ -18,12 +46,9 @@ CREATE TABLE IF NOT EXISTS coaching.roadmaps (
 );
 
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON coaching.roadmaps(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
 
--- Only one ACTIVE roadmap per user (BR-AC-01 invariant support)
-CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active
-    ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
-
--- 2. Table: week_plans (4 per roadmap, one per phase)
+-- 3. WEEK PLANS (4 per roadmap, one per phase)
 CREATE TABLE IF NOT EXISTS coaching.week_plans (
     week_plan_id       VARCHAR(255) PRIMARY KEY,
     roadmap_id         VARCHAR(255) NOT NULL REFERENCES coaching.roadmaps(roadmap_id) ON DELETE CASCADE,
@@ -42,7 +67,7 @@ CREATE TABLE IF NOT EXISTS coaching.week_plans (
 
 CREATE INDEX IF NOT EXISTS idx_week_plans_roadmap_id ON coaching.week_plans(roadmap_id);
 
--- 3. Table: day_plans (7 per week)
+-- 4. DAY PLANS (7 per week)
 CREATE TABLE IF NOT EXISTS coaching.day_plans (
     day_plan_id      VARCHAR(255) PRIMARY KEY,
     week_plan_id     VARCHAR(255) NOT NULL REFERENCES coaching.week_plans(week_plan_id) ON DELETE CASCADE,
@@ -56,7 +81,7 @@ CREATE TABLE IF NOT EXISTS coaching.day_plans (
 CREATE INDEX IF NOT EXISTS idx_day_plans_week_plan_id ON coaching.day_plans(week_plan_id);
 CREATE INDEX IF NOT EXISTS idx_day_plans_user_date   ON coaching.day_plans(user_id, scheduled_date);
 
--- 4. Table: session_plans (0-N per day)
+-- 5. SESSION PLANS (0-N per day)
 CREATE TABLE IF NOT EXISTS coaching.session_plans (
     session_plan_id       VARCHAR(255) PRIMARY KEY,
     day_plan_id           VARCHAR(255) NOT NULL REFERENCES coaching.day_plans(day_plan_id) ON DELETE CASCADE,
@@ -64,9 +89,9 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
     roadmap_id            VARCHAR(255) NOT NULL,
     user_id               VARCHAR(255) NOT NULL,
     scheduled_date        DATE         NOT NULL,
-    slot_time                 VARCHAR(50)  NOT NULL DEFAULT '',
-    estimated_duration_minutes INT          NOT NULL DEFAULT 45,
-    status                    VARCHAR(50)  NOT NULL DEFAULT 'PENDING',
+    slot_time             VARCHAR(50)  NOT NULL DEFAULT '',
+    estimated_duration_minutes INT      NOT NULL DEFAULT 45,
+    status                VARCHAR(50)  NOT NULL DEFAULT 'PENDING',
     source                VARCHAR(50)  NOT NULL DEFAULT 'COACH_SCHEDULED',
     target_muscle_groups  JSONB        NOT NULL DEFAULT '[]',
     prescription          JSONB        NOT NULL DEFAULT '{}',
@@ -81,13 +106,5 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
 
 CREATE INDEX IF NOT EXISTS idx_session_plans_day_plan_id  ON coaching.session_plans(day_plan_id);
 CREATE INDEX IF NOT EXISTS idx_session_plans_user_date    ON coaching.session_plans(user_id, scheduled_date);
+CREATE INDEX IF NOT EXISTS ix_session_plans_pending       ON coaching.session_plans(user_id, scheduled_date) WHERE status = 'PENDING';
 
--- Partial index for pending sessions (D3: Regenerate touches only PENDING)
-CREATE INDEX IF NOT EXISTS ix_session_plans_pending
-    ON coaching.session_plans(user_id, scheduled_date) WHERE status = 'PENDING';
-
--- 5. Consumer idempotency (D9): unique event_id on outbox_log
--- NOTE: idx_coaching_outbox_log_event_status is already created in 01-init-schemas.sql.
---       Only add the UNIQUE constraint on event_id which is new.
-CREATE UNIQUE INDEX IF NOT EXISTS ux_coaching_outbox_log_event_id
-    ON coaching.outbox_log(event_id);

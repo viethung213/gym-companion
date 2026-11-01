@@ -197,7 +197,7 @@ func run() error {
 		log.Println("Warning: coaching database pool not found, falling back to auth pool.")
 		coachingDB = db
 	}
-	coachGRPCHandler, coachAgent, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
+	coachGRPCHandler, _, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
 		DB:            coachingDB,
 		KafkaRegistry: kafkaRegistry,
 		IDGenerator:   coachingpersistence.UUIDGenerator{},
@@ -241,11 +241,6 @@ func run() error {
 	}
 	defer shutdownSoloMatch()
 
-	// Seed system bot profiles via Auth API and wait for solo_match snapshot sync
-	if seedErr := seeder.SeedSystemBots(ctx, db, authGRPCHandler); seedErr != nil {
-		return fmt.Errorf("seed system bots: %w", seedErr)
-	}
-
 	// Initialize Gamification Module
 	gamificationDB, err := dbRegistry.GetPool("gamification")
 	if err != nil {
@@ -284,10 +279,6 @@ func run() error {
 	notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors)
 	coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors)
 
-	// Register Coaching REST HTTP Handler
-	coachingHandler := coaching.NewCoachingHandler(coachAgent)
-	coaching.RegisterHandlers(mux, coachingHandler)
-
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -315,6 +306,21 @@ func run() error {
 		Addr:    ":" + appPort,
 		Handler: h2cHandler,
 	}
+
+	// Run background seeder tasks without blocking server startup or incoming API traffic
+	go func() {
+		seedCtx := context.Background()
+		log.Println("🌱 Triggering background seeding for System Bots, Exercise catalog, and Food items...")
+		if seedErr := seeder.SeedSystemBots(seedCtx, db, authGRPCHandler); seedErr != nil {
+			log.Printf("⚠️ Background seeding system bots error: %v", seedErr)
+		}
+		if seedErr := seeder.SeedExercises(seedCtx, exerciseDB, exerciseServer); seedErr != nil {
+			log.Printf("⚠️ Background seeding exercise catalog error: %v", seedErr)
+		}
+		if seedErr := seeder.SeedFoodItems(seedCtx, nutritionDB, nutritionGRPCHandler); seedErr != nil {
+			log.Printf("⚠️ Background seeding food catalog error: %v", seedErr)
+		}
+	}()
 
 	errChan := make(chan error, 1)
 	go func() {
