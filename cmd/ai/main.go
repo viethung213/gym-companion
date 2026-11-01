@@ -12,9 +12,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
-
 	"github.com/viethung213/gym-companion/internal/coaching"
 	coachingadapters "github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
@@ -25,6 +22,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"github.com/viethung213/gym-companion/internal/shared/seeder"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 func main() {
@@ -245,4 +244,3 @@ func maskKey(k string) string {
 	}
 	return k[:6] + "..." + k[len(k)-4:] + fmt.Sprintf(" (len=%d)", len(k))
 }
-

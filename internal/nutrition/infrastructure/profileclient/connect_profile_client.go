@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
 	profilemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
@@ -77,4 +76,3 @@ func (c *ConnectProfileClient) GetBiologicalMetrics(
 		ActivityLevel: activity,
 	}, nil
 }
-
