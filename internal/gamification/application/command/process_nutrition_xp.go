@@ -10,33 +10,31 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/event"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/service"
 )
 
-// ProcessNutritionXpCommand carries nutrition adherence details.
 type ProcessNutritionXpCommand struct {
 	UserID       string
-	ActivityDate string // YYYY-MM-DD
+	ActivityDate string
 	AchievedAt   time.Time
 }
 
-// ProcessNutritionXpResult contains the outcome of awarding nutrition XP.
 type ProcessNutritionXpResult struct {
 	Claimed  bool
 	DeltaXp  int32
 	NewXp    int64
 	NewLevel int32
+	Events   []event.Event
 }
 
-// ProcessNutritionXpHandler awards fixed +30 XP for meeting daily nutrition targets.
 type ProcessNutritionXpHandler struct {
 	userXpRepo   repository.UserXpRepository
 	txManager    port.TransactionManager
 	outboxWriter port.OutboxWriter
 }
 
-// NewProcessNutritionXpHandler constructs ProcessNutritionXpHandler.
 func NewProcessNutritionXpHandler(
 	userXpRepo repository.UserXpRepository,
 	txManager port.TransactionManager,
@@ -49,7 +47,30 @@ func NewProcessNutritionXpHandler(
 	}
 }
 
-// Handle awards the daily nutrition bonus if not already claimed for the local date.
+func (h *ProcessNutritionXpHandler) HandleEvents(
+	ctx context.Context,
+	events []event.Event,
+) ([]event.Event, error) {
+	if h == nil {
+		return nil, nil
+	}
+	var emitted []event.Event
+	for _, ev := range events {
+		if e, ok := ev.(*event.NutritionActivityIngested); ok {
+			res, err := h.Handle(ctx, ProcessNutritionXpCommand{
+				UserID:       e.UserID,
+				ActivityDate: e.ActivityDate,
+				AchievedAt:   e.RecordedAt,
+			})
+			if err != nil {
+				return nil, err
+			}
+			emitted = append(emitted, res.Events...)
+		}
+	}
+	return emitted, nil
+}
+
 func (h *ProcessNutritionXpHandler) Handle(
 	ctx context.Context,
 	cmd ProcessNutritionXpCommand,
@@ -71,7 +92,6 @@ func (h *ProcessNutritionXpHandler) Handle(
 		events, err := userXp.EarnNutritionXp(cmd.ActivityDate, cmd.AchievedAt)
 		if err != nil {
 			if errors.Is(err, aggregate.ErrNutritionRewardAlreadyClaimedToday) {
-				// Idempotent no-op: already rewarded today
 				result = ProcessNutritionXpResult{
 					Claimed:  false,
 					DeltaXp:  0,
@@ -114,10 +134,10 @@ func (h *ProcessNutritionXpHandler) Handle(
 			DeltaXp:  service.NutritionDailyXpReward,
 			NewXp:    userXp.Xp(),
 			NewLevel: userXp.Level(),
+			Events:   events,
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

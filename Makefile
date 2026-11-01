@@ -1,4 +1,4 @@
-.PHONY: proto-gen proto-lint build-prod build-test run-prod run-prod-d stop-prod test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
+.PHONY: proto-gen proto-lint build-prod build-gateway build-test run-prod run-prod-d stop-prod run-gateway stop-gateway logs-prod test-env-up test-env-down lint test-all test-unit test-integration test-module test-unit-module test-integration-module clean install-hooks proto-docker-build proto-update db-init-postgres db-init-go db-init-all
 
 # Lệnh chạy docker compose của Buf CLI
 BUF_COMPOSE = docker compose -f infra/buf/docker-compose.yml
@@ -37,23 +37,48 @@ proto-lint:
 # 2. Docker Build & Run Environments
 # =====================================================================
 
-# Build production target image (tối ưu dung lượng, chỉ chứa binary chạy thực tế)
-build-prod:
-	@echo "Building Production Docker Image..."
+# Build API Gateway Docker image độc lập (<10MB)
+build-gateway:
+	@echo "Building API Gateway Docker Image..."
+	docker build -f infra/gateway/Dockerfile -t fitai-gateway:latest .
+
+# Build toàn bộ production target images (cả Backend API và API Gateway)
+build-prod: build-gateway
+	@echo "Building Backend Production Docker Image..."
 	docker build --target prod -t fitai-app:latest .
 
-# Chạy container Production (fitai-app:latest) tương tác trực tiếp, mount cổng 8080 và nạp .env
-run-prod:
+# Khởi chạy riêng API Gateway Container trên port 8000 & 8001
+run-gateway:
 	@-docker network create fitai-network 2>/dev/null
-	@-cp -n .env.example .env 2>/dev/null
-	@echo "Starting Production Container on port 8080..."
-	docker run --rm -it --name fitai-backend --network fitai-network --env-file .env -p 8080:8080 -p 9090:9090 fitai-app:latest
+	@echo "Starting API Gateway Container on ports 8000 & 8001..."
+	docker compose -f infra/gateway/docker-compose.yml up -d --build
 
-# Dừng container Production
+# Dừng riêng API Gateway Container
+stop-gateway:
+	@echo "Stopping API Gateway Container..."
+	docker compose -f infra/gateway/docker-compose.yml down
+
+# Khởi chạy toàn bộ hệ thống Production (cả Gateway và Backend API) chạy ngầm dưới nền (Detached mode)
+run-prod: run-gateway
+	@-cp -n .env.example .env 2>/dev/null
+	@echo "Starting Backend Production Container in background..."
+	docker run -d --name fitai-backend --network fitai-network --network-alias app --network-alias api --env-file .env -p 8080:8080 -p 9090:9090 fitai-app:latest
+	@echo "======================================================================"
+	@echo "🟢 Hệ thống đã khởi chạy thành công dưới nền (xem trong Docker Desktop):"
+	@echo "   - API Gateway Data Plane:    http://localhost:8000"
+	@echo "   - API Gateway Control Plane: http://localhost:8001"
+	@echo "   - Backend App API:           http://localhost:8080"
+	@echo "======================================================================"
+	@echo "👉 Xem logs Gateway: docker logs -f fitai-gateway"
+	@echo "👉 Dừng hệ thống:    make stop-prod"
+
+# Dừng toàn bộ hệ thống Production (cả Backend API và API Gateway)
 stop-prod:
-	@echo "Stopping Production Container..."
+	@echo "Stopping Backend Production Container..."
 	docker stop fitai-backend || true
 	docker rm fitai-backend || true
+	@echo "Stopping API Gateway Container..."
+	docker compose -f infra/gateway/docker-compose.yml down || true
 
 # Build test target image (chứa toàn bộ môi trường Go để chạy test)
 build-test:

@@ -26,6 +26,7 @@ type ExerciseServer struct {
 	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler
 	approveHandler           *command.ApproveExerciseHandler
 	archiveHandler           *command.ArchiveExerciseHandler
+	restoreHandler           *command.RestoreExerciseHandler
 	getHandler               *query.GetExerciseHandler
 	getRandomHandler         *query.GetRandomExerciseHandler
 	searchHandler            *query.SearchExercisesHandler
@@ -64,6 +65,7 @@ func NewExerciseServer(
 	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler,
 	approveHandler *command.ApproveExerciseHandler,
 	archiveHandler *command.ArchiveExerciseHandler,
+	restoreHandler *command.RestoreExerciseHandler,
 	getHandler *query.GetExerciseHandler,
 	getRandomHandler *query.GetRandomExerciseHandler,
 	searchHandler *query.SearchExercisesHandler,
@@ -95,6 +97,7 @@ func NewExerciseServer(
 		submitForApprovalHandler: submitForApprovalHandler,
 		approveHandler:           approveHandler,
 		archiveHandler:           archiveHandler,
+		restoreHandler:           restoreHandler,
 		getHandler:               getHandler,
 		getRandomHandler:         getRandomHandler,
 		searchHandler:            searchHandler,
@@ -129,7 +132,7 @@ func (s *ExerciseServer) SearchExercises(
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	exercises, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{
+	result, err := s.searchHandler.Handle(ctx, query.SearchExercisesQuery{
 		Filters: &port.SearchFilters{
 			BodyPartID:         req.GetBodyPartId(),
 			EquipmentID:        req.GetEquipmentId(),
@@ -141,6 +144,8 @@ func (s *ExerciseServer) SearchExercises(
 			Limit:              req.GetLimit(),
 			Offset:             req.GetOffset(),
 			MeasurementType:    toDomainMeasurementTypeString(req.GetMeasurementType()),
+			Status:             toDomainStatus(req.GetStatus()),
+			IncludeAllStatuses: req.GetIncludeAllStatuses(),
 		},
 	})
 	if err != nil {
@@ -148,9 +153,10 @@ func (s *ExerciseServer) SearchExercises(
 	}
 
 	response := &exercisemsg.SearchExercisesResponse{
-		Exercises: make([]*exercisemsg.ExerciseInfo, 0, len(exercises)),
+		Exercises:  make([]*exercisemsg.ExerciseInfo, 0, len(result.Exercises)),
+		TotalCount: result.TotalCount,
 	}
-	for _, exercise := range exercises {
+	for _, exercise := range result.Exercises {
 		info := exercise.Info()
 		response.Exercises = append(response.Exercises, toProtoExercise(&info))
 	}
@@ -225,6 +231,7 @@ func (s *ExerciseServer) CreateExercise(
 			DefaultRestSeconds: req.GetDefaultRestSeconds(),
 			TagIDs:             req.GetTagIds(),
 			MeasurementType:    toDomainMeasurementType(req.GetMeasurementType()),
+			Status:             toDomainStatus(req.GetStatus()),
 		},
 	})
 	if err != nil {
@@ -329,6 +336,27 @@ func (s *ExerciseServer) DeleteExercise(
 	return &exercisemsg.DeleteExerciseResponse{Success: true}, nil
 }
 
+func (s *ExerciseServer) RestoreExercise(
+	ctx context.Context,
+	req *exercisemsg.RestoreExerciseRequest,
+) (*exercisemsg.RestoreExerciseResponse, error) {
+	if req == nil || req.GetId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "exercise id is required")
+	}
+
+	exercise, err := s.restoreHandler.Handle(ctx, command.RestoreExerciseCommand{
+		ID: req.GetId(),
+	})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+
+	info := exercise.Info()
+	return &exercisemsg.RestoreExerciseResponse{
+		Exercise: toProtoExercise(&info),
+	}, nil
+}
+
 func toProtoExercise(info *domain.Info) *exercisemsg.ExerciseInfo {
 	return &exercisemsg.ExerciseInfo{
 		Id:                 info.ID,
@@ -384,6 +412,21 @@ func toProtoMetadata(metadata *port.Metadata) *exercisemsg.GetCatalogMetadataRes
 	}
 
 	return response
+}
+
+func toDomainStatus(s exercisemsg.ExerciseStatus) domain.Status {
+	switch s {
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_DRAFT:
+		return domain.StatusDraft
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_PENDING_APPROVAL:
+		return domain.StatusPendingApproval
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE:
+		return domain.StatusActive
+	case exercisemsg.ExerciseStatus_EXERCISE_STATUS_ARCHIVED:
+		return domain.StatusArchived
+	default:
+		return ""
+	}
 }
 
 func toProtoStatus(status domain.Status) exercisemsg.ExerciseStatus {
@@ -847,6 +890,17 @@ func (c *ConnectExerciseHandler) DeleteExercise(
 	req *connect.Request[exercisemsg.DeleteExerciseRequest],
 ) (*connect.Response[exercisemsg.DeleteExerciseResponse], error) {
 	res, err := c.server.DeleteExercise(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (c *ConnectExerciseHandler) RestoreExercise(
+	ctx context.Context,
+	req *connect.Request[exercisemsg.RestoreExerciseRequest],
+) (*connect.Response[exercisemsg.RestoreExerciseResponse], error) {
+	res, err := c.server.RestoreExercise(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,10 @@ services:
       DEFAULT_ONNX_DETECTOR_URL: ${DEFAULT_ONNX_DETECTOR_URL:-}
       DEFAULT_ONNX_SKELETON_URL: ${DEFAULT_ONNX_SKELETON_URL:-}
     networks:
-      - fitai-network
+      fitai-network:
+        aliases:
+          - app
+          - api
 
 networks:
   fitai-network:

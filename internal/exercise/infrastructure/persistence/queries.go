@@ -115,14 +115,19 @@ func replaceTags(tx *gorm.DB, info *domain.Info) error {
 	return nil
 }
 
-func (r *PostgresRepository) searchActiveRecords(
+func (r *PostgresRepository) buildSearchQuery(
 	ctx context.Context,
 	filters *port.SearchFilters,
-) ([]exerciseRecord, error) {
-	query := r.db.WithContext(ctx).
-		Table("exercise.exercises AS e").
-		Select("e.*").
-		Where("e.status = ?", string(domain.StatusActive))
+) *gorm.DB {
+	query := r.db.WithContext(ctx).Table("exercise.exercises AS e")
+
+	if !filters.IncludeAllStatuses {
+		if filters.Status != "" {
+			query = query.Where("e.status = ?", string(filters.Status))
+		} else {
+			query = query.Where("e.status = ?", string(domain.StatusActive))
+		}
+	}
 
 	if filters.BodyPartID != "" {
 		query = query.Where("e.body_part_id = ?", filters.BodyPartID)
@@ -161,6 +166,19 @@ func (r *PostgresRepository) searchActiveRecords(
 		)
 	}
 
+	return query
+}
+
+func (r *PostgresRepository) searchActiveRecords(
+	ctx context.Context,
+	filters *port.SearchFilters,
+) ([]exerciseRecord, int32, error) {
+	countQuery := r.buildSearchQuery(ctx, filters)
+	var totalCount int64
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return nil, 0, fmt.Errorf("count active exercises: %w", err)
+	}
+
 	limit := filters.Limit
 	if limit <= 0 {
 		limit = 50
@@ -169,17 +187,20 @@ func (r *PostgresRepository) searchActiveRecords(
 		limit = 100
 	}
 
-	query = query.Order("e.name").Limit(int(limit))
+	dataQuery := r.buildSearchQuery(ctx, filters).
+		Select("e.*").
+		Order("e.name").
+		Limit(int(limit))
 	if filters.Offset > 0 {
-		query = query.Offset(int(filters.Offset))
+		dataQuery = dataQuery.Offset(int(filters.Offset))
 	}
 
 	var records []exerciseRecord
-	if err := query.Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("query active exercises: %w", err)
+	if err := dataQuery.Find(&records).Error; err != nil {
+		return nil, 0, fmt.Errorf("query active exercises: %w", err)
 	}
 
-	return records, nil
+	return records, int32(totalCount), nil
 }
 
 func querySecondaryMuscleIDs(

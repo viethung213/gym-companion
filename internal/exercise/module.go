@@ -57,6 +57,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	submitForApprovalHandler := command.NewSubmitExerciseForApprovalHandler(repo, clock, ids)
 	approveHandler := command.NewApproveExerciseHandler(repo, clock, ids)
 	archiveHandler := command.NewArchiveExerciseHandler(repo, clock, ids)
+	restoreHandler := command.NewRestoreExerciseHandler(repo, clock, ids)
 
 	// Initialize CQRS Query Handlers
 	getHandler := query.NewGetExerciseHandler(repo)
@@ -96,6 +97,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 		submitForApprovalHandler,
 		approveHandler,
 		archiveHandler,
+		restoreHandler,
 		getHandler,
 		getRandomHandler,
 		searchHandler,

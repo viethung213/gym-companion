@@ -56,8 +56,8 @@ func (m *mockQueryRepository) FindByID(ctx context.Context, id string) (*domain.
 	return nil, nil
 }
 
-func (m *mockQueryRepository) SearchActive(ctx context.Context, filters *port.SearchFilters) ([]*domain.Exercise, error) {
-	return nil, nil
+func (m *mockQueryRepository) SearchActive(ctx context.Context, filters *port.SearchFilters) ([]*domain.Exercise, int32, error) {
+	return nil, 0, nil
 }
 
 func (m *mockQueryRepository) GetRandomAISupported(_ context.Context) (*domain.Exercise, error) {

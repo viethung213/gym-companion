@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
@@ -111,13 +110,15 @@ func run() error {
 		log.Println("Initialized isolated Workout Execution Database Pool successfully.")
 	}
 
-	lazyKP := &lazyKeyProvider{}
+	internalSecret := os.Getenv("INTERNAL_SECRET")
+	if internalSecret == "" {
+		internalSecret = "gym-companion-internal-secret-2026-key"
+	}
 
 	// Initialize Auth Module
 	authGRPCHandler, shutdownAuth, err := auth.Initialize(ctx, auth.ModuleDeps{
-		DB:                db,
-		AssignKeyProvider: lazyKP.Set,
-		KafkaRegistry:     kafkaRegistry,
+		DB:            db,
+		KafkaRegistry: kafkaRegistry,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize auth module: %w", err)
@@ -268,8 +269,7 @@ func run() error {
 		middleware.NewConnectRecoveryInterceptor(),
 		middleware.NewConnectLoggingInterceptor(),
 		middleware.NewConnectErrorMappingInterceptor(),
-		middleware.NewConnectAuthInterceptor(lazyKP),
-		middleware.NewConnectRateLimitInterceptor(),
+		middleware.NewConnectInternalAuthInterceptor(internalSecret),
 	)
 
 	// Mount ConnectRPC Service Handlers directly onto HTTP multiplexer
@@ -336,28 +336,6 @@ func run() error {
 	}()
 
 	return <-errChan
-}
-
-type lazyKeyProvider struct {
-	mu sync.RWMutex
-	kp middleware.KeyProvider
-}
-
-var _ middleware.KeyProvider = (*lazyKeyProvider)(nil)
-
-func (l *lazyKeyProvider) GetPublicKeyPEM(ctx context.Context, kid string) (string, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	if l.kp == nil {
-		return "", errors.New("key provider not initialized")
-	}
-	return l.kp.GetPublicKeyPEM(ctx, kid)
-}
-
-func (l *lazyKeyProvider) Set(kp middleware.KeyProvider) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.kp = kp
 }
 
 func loadEnvFile() {

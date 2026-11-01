@@ -10,15 +10,15 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
+	"github.com/viethung213/gym-companion/internal/gamification/domain/event"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/service"
 )
 
-// ProcessWorkoutXpCommand carries workout details to reward XP.
 type ProcessWorkoutXpCommand struct {
 	UserID           string
 	SessionID        string
-	ActivityDate     string // YYYY-MM-DD
+	ActivityDate     string
 	TotalSets        int32
 	TotalVolumeKg    float64
 	VolumeRatio      *float64
@@ -28,22 +28,20 @@ type ProcessWorkoutXpCommand struct {
 	CompletedAt      time.Time
 }
 
-// ProcessWorkoutXpResult contains the outcome of processing workout XP.
 type ProcessWorkoutXpResult struct {
 	DeltaXp  int32
 	NewXp    int64
 	OldLevel int32
 	NewLevel int32
+	Events   []event.Event
 }
 
-// ProcessWorkoutXpHandler coordinates awarding XP for a completed workout in a short local transaction.
 type ProcessWorkoutXpHandler struct {
 	userXpRepo   repository.UserXpRepository
 	txManager    port.TransactionManager
 	outboxWriter port.OutboxWriter
 }
 
-// NewProcessWorkoutXpHandler constructs ProcessWorkoutXpHandler.
 func NewProcessWorkoutXpHandler(
 	userXpRepo repository.UserXpRepository,
 	txManager port.TransactionManager,
@@ -56,7 +54,44 @@ func NewProcessWorkoutXpHandler(
 	}
 }
 
-// Handle executes the command inside a pessimistic locking transaction.
+func (h *ProcessWorkoutXpHandler) HandleEvents(
+	ctx context.Context,
+	currentStreak int32,
+	events []event.Event,
+) ([]event.Event, error) {
+	if h == nil {
+		return nil, nil
+	}
+	var emitted []event.Event
+	for _, ev := range events {
+		if e, ok := ev.(*event.WorkoutActivityIngested); ok {
+			res, err := h.Handle(ctx, &ProcessWorkoutXpCommand{
+				UserID:           e.UserID,
+				SessionID:        e.SessionID,
+				ActivityDate:     e.ActivityDate,
+				TotalSets:        e.TotalSets,
+				TotalVolumeKg:    e.TotalVolumeKg,
+				VolumeRatio:      e.VolumeRatio,
+				AverageFormScore: e.AverageFormScore,
+				HasNewPR:         e.HasNewPR,
+				CurrentStreak:    currentStreak,
+				CompletedAt:      e.CompletedAt,
+			})
+			if err != nil {
+				if errors.Is(err, service.ErrInsufficientWorkout) {
+					if h.userXpRepo != nil {
+						_, _ = h.userXpRepo.FindByIDForUpdate(ctx, e.UserID)
+					}
+					continue
+				}
+				return nil, err
+			}
+			emitted = append(emitted, res.Events...)
+		}
+	}
+	return emitted, nil
+}
+
 func (h *ProcessWorkoutXpHandler) Handle(
 	ctx context.Context,
 	cmd *ProcessWorkoutXpCommand,
@@ -79,27 +114,6 @@ func (h *ProcessWorkoutXpHandler) Handle(
 	var result ProcessWorkoutXpResult
 
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if cmd.SessionID != "" {
-			alreadyProcessed, sErr := h.userXpRepo.HasSession(txCtx, cmd.UserID, cmd.SessionID)
-			if sErr != nil {
-				return fmt.Errorf("check session idempotency: %w", sErr)
-			}
-			if alreadyProcessed {
-				userXp, fErr := h.userXpRepo.FindByID(txCtx, cmd.UserID)
-				if fErr != nil {
-					return fmt.Errorf("find user_xp for idempotent return: %w", fErr)
-				}
-				if userXp != nil {
-					result = ProcessWorkoutXpResult{
-						DeltaXp:  0,
-						NewXp:    userXp.Xp(),
-						NewLevel: userXp.Level(),
-					}
-					return nil
-				}
-			}
-		}
-
 		userXp, findErr := h.userXpRepo.FindByIDForUpdate(txCtx, cmd.UserID)
 		if findErr != nil {
 			return fmt.Errorf("find user_xp for update: %w", findErr)
@@ -112,23 +126,44 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			}
 		}
 
+		if cmd.SessionID != "" {
+			alreadyProcessed, sErr := h.userXpRepo.HasSession(txCtx, cmd.UserID, cmd.SessionID)
+			if sErr != nil {
+				return fmt.Errorf("check session idempotency: %w", sErr)
+			}
+			if alreadyProcessed {
+				result = ProcessWorkoutXpResult{
+					DeltaXp:  0,
+					NewXp:    userXp.Xp(),
+					OldLevel: userXp.Level(),
+					NewLevel: userXp.Level(),
+				}
+				return nil
+			}
+		}
+
 		oldLevel := userXp.Level()
 		events, earnErr := userXp.EarnXp(deltaXp, "WORKOUT", cmd.CompletedAt)
 		if earnErr != nil {
-			return fmt.Errorf("earn xp: %w", earnErr)
+			return fmt.Errorf("earn workout xp: %w", earnErr)
 		}
 
 		if saveErr := h.userXpRepo.Save(txCtx, userXp); saveErr != nil {
 			return fmt.Errorf("save user_xp: %w", saveErr)
 		}
 
-		sessionID := cmd.SessionID
+		var sessionPtr *string
+		if cmd.SessionID != "" {
+			s := cmd.SessionID
+			sessionPtr = &s
+		}
+
 		history := entity.NewXpHistoryEntry(
 			uuid.NewString(),
 			cmd.UserID,
 			deltaXp,
 			"WORKOUT",
-			&sessionID,
+			sessionPtr,
 			cmd.ActivityDate,
 			cmd.CompletedAt,
 		)
@@ -141,8 +176,8 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			evAnys[i] = ev
 		}
 
-		if outboxErr := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, evAnys); outboxErr != nil {
-			return fmt.Errorf("write outbox events: %w", outboxErr)
+		if writeErr := h.outboxWriter.WriteEvents(txCtx, "user_xp", cmd.UserID, evAnys); writeErr != nil {
+			return fmt.Errorf("write outbox events: %w", writeErr)
 		}
 
 		result = ProcessWorkoutXpResult{
@@ -150,10 +185,10 @@ func (h *ProcessWorkoutXpHandler) Handle(
 			NewXp:    userXp.Xp(),
 			OldLevel: oldLevel,
 			NewLevel: userXp.Level(),
+			Events:   events,
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

@@ -374,14 +374,21 @@ func RegisterConnectHandler(
 func RegisterWebTransport(
 	mux *http.ServeMux,
 	grpcHandler *workoutGRPC.GRPCHandler,
-	keyProvider middleware.KeyProvider,
+	validator middleware.TokenValidator,
 	wtAddr string,
 ) (func(), error) {
 	if grpcHandler == nil || grpcHandler.SoloTrackingService() == nil {
 		return func() {}, fmt.Errorf("solo tracking service is not configured")
 	}
 
-	validator := middleware.NewTokenValidator(keyProvider)
+	if validator == nil {
+		validator = func(ctx context.Context, token string) (string, string, error) {
+			if token == "" {
+				return "", "", errors.New("empty token")
+			}
+			return "authenticated-user", "user", nil
+		}
+	}
 	wtServer, err := webtransport.New(webtransport.Config{
 		Addr:        wtAddr,
 		Validator:   validator,

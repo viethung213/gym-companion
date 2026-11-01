@@ -93,7 +93,7 @@ func (r *GormUserXpRepository) Save(ctx context.Context, userXp *aggregate.UserX
 	db := GetDB(ctx, r.db)
 	err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}},
-		UpdateAll: true,
+		DoUpdates: clause.AssignmentColumns([]string{"xp", "level", "last_nutrition_reward_date", "updated_at"}),
 	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("save user_xp: %w", err)

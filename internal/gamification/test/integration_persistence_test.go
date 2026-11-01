@@ -248,3 +248,55 @@ func TestIntegration_Outbox_ReleaseClaims(t *testing.T) {
 	require.Len(t, reclaimed, 1)
 	assert.Equal(t, "outbox-test-1", reclaimed[0].ID)
 }
+
+func TestIntegration_Outbox_DeadLetterNeverReclaimed(t *testing.T) {
+	_, repos := testutil.NewTestDB(t)
+	ctx := context.Background()
+
+	record := &port.OutboxRecord{
+		ID:            "outbox-dlq-1",
+		EventID:       "evt-dlq-1",
+		AggregateType: "UserXp",
+		AggregateID:   "user-dlq",
+		EventType:     "contracts.gamification.v1.XpEarned",
+		Payload:       []byte(`{}`),
+		PartitionKey:  "user-dlq",
+	}
+	require.NoError(t, repos.OutboxRepo.Save(ctx, record))
+
+	// Default max_retries is 5; fail 5 times to transition to DEAD_LETTER
+	for i := 0; i < 5; i++ {
+		claimed, err := repos.OutboxRepo.ClaimBatch(ctx, 10, 1*time.Minute)
+		require.NoError(t, err)
+		require.Len(t, claimed, 1, "attempt %d must claim PENDING record", i+1)
+		require.NoError(t, repos.OutboxRepo.MarkAsFailed(ctx, []string{"outbox-dlq-1"}, assert.AnError))
+	}
+
+	// 6th ClaimBatch must return 0 records because status is now DEAD_LETTER
+	claimedAfterDLQ, err := repos.OutboxRepo.ClaimBatch(ctx, 10, 1*time.Minute)
+	require.NoError(t, err)
+	assert.Empty(t, claimedAfterDLQ, "DEAD_LETTER record must never be reclaimed by ClaimBatch")
+}
+
+func TestIntegration_BadgeRepository_SaveBatchReturningInserted(t *testing.T) {
+	_, repos := testutil.NewTestDB(t)
+	ctx := context.Background()
+
+	gormBadgeRepo, ok := repos.BadgeRepo.(*persistence.GormBadgeRepository)
+	require.True(t, ok)
+
+	b1, _, err := aggregate.UnlockBadge("b-ret-1", "user-ret-1", "FIRST_WORKOUT", "Khởi Đầu", "MILESTONE", nil, time.Now().UTC())
+	require.NoError(t, err)
+
+	// 1st SaveBatchReturningInserted -> returns ["FIRST_WORKOUT"]
+	inserted1, err := gormBadgeRepo.SaveBatchReturningInserted(ctx, []*aggregate.UserBadge{b1})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"FIRST_WORKOUT"}, inserted1)
+
+	// 2nd SaveBatchReturningInserted with duplicate badge -> returns empty slice
+	b1Dup, _, err := aggregate.UnlockBadge("b-ret-2", "user-ret-1", "FIRST_WORKOUT", "Khởi Đầu", "MILESTONE", nil, time.Now().UTC())
+	require.NoError(t, err)
+	inserted2, err := gormBadgeRepo.SaveBatchReturningInserted(ctx, []*aggregate.UserBadge{b1Dup})
+	require.NoError(t, err)
+	assert.Empty(t, inserted2, "duplicate badge must not be reported as newly inserted")
+}
