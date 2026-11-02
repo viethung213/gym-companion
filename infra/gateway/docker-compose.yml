@@ -14,7 +14,7 @@ services:
     environment:
       APP_ENV: "production"
       GATEWAY_PORT: "8000"
-      GATEWAY_CONFIG_PATH: "configs/gateway_routes.docker.json"
+      GATEWAY_CONFIG_PATH: "configs/gateway_routes.json"
       GATEWAY_ADMIN_PORT: "8001"
       GATEWAY_ADMIN_KEY: "gym-companion-admin-secret-2026"
       GATEWAY_ADMIN_ENABLED: "true"
