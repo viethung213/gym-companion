@@ -204,15 +204,6 @@ func (cm *Manager) readFile() (*Config, time.Time, error) {
 		return nil, time.Time{}, fmt.Errorf("unmarshal gateway config: %w", err)
 	}
 
-	if extraHosts := os.Getenv("GATEWAY_ALLOWED_HOSTS"); extraHosts != "" {
-		for _, h := range strings.Split(extraHosts, ",") {
-			h = strings.TrimSpace(h)
-			if h != "" {
-				cfg.AllowedHosts = append(cfg.AllowedHosts, h)
-			}
-		}
-	}
-
 	return &cfg, info.ModTime(), nil
 }
 
