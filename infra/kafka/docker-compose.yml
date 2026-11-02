@@ -27,21 +27,6 @@ services:
     networks:
       - fitai-network
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: fitai-kafka-ui-test
-    ports:
-      - "8085:8080"
-    environment:
-      DYNAMIC_CONFIG_ENABLED: 'true'
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    depends_on:
-      kafka:
-        condition: service_healthy
-    networks:
-      - fitai-network
-
 networks:
   fitai-network:
     name: fitai-network
