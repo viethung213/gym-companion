@@ -61,8 +61,8 @@ jobs:
             # 1. Xác định target service
             TARGET_SERVICE="${{ inputs.service || 'all' }}"
 
-            # 2. Lấy mã commit hash mới nhất vừa build thành công
-            TARGET_TAG="${{ inputs.tag || github.event.workflow_run.head_sha || github.sha }}"
+            # 2. Lấy tag cần deploy (mặc định 'latest' đảm bảo tất cả service đều có image mới nhất)
+            TARGET_TAG="${{ inputs.tag || 'latest' }}"
 
             echo "=========================================================="
             echo " Triggering VPS Deployment:"
