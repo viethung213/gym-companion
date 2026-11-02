@@ -1,0 +1,75 @@
+name: Deploy to Single VPS (CD)
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service cần deploy (mặc định: all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - gateway
+          - core
+          - ai
+          - kafka
+          - redis
+      tag:
+        description: 'Tag hoặc Commit SHA (để trống sẽ tự lấy SHA hiện tại)'
+        required: false
+        default: ''
+        type: string
+
+  workflow_run:
+    workflows:
+      - "Module Selective Tests & GHCR Publish CI"
+      - "Test & Publish Gateway Docker Image"
+      - "Publish Dedicated Kafka Docker Image"
+      - "Publish Dedicated Redis Docker Image"
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  deploy-to-vps:
+    name: SSH to VPS & Trigger Deployment
+    runs-on: ubuntu-latest
+    # CHẶN TUYỆT ĐỐI PULL REQUEST:
+    # Chỉ deploy khi: Kích hoạt thủ công (workflow_dispatch) HOẶC commit thật sự đã merge/push vào main thành công
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+
+    steps:
+      - name: Kết nối SSH tới VPS và kích hoạt deploy.sh
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          timeout: 60s
+          command_timeout: 30m
+          script_stop: true
+          script: |
+            # 1. Xác định target service
+            TARGET_SERVICE="${{ inputs.service || 'all' }}"
+
+            # 2. Lấy mã commit hash mới nhất vừa build thành công
+            TARGET_TAG="${{ inputs.tag || github.event.workflow_run.head_sha || github.sha }}"
+
+            echo "=========================================================="
+            echo " Triggering VPS Deployment:"
+            echo " Service Target : $TARGET_SERVICE"
+            echo " Commit Hash    : $TARGET_TAG"
+            echo "=========================================================="
+
+            # 3. Gọi trực tiếp deploy.sh trên VPS (để deploy.sh tự lo việc so sánh và cập nhật)
+            /opt/gym-companion/deploy.sh "$TARGET_SERVICE" "$TARGET_TAG"
+

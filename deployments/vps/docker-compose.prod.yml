@@ -1,0 +1,134 @@
+version: '3.8'
+
+# Cấu hình chống tràn file Log cho tất cả các container
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # ===========================================================================
+  # 1. KAFKA: Build từ Git của bạn (fitai-kafka)
+  # ===========================================================================
+  kafka:
+    image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-kafka:${IMAGE_TAG:-latest}
+    container_name: fitai-kafka
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9092:9092"
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # Chống tràn ổ cứng VPS cho Kafka:
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+      KAFKA_LOG_SEGMENT_BYTES: 104857600
+      KAFKA_LOG_CLEANUP_POLICY: delete
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
+    networks:
+      - fitai-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *default-logging
+
+  # ===========================================================================
+  # 2. REDIS: Build từ Git của bạn (fitai-redis)
+  # ===========================================================================
+  redis:
+    image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-redis:${IMAGE_TAG:-latest}
+    container_name: fitai-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - fitai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    <<: *default-logging
+
+  # ===========================================================================
+  # 3. API GATEWAY: Build từ Git của bạn (fitai-gateway)
+  # ===========================================================================
+  gateway:
+    image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-gateway:${IMAGE_TAG:-latest}
+    container_name: fitai-gateway
+    restart: unless-stopped
+    env_file:
+      - ./secrets/.env.gateway.prod
+    ports:
+      - "8000:8000"   # Public API endpoint
+      - "8001:8001"   # Admin / Control Plane
+    networks:
+      - fitai-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    <<: *default-logging
+
+  # ===========================================================================
+  # 4. CORE SERVICE: Build từ Git của bạn (fitai-core)
+  # ===========================================================================
+  core:
+    image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-core:${IMAGE_TAG:-latest}
+    container_name: fitai-core
+    restart: unless-stopped
+    env_file:
+      - ./secrets/.env.core.prod
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - fitai-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    <<: *default-logging
+
+  # ===========================================================================
+  # 5. AI SERVICE: Build từ Git của bạn (fitai-ai)
+  # ===========================================================================
+  ai:
+    image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-ai:${IMAGE_TAG:-latest}
+    container_name: fitai-ai
+    restart: unless-stopped
+    env_file:
+      - ./secrets/.env.ai.prod
+    ports:
+      - "8082:8082"
+      - "9092:9092"
+    networks:
+      - fitai-network
+    <<: *default-logging
+
+volumes:
+  redis-data:
+    name: fitai-redis-data
+  kafka-data:
+    name: fitai-kafka-data
+
+networks:
+  fitai-network:
+    name: fitai-network
+    external: true
+

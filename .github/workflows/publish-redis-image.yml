@@ -1,0 +1,58 @@
+name: Publish Dedicated Redis Docker Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/redis/Dockerfile'
+      - 'infra/redis/redis.conf'
+      - '.github/workflows/publish-redis-image.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infra/redis/Dockerfile'
+      - 'infra/redis/redis.conf'
+      - '.github/workflows/publish-redis-image.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: fitai-redis
+
+jobs:
+  build-and-push-redis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Image Name
+        id: prep
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_tag=${{ env.REGISTRY }}/${REPO_OWNER}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "sha_tag=${{ env.REGISTRY }}/${REPO_OWNER}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Redis Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./infra/redis/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ steps.prep.outputs.image_tag }}
+            ${{ steps.prep.outputs.sha_tag }}
+
