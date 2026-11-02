@@ -6,10 +6,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -350,9 +352,9 @@ func TestGateway_CircuitBreaker_TripsAndFastFails(t *testing.T) {
 	t.Parallel()
 
 	// 1. Backend server that constantly returns 503
-	var backendHits int
+	var backendHits atomic.Int64
 	backend := httptest.NewServer(h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		backendHits++
+		backendHits.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"temporarily broken"}`))
@@ -391,17 +393,19 @@ func TestGateway_CircuitBreaker_TripsAndFastFails(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		resp, reqErr := client.Get(gwServer.URL + "/contracts.generic.auth.v1.service.AuthService/Login")
 		require.NoError(t, reqErr)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
 
-	assert.Equal(t, 5, backendHits, "Backend should have been hit 5 times before circuit tripped")
+	assert.Equal(t, int64(5), backendHits.Load(), "Backend should have been hit 5 times before circuit tripped")
 
 	// 3. 6th request: Circuit Breaker is now OPEN! Must Fast-Fail at Gateway without hitting backend!
 	resp, reqErr := client.Get(gwServer.URL + "/contracts.generic.auth.v1.service.AuthService/Login")
 	require.NoError(t, reqErr)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
-	assert.Equal(t, 5, backendHits, "Backend should NOT have received the 6th request (Fast-Fail)")
+	assert.Equal(t, int64(5), backendHits.Load(), "Backend should NOT have received the 6th request (Fast-Fail)")
 }
 

@@ -420,13 +420,35 @@ func (gw *Gateway) Handler() http.Handler {
 		val, ok := route.Proxies.Load(key)
 		var p http.Handler
 		if !ok {
-			created := gw.proxyEngine.CreateProxy(target)
+			created := gw.proxyEngine.CreateProxy(target, proxy.Hooks{
+				OnResponse: func(statusCode int) {
+					if statusCode >= 502 && statusCode <= 504 {
+						route.LB.ReportFailure(target)
+					} else if statusCode > 0 && statusCode < 500 {
+						route.LB.ReportSuccess(target)
+					}
+				},
+				OnError: func(_ error) {
+					route.LB.ReportFailure(target)
+				},
+			})
 			route.Proxies.Store(key, created)
 			p = created
 		} else if handler, isHandler := val.(http.Handler); isHandler {
 			p = handler
 		} else {
-			created := gw.proxyEngine.CreateProxy(target)
+			created := gw.proxyEngine.CreateProxy(target, proxy.Hooks{
+				OnResponse: func(statusCode int) {
+					if statusCode >= 502 && statusCode <= 504 {
+						route.LB.ReportFailure(target)
+					} else if statusCode > 0 && statusCode < 500 {
+						route.LB.ReportSuccess(target)
+					}
+				},
+				OnError: func(_ error) {
+					route.LB.ReportFailure(target)
+				},
+			})
 			route.Proxies.Store(key, created)
 			p = created
 		}
@@ -436,13 +458,6 @@ func (gw *Gateway) Handler() http.Handler {
 		if rec, ok := w.(*statusRecorder); ok {
 			uDurNs := time.Since(uStart).Nanoseconds()
 			gw.telemetry.Metrics.RecordUpstreamResult(key, uDurNs, rec.statusCode, nil)
-
-			// Circuit Breaker feedback loop
-			if rec.statusCode >= 502 && rec.statusCode <= 504 {
-				route.LB.ReportFailure(target)
-			} else if rec.statusCode > 0 && rec.statusCode < 500 {
-				route.LB.ReportSuccess(target)
-			}
 		}
 	})
 
