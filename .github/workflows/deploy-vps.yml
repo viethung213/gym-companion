@@ -36,8 +36,15 @@ jobs:
   deploy-to-vps:
     name: SSH to VPS & Trigger Deployment
     runs-on: ubuntu-latest
-    # Chỉ chạy nếu kích hoạt tay hoặc workflow build trước đó hoàn thành thành công
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # CHẶN TUYỆT ĐỐI PULL REQUEST:
+    # Chỉ deploy khi: Kích hoạt thủ công (workflow_dispatch) HOẶC commit thật sự đã merge/push vào main thành công
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
 
     steps:
       - name: Kết nối SSH tới VPS và kích hoạt deploy.sh
