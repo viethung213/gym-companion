@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Cấu hình chống tràn file Log cho tất cả các container
 x-logging: &default-logging
   logging:
@@ -130,5 +128,4 @@ volumes:
 networks:
   fitai-network:
     name: fitai-network
-    external: true
 
