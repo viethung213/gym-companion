@@ -16,7 +16,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/coaching"
-	coachingadapters "github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/notification"
 	"github.com/viethung213/gym-companion/internal/nutrition"
@@ -112,14 +111,13 @@ func run() error {
 	}
 	log.Printf("🌐 [AI Service] Gateway Upstream URL for Core RPC: %s", gatewayURL)
 
-	// Initialize Coaching Module (using mock readers temporarily to isolate from core service DB)
+	// Initialize Coaching Module
 	coachGRPCHandler, _, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
-		DB:            coachingDB,
-		KafkaRegistry: kafkaRegistry,
-		IDGenerator:   coachingpersistence.UUIDGenerator{},
-		ProfileReader: &coachingadapters.MockUserProfileReader{},
-		SessionReader: &coachingadapters.MockWorkoutSessionReader{},
-		CatalogReader: &coachingadapters.MockExerciseCatalogReader{},
+		DB:             coachingDB,
+		KafkaRegistry:  kafkaRegistry,
+		IDGenerator:    coachingpersistence.UUIDGenerator{},
+		GatewayURL:     gatewayURL,
+		InternalSecret: internalSecret,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize coaching module: %w", err)

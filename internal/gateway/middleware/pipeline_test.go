@@ -12,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 )
 
 type mockTestKeyProvider struct {
@@ -105,4 +106,58 @@ func TestPipeline_TLSEnforcement(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, recTLS.Code)
 	assert.Contains(t, recTLS.Header().Get("Strict-Transport-Security"), "max-age=")
+}
+
+func TestPipeline_InternalTokenAuth(t *testing.T) {
+	t.Parallel()
+
+	secret := "test-internal-secret-2026"
+	pipeline := NewPipeline(PipelineOptions{
+		InternalSecret: secret,
+		TokenTTL:       time.Minute,
+		EnforceTLS:     false,
+	})
+
+	var receivedToken, receivedReqID string
+	backendHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedToken = r.Header.Get(HeaderInternalToken)
+		receivedReqID = r.Header.Get(HeaderRequestID)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := pipeline.Wrap(backendHandler)
+
+	protectedPath := "/contracts.supporting.profile.v1.service.ProfileService/GetProfile"
+
+	t.Run("valid internal token allows access without Bearer JWT", func(t *testing.T) {
+		tokenStr, err := internaltoken.Generate("svc-ai", "system", "trace-ai-1", time.Minute, secret)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, protectedPath, nil)
+		req.Header.Set(HeaderInternalToken, tokenStr)
+		req.Header.Set(HeaderRequestID, "trace-ai-1")
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.NotEmpty(t, receivedToken)
+		assert.Equal(t, "trace-ai-1", receivedReqID)
+
+		claims, err := internaltoken.Validate(receivedToken, secret)
+		require.NoError(t, err)
+		assert.Equal(t, "svc-ai", claims.UserID)
+		assert.Equal(t, "system", claims.Role)
+		assert.Equal(t, "trace-ai-1", claims.RequestID)
+	})
+
+	t.Run("invalid internal token returns 401 unauthenticated", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, protectedPath, nil)
+		req.Header.Set(HeaderInternalToken, "invalid-token-value")
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
 }

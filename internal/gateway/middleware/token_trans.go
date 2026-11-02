@@ -34,3 +34,8 @@ func NewTokenTranslator(secret string, ttl time.Duration) *TokenTranslator {
 func (t *TokenTranslator) Generate(userID, role, requestID string) (string, error) {
 	return internaltoken.Generate(userID, role, requestID, t.ttl, t.secret)
 }
+
+// Validate verifies an incoming internal token against the translator's secret.
+func (t *TokenTranslator) Validate(tokenStr string) (*internaltoken.InternalClaims, error) {
+	return internaltoken.Validate(tokenStr, t.secret)
+}

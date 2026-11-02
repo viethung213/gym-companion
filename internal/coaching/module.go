@@ -37,15 +37,17 @@ func (realClock) Now() time.Time { return time.Now() }
 
 // ModuleDeps contains dependencies for coaching module initialization.
 type ModuleDeps struct {
-	DB            *sql.DB
-	GormDB        *gorm.DB
-	KafkaRegistry *kafka.Registry
-	ProfileReader port.UserProfileReader
-	SessionReader port.WorkoutSessionReader
-	CatalogReader port.ExerciseCatalogReader
-	RoadmapRepo   port.RoadmapRepository
-	OutboxWriter  port.OutboxWriter
-	IDGenerator   port.IDGenerator
+	DB             *sql.DB
+	GormDB         *gorm.DB
+	KafkaRegistry  *kafka.Registry
+	GatewayURL     string
+	InternalSecret string
+	ProfileReader  port.UserProfileReader
+	SessionReader  port.WorkoutSessionReader
+	CatalogReader  port.ExerciseCatalogReader
+	RoadmapRepo    port.RoadmapRepository
+	OutboxWriter   port.OutboxWriter
+	IDGenerator    port.IDGenerator
 }
 
 // Initialize sets up the coaching module (coaching context agent, gRPC services, etc).
@@ -66,18 +68,15 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	if deps.ProfileReader == nil {
-		// Temporary mock: use MockUserProfileReader to decouple from profile tables until API client is integrated.
-		deps.ProfileReader = &adapters.MockUserProfileReader{}
+		deps.ProfileReader = adapters.NewConnectUserProfileReader(deps.GatewayURL, deps.InternalSecret, nil)
 	}
 
 	if deps.SessionReader == nil {
-		// Temporary mock: use MockWorkoutSessionReader to decouple from workout_execution tables until API client is integrated.
-		deps.SessionReader = &adapters.MockWorkoutSessionReader{}
+		deps.SessionReader = adapters.NewConnectWorkoutSessionReader(deps.GatewayURL, deps.InternalSecret, nil)
 	}
 
 	if deps.CatalogReader == nil {
-		// Temporary mock: use MockExerciseCatalogReader to decouple from exercise tables until API client is integrated.
-		deps.CatalogReader = &adapters.MockExerciseCatalogReader{}
+		deps.CatalogReader = adapters.NewConnectExerciseCatalogReader(deps.GatewayURL, deps.InternalSecret, nil)
 	}
 
 	if deps.RoadmapRepo == nil && gormDB != nil {
