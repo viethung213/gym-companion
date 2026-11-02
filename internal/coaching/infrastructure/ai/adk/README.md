@@ -240,7 +240,7 @@ Hai luồng vá **dùng chung một builder** (`buildRewriteAgent`): cùng một
 
 ```powershell
 $env:COACH_PROMPT_DUMP_DIR = "tmp/prompts"
-go run ./cmd/test-coaching     # chạy từ gốc repo
+go test -v ./internal/coaching/infrastructure/ai/adk/...
 ```
 
 ```

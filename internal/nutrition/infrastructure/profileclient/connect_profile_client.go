@@ -60,7 +60,7 @@ func (c *ConnectProfileClient) GetBiologicalMetrics(
 		return nil, errors.New("user id cannot be empty")
 	}
 
-	tokenStr, err := internaltoken.Generate(userID, "system", "ai-nutrition", time.Minute, c.internalSecret)
+	tokenStr, err := internaltoken.Generate(userID, "Admin", "ai-nutrition", time.Minute, c.internalSecret)
 	if err != nil {
 		return nil, fmt.Errorf("generate internal token: %w", err)
 	}

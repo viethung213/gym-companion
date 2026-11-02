@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
+	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 )
 
 // PipelineOptions configures the security pipeline for Gateway.
@@ -55,17 +57,31 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 
 		requiresAuth := IsAuthRequired(procedure)
 
-		var userID, role string
+		var (
+			userID, role   string
+			incomingClaims *internaltoken.InternalClaims
+		)
+		incomingInternalToken := r.Header.Get(HeaderInternalToken)
 		authHeader := r.Header.Get("Authorization")
 
-		if requiresAuth {
+		switch {
+		case incomingInternalToken != "":
+			claims, err := p.translator.Validate(incomingInternalToken)
+			if err != nil {
+				gwerror.Unauthenticated(w, r, fmt.Sprintf("invalid or expired internal token: %v", err))
+				return
+			}
+			userID = claims.UserID
+			role = claims.Role
+			incomingClaims = claims
+		case requiresAuth:
 			var err error
 			userID, role, err = p.jwtVal.Verify(r.Context(), authHeader)
 			if err != nil {
 				gwerror.Unauthenticated(w, r, err.Error())
 				return
 			}
-		} else {
+		default:
 			// Optional/Public auth
 			if authHeader != "" {
 				if uid, rRole, err := p.jwtVal.Verify(r.Context(), authHeader); err == nil {
@@ -80,6 +96,9 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 		}
 
 		reqID := r.Header.Get(HeaderRequestID)
+		if reqID == "" && incomingClaims != nil && incomingClaims.RequestID != "" {
+			reqID = incomingClaims.RequestID
+		}
 		internalToken, err := p.translator.Generate(userID, role, reqID)
 		if err != nil {
 			log.Printf("[Gateway Token Gen Error]: %v", err)
