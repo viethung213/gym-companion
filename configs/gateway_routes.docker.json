@@ -5,33 +5,5 @@
     "127.0.0.1",
     "gateway"
   ],
-  "services": [
-    {
-      "id": "ai-notification-service",
-      "prefixes": [
-        "/contracts.core.coaching.",
-        "/contracts.core.nutrition.",
-        "/contracts.generic.notification."
-      ],
-      "upstreams": [
-        "http://ai:8082"
-      ]
-    },
-    {
-      "id": "core-fitness-service",
-      "prefixes": [
-        "/contracts.generic.auth.",
-        "/contracts.core.workout_execution.",
-        "/contracts.core.solo_match.",
-        "/contracts.supporting.exercise.",
-        "/contracts.supporting.gamification.",
-        "/contracts.supporting.profile.",
-        "/contracts.supporting.social.",
-        "/contracts.generic.audio."
-      ],
-      "upstreams": [
-        "http://core:8080"
-      ]
-    }
-  ]
+  "services": []
 }

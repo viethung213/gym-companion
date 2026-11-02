@@ -173,10 +173,11 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcHandler *nutritionGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	connectHandler := nutritionGRPC.NewConnectNutritionHandler(grpcHandler)
 	path, handler := nutritionv1serviceconnect.NewNutritionServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }
 
 func (m *Module) StartWorkers(ctx context.Context) {

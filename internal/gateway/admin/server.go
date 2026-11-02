@@ -8,6 +8,9 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 // Server encapsulates the Gateway Admin Control Plane HTTP server.
@@ -24,10 +27,11 @@ func NewServer(port, adminKey string, inspector Inspector) *Server {
 	addr := net.JoinHostPort("", port)
 
 	handler := NewHandler(adminKey, inspector)
+	h2cHandler := h2c.NewHandler(handler.Routes(), &http2.Server{})
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           handler.Routes(),
+		Handler:           h2cHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}

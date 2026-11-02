@@ -281,11 +281,12 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	server *coachingGrpc.Server,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	if server == nil {
-		return
+		return ""
 	}
 	connectHandler := coachingGrpc.NewConnectCoachingHandler(server)
 	path, handler := coachingv1serviceconnect.NewCoachingServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }

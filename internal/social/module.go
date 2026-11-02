@@ -195,7 +195,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	return grpcHandler, shutdown, nil
 }
 
-func RegisterConnectHandler(mux *http.ServeMux, handler *socialGRPC.GRPCHandler, opts ...connect.HandlerOption) {
+func RegisterConnectHandler(mux *http.ServeMux, handler *socialGRPC.GRPCHandler, opts ...connect.HandlerOption) string {
 	path, connectHandler := socialv1serviceconnect.NewSocialServiceHandler(handler, opts...)
 	mux.Handle(path, connectHandler)
+	return path
 }

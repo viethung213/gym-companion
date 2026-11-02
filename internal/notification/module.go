@@ -162,8 +162,9 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcHandler *notificationGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	connectHandler := notificationGRPC.NewConnectNotificationHandler(grpcHandler)
 	path, handler := notificationv1serviceconnect.NewNotificationServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }

@@ -8,7 +8,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
@@ -17,6 +20,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification"
 	"github.com/viethung213/gym-companion/internal/profile"
 	"github.com/viethung213/gym-companion/internal/shared/database"
+	"github.com/viethung213/gym-companion/internal/shared/discovery"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
@@ -202,13 +206,15 @@ func run() error {
 	)
 
 	// Mount Core ConnectRPC Service Handlers
-	auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors)
-	exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors)
-	workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)
-	profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors)
-	social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors)
-	solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors)
-	gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors)
+	prefixes := []string{
+		auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors),
+		exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors),
+		profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors),
+		social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors),
+		solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors),
+		gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors),
+	}
+	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)...)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -250,6 +256,35 @@ func run() error {
 		}
 	}()
 
+	// Auto-register with API Gateway via Service Discovery
+	gatewayAdminURL := os.Getenv("GATEWAY_ADMIN_URL")
+	if gatewayAdminURL == "" {
+		gatewayAdminURL = "http://localhost:8001"
+	}
+	gatewayAdminKey := os.Getenv("GATEWAY_ADMIN_KEY")
+	if gatewayAdminKey == "" {
+		gatewayAdminKey = "gym-companion-admin-secret-2026"
+	}
+
+	serviceID := os.Getenv("SERVICE_ID")
+	if serviceID == "" {
+		serviceID = "core-fitness-service"
+	}
+
+	registrar := discovery.NewRegistrar(&discovery.Config{
+		GatewayAdminURL: gatewayAdminURL,
+		AdminKey:        gatewayAdminKey,
+		ServiceID:       serviceID,
+		ServicePort:     appPort,
+		Prefixes:        prefixes,
+	})
+	registrar.Start(ctx)
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer shutdownCancel()
+		_ = registrar.Stop(shutdownCtx)
+	}()
+
 	errChan := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -257,7 +292,24 @@ func run() error {
 		}
 	}()
 
-	return <-errChan
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case err := <-errChan:
+		return err
+	case sig := <-sigChan:
+		log.Printf("🛑 [Core Service] Received signal %v, initiating graceful shutdown...", sig)
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server shutdown: %w", err)
+	}
+	log.Println("👋 [Core Service] Graceful shutdown complete")
+	return nil
 }
 
 func loadEnvFiles(files ...string) {

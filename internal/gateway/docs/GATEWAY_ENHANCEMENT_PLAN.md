@@ -14,7 +14,7 @@ Tài liệu này tổng hợp hiện trạng thực thi, đánh giá theo **7 ti
 | **4. Security (Zero-Trust)** | - **Stateless 100% (Zero-DB)**: Tự động khám phá Auth Service upstream để lấy JWKS.<br>- Token Translation: Public JWT (ES256/RS256) $\rightarrow$ Short-lived HMAC-SHA256 (`X-Internal-Token`, TTL=1m).<br>- Protobuf SSOT Auth Matcher qua ConnectRPC Descriptor Registry.<br>- **Host & Authority Filter**: Chặn DNS Rebinding, chặn truy cập trực tiếp qua IP lạ, whitelist allowed hosts.<br>- **Enforce TLS Option**: Từ chối request HTTP không an toàn khi bật flag.<br>- **Global IP Rate Limiter**: Giới hạn tần suất request theo IP client với thuật toán Token Bucket. | - WAF rules nâng cao (chặn SQLi, XSS payload tại Gateway) - *Hiện tại Backend validator đã đảm nhận*. | **95%**<br>🟢 Rất vững chắc |
 | **5. Observability** | - Phân tách biệt lập 2 Port: **Data Plane (8000)** & **Control Plane (8001)**.<br>- Bảo vệ Control Plane bằng `X-Admin-Key` (Timing attack safe).<br>- Distributed Tracing: Tự động cấp/kế thừa `X-Request-ID`.<br>- **Ring Buffer Trace Store**: Lưu vết 1.000+ request gần nhất trong RAM, hỗ trợ lọc theo path, client IP, mã lỗi, duration.<br>- Endpoint `/metrics` chuẩn Prometheus Format.<br>- Admin REST APIs: `/admin/overview`, `/admin/upstreams`, `/admin/traces`, `/admin/config`. | - **Web Dashboard UI (`/dashboard`)**: Trang giao diện đồ họa trực quan (HTML nhúng) để quan sát thời gian thực phục vụ báo cáo bảo vệ đồ án. | **85%**<br>🟢 Đã có API nền tảng |
 | **6. Production Operations & CI/CD** | - Unit Tests & Integration E2E Tests chuẩn Go đạt **PASS 100%**.<br>- Multi-stage Dockerfile độc lập ([infra/gateway/Dockerfile](file:///e:/LEAN/DATN/gym-companion/infra/gateway/Dockerfile)), kích thước siêu nhẹ (~9.78 MB).<br>- Tách biệt hoàn toàn khỏi mã nguồn Backend Monolith.<br>- Target `tester` cho phép chạy toàn bộ test độc lập ngay trong Docker.<br>- GitHub Actions Workflow ([.github/workflows/publish-gateway-image.yml](file:///e:/LEAN/DATN/gym-companion/.github/workflows/publish-gateway-image.yml)) tự động test, build và publish lên **GHCR** (`ghcr.io`). | - Kịch bản kiểm thử tải thực tế (Load test benchmark với `k6` / `vegeta`). | **90%**<br>🟢 Chuẩn DevOps |
-| **7. Advanced Service Discovery** | - Kiến trúc Control Plane sẵn sàng nhận chỉ thị nạp/xóa route động trong runtime. | - **Self-Registration Service Discovery**: API cho phép các service replica khi khởi động tự gọi đăng ký IP/Port và gửi Heartbeat định kỳ 5s (`/admin/discovery/register`). | **50%**<br>⚪ Đang cấu hình tĩnh |
+| **7. Advanced Service Discovery** | - Kiến trúc Control Plane sẵn sàng nhận chỉ thị nạp/xóa route động trong runtime.<br>- **Self-Registration Service Discovery**: API `/admin/discovery/register` & `/admin/discovery/deregister` nhận đăng ký động từ Core & AI Service.<br>- **Heartbeat & TTL Eviction**: Tự động gạch tên node chết sau 15s không gửi heartbeat.<br>- **Auto-detect Self Address**: Thuật toán tự tìm IP/Host & Port của bản thân. | - Hỗ trợ nạp config từ remote K/V store (Consul / Etcd) - *Không bắt buộc cho đồ án*. | **100%**<br>🟢 Hoàn thành |
 
 ---
 
@@ -67,11 +67,12 @@ Tài liệu này tổng hợp hiện trạng thực thi, đánh giá theo **7 ti
   - Nếu fail liên tiếp 3 lần: Đánh dấu `Unhealthy` và tạm thời ngắt khỏi Round-Robin pool.
   - Khi node phản hồi 200 OK trở lại: Tự động tái kích hoạt vào danh sách phân phối.
 
-### [ ] Hạng mục 3: Dynamic Self-Registration & Heartbeat (Service Discovery)
+### [x] Hạng mục 3: Dynamic Self-Registration & Heartbeat (Service Discovery)
 - **Mục tiêu**: Hỗ trợ mở rộng cụm microservice không cần sửa file JSON.
 - **Mô tả**:
   - Thêm endpoint `POST /admin/discovery/register` nhận `{ "service_id": "...", "upstream_url": "..." }`.
   - Thêm cơ chế TTL eviction: Nếu replica không gửi heartbeat sau 15 giây, Gateway tự xóa node khỏi RAM.
+  - Tích hợp client `internal/shared/discovery` tự phát hiện địa chỉ mạng (IP outbound / Hostname / Env) cho cả Core Service và AI Service.
 
 ### [ ] Hạng mục 4: Kịch bản kiểm thử tải (Benchmark Load Testing)
 - **Mục tiêu**: Đo đạc độ trễ và khả năng chịu tải của Gateway trước khi bảo vệ đồ án.

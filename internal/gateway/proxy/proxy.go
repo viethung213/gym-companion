@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 	"golang.org/x/net/http2"
 )
 
@@ -34,8 +34,14 @@ func NewEngine() *Engine {
 	}
 }
 
-// CreateProxy creates an httputil.ReverseProxy with strict HTTP/2 h2c transport.
-func (pe *Engine) CreateProxy(target *url.URL) *httputil.ReverseProxy {
+// Hooks defines optional lifecycle callbacks invoked before response headers are written to client.
+type Hooks struct {
+	OnResponse func(statusCode int)
+	OnError    func(err error)
+}
+
+// CreateProxy creates an httputil.ReverseProxy with strict HTTP/2 h2c transport and optional lifecycle hooks.
+func (pe *Engine) CreateProxy(target *url.URL, hooks ...Hooks) *httputil.ReverseProxy {
 	p := httputil.NewSingleHostReverseProxy(target)
 	p.Transport = pe.h2cTransport
 	p.FlushInterval = -1 // Flush immediately for real-time ConnectRPC & AI streaming
@@ -46,16 +52,25 @@ func (pe *Engine) CreateProxy(target *url.URL) *httputil.ReverseProxy {
 		req.Host = target.Host
 	}
 
+	var hook Hooks
+	if len(hooks) > 0 {
+		hook = hooks[0]
+	}
+
+	if hook.OnResponse != nil {
+		p.ModifyResponse = func(resp *http.Response) error {
+			hook.OnResponse(resp.StatusCode)
+			return nil
+		}
+	}
+
 	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		reqID := r.Header.Get("X-Request-ID")
 		log.Printf("[Gateway Proxy Error] [ReqID: %s] %s %s -> %s: %v", reqID, r.Method, r.URL.Path, target.String(), err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"code":      "BAD_GATEWAY",
-			"message":   "Service temporarily unavailable. Please try again later.",
-			"requestId": reqID,
-		})
+		if hook.OnError != nil {
+			hook.OnError(err)
+		}
+		gwerror.BadGateway(w, r, "Service temporarily unavailable. Please try again later.")
 	}
 
 	return p

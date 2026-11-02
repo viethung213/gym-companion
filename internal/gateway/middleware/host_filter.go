@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 )
 
 // HostFilter validates incoming HTTP Host and HTTP/2 :authority against an allowed whitelist.
@@ -133,9 +135,7 @@ func (hf *HostFilter) Wrap(next http.Handler) http.Handler {
 
 		if !hf.IsAllowed(incomingHost) {
 			log.Printf("[Gateway Security] Rejected unauthorized Host/Authority: %q from %s", incomingHost, r.RemoteAddr)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"code":"FORBIDDEN","message":"Direct IP access or unauthorized domain name rejected"}`))
+			gwerror.Forbidden(w, r, "Direct IP access or unauthorized domain name rejected")
 			return
 		}
 

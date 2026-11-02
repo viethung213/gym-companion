@@ -1,9 +1,13 @@
 package gateway
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +16,8 @@ import (
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/gateway/balancer"
 	"github.com/viethung213/gym-companion/internal/gateway/config"
+	"github.com/viethung213/gym-companion/internal/gateway/discovery"
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 	"github.com/viethung213/gym-companion/internal/gateway/middleware"
 	"github.com/viethung213/gym-companion/internal/gateway/proxy"
 	"github.com/viethung213/gym-companion/internal/gateway/telemetry"
@@ -28,13 +34,14 @@ type RuntimeRoute struct {
 
 // Gateway manages dynamic routing, reverse proxying, and authentication.
 type Gateway struct {
-	mu          sync.RWMutex
-	routes      []*RuntimeRoute
-	configMgr   *config.Manager
-	proxyEngine *proxy.Engine
-	hostFilter  *middleware.HostFilter
-	pipeline    *middleware.Pipeline
-	telemetry   *telemetry.Telemetry
+	mu                sync.RWMutex
+	routes            []*RuntimeRoute
+	configMgr         *config.Manager
+	proxyEngine       *proxy.Engine
+	hostFilter        *middleware.HostFilter
+	pipeline          *middleware.Pipeline
+	telemetry         *telemetry.Telemetry
+	discoveryRegistry *discovery.Registry
 }
 
 // Options contains parameters to initialize the Gateway.
@@ -70,6 +77,9 @@ func NewGateway(opts Options) (*Gateway, error) {
 		telemetry:   telemetry.NewTelemetry(bufSize),
 	}
 
+	gw.discoveryRegistry = discovery.NewRegistry(15*time.Second, gw.onInstanceEvicted)
+	gw.discoveryRegistry.StartWatcher(context.Background(), 5*time.Second)
+
 	// If no KeyProvider is supplied, auto-bind to dynamic Auth upstream from routes!
 	kp := opts.KeyProvider
 	if kp == nil {
@@ -100,7 +110,7 @@ func (gw *Gateway) onConfigChange(cfg *config.Config) {
 	for _, svc := range cfg.Services {
 		lb, err := balancer.New(svc.Upstreams)
 		if err != nil {
-			continue
+			lb = balancer.NewEmpty()
 		}
 
 		for _, prefix := range svc.Prefixes {
@@ -109,6 +119,48 @@ func (gw *Gateway) onConfigChange(cfg *config.Config) {
 				PathPrefix: prefix,
 				LB:         lb,
 			})
+		}
+	}
+
+	// Re-apply dynamically registered instances and prefixes from discovery registry
+	if gw.discoveryRegistry != nil {
+		instances := gw.discoveryRegistry.GetInstances()
+		for _, inst := range instances {
+			for _, prefix := range inst.Prefixes {
+				prefix = strings.TrimSpace(prefix)
+				if prefix == "" {
+					continue
+				}
+				var matchedRoute *RuntimeRoute
+				for _, r := range newRoutes {
+					if r.PathPrefix == prefix {
+						matchedRoute = r
+						break
+					}
+				}
+				if matchedRoute == nil {
+					lb := balancer.NewEmpty()
+					_ = lb.AddServer(inst.UpstreamURL)
+					newRoutes = append(newRoutes, &RuntimeRoute{
+						ServiceID:  inst.ServiceID,
+						PathPrefix: prefix,
+						LB:         lb,
+					})
+				} else {
+					if matchedRoute.LB == nil {
+						matchedRoute.LB = balancer.NewEmpty()
+					}
+					_ = matchedRoute.LB.AddServer(inst.UpstreamURL)
+				}
+			}
+			for _, r := range newRoutes {
+				if r.ServiceID == inst.ServiceID {
+					if r.LB == nil {
+						r.LB = balancer.NewEmpty()
+					}
+					_ = r.LB.AddServer(inst.UpstreamURL)
+				}
+			}
 		}
 	}
 
@@ -152,9 +204,115 @@ func (gw *Gateway) ConfigManager() *config.Manager {
 
 // Close cleans up resources such as configuration file watchers.
 func (gw *Gateway) Close() {
+	if gw.discoveryRegistry != nil {
+		gw.discoveryRegistry.Stop()
+	}
 	if gw.configMgr != nil {
 		gw.configMgr.Close()
 	}
+}
+
+// RegisterService dynamically adds or refreshes an upstream server and its prefixes for a service.
+func (gw *Gateway) RegisterService(serviceID, upstreamURL string, prefixes []string) error {
+	if serviceID == "" {
+		return errors.New("service_id cannot be empty")
+	}
+	parsed, err := url.Parse(upstreamURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("invalid upstream_url: %q", upstreamURL)
+	}
+
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+
+	isNew := gw.discoveryRegistry.Register(serviceID, upstreamURL, prefixes)
+
+	// 1. Dynamically add or create routes for each prefix sent by the service
+	for _, rawPrefix := range prefixes {
+		prefix := strings.TrimSpace(rawPrefix)
+		if prefix == "" {
+			continue
+		}
+		var matchedRoute *RuntimeRoute
+		for _, r := range gw.routes {
+			if r.PathPrefix == prefix {
+				matchedRoute = r
+				break
+			}
+		}
+
+		if matchedRoute == nil {
+			lb := balancer.NewEmpty()
+			_ = lb.AddServer(upstreamURL)
+			gw.routes = append(gw.routes, &RuntimeRoute{
+				ServiceID:  serviceID,
+				PathPrefix: prefix,
+				LB:         lb,
+			})
+		} else {
+			if matchedRoute.LB == nil {
+				matchedRoute.LB = balancer.NewEmpty()
+			}
+			_ = matchedRoute.LB.AddServer(upstreamURL)
+		}
+	}
+
+	// 2. Also attach to any pre-configured routes with matching serviceID
+	for _, route := range gw.routes {
+		if route.ServiceID == serviceID {
+			if route.LB == nil {
+				route.LB = balancer.NewEmpty()
+			}
+			_ = route.LB.AddServer(upstreamURL)
+		}
+	}
+
+	// 3. Sort routes longest prefix first for unambiguous matching
+	sort.Slice(gw.routes, func(i, j int) bool {
+		return len(gw.routes[i].PathPrefix) > len(gw.routes[j].PathPrefix)
+	})
+
+	if isNew {
+		log.Printf("🔗 [Service Discovery] Registered upstream %s for %s (%d prefixes, HTTP/2 h2c)",
+			upstreamURL, serviceID, len(prefixes))
+	}
+	return nil
+}
+
+// DeregisterService removes an upstream server for a service.
+func (gw *Gateway) DeregisterService(serviceID, upstreamURL string) error {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+
+	gw.discoveryRegistry.Deregister(serviceID, upstreamURL)
+
+	for _, route := range gw.routes {
+		if route.ServiceID == serviceID && route.LB != nil {
+			route.LB.RemoveServer(upstreamURL)
+		}
+	}
+	log.Printf("🔌 [Service Discovery] Deregistered upstream %s for %s", upstreamURL, serviceID)
+	return nil
+}
+
+// GetDiscoveryInstances returns all currently registered instances from service discovery.
+func (gw *Gateway) GetDiscoveryInstances() []discovery.Instance {
+	if gw.discoveryRegistry == nil {
+		return nil
+	}
+	return gw.discoveryRegistry.GetInstances()
+}
+
+func (gw *Gateway) onInstanceEvicted(serviceID, upstreamURL string) {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+
+	for _, route := range gw.routes {
+		if route.ServiceID == serviceID && route.LB != nil {
+			route.LB.RemoveServer(upstreamURL)
+		}
+	}
+	log.Printf("⚠️ [Service Discovery] Evicted stale upstream %s for %s (heartbeat TTL expired)", upstreamURL, serviceID)
 }
 
 // GetAuthUpstreamURL finds an upstream URL capable of serving AuthService.
@@ -230,22 +388,22 @@ func (gw *Gateway) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		route := gw.MatchRoute(r.URL.Path)
 		if route == nil {
-			http.Error(w, `{"code":"NOT_FOUND","message":"Route not found"}`, http.StatusNotFound)
+			gwerror.NotFound(w, r)
 			return
 		}
 
 		if route.LB == nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"code":"UNAVAILABLE","message":"No load balancer configured for service"}`))
+			gwerror.ServiceUnavailable(w, r, "No load balancer configured for service")
 			return
 		}
 
 		target := route.LB.Next()
 		if target == nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"code":"UNAVAILABLE","message":"No healthy upstream instances available for service"}`))
+			if route.LB.ServerCount() == 0 {
+				gwerror.ServiceUnavailable(w, r, "No upstream instances available for service")
+			} else {
+				gwerror.CircuitOpen(w, r, "All upstream instances are temporarily unavailable (Circuit Breaker Tripped)")
+			}
 			return
 		}
 
@@ -262,13 +420,35 @@ func (gw *Gateway) Handler() http.Handler {
 		val, ok := route.Proxies.Load(key)
 		var p http.Handler
 		if !ok {
-			created := gw.proxyEngine.CreateProxy(target)
+			created := gw.proxyEngine.CreateProxy(target, proxy.Hooks{
+				OnResponse: func(statusCode int) {
+					if statusCode >= 502 && statusCode <= 504 {
+						route.LB.ReportFailure(target)
+					} else if statusCode > 0 && statusCode < 500 {
+						route.LB.ReportSuccess(target)
+					}
+				},
+				OnError: func(_ error) {
+					route.LB.ReportFailure(target)
+				},
+			})
 			route.Proxies.Store(key, created)
 			p = created
 		} else if handler, isHandler := val.(http.Handler); isHandler {
 			p = handler
 		} else {
-			created := gw.proxyEngine.CreateProxy(target)
+			created := gw.proxyEngine.CreateProxy(target, proxy.Hooks{
+				OnResponse: func(statusCode int) {
+					if statusCode >= 502 && statusCode <= 504 {
+						route.LB.ReportFailure(target)
+					} else if statusCode > 0 && statusCode < 500 {
+						route.LB.ReportSuccess(target)
+					}
+				},
+				OnError: func(_ error) {
+					route.LB.ReportFailure(target)
+				},
+			})
 			route.Proxies.Store(key, created)
 			p = created
 		}

@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -203,10 +202,6 @@ func (cm *Manager) readFile() (*Config, time.Time, error) {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, time.Time{}, fmt.Errorf("unmarshal gateway config: %w", err)
-	}
-
-	if len(cfg.Services) == 0 {
-		return nil, time.Time{}, errors.New("gateway config must contain at least one service")
 	}
 
 	return &cfg, info.ModTime(), nil

@@ -6,10 +6,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -344,4 +346,65 @@ func TestGateway_EmptyUpstreamReturns503WithoutPanic(t *testing.T) {
 
 	// Must return 503 Service Unavailable, not panic or crash
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+}
+
+func TestGateway_CircuitBreaker_TripsAndFastFails(t *testing.T) {
+	t.Parallel()
+
+	// 1. Backend server that constantly returns 503
+	var backendHits atomic.Int64
+	backend := httptest.NewServer(h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		backendHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"temporarily broken"}`))
+	}), &http2.Server{}))
+	defer backend.Close()
+
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "gateway_routes.json")
+	cfgJSON := []byte(`{
+		"allowed_hosts": ["localhost", "127.0.0.1"],
+		"services": [
+			{
+				"id": "failing-service",
+				"prefixes": ["/contracts.generic.auth.v1.service.AuthService/"],
+				"upstreams": ["` + backend.URL + `"]
+			}
+		]
+	}`)
+	require.NoError(t, os.WriteFile(cfgFile, cfgJSON, 0o600))
+
+	gw, err := NewGateway(Options{
+		ConfigPath:     cfgFile,
+		KeyProvider:    &mockKeyProvider{},
+		InternalSecret: "test-secret",
+		TokenTTL:       time.Minute,
+		WatchInterval:  time.Hour,
+	})
+	require.NoError(t, err)
+	defer gw.Close()
+
+	gwServer := httptest.NewServer(gw.Handler())
+	defer gwServer.Close()
+	client := gwServer.Client()
+
+	// 2. Send 5 requests -> each causes a 503 from backend -> trips Circuit Breaker (threshold: 5)
+	for i := 0; i < 5; i++ {
+		resp, reqErr := client.Get(gwServer.URL + "/contracts.generic.auth.v1.service.AuthService/Login")
+		require.NoError(t, reqErr)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+
+	assert.Equal(t, int64(5), backendHits.Load(), "Backend should have been hit 5 times before circuit tripped")
+
+	// 3. 6th request: Circuit Breaker is now OPEN! Must Fast-Fail at Gateway without hitting backend!
+	resp, reqErr := client.Get(gwServer.URL + "/contracts.generic.auth.v1.service.AuthService/Login")
+	require.NoError(t, reqErr)
+	_, _ = io.Copy(io.Discard, resp.Body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, int64(5), backendHits.Load(), "Backend should NOT have received the 6th request (Fast-Fail)")
 }
