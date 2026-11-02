@@ -9,6 +9,8 @@ services:
     ports:
       - "8000:8000"
       - "8001:8001"
+    volumes:
+      - ../../configs:/app/configs:ro
     environment:
       APP_ENV: "production"
       GATEWAY_PORT: "8000"

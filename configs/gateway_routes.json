@@ -2,7 +2,8 @@
   "allowed_hosts": [
     "api.gymcompanion.com",
     "localhost",
-    "127.0.0.1"
+    "127.0.0.1",
+    "180.93.42.156"
   ],
   "services": []
 }
