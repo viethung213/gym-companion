@@ -206,18 +206,15 @@ func run() error {
 	)
 
 	// Mount Core ConnectRPC Service Handlers
-	var prefixes []string
-	prefixes = append(prefixes,
+	prefixes := []string{
 		auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors),
 		exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors),
-	)
-	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)...)
-	prefixes = append(prefixes,
 		profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors),
 		social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors),
 		solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors),
 		gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors),
-	)
+	}
+	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)...)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {

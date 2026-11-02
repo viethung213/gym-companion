@@ -160,12 +160,11 @@ func run() error {
 	)
 
 	// Mount AI ConnectRPC Service Handlers
-	var prefixes []string
-	prefixes = append(prefixes,
+	prefixes := []string{
 		coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors),
 		nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors),
 		notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors),
-	)
+	}
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
