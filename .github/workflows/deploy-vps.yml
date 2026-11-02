@@ -23,6 +23,7 @@ on:
 
   workflow_run:
     workflows:
+      - "Module Selective Tests & GHCR Publish CI"
       - "Test & Publish Gateway Docker Image"
       - "Publish Dedicated Kafka Docker Image"
       - "Publish Dedicated Redis Docker Image"
