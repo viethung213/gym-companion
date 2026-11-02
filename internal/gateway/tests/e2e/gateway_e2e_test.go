@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -137,7 +138,7 @@ func setupTestEnvironment(t *testing.T) *testEnvironment {
 	}()
 
 	// Start Admin Server
-	adminAdapter := admin.NewAdapter(gw.Telemetry(), gw.ConfigManager())
+	adminAdapter := admin.NewAdapter(gw.Telemetry(), gw.ConfigManager(), gw)
 	adminSrv := admin.NewServer("0", defaultAdminKey, adminAdapter)
 	adminListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -392,5 +393,170 @@ func TestGatewayE2E_AdminTraces(t *testing.T) {
 	}
 	if len(traces) == 0 {
 		t.Error("expected at least 1 recorded trace journey, got 0")
+	}
+}
+
+func TestGatewayE2E_DynamicServiceDiscovery(t *testing.T) {
+	env := setupTestEnvironment(t)
+	defer env.cleanup()
+
+	client := &http.Client{Timeout: 3 * time.Second}
+
+	// 1. Start a new dynamic upstream server
+	var dynamicHits atomic.Int32
+	dynamicMux := http.NewServeMux()
+	dynamicMux.HandleFunc("/contracts.supporting.exercise.v1.service.ExerciseService/SearchExercises", func(w http.ResponseWriter, r *http.Request) {
+		dynamicHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"exercises":[{"id":"dyn-1","name":"Dynamic Exercise"}]}`))
+	})
+
+	dynamicServer := httptest.NewServer(h2c.NewHandler(dynamicMux, &http2.Server{}))
+	defer dynamicServer.Close()
+
+	// 2. Register with Gateway Admin Control Plane
+	regPayload := fmt.Sprintf(`{"service_id":"exercise-service","upstream_url":%q}`, dynamicServer.URL)
+	regReq, _ := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		env.adminURL+"/admin/discovery/register",
+		strings.NewReader(regPayload),
+	)
+	regReq.Header.Set("X-Admin-Key", env.adminKey)
+	regReq.Header.Set("Content-Type", "application/json")
+
+	regResp, err := client.Do(regReq)
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+	defer regResp.Body.Close()
+
+	if regResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(regResp.Body)
+		t.Fatalf("register expected 200, got %d: %s", regResp.StatusCode, string(body))
+	}
+
+	// 3. Query instances
+	instReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, env.adminURL+"/admin/discovery/instances", nil)
+	instReq.Header.Set("X-Admin-Key", env.adminKey)
+	instResp, err := client.Do(instReq)
+	if err != nil {
+		t.Fatalf("instances query failed: %v", err)
+	}
+	defer instResp.Body.Close()
+
+	if instResp.StatusCode != http.StatusOK {
+		t.Fatalf("instances query got %d", instResp.StatusCode)
+	}
+
+	// 4. Send multiple requests through Gateway to verify load balancer hits the newly registered server
+	for i := 0; i < 5; i++ {
+		gwReq, _ := http.NewRequestWithContext(
+			context.Background(),
+			http.MethodPost,
+			env.gatewayURL+"/contracts.supporting.exercise.v1.service.ExerciseService/SearchExercises",
+			strings.NewReader(`{}`),
+		)
+		gwReq.Header.Set("Content-Type", "application/json")
+		resp, reqErr := client.Do(gwReq)
+		if reqErr == nil {
+			resp.Body.Close()
+		}
+	}
+
+	if dynamicHits.Load() == 0 {
+		t.Errorf("expected dynamic server to receive at least 1 request, got %d", dynamicHits.Load())
+	}
+
+	// 5. Deregister
+	deregPayload := fmt.Sprintf(`{"service_id":"exercise-service","upstream_url":%q}`, dynamicServer.URL)
+	deregReq, _ := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		env.adminURL+"/admin/discovery/deregister",
+		strings.NewReader(deregPayload),
+	)
+	deregReq.Header.Set("X-Admin-Key", env.adminKey)
+	deregReq.Header.Set("Content-Type", "application/json")
+
+	deregResp, err := client.Do(deregReq)
+	if err != nil {
+		t.Fatalf("deregister failed: %v", err)
+	}
+	defer deregResp.Body.Close()
+
+	if deregResp.StatusCode != http.StatusOK {
+		t.Errorf("deregister expected 200, got %d", deregResp.StatusCode)
+	}
+}
+
+func TestGatewayE2E_ZeroConfigDynamicRouting(t *testing.T) {
+	env := setupTestEnvironment(t)
+	defer env.cleanup()
+
+	client := &http.Client{Timeout: 3 * time.Second}
+
+	// 1. Start a new module server with a dynamically registered prefix
+	var authHits atomic.Int32
+	authMux := http.NewServeMux()
+	authMux.HandleFunc("/contracts.generic.auth.v1.service.AuthService/Login", func(w http.ResponseWriter, r *http.Request) {
+		authHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"accessToken":"test-token"}`))
+	})
+
+	authServer := httptest.NewServer(h2c.NewHandler(authMux, &http2.Server{}))
+	defer authServer.Close()
+
+	// 2. Register dynamically with Prefixes (Method 2: Zero-Config)
+	regPayload := fmt.Sprintf(`{
+		"service_id": "auth-dynamic-service",
+		"upstream_url": %q,
+		"prefixes": ["/contracts.generic.auth.v1.service.AuthService/"]
+	}`, authServer.URL)
+
+	regReq, _ := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		env.adminURL+"/admin/discovery/register",
+		strings.NewReader(regPayload),
+	)
+	regReq.Header.Set("X-Admin-Key", env.adminKey)
+	regReq.Header.Set("Content-Type", "application/json")
+
+	regResp, err := client.Do(regReq)
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+	defer regResp.Body.Close()
+
+	if regResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(regResp.Body)
+		t.Fatalf("register expected 200, got %d: %s", regResp.StatusCode, string(body))
+	}
+
+	// 3. Request through Gateway Data Plane
+	gwReq, _ := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		env.gatewayURL+"/contracts.generic.auth.v1.service.AuthService/Login",
+		strings.NewReader(`{}`),
+	)
+	gwReq.Header.Set("Content-Type", "application/json")
+	gwResp, err := client.Do(gwReq)
+	if err != nil {
+		t.Fatalf("gateway request failed: %v", err)
+	}
+	defer gwResp.Body.Close()
+
+	if gwResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(gwResp.Body)
+		t.Fatalf("gateway expected 200, got %d: %s", gwResp.StatusCode, string(body))
+	}
+
+	if authHits.Load() != 1 {
+		t.Errorf("expected 1 hit on authServer, got %d", authHits.Load())
 	}
 }

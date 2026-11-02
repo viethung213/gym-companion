@@ -1,7 +1,10 @@
 package admin
 
 import (
+	"errors"
+
 	"github.com/viethung213/gym-companion/internal/gateway/config"
+	"github.com/viethung213/gym-companion/internal/gateway/discovery"
 	"github.com/viethung213/gym-companion/internal/gateway/telemetry"
 )
 
@@ -12,17 +15,30 @@ type ConfigSource interface {
 	GetConfig() *config.Config
 }
 
-// Adapter chuyển đổi telemetry và config thành Inspector cho Admin Server.
+// ServiceRegistry đại diện cho nguồn quản lý đăng ký service động.
+type ServiceRegistry interface {
+	RegisterService(serviceID, upstreamURL string, prefixes []string) error
+	DeregisterService(serviceID, upstreamURL string) error
+	GetDiscoveryInstances() []discovery.Instance
+}
+
+// Adapter chuyển đổi telemetry, config và discovery thành Inspector cho Admin Server.
 type Adapter struct {
 	telemetry *telemetry.Telemetry
 	configSrc ConfigSource
+	registry  ServiceRegistry
 }
 
 // NewAdapter khởi tạo Adapter độc lập.
-func NewAdapter(t *telemetry.Telemetry, cfgSrc ConfigSource) *Adapter {
+func NewAdapter(t *telemetry.Telemetry, cfgSrc ConfigSource, registries ...ServiceRegistry) *Adapter {
+	var reg ServiceRegistry
+	if len(registries) > 0 {
+		reg = registries[0]
+	}
 	return &Adapter{
 		telemetry: t,
 		configSrc: cfgSrc,
+		registry:  reg,
 	}
 }
 
@@ -59,4 +75,25 @@ func (a *Adapter) GetConfig() *config.Config {
 		return nil
 	}
 	return a.configSrc.GetConfig()
+}
+
+func (a *Adapter) RegisterService(serviceID, upstreamURL string, prefixes []string) error {
+	if a.registry == nil {
+		return errors.New("service registry not configured")
+	}
+	return a.registry.RegisterService(serviceID, upstreamURL, prefixes)
+}
+
+func (a *Adapter) DeregisterService(serviceID, upstreamURL string) error {
+	if a.registry == nil {
+		return errors.New("service registry not configured")
+	}
+	return a.registry.DeregisterService(serviceID, upstreamURL)
+}
+
+func (a *Adapter) GetDiscoveryInstances() []discovery.Instance {
+	if a.registry == nil {
+		return nil
+	}
+	return a.registry.GetDiscoveryInstances()
 }

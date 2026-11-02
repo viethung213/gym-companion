@@ -355,11 +355,12 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcHandler *workoutGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
-) {
+) []string {
 	connectHandler := workoutGRPC.NewConnectWorkoutExecutionHandler(grpcHandler)
 	path, handler := workoutexecutionv1serviceconnect.NewWorkoutExecutionServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
 
 	adminPath, adminHandler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(connectHandler, opts...)
 	mux.Handle(adminPath, adminHandler)
+	return []string{path, adminPath}
 }

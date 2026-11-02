@@ -126,8 +126,9 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcHandler *profileGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	connectHandler := profileGRPC.NewConnectProfileHandler(grpcHandler)
 	path, handler := profilev1serviceconnect.NewProfileServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }

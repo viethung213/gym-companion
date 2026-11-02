@@ -59,8 +59,8 @@ func run() error {
 
 	var adminServer *admin.Server
 	if cfg.AdminEnabled {
-		// Adapter lấy trực tiếp Telemetry và ConfigManager từ Gateway
-		adminInspector := admin.NewAdapter(gw.Telemetry(), gw.ConfigManager())
+		// Adapter lấy trực tiếp Telemetry, ConfigManager và Discovery từ Gateway
+		adminInspector := admin.NewAdapter(gw.Telemetry(), gw.ConfigManager(), gw)
 		adminServer = admin.NewServer(cfg.AdminPort, cfg.AdminKey, adminInspector)
 	}
 

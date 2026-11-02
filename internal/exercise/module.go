@@ -219,8 +219,9 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcServer *exerciseGRPC.ExerciseServer,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	connectHandler := exerciseGRPC.NewConnectExerciseHandler(grpcServer)
 	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }

@@ -1,11 +1,12 @@
 package middleware
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 )
 
 // PipelineOptions configures the security pipeline for Gateway.
@@ -61,9 +62,7 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 			var err error
 			userID, role, err = p.jwtVal.Verify(r.Context(), authHeader)
 			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = fmt.Fprintf(w, `{"code":"UNAUTHENTICATED","message":"%s"}`, err.Error())
+				gwerror.Unauthenticated(w, r, err.Error())
 				return
 			}
 		} else {
@@ -84,7 +83,7 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 		internalToken, err := p.translator.Generate(userID, role, reqID)
 		if err != nil {
 			log.Printf("[Gateway Token Gen Error]: %v", err)
-			http.Error(w, `{"code":"INTERNAL_ERROR","message":"Token generation failed"}`, http.StatusInternalServerError)
+			gwerror.Internal(w, r, "Token generation failed")
 			return
 		}
 
@@ -113,9 +112,7 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 			isTLS := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 			if !isTLS {
 				log.Printf("[Gateway Security] Rejected non-TLS request to %s from %s", r.URL.Path, r.RemoteAddr)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUpgradeRequired)
-				_, _ = w.Write([]byte(`{"code":"TLS_REQUIRED","message":"HTTPS connection is required"}`))
+				gwerror.TLSRequired(w, r)
 				return
 			}
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")

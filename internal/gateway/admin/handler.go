@@ -8,19 +8,24 @@ import (
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/gateway/config"
+	"github.com/viethung213/gym-companion/internal/gateway/discovery"
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 	"github.com/viethung213/gym-companion/internal/gateway/telemetry"
 )
 
 // HeaderAdminKey defines the request header required for authenticating with the Admin API.
 const HeaderAdminKey = "X-Admin-Key"
 
-// Inspector định nghĩa các phương thức cần thiết để Control Plane truy xuất số liệu.
+// Inspector định nghĩa các phương thức cần thiết để Control Plane truy xuất số liệu và quản lý discovery.
 type Inspector interface {
 	GetOverview() telemetry.OverviewStats
 	GetUpstreamStats() []telemetry.UpstreamStats
 	QueryTraces(filter telemetry.TraceFilter) []telemetry.RequestJourney
 	FormatPrometheus() string
 	GetConfig() *config.Config
+	RegisterService(serviceID, upstreamURL string, prefixes []string) error
+	DeregisterService(serviceID, upstreamURL string) error
+	GetDiscoveryInstances() []discovery.Instance
 }
 
 // Handler handles administrative and telemetry endpoints.
@@ -53,6 +58,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("/admin/upstreams", h.handleUpstreams)
 	mux.HandleFunc("/admin/config", h.handleConfig)
 	mux.HandleFunc("/admin/traces", h.handleTraces)
+	mux.HandleFunc("/admin/discovery/register", h.handleDiscoveryRegister)
+	mux.HandleFunc("/admin/discovery/deregister", h.handleDiscoveryDeregister)
+	mux.HandleFunc("/admin/discovery/instances", h.handleDiscoveryInstances)
 	mux.HandleFunc("/metrics", h.handleMetrics)
 
 	return h.authMiddleware(mux)
@@ -68,9 +76,7 @@ func (h *Handler) authMiddleware(next http.Handler) http.Handler {
 
 		key := r.Header.Get(HeaderAdminKey)
 		if key == "" || subtle.ConstantTimeCompare([]byte(key), []byte(h.adminKey)) != 1 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"code":"UNAUTHORIZED","message":"Invalid or missing admin key"}`))
+			gwerror.Unauthenticated(w, r, "Invalid or missing admin key")
 			return
 		}
 
@@ -80,7 +86,7 @@ func (h *Handler) authMiddleware(next http.Handler) http.Handler {
 
 func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, `{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		gwerror.MethodNotAllowed(w, r)
 		return
 	}
 
@@ -91,7 +97,7 @@ func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleUpstreams(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, `{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		gwerror.MethodNotAllowed(w, r)
 		return
 	}
 
@@ -105,7 +111,7 @@ func (h *Handler) handleUpstreams(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, `{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		gwerror.MethodNotAllowed(w, r)
 		return
 	}
 
@@ -116,7 +122,7 @@ func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleTraces(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, `{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		gwerror.MethodNotAllowed(w, r)
 		return
 	}
 
@@ -141,11 +147,113 @@ func (h *Handler) handleTraces(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, `{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		gwerror.MethodNotAllowed(w, r)
 		return
 	}
 
 	prom := h.inspector.FormatPrometheus()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	_, _ = w.Write([]byte(prom))
+}
+
+type discoveryRequest struct {
+	ServiceID      string   `json:"service_id"`
+	ServiceIDAlt   string   `json:"serviceId"`
+	UpstreamURL    string   `json:"upstream_url"`
+	UpstreamURLAlt string   `json:"upstreamUrl"`
+	Prefixes       []string `json:"prefixes"`
+}
+
+func (h *Handler) handleDiscoveryRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		gwerror.MethodNotAllowed(w, r)
+		return
+	}
+
+	var req discoveryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		gwerror.BadRequest(w, r, "Invalid JSON payload")
+		return
+	}
+
+	serviceID := req.ServiceID
+	if serviceID == "" {
+		serviceID = req.ServiceIDAlt
+	}
+	upstreamURL := req.UpstreamURL
+	if upstreamURL == "" {
+		upstreamURL = req.UpstreamURLAlt
+	}
+
+	if serviceID == "" || upstreamURL == "" {
+		gwerror.BadRequest(w, r, "service_id and upstream_url are required")
+		return
+	}
+
+	if err := h.inspector.RegisterService(serviceID, upstreamURL, req.Prefixes); err != nil {
+		gwerror.Write(w, r, http.StatusBadRequest, "REGISTRATION_FAILED", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":       "OK",
+		"message":      "Registered successfully",
+		"service_id":   serviceID,
+		"upstream_url": upstreamURL,
+	})
+}
+
+func (h *Handler) handleDiscoveryDeregister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		gwerror.MethodNotAllowed(w, r)
+		return
+	}
+
+	var req discoveryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		gwerror.BadRequest(w, r, "Invalid JSON payload")
+		return
+	}
+
+	serviceID := req.ServiceID
+	if serviceID == "" {
+		serviceID = req.ServiceIDAlt
+	}
+	upstreamURL := req.UpstreamURL
+	if upstreamURL == "" {
+		upstreamURL = req.UpstreamURLAlt
+	}
+
+	if serviceID == "" || upstreamURL == "" {
+		gwerror.BadRequest(w, r, "service_id and upstream_url are required")
+		return
+	}
+
+	if err := h.inspector.DeregisterService(serviceID, upstreamURL); err != nil {
+		gwerror.Write(w, r, http.StatusBadRequest, "DEREGISTRATION_FAILED", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "OK",
+		"message": "Deregistered successfully",
+	})
+}
+
+func (h *Handler) handleDiscoveryInstances(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		gwerror.MethodNotAllowed(w, r)
+		return
+	}
+
+	instances := h.inspector.GetDiscoveryInstances()
+	if instances == nil {
+		instances = []discovery.Instance{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(instances)
 }

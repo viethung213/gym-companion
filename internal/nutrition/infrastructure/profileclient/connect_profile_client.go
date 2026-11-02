@@ -3,8 +3,10 @@ package profileclient
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"golang.org/x/net/http2"
 )
 
 var _ repository.ProfileClient = (*ConnectProfileClient)(nil)
@@ -28,7 +31,18 @@ type ConnectProfileClient struct {
 // NewConnectProfileClient constructs a ConnectProfileClient communicating through API Gateway.
 func NewConnectProfileClient(gatewayURL, internalSecret string, httpClient *http.Client) *ConnectProfileClient {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 10 * time.Second}
+		httpClient = &http.Client{
+			Transport: &http2.Transport{
+				AllowHTTP: true,
+				DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+					var d net.Dialer
+					return d.DialContext(ctx, network, addr)
+				},
+				ReadIdleTimeout: 30 * time.Second,
+				PingTimeout:     5 * time.Second,
+			},
+			Timeout: 10 * time.Second,
+		}
 	}
 	client := profilev1serviceconnect.NewProfileServiceClient(httpClient, gatewayURL)
 	return &ConnectProfileClient{

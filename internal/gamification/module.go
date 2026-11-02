@@ -243,7 +243,8 @@ func (a prCoordinatorAdapter) Handle(ctx context.Context, cmd command.ProcessPer
 }
 
 // RegisterConnectHandler mounts the Gamification service on the provided HTTP multiplexer.
-func RegisterConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.Handler, opts ...connect.HandlerOption) {
+func RegisterConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.Handler, opts ...connect.HandlerOption) string {
 	path, connectHandler := gamificationv1serviceconnect.NewGamificationServiceHandler(handler, opts...)
 	mux.Handle(path, connectHandler)
+	return path
 }

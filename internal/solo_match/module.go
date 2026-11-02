@@ -254,8 +254,9 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcHandler *grpc.Handler,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	connectHandler := grpc.NewConnectSoloMatchHandler(grpcHandler)
 	path, handler := solomatchv1serviceconnect.NewSoloMatchServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }

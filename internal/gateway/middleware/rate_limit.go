@@ -1,13 +1,13 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 	"golang.org/x/time/rate"
 )
 
@@ -119,12 +119,7 @@ func (rl *RateLimiter) Wrap(next http.Handler) http.Handler {
 		limiter := rl.GetLimiter(key, limit)
 
 		if !limiter.Allow() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"code":    "RESOURCE_EXHAUSTED",
-				"message": "Rate limit exceeded. Please try again later.",
-			})
+			gwerror.RateLimited(w, r, "Rate limit exceeded. Please try again later.")
 			return
 		}
 

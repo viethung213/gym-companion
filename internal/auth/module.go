@@ -256,8 +256,9 @@ func RegisterConnectHandler(
 	mux *http.ServeMux,
 	grpcHandler *authGRPC.GRPCHandler,
 	opts ...connect.HandlerOption,
-) {
+) string {
 	connectHandler := authGRPC.NewConnectAuthHandler(grpcHandler)
 	path, handler := authv1serviceconnect.NewAuthServiceHandler(connectHandler, opts...)
 	mux.Handle(path, handler)
+	return path
 }

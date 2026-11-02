@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
 	"golang.org/x/net/http2"
 )
 
@@ -49,13 +49,7 @@ func (pe *Engine) CreateProxy(target *url.URL) *httputil.ReverseProxy {
 	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		reqID := r.Header.Get("X-Request-ID")
 		log.Printf("[Gateway Proxy Error] [ReqID: %s] %s %s -> %s: %v", reqID, r.Method, r.URL.Path, target.String(), err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"code":      "BAD_GATEWAY",
-			"message":   "Service temporarily unavailable. Please try again later.",
-			"requestId": reqID,
-		})
+		gwerror.BadGateway(w, r, "Service temporarily unavailable. Please try again later.")
 	}
 
 	return p
