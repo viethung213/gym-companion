@@ -408,4 +408,3 @@ func TestGateway_CircuitBreaker_TripsAndFastFails(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	assert.Equal(t, int64(5), backendHits.Load(), "Backend should NOT have received the 6th request (Fast-Fail)")
 }
-

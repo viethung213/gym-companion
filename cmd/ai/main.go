@@ -161,9 +161,11 @@ func run() error {
 
 	// Mount AI ConnectRPC Service Handlers
 	var prefixes []string
-	prefixes = append(prefixes, coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors))
-	prefixes = append(prefixes, nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors))
-	prefixes = append(prefixes, notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors))
+	prefixes = append(prefixes,
+		coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors),
+		nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors),
+		notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors),
+	)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -214,7 +216,7 @@ func run() error {
 		serviceID = "ai-notification-service"
 	}
 
-	registrar := discovery.NewRegistrar(discovery.Config{
+	registrar := discovery.NewRegistrar(&discovery.Config{
 		GatewayAdminURL: gatewayAdminURL,
 		AdminKey:        gatewayAdminKey,
 		ServiceID:       serviceID,

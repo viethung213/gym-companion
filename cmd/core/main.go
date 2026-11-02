@@ -207,13 +207,17 @@ func run() error {
 
 	// Mount Core ConnectRPC Service Handlers
 	var prefixes []string
-	prefixes = append(prefixes, auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors))
-	prefixes = append(prefixes, exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors))
+	prefixes = append(prefixes,
+		auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors),
+		exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors),
+	)
 	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)...)
-	prefixes = append(prefixes, profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors))
-	prefixes = append(prefixes, social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors))
-	prefixes = append(prefixes, solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors))
-	prefixes = append(prefixes, gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors))
+	prefixes = append(prefixes,
+		profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors),
+		social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors),
+		solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors),
+		gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors),
+	)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -270,7 +274,7 @@ func run() error {
 		serviceID = "core-fitness-service"
 	}
 
-	registrar := discovery.NewRegistrar(discovery.Config{
+	registrar := discovery.NewRegistrar(&discovery.Config{
 		GatewayAdminURL: gatewayAdminURL,
 		AdminKey:        gatewayAdminKey,
 		ServiceID:       serviceID,

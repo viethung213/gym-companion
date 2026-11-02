@@ -41,25 +41,29 @@ type Registrar struct {
 }
 
 // NewRegistrar creates a new service registrar instance.
-func NewRegistrar(cfg Config) *Registrar {
-	if cfg.GatewayAdminURL == "" {
-		cfg.GatewayAdminURL = "http://localhost:8001"
+func NewRegistrar(cfg *Config) *Registrar {
+	if cfg == nil {
+		cfg = &Config{}
 	}
-	adminURL := strings.TrimRight(cfg.GatewayAdminURL, "/")
+	conf := *cfg
+	if conf.GatewayAdminURL == "" {
+		conf.GatewayAdminURL = "http://localhost:8001"
+	}
+	adminURL := strings.TrimRight(conf.GatewayAdminURL, "/")
 
-	if cfg.AdminKey == "" {
-		cfg.AdminKey = "gym-companion-admin-secret-2026"
+	if conf.AdminKey == "" {
+		conf.AdminKey = "gym-companion-admin-secret-2026"
 	}
-	if cfg.HeartbeatInterval <= 0 {
-		cfg.HeartbeatInterval = 5 * time.Second
+	if conf.HeartbeatInterval <= 0 {
+		conf.HeartbeatInterval = 5 * time.Second
 	}
 
-	upstream := cfg.UpstreamURL
+	upstream := conf.UpstreamURL
 	if upstream == "" {
-		upstream = ResolveSelfAddress(cfg.ServicePort)
+		upstream = ResolveSelfAddress(conf.ServicePort)
 	}
 
-	httpClient := cfg.HTTPClient
+	httpClient := conf.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{
 			Transport: &http2.Transport{
@@ -76,7 +80,7 @@ func NewRegistrar(cfg Config) *Registrar {
 	}
 
 	return &Registrar{
-		cfg:         cfg,
+		cfg:         conf,
 		adminURL:    adminURL,
 		upstreamURL: upstream,
 		client:      httpClient,
@@ -157,7 +161,7 @@ func (r *Registrar) register(ctx context.Context) error {
 		return fmt.Errorf("marshal register payload: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/admin/discovery/register", r.adminURL)
+	endpoint := r.adminURL + "/admin/discovery/register"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create register request: %w", err)
@@ -190,7 +194,7 @@ func (r *Registrar) deregister(ctx context.Context) error {
 		return fmt.Errorf("marshal deregister payload: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/admin/discovery/deregister", r.adminURL)
+	endpoint := r.adminURL + "/admin/discovery/deregister"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create deregister request: %w", err)
@@ -212,4 +216,3 @@ func (r *Registrar) deregister(ctx context.Context) error {
 	}
 	return nil
 }
-

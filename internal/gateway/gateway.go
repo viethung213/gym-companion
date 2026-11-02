@@ -530,4 +530,3 @@ func (gw *Gateway) Handler() http.Handler {
 		corsHandler.ServeHTTP(rec, r)
 	})
 }
-

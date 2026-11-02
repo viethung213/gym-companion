@@ -57,7 +57,7 @@ func TestRegistrar_Lifecycle(t *testing.T) {
 		HeartbeatInterval: 30 * time.Millisecond,
 	}
 
-	reg := NewRegistrar(cfg)
+	reg := NewRegistrar(&cfg)
 	assert.Equal(t, "http://localhost:1234", reg.UpstreamURL())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -77,4 +77,3 @@ func TestRegistrar_Lifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int32(1), deregisterCalls.Load())
 }
-

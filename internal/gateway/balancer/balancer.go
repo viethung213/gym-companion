@@ -170,17 +170,18 @@ func (lb *LoadBalancer) ReportSuccess(target *url.URL) {
 
 	targetStr := target.String()
 	for _, node := range lb.nodes {
-		if node.URL.String() == targetStr {
-			node.ConsecutiveFailures.Store(0)
-			state := State(node.State.Load())
-			if state == StateHalfOpen {
-				successes := node.HalfOpenSuccesses.Add(1)
-				if int(successes) >= lb.cfg.HalfOpenSuccessGoal {
-					node.State.Store(int32(StateClosed))
-				}
-			}
-			return
+		if node.URL.String() != targetStr {
+			continue
 		}
+		node.ConsecutiveFailures.Store(0)
+		state := State(node.State.Load())
+		if state == StateHalfOpen {
+			successes := node.HalfOpenSuccesses.Add(1)
+			if int(successes) >= lb.cfg.HalfOpenSuccessGoal {
+				node.State.Store(int32(StateClosed))
+			}
+		}
+		return
 	}
 }
 
@@ -196,20 +197,21 @@ func (lb *LoadBalancer) ReportFailure(target *url.URL) {
 	targetStr := target.String()
 	now := time.Now().UnixNano()
 	for _, node := range lb.nodes {
-		if node.URL.String() == targetStr {
-			node.LastFailureTime.Store(now)
-			failures := node.ConsecutiveFailures.Add(1)
-			state := State(node.State.Load())
-
-			if state == StateHalfOpen {
-				// Any failure in Half-Open immediately trips back to Open
-				node.State.Store(int32(StateOpen))
-			} else if state == StateClosed && int(failures) >= lb.cfg.FailureThreshold {
-				// Reached failure threshold in Closed, trip circuit to Open
-				node.State.Store(int32(StateOpen))
-			}
-			return
+		if node.URL.String() != targetStr {
+			continue
 		}
+		node.LastFailureTime.Store(now)
+		failures := node.ConsecutiveFailures.Add(1)
+		state := State(node.State.Load())
+
+		if state == StateHalfOpen {
+			// Any failure in Half-Open immediately trips back to Open
+			node.State.Store(int32(StateOpen))
+		} else if state == StateClosed && int(failures) >= lb.cfg.FailureThreshold {
+			// Reached failure threshold in Closed, trip circuit to Open
+			node.State.Store(int32(StateOpen))
+		}
+		return
 	}
 }
 
