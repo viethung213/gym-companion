@@ -1,30 +1,23 @@
-package postgres
+package persistence
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
+	"gorm.io/gorm"
 )
 
 var _ port.OutboxLogRepository = (*OutboxLogRepository)(nil)
 
 type OutboxLogRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewOutboxLogRepository(db *sql.DB) *OutboxLogRepository {
+func NewOutboxLogRepository(db *gorm.DB) *OutboxLogRepository {
 	return &OutboxLogRepository{db: db}
-}
-
-func (r *OutboxLogRepository) getExecutor(ctx context.Context) DBExecutor {
-	if tx := GetTx(ctx); tx != nil {
-		return tx
-	}
-	return r.db
 }
 
 func (r *OutboxLogRepository) LogProcessed(
@@ -48,9 +41,7 @@ func (r *OutboxLogRepository) LogProcessed(
 		status = "SUCCESS"
 	}
 
-	executor := r.getExecutor(ctx)
-	res, err := executor.ExecContext(
-		ctx,
+	res := GetDB(ctx, r.db).Exec(
 		query,
 		id,
 		parsedEventUUID,
@@ -61,16 +52,11 @@ func (r *OutboxLogRepository) LogProcessed(
 		status,
 		errMsg,
 	)
-	if err != nil {
-		return false, fmt.Errorf("insert notification outbox_log: %w", err)
+	if res.Error != nil {
+		return false, fmt.Errorf("insert notification outbox_log: %w", res.Error)
 	}
 
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("check rows affected outbox_log: %w", err)
-	}
-
-	return rows > 0, nil
+	return res.RowsAffected > 0, nil
 }
 
 func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {
@@ -102,9 +88,7 @@ func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLo
 		processedAt = time.Now().UTC()
 	}
 
-	executor := r.getExecutor(ctx)
-	_, err = executor.ExecContext(
-		ctx,
+	err = GetDB(ctx, r.db).Exec(
 		query,
 		id,
 		parsedEventUUID,
@@ -114,7 +98,7 @@ func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLo
 		processedAt,
 		record.Status,
 		record.ErrorMessage,
-	)
+	).Error
 	if err != nil {
 		return fmt.Errorf("save outbound log in notification.outbox_log: %w", err)
 	}
@@ -133,8 +117,7 @@ func (r *OutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([
 		ORDER BY processed_at ASC
 		LIMIT $1
 	`
-	executor := r.getExecutor(ctx)
-	rows, err := executor.QueryContext(ctx, query, limit)
+	rows, err := GetDB(ctx, r.db).Raw(query, limit).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("query failed notification outbox logs: %w", err)
 	}
@@ -170,8 +153,7 @@ func (r *OutboxLogRepository) UpdateLogStatus(ctx context.Context, id, status, e
 		SET status = $1, error_message = $2, processed_at = $3
 		WHERE id = $4
 	`
-	executor := r.getExecutor(ctx)
-	_, err := executor.ExecContext(ctx, query, status, errMsg, time.Now().UTC(), id)
+	err := GetDB(ctx, r.db).Exec(query, status, errMsg, time.Now().UTC(), id).Error
 	if err != nil {
 		return fmt.Errorf("update notification outbox_log status: %w", err)
 	}

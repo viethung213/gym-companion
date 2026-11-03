@@ -24,6 +24,7 @@ type RecalibratePlanWithPantryHandler struct {
 	historyRepo   repository.MealHistoryRepository
 	eventRecorder port.EventRecorder
 	menuGenerator *service.MenuGenerator
+	txManager     port.TransactionManager
 }
 
 func NewRecalibratePlanWithPantryHandler(
@@ -31,12 +32,18 @@ func NewRecalibratePlanWithPantryHandler(
 	historyRepo repository.MealHistoryRepository,
 	eventRecorder port.EventRecorder,
 	menuGenerator *service.MenuGenerator,
+	txManager ...port.TransactionManager,
 ) *RecalibratePlanWithPantryHandler {
+	var tm port.TransactionManager
+	if len(txManager) > 0 {
+		tm = txManager[0]
+	}
 	return &RecalibratePlanWithPantryHandler{
 		planRepo:      planRepo,
 		historyRepo:   historyRepo,
 		eventRecorder: eventRecorder,
 		menuGenerator: menuGenerator,
+		txManager:     tm,
 	}
 }
 
@@ -52,6 +59,7 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd Recal
 		lockouts = history.LockoutRegistry()
 	}
 
+	// External AI Generation is intentionally executed outside the DB transaction to prevent connection bottleneck
 	recalibratedPlan, genErr := h.menuGenerator.GeneratePlanWithPantry(
 		ctx,
 		cmd.UserID,
@@ -66,18 +74,34 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd Recal
 
 	plan.UpdateRemainingUnconsumedMeals(recalibratedPlan.DailyMeals(), plan.CalorieAllocation())
 
-	if updateErr := h.planRepo.Update(ctx, plan); updateErr != nil {
-		return nil, fmt.Errorf("recalibrate pantry update: %w", updateErr)
+	// Wrap local DB update and outbox event recording in an atomic transaction
+	saveFunc := func(txCtx context.Context) error {
+		if updateErr := h.planRepo.Update(txCtx, plan); updateErr != nil {
+			return fmt.Errorf("recalibrate pantry update: %w", updateErr)
+		}
+
+		if h.eventRecorder != nil {
+			ev := domainEvent.NewNutritionPlanRecalibratedEvent(
+				plan.ID(),
+				plan.UserID(),
+				"Pantry ingredient availability recalibration",
+				time.Now(),
+			)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record nutrition plan recalibrated event: %w", err)
+			}
+		}
+		return nil
 	}
 
-	if h.eventRecorder != nil {
-		ev := domainEvent.NewNutritionPlanRecalibratedEvent(
-			plan.ID(),
-			plan.UserID(),
-			"Pantry ingredient availability recalibration",
-			time.Now(),
-		)
-		_ = h.eventRecorder.RecordEvents(ctx, []any{ev})
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	return plan, nil

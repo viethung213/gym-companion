@@ -23,7 +23,7 @@ func NewGormFollowRepository(db *gorm.DB) *GormFollowRepository {
 
 func (r *GormFollowRepository) Follow(ctx context.Context, follow *aggregate.Follow) error {
 	m := ToPersistenceFollow(follow)
-	err := getDB(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(m).Error
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(m).Error
 	if err != nil {
 		return fmt.Errorf("create follow: %w", err)
 	}
@@ -31,7 +31,7 @@ func (r *GormFollowRepository) Follow(ctx context.Context, follow *aggregate.Fol
 }
 
 func (r *GormFollowRepository) Unfollow(ctx context.Context, followerID, followingID string) error {
-	err := getDB(ctx, r.db).Where("follower_id = ? AND following_id = ?", followerID, followingID).
+	err := GetDB(ctx, r.db).Where("follower_id = ? AND following_id = ?", followerID, followingID).
 		Delete(&FollowModel{}).Error
 	if err != nil {
 		return fmt.Errorf("delete follow: %w", err)
@@ -41,7 +41,7 @@ func (r *GormFollowRepository) Unfollow(ctx context.Context, followerID, followi
 
 func (r *GormFollowRepository) IsFollowing(ctx context.Context, followerID, followingID string) (bool, error) {
 	var count int64
-	err := getDB(ctx, r.db).Model(&FollowModel{}).
+	err := GetDB(ctx, r.db).Model(&FollowModel{}).
 		Where("follower_id = ? AND following_id = ?", followerID, followingID).
 		Count(&count).Error
 	if err != nil {
@@ -57,7 +57,7 @@ func (r *GormFollowRepository) GetFollowers(
 	cursor string,
 ) (items []*aggregate.Follow, nextCursor string, total int32, err error) {
 	var models []FollowModel
-	query := getDB(ctx, r.db).Where("following_id = ?", userID)
+	query := GetDB(ctx, r.db).Where("following_id = ?", userID)
 
 	var totalCount int64
 	if countErr := query.Model(&FollowModel{}).Count(&totalCount).Error; countErr != nil {
@@ -97,7 +97,7 @@ func (r *GormFollowRepository) GetFollowing(
 	cursor string,
 ) (items []*aggregate.Follow, nextCursor string, total int32, err error) {
 	var models []FollowModel
-	query := getDB(ctx, r.db).Where("follower_id = ?", userID)
+	query := GetDB(ctx, r.db).Where("follower_id = ?", userID)
 
 	var totalCount int64
 	if countErr := query.Model(&FollowModel{}).Count(&totalCount).Error; countErr != nil {
@@ -132,7 +132,7 @@ func (r *GormFollowRepository) GetFollowing(
 
 func (r *GormFollowRepository) GetFollowingIDs(ctx context.Context, followerID string) ([]string, error) {
 	var ids []string
-	err := getDB(ctx, r.db).Model(&FollowModel{}).
+	err := GetDB(ctx, r.db).Model(&FollowModel{}).
 		Where("follower_id = ?", followerID).
 		Pluck("following_id", &ids).Error
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *GormFollowRepository) FilterFollowingIDs(
 	}
 
 	var followingIDs []string
-	err := getDB(ctx, r.db).Model(&FollowModel{}).
+	err := GetDB(ctx, r.db).Model(&FollowModel{}).
 		Where("follower_id = ? AND following_id IN ?", followerID, targetUserIDs).
 		Pluck("following_id", &followingIDs).Error
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 )
 
@@ -26,11 +27,22 @@ type UpdateMealScheduleResult struct {
 }
 
 type UpdateMealScheduleHandler struct {
-	planRepo repository.NutritionPlanRepository
+	planRepo  repository.NutritionPlanRepository
+	txManager port.TransactionManager
 }
 
-func NewUpdateMealScheduleHandler(planRepo repository.NutritionPlanRepository) *UpdateMealScheduleHandler {
-	return &UpdateMealScheduleHandler{planRepo: planRepo}
+func NewUpdateMealScheduleHandler(
+	planRepo repository.NutritionPlanRepository,
+	txManager ...port.TransactionManager,
+) *UpdateMealScheduleHandler {
+	var tm port.TransactionManager
+	if len(txManager) > 0 {
+		tm = txManager[0]
+	}
+	return &UpdateMealScheduleHandler{
+		planRepo:  planRepo,
+		txManager: tm,
+	}
 }
 
 func (h *UpdateMealScheduleHandler) Handle(ctx context.Context, cmd UpdateMealScheduleCommand) (*UpdateMealScheduleResult, error) {
@@ -45,17 +57,35 @@ func (h *UpdateMealScheduleHandler) Handle(ctx context.Context, cmd UpdateMealSc
 		}
 	}
 
-	if len(schedulesMap) > 0 {
-		if err := h.planRepo.SaveUserMealSchedules(ctx, cmd.UserID, schedulesMap); err != nil {
-			return nil, fmt.Errorf("update meal schedule save user preferences: %w", err)
-		}
+	now := time.Now()
+	plan, _ := h.planRepo.FindByUserIDAndDate(ctx, cmd.UserID, now)
+	if plan != nil {
+		plan.UpdateMealSchedule(schedulesMap)
 	}
 
-	now := time.Now()
-	plan, err := h.planRepo.FindByUserIDAndDate(ctx, cmd.UserID, now)
-	if err == nil && plan != nil {
-		plan.UpdateMealSchedule(schedulesMap)
-		_ = h.planRepo.Update(ctx, plan)
+	// Wrap local DB preference save and current plan schedule update in an atomic transaction
+	saveFunc := func(txCtx context.Context) error {
+		if len(schedulesMap) > 0 {
+			if err := h.planRepo.SaveUserMealSchedules(txCtx, cmd.UserID, schedulesMap); err != nil {
+				return fmt.Errorf("update meal schedule save user preferences: %w", err)
+			}
+		}
+		if plan != nil {
+			if err := h.planRepo.Update(txCtx, plan); err != nil {
+				return fmt.Errorf("update current plan schedule: %w", err)
+			}
+		}
+		return nil
+	}
+
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	savedSchedules, err := h.planRepo.GetUserMealSchedules(ctx, cmd.UserID)

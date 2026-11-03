@@ -19,12 +19,14 @@ import (
 	notificationEvent "github.com/viethung213/gym-companion/internal/notification/infrastructure/event"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
-	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence/postgres"
+	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/sms"
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
 	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
@@ -42,13 +44,24 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		return nil, nil, fmt.Errorf("load notification config: %w", err)
 	}
 
+	// Wrap sql.DB with GORM
+	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
+		Conn: deps.DB,
+	}), &gorm.Config{
+		PrepareStmt:            false,
+		SkipDefaultTransaction: true,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
+	}
+
 	// 1. Repositories & Adapters
-	deviceRepo := postgres.NewDeviceRepository(deps.DB)
-	settingRepo := postgres.NewSettingRepository(deps.DB)
-	notificationRepo := postgres.NewNotificationRepository(deps.DB)
-	outboxRepo := postgres.NewOutboxRepository(deps.DB)
-	outboxLogRepo := postgres.NewOutboxLogRepository(deps.DB)
-	txManager := postgres.NewTxManager(deps.DB)
+	deviceRepo := persistence.NewDeviceRepository(gormDB)
+	settingRepo := persistence.NewSettingRepository(gormDB)
+	notificationRepo := persistence.NewNotificationRepository(gormDB)
+	outboxRepo := persistence.NewOutboxRepository(gormDB)
+	outboxLogRepo := persistence.NewOutboxLogRepository(gormDB)
+	txManager := persistence.NewSQLTransactionManager(gormDB)
 	fcmClient := fcm.NewClient(&cfg)
 	emailProvider := email.NewEmailProvider(&cfg)
 	smsProvider := sms.NewSMSProvider(&cfg)

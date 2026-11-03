@@ -25,7 +25,7 @@ func (r *PostgresOutboxLogRepository) IsProcessed(ctx context.Context, eventID s
 	if eventID == "" {
 		return false, nil
 	}
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var logModel GormOutboxLog
 	err := db.Where("event_id = ? AND status = ?", eventID, "PROCESSED").First(&logModel).Error
 	if err != nil {
@@ -48,7 +48,7 @@ func (r *PostgresOutboxLogRepository) SaveLog(ctx context.Context, logRecord *po
 		Status:       logRecord.Status,
 		ErrorMessage: logRecord.ErrorMessage,
 	}
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(m).Error; err != nil {
 		return fmt.Errorf("save outbox log model: %w", err)
 	}

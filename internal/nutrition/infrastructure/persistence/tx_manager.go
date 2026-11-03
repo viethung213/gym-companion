@@ -2,13 +2,10 @@ package persistence
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
 	"gorm.io/gorm"
 )
-
-type txKey struct{}
 
 type SQLTransactionManager struct {
 	db *gorm.DB
@@ -21,22 +18,15 @@ func NewSQLTransactionManager(db *gorm.DB) *SQLTransactionManager {
 }
 
 func (tm *SQLTransactionManager) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
-	if _, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
+	if existingTx := GetTx(ctx); existingTx != nil {
 		return fn(ctx)
 	}
 
 	return tm.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txCtx := context.WithValue(ctx, txKey{}, tx)
+		txCtx := WithTx(ctx, tx)
 		if err := fn(txCtx); err != nil {
-			return fmt.Errorf("transaction execution failed: %w", err)
+			return err
 		}
 		return nil
 	})
-}
-
-func getDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
-	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
-		return tx
-	}
-	return defaultDB.WithContext(ctx)
 }

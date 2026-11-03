@@ -10,7 +10,7 @@ import (
 	authCommand "github.com/viethung213/gym-companion/internal/auth/application/command"
 	authCrypto "github.com/viethung213/gym-companion/internal/auth/infrastructure/crypto"
 	authEvent "github.com/viethung213/gym-companion/internal/auth/infrastructure/event"
-	authPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
+	authPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence"
 	authGRPC "github.com/viethung213/gym-companion/internal/auth/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/shared/seeder"
 	"gorm.io/gorm"

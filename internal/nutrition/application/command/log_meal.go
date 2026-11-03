@@ -31,6 +31,7 @@ type LogMealHandler struct {
 	historyRepo   repository.MealHistoryRepository
 	eventRecorder port.EventRecorder
 	aiService     repository.AIService
+	txManager     port.TransactionManager
 }
 
 func NewLogMealHandler(
@@ -38,12 +39,18 @@ func NewLogMealHandler(
 	historyRepo repository.MealHistoryRepository,
 	eventRecorder port.EventRecorder,
 	aiService repository.AIService,
+	txManager ...port.TransactionManager,
 ) *LogMealHandler {
+	var tm port.TransactionManager
+	if len(txManager) > 0 {
+		tm = txManager[0]
+	}
 	return &LogMealHandler{
 		planRepo:      planRepo,
 		historyRepo:   historyRepo,
 		eventRecorder: eventRecorder,
 		aiService:     aiService,
+		txManager:     tm,
 	}
 }
 
@@ -53,6 +60,7 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 	var calories, protein, carbs, fat float64
 	mealName := cmd.MealName
 	mealType := cmd.MealType
+	var planToUpdate *aggregate.NutritionPlan
 
 	if cmd.PlannedOptionID != "" {
 		plan, planErr := h.planRepo.FindByUserIDAndDate(ctx, cmd.UserID, cmd.PlanDate)
@@ -64,11 +72,12 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 				protein = option.ProteinGrams()
 				carbs = option.CarbGrams()
 				fat = option.FatGrams()
-				_ = h.planRepo.Update(ctx, plan)
+				planToUpdate = plan
 			}
 		}
 	}
 
+	// External AI estimation is executed outside DB transaction to avoid blocking connection pool
 	if cmd.PlannedOptionID == "" && cmd.Calories <= 0 {
 		if h.aiService != nil {
 			aiRes, aiErr := h.aiService.EstimateNutrient(ctx, cmd.MealName, cmd.Portion)
@@ -112,30 +121,51 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 	)
 
 	history.AddMealLog(mealLog)
-
 	history.ApplyLockoutRule(vo.LockoutTypeProtein, mealName, vo.DurationProtein, now)
 	history.ApplyLockoutRule(vo.LockoutTypeCategory, mealType, vo.DurationCategory, now)
 
-	if saveErr := h.historyRepo.Save(ctx, history); saveErr != nil {
-		return nil, fmt.Errorf("log meal save: %w", saveErr)
+	// Wrap local DB persistence and outbox event recording in an atomic transaction
+	saveFunc := func(txCtx context.Context) error {
+		if planToUpdate != nil {
+			if err := h.planRepo.Update(txCtx, planToUpdate); err != nil {
+				return fmt.Errorf("update plan option logged: %w", err)
+			}
+		}
+
+		if saveErr := h.historyRepo.Save(txCtx, history); saveErr != nil {
+			return fmt.Errorf("log meal save: %w", saveErr)
+		}
+
+		if h.eventRecorder != nil {
+			ev1 := domainEvent.NewMealLoggedEvent(
+				mealLog.ID(),
+				cmd.UserID,
+				mealType,
+				mealName,
+				calories,
+				now,
+			)
+			ev2 := domainEvent.NewLockoutAppliedEvent(
+				cmd.UserID,
+				vo.LockoutTypeProtein,
+				mealName,
+				now.Add(vo.DurationProtein),
+			)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev1, ev2}); err != nil {
+				return fmt.Errorf("record meal logged outbox events: %w", err)
+			}
+		}
+		return nil
 	}
 
-	if h.eventRecorder != nil {
-		ev1 := domainEvent.NewMealLoggedEvent(
-			mealLog.ID(),
-			cmd.UserID,
-			mealType,
-			mealName,
-			calories,
-			now,
-		)
-		ev2 := domainEvent.NewLockoutAppliedEvent(
-			cmd.UserID,
-			vo.LockoutTypeProtein,
-			mealName,
-			now.Add(vo.DurationProtein),
-		)
-		_ = h.eventRecorder.RecordEvents(ctx, []any{ev1, ev2})
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	return &mealLog, nil

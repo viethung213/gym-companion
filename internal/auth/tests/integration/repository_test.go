@@ -14,7 +14,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/auth/domain/derror"
 	"github.com/viethung213/gym-companion/internal/auth/domain/vo"
-	infraPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
+	infraPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

@@ -41,7 +41,7 @@ func (r *PostgresOutboxRepository) Save(ctx context.Context, record *port.Outbox
 		Status:        "PENDING",
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Create(gormRecord).Error; err != nil {
 		return fmt.Errorf("outbox repo save record: %w", err)
 	}
@@ -67,7 +67,7 @@ func (r *PostgresOutboxRepository) SaveEvent(ctx context.Context, eventID, event
 
 func (r *PostgresOutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]port.OutboxRecord, error) {
 	var gormRecords []GormOutbox
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Where("published = ?", false).Order("created_at ASC").Limit(limit).Find(&gormRecords).Error; err != nil {
 		return nil, fmt.Errorf("outbox repo fetch unpublished: %w", err)
 	}
@@ -107,7 +107,7 @@ func (r *PostgresOutboxRepository) ClaimBatch(
 	now := time.Now()
 	lockedUntil := now.Add(lockDuration)
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var models []GormOutbox
 		err := tx.
@@ -173,7 +173,7 @@ func (r *PostgresOutboxRepository) MarkAsPublished(ctx context.Context, ids []st
 	if len(ids) == 0 {
 		return nil
 	}
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	now := time.Now()
 	err := db.Model(&GormOutbox{}).
 		Where("id IN ?", ids).

@@ -68,12 +68,12 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 	matrix := service.NewCombinatorialMatrix()
 	menuGen := service.NewMenuGenerator(matrix, recipeCacheRepo, foodRepo, aiAgent)
 
-	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, outboxWriter, tdeeCalc, menuGen)
-	recalPlanHdlr := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, outboxWriter, menuGen)
-	logMealHdlr := command.NewLogMealHandler(planRepo, historyRepo, outboxWriter, aiAgent)
+	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, outboxWriter, tdeeCalc, menuGen, txManager)
+	recalPlanHdlr := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, outboxWriter, menuGen, txManager)
+	logMealHdlr := command.NewLogMealHandler(planRepo, historyRepo, outboxWriter, aiAgent, txManager)
 	createFoodItemHdlr := command.NewCreateFoodItemHandler(foodRepo)
 	approveFoodItemHdlr := command.NewApproveFoodItemHandler(foodRepo)
-	updateMealScheduleHdlr := command.NewUpdateMealScheduleHandler(planRepo)
+	updateMealScheduleHdlr := command.NewUpdateMealScheduleHandler(planRepo, txManager)
 
 	getTodayMenuHdlr := query.NewGetTodayMenuHandler(planRepo)
 	getNutritionHistHdlr := query.NewGetNutritionHistoryHandler(historyRepo)

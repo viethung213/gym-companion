@@ -24,7 +24,7 @@ func NewGormInteractionRepository(db *gorm.DB) *GormInteractionRepository {
 
 func (r *GormInteractionRepository) SaveReaction(ctx context.Context, reaction *entity.Reaction) error {
 	m := ToPersistenceReaction(reaction)
-	err := getDB(ctx, r.db).Clauses(clause.OnConflict{
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "feed_item_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"reaction_type"}),
 	}).Create(m).Error
@@ -35,7 +35,7 @@ func (r *GormInteractionRepository) SaveReaction(ctx context.Context, reaction *
 }
 
 func (r *GormInteractionRepository) DeleteReaction(ctx context.Context, userID, feedItemID string) error {
-	err := getDB(ctx, r.db).Where("user_id = ? AND feed_item_id = ?", userID, feedItemID).
+	err := GetDB(ctx, r.db).Where("user_id = ? AND feed_item_id = ?", userID, feedItemID).
 		Delete(&ReactionModel{}).Error
 	if err != nil {
 		return fmt.Errorf("delete reaction: %w", err)
@@ -45,7 +45,7 @@ func (r *GormInteractionRepository) DeleteReaction(ctx context.Context, userID, 
 
 func (r *GormInteractionRepository) GetReaction(ctx context.Context, userID, feedItemID string) (*entity.Reaction, error) {
 	var m ReactionModel
-	err := getDB(ctx, r.db).Where("user_id = ? AND feed_item_id = ?", userID, feedItemID).
+	err := GetDB(ctx, r.db).Where("user_id = ? AND feed_item_id = ?", userID, feedItemID).
 		First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -58,7 +58,7 @@ func (r *GormInteractionRepository) GetReaction(ctx context.Context, userID, fee
 
 func (r *GormInteractionRepository) GetReactionsByFeedItem(ctx context.Context, feedItemID string) ([]*entity.Reaction, error) {
 	var models []ReactionModel
-	err := getDB(ctx, r.db).Where("feed_item_id = ?", feedItemID).Find(&models).Error
+	err := GetDB(ctx, r.db).Where("feed_item_id = ?", feedItemID).Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("find reactions by feed item: %w", err)
 	}
@@ -82,7 +82,7 @@ func (r *GormInteractionRepository) GetReactionsByUserAndFeedItemIDs(
 		return make(map[string]*entity.Reaction), nil
 	}
 	var models []ReactionModel
-	err := getDB(ctx, r.db).Where("user_id = ? AND feed_item_id IN ?", userID, feedItemIDs).Find(&models).Error
+	err := GetDB(ctx, r.db).Where("user_id = ? AND feed_item_id IN ?", userID, feedItemIDs).Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("find reactions by items: %w", err)
 	}
@@ -104,7 +104,7 @@ func (r *GormInteractionRepository) GetUserReactions(ctx context.Context, userID
 	}
 
 	var models []ReactionModel
-	err := getDB(ctx, r.db).Where("user_id = ? AND feed_item_id IN ?", userID, feedItemIDs).Find(&models).Error
+	err := GetDB(ctx, r.db).Where("user_id = ? AND feed_item_id IN ?", userID, feedItemIDs).Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("find batch user reactions: %w", err)
 	}
@@ -120,7 +120,7 @@ func (r *GormInteractionRepository) GetUserReactions(ctx context.Context, userID
 
 func (r *GormInteractionRepository) AddComment(ctx context.Context, comment *entity.Comment) error {
 	m := ToPersistenceComment(comment)
-	if err := getDB(ctx, r.db).Create(m).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(m).Error; err != nil {
 		return fmt.Errorf("create comment: %w", err)
 	}
 	return nil
@@ -128,7 +128,7 @@ func (r *GormInteractionRepository) AddComment(ctx context.Context, comment *ent
 
 func (r *GormInteractionRepository) GetCommentByID(ctx context.Context, id string) (*entity.Comment, error) {
 	var m CommentModel
-	err := getDB(ctx, r.db).Where("id = ?", id).First(&m).Error
+	err := GetDB(ctx, r.db).Where("id = ?", id).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -139,7 +139,7 @@ func (r *GormInteractionRepository) GetCommentByID(ctx context.Context, id strin
 }
 
 func (r *GormInteractionRepository) DeleteComment(ctx context.Context, id, userID string) error {
-	err := getDB(ctx, r.db).Where("id = ? AND user_id = ?", id, userID).Delete(&CommentModel{}).Error
+	err := GetDB(ctx, r.db).Where("id = ? AND user_id = ?", id, userID).Delete(&CommentModel{}).Error
 	if err != nil {
 		return fmt.Errorf("delete comment: %w", err)
 	}
@@ -153,7 +153,7 @@ func (r *GormInteractionRepository) ListComments(
 	cursor string,
 ) (items []*entity.Comment, nextCursor string, total int32, err error) {
 	var models []CommentModel
-	query := getDB(ctx, r.db).Where("feed_item_id = ?", feedItemID)
+	query := GetDB(ctx, r.db).Where("feed_item_id = ?", feedItemID)
 
 	var totalCount int64
 	if countErr := query.Model(&CommentModel{}).Count(&totalCount).Error; countErr != nil {

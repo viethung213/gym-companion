@@ -31,6 +31,7 @@ type GenerateDailyPlanHandler struct {
 	eventRecorder  port.EventRecorder
 	tdeeCalculator *service.TDEECalculator
 	menuGenerator  *service.MenuGenerator
+	txManager      port.TransactionManager
 }
 
 func NewGenerateDailyPlanHandler(
@@ -39,13 +40,19 @@ func NewGenerateDailyPlanHandler(
 	eventRecorder port.EventRecorder,
 	tdeeCalculator *service.TDEECalculator,
 	menuGenerator *service.MenuGenerator,
+	txManager ...port.TransactionManager,
 ) *GenerateDailyPlanHandler {
+	var tm port.TransactionManager
+	if len(txManager) > 0 {
+		tm = txManager[0]
+	}
 	return &GenerateDailyPlanHandler{
 		planRepo:       planRepo,
 		historyRepo:    historyRepo,
 		eventRecorder:  eventRecorder,
 		tdeeCalculator: tdeeCalculator,
 		menuGenerator:  menuGenerator,
+		txManager:      tm,
 	}
 }
 
@@ -72,6 +79,7 @@ func (h *GenerateDailyPlanHandler) Handle(ctx context.Context, cmd GenerateDaily
 		lockouts = history.LockoutRegistry()
 	}
 
+	// External AI Generation is intentionally executed outside the DB transaction to prevent connection bottleneck
 	plan, genErr := h.menuGenerator.GenerateDailyPlan(
 		ctx,
 		cmd.UserID,
@@ -89,18 +97,34 @@ func (h *GenerateDailyPlanHandler) Handle(ctx context.Context, cmd GenerateDaily
 		plan.UpdateMealSchedule(savedSchedules)
 	}
 
-	if saveErr := h.planRepo.Save(ctx, plan); saveErr != nil {
-		return nil, fmt.Errorf("generate daily plan save: %w", saveErr)
+	// Wrap local DB persistence and outbox event recording in an atomic transaction
+	saveFunc := func(txCtx context.Context) error {
+		if saveErr := h.planRepo.Save(txCtx, plan); saveErr != nil {
+			return fmt.Errorf("generate daily plan save: %w", saveErr)
+		}
+
+		if h.eventRecorder != nil {
+			ev := domainEvent.NewNutritionPlanGeneratedEvent(
+				plan.ID(),
+				plan.UserID(),
+				plan.PlanDate(),
+				time.Now(),
+			)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record nutrition plan generated event: %w", err)
+			}
+		}
+		return nil
 	}
 
-	if h.eventRecorder != nil {
-		ev := domainEvent.NewNutritionPlanGeneratedEvent(
-			plan.ID(),
-			plan.UserID(),
-			plan.PlanDate(),
-			time.Now(),
-		)
-		_ = h.eventRecorder.RecordEvents(ctx, []any{ev})
+	if h.txManager != nil {
+		if err := h.txManager.WithTransaction(ctx, saveFunc); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := saveFunc(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	return plan, nil

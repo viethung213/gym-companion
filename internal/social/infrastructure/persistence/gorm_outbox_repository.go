@@ -55,7 +55,7 @@ func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 		Status:        status,
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "event_id"}},
 		DoNothing: true,
@@ -71,7 +71,7 @@ func (r *GormOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 		limit = 100
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var models []*OutboxModel
 	if err := db.Where("published = ?", false).Order("created_at ASC").Limit(limit).Find(&models).Error; err != nil {
 		return nil, fmt.Errorf("fetch unpublished outbox events: %w", err)
@@ -105,7 +105,7 @@ func (r *GormOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDu
 		lockDuration = 30 * time.Second
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	now := time.Now().UTC()
 	lockedUntil := now.Add(lockDuration)
 
@@ -173,7 +173,7 @@ func (r *GormOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 		return nil
 	}
 	now := time.Now().UTC()
-	err := getDB(ctx, r.db).Model(&OutboxModel{}).Where("id IN ?", ids).
+	err := GetDB(ctx, r.db).Model(&OutboxModel{}).Where("id IN ?", ids).
 		Updates(map[string]any{
 			"published":    true,
 			"published_at": &now,

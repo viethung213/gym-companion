@@ -1,4 +1,4 @@
-package postgres
+package persistence
 
 import (
 	"context"
@@ -9,15 +9,16 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
+	"gorm.io/gorm"
 )
 
 var _ repository.SettingRepository = (*SettingRepository)(nil)
 
 type SettingRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewSettingRepository(db *sql.DB) *SettingRepository {
+func NewSettingRepository(db *gorm.DB) *SettingRepository {
 	return &SettingRepository{db: db}
 }
 
@@ -28,7 +29,7 @@ func (r *SettingRepository) GetByUserID(ctx context.Context, userID string) (*ag
 		WHERE user_id = $1
 	`
 	var m SettingModel
-	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+	err := GetDB(ctx, r.db).Raw(query, userID).Row().Scan(
 		&m.UserID,
 		&m.EnablePush,
 		&m.EnableEmail,
@@ -39,7 +40,7 @@ func (r *SettingRepository) GetByUserID(ctx context.Context, userID string) (*ag
 		&m.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrSettingNotFound
 		}
 		return nil, fmt.Errorf("query user notification setting: %w", err)
@@ -61,8 +62,7 @@ func (r *SettingRepository) Save(ctx context.Context, setting *aggregate.Setting
 			quiet_hours_end = EXCLUDED.quiet_hours_end,
 			updated_at = EXCLUDED.updated_at
 	`
-	_, err := r.db.ExecContext(
-		ctx,
+	err := GetDB(ctx, r.db).Exec(
 		query,
 		setting.UserID(),
 		setting.EnablePush(),
@@ -72,7 +72,7 @@ func (r *SettingRepository) Save(ctx context.Context, setting *aggregate.Setting
 		setting.QuietHoursEnd(),
 		setting.CreatedAt(),
 		setting.UpdatedAt(),
-	)
+	).Error
 	if err != nil {
 		return fmt.Errorf("upsert user notification setting: %w", err)
 	}

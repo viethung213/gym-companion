@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"testing"
 
-	infraPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
+	infraPostgres "github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence"
 )
 
 const (

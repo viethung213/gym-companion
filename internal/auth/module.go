@@ -22,7 +22,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/jwt"
 	authKafka "github.com/viethung213/gym-companion/internal/auth/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/oauth"
-	"github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence/postgres"
+	"github.com/viethung213/gym-companion/internal/auth/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/worker"
 	authGRPC "github.com/viethung213/gym-companion/internal/auth/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
@@ -63,10 +63,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	}
 
 	// 3. Initialize Repositories
-	userRepo := postgres.NewUserRepository(gormDB)
-	keyRepo := postgres.NewKeyRepository(gormDB)
-	sessRepo := postgres.NewSessionRepository(gormDB)
-	outboxRepo := postgres.NewOutboxRepository(gormDB)
+	userRepo := persistence.NewUserRepository(gormDB)
+	keyRepo := persistence.NewKeyRepository(gormDB)
+	sessRepo := persistence.NewSessionRepository(gormDB)
+	outboxRepo := persistence.NewOutboxRepository(gormDB)
 
 	// 4. Initialize Services & Adapters
 	googleConfig := oauth.ProviderConfig{
@@ -83,7 +83,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 
 	tokenServ := jwt.NewJWTSigner(keyRepo, cfg.JWTIssuer, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	keyGen := crypto.NewRSAKeyGenerator()
-	txManager := postgres.NewSQLTransactionManager(gormDB)
+	txManager := persistence.NewSQLTransactionManager(gormDB)
 	eventRecorder := authEvent.NewOutboxWriter(outboxRepo)
 
 	// 5. Initialize Application Handlers
@@ -206,8 +206,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 
 	refreshTokenHandler := command.NewRefreshTokenHandler(userRepo, keyRepo, sessRepo, tokenServ)
 	argon2Hasher := crypto.NewArgon2Hasher()
-	otpRepo := postgres.NewOTPRepository(gormDB)
-	resetTokenRepo := postgres.NewPasswordResetTokenRepository(gormDB)
+	otpRepo := persistence.NewOTPRepository(gormDB)
+	resetTokenRepo := persistence.NewPasswordResetTokenRepository(gormDB)
 
 	registerHandler := command.NewRegisterHandler(userRepo, argon2Hasher, eventRecorder, txManager)
 	credentialsLoginHandler := command.NewCredentialsLoginHandler(userRepo, argon2Hasher, keyRepo, tokenServ, sessRepo)
@@ -215,7 +215,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	verifyOTPHandler := command.NewVerifyOTPHandler(otpRepo, resetTokenRepo, userRepo, argon2Hasher)
 	changePasswordHandler := command.NewChangePasswordHandler(userRepo, argon2Hasher)
 	resetPasswordHandler := command.NewResetPasswordHandler(resetTokenRepo, userRepo, argon2Hasher, txManager)
-	brandRepo := postgres.NewBrandRequestRepository(gormDB)
+	brandRepo := persistence.NewBrandRequestRepository(gormDB)
 	registerBrandHandler := command.NewRegisterBrandHandler(brandRepo, userRepo)
 	approveBrandHandler := command.NewApproveBrandHandler(brandRepo, userRepo, txManager, eventRecorder)
 	rejectBrandHandler := command.NewRejectBrandHandler(brandRepo)

@@ -24,7 +24,7 @@ func NewGormFeedItemRepository(db *gorm.DB) *GormFeedItemRepository {
 
 func (r *GormFeedItemRepository) Create(ctx context.Context, item *aggregate.FeedItem) error {
 	m := ToPersistenceFeedItem(item)
-	if err := getDB(ctx, r.db).Create(m).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(m).Error; err != nil {
 		return fmt.Errorf("create feed item: %w", err)
 	}
 	return nil
@@ -32,7 +32,7 @@ func (r *GormFeedItemRepository) Create(ctx context.Context, item *aggregate.Fee
 
 func (r *GormFeedItemRepository) GetByID(ctx context.Context, id string) (*aggregate.FeedItem, error) {
 	var m FeedItemModel
-	err := getDB(ctx, r.db).Where("id = ?", id).First(&m).Error
+	err := GetDB(ctx, r.db).Where("id = ?", id).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -43,7 +43,7 @@ func (r *GormFeedItemRepository) GetByID(ctx context.Context, id string) (*aggre
 }
 
 func (r *GormFeedItemRepository) Delete(ctx context.Context, id, userID string) error {
-	err := getDB(ctx, r.db).Where("id = ? AND user_id = ?", id, userID).Delete(&FeedItemModel{}).Error
+	err := GetDB(ctx, r.db).Where("id = ? AND user_id = ?", id, userID).Delete(&FeedItemModel{}).Error
 	if err != nil {
 		return fmt.Errorf("delete feed item: %w", err)
 	}
@@ -52,7 +52,7 @@ func (r *GormFeedItemRepository) Delete(ctx context.Context, id, userID string) 
 
 func (r *GormFeedItemRepository) GetByUserID(ctx context.Context, userID string, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
 	var models []FeedItemModel
-	query := getDB(ctx, r.db).Where("user_id = ?", userID)
+	query := GetDB(ctx, r.db).Where("user_id = ?", userID)
 
 	if cursor != "" {
 		if t, err := time.Parse("2006-01-02T15:04:05.000000Z07:00", cursor); err == nil {
@@ -86,7 +86,7 @@ func (r *GormFeedItemRepository) GetByAuthorIDs(ctx context.Context, authorIDs [
 	}
 
 	var models []FeedItemModel
-	query := getDB(ctx, r.db).Where("user_id IN ?", authorIDs)
+	query := GetDB(ctx, r.db).Where("user_id IN ?", authorIDs)
 
 	if cursor != "" {
 		if t, err := time.Parse("2006-01-02T15:04:05.000000Z07:00", cursor); err == nil {
@@ -116,7 +116,7 @@ func (r *GormFeedItemRepository) GetByAuthorIDs(ctx context.Context, authorIDs [
 
 func (r *GormFeedItemRepository) CountByUserID(ctx context.Context, userID string) (int32, error) {
 	var count int64
-	err := getDB(ctx, r.db).Model(&FeedItemModel{}).Where("user_id = ?", userID).Count(&count).Error
+	err := GetDB(ctx, r.db).Model(&FeedItemModel{}).Where("user_id = ?", userID).Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("count user feed items: %w", err)
 	}
@@ -128,7 +128,7 @@ func (r *GormFeedItemRepository) UpdateReactionCount(ctx context.Context, id str
 	if delta < 0 {
 		expr = "GREATEST(reaction_count + ?, 0)"
 	}
-	return getDB(ctx, r.db).Model(&FeedItemModel{}).
+	return GetDB(ctx, r.db).Model(&FeedItemModel{}).
 		Where("id = ?", id).
 		UpdateColumn("reaction_count", gorm.Expr(expr, delta)).Error
 }
@@ -138,7 +138,7 @@ func (r *GormFeedItemRepository) UpdateCommentCount(ctx context.Context, id stri
 	if delta < 0 {
 		expr = "GREATEST(comment_count + ?, 0)"
 	}
-	return getDB(ctx, r.db).Model(&FeedItemModel{}).
+	return GetDB(ctx, r.db).Model(&FeedItemModel{}).
 		Where("id = ?", id).
 		UpdateColumn("comment_count", gorm.Expr(expr, delta)).Error
 }
@@ -162,7 +162,7 @@ func (r *GormFeedItemRepository) SearchPosts(
 		limit = 100
 	}
 
-	db := getDB(ctx, r.db).Model(&FeedItemModel{})
+	db := GetDB(ctx, r.db).Model(&FeedItemModel{})
 
 	// 1. Lọc theo từ khóa trong caption (sử dụng ILIKE để ăn GIN index trên Postgres)
 	if query := strings.TrimSpace(filter.Query); query != "" {

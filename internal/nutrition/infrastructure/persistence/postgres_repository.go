@@ -27,7 +27,7 @@ func NewPostgresFoodItemRepository(db *gorm.DB) *PostgresFoodItemRepository {
 
 func (r *PostgresFoodItemRepository) FindByID(ctx context.Context, id string) (*aggregate.FoodItem, error) {
 	var gormItem GormFoodItem
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.First(&gormItem, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -39,7 +39,7 @@ func (r *PostgresFoodItemRepository) FindByID(ctx context.Context, id string) (*
 
 func (r *PostgresFoodItemRepository) FindByName(ctx context.Context, name string) (*aggregate.FoodItem, error) {
 	var gormItem GormFoodItem
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.First(&gormItem, "LOWER(name) = LOWER(?)", name).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -51,7 +51,7 @@ func (r *PostgresFoodItemRepository) FindByName(ctx context.Context, name string
 
 func (r *PostgresFoodItemRepository) FindActiveCatalog(ctx context.Context) ([]vo.FoodNutrient, error) {
 	var gormItems []GormFoodItem
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Where("status = ?", aggregate.FoodStatusActive).Find(&gormItems).Error; err != nil {
 		return nil, fmt.Errorf("postgres food repo active catalog: %w", err)
 	}
@@ -65,7 +65,7 @@ func (r *PostgresFoodItemRepository) FindActiveCatalog(ctx context.Context) ([]v
 
 func (r *PostgresFoodItemRepository) FindNutiFoodProducts(ctx context.Context) ([]vo.FoodNutrient, error) {
 	var gormItems []GormFoodItem
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Where("is_nutifood_product = ? AND status = ?", true, aggregate.FoodStatusActive).Find(&gormItems).Error; err != nil {
 		return nil, fmt.Errorf("postgres food repo nutifood products: %w", err)
 	}
@@ -79,7 +79,7 @@ func (r *PostgresFoodItemRepository) FindNutiFoodProducts(ctx context.Context) (
 
 func (r *PostgresFoodItemRepository) Save(ctx context.Context, item *aggregate.FoodItem) error {
 	gormModel := FromDomainFoodItem(item)
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Create(gormModel).Error; err != nil {
 		return fmt.Errorf("postgres food repo save: %w", err)
 	}
@@ -88,7 +88,7 @@ func (r *PostgresFoodItemRepository) Save(ctx context.Context, item *aggregate.F
 
 func (r *PostgresFoodItemRepository) Update(ctx context.Context, item *aggregate.FoodItem) error {
 	gormModel := FromDomainFoodItem(item)
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Save(gormModel).Error; err != nil {
 		return fmt.Errorf("postgres food repo update: %w", err)
 	}
@@ -107,7 +107,7 @@ func NewPostgresRecipeCacheRepository(db *gorm.DB) *PostgresRecipeCacheRepositor
 
 func (r *PostgresRecipeCacheRepository) FindByHash(ctx context.Context, hash string) (*repository.CachedRecipe, error) {
 	var gormRecipe GormRecipe
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.First(&gormRecipe, "ingredient_hash = ?", hash).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -131,7 +131,7 @@ func (r *PostgresRecipeCacheRepository) Save(ctx context.Context, recipe *reposi
 		CreatedAt:        recipe.CreatedAt,
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Create(gormModel).Error; err != nil {
 		return fmt.Errorf("postgres recipe cache repo save: %w", err)
 	}
@@ -152,7 +152,7 @@ func (r *PostgresNutritionPlanRepository) FindByUserIDAndDate(ctx context.Contex
 	var gormPlan GormNutritionPlan
 	dateStr := date.Format("2006-01-02")
 	utcDateStr := date.UTC().Format("2006-01-02")
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.First(&gormPlan, "user_id = ? AND (DATE(plan_date) = ? OR DATE(plan_date) = ?)", userID, dateStr, utcDateStr).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -183,7 +183,7 @@ func (r *PostgresNutritionPlanRepository) Save(ctx context.Context, plan *aggreg
 		UpdatedAt:      plan.UpdatedAt(),
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "plan_date"}},
 		DoUpdates: clause.AssignmentColumns([]string{"target_calories", "target_protein", "target_carbs", "target_fat", "meals_json", "updated_at"}),
@@ -209,7 +209,7 @@ func (r *PostgresNutritionPlanRepository) Update(ctx context.Context, plan *aggr
 		UpdatedAt:      time.Now(),
 	}
 
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Save(gormModel).Error; err != nil {
 		return fmt.Errorf("postgres nutrition plan repo update: %w", err)
 	}
@@ -221,7 +221,7 @@ func (r *PostgresNutritionPlanRepository) Update(ctx context.Context, plan *aggr
 func (r *PostgresNutritionPlanRepository) FindActiveUserIDs(ctx context.Context, withinDays int) ([]string, error) {
 	since := time.Now().AddDate(0, 0, -withinDays)
 	var userIDs []string
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Model(&GormMealLog{}).
 		Where("logged_at >= ?", since).
 		Distinct("user_id").
@@ -234,7 +234,7 @@ func (r *PostgresNutritionPlanRepository) FindActiveUserIDs(ctx context.Context,
 func (r *PostgresNutritionPlanRepository) FindPlansForDate(ctx context.Context, targetDate time.Time) ([]*aggregate.NutritionPlan, error) {
 	var gormPlans []GormNutritionPlan
 	dateStr := targetDate.Format("2006-01-02")
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Where("DATE(plan_date) = ?", dateStr).Find(&gormPlans).Error; err != nil {
 		return nil, fmt.Errorf("postgres nutrition plan repo find plans for date: %w", err)
 	}
@@ -251,7 +251,7 @@ func (r *PostgresNutritionPlanRepository) FindPlansForDate(ctx context.Context, 
 
 func (r *PostgresNutritionPlanRepository) GetUserMealSchedules(ctx context.Context, userID string) (map[string]string, error) {
 	var records []GormUserMealSchedule
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.Where("user_id = ?", userID).Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("postgres nutrition plan repo get user meal schedules: %w", err)
 	}
@@ -277,7 +277,7 @@ func (r *PostgresNutritionPlanRepository) GetUserMealSchedules(ctx context.Conte
 }
 
 func (r *PostgresNutritionPlanRepository) SaveUserMealSchedules(ctx context.Context, userID string, schedules map[string]string) error {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	now := time.Now()
 
 	for mealType, scheduledTime := range schedules {
@@ -323,7 +323,7 @@ func NewPostgresMealHistoryRepository(db *gorm.DB) *PostgresMealHistoryRepositor
 
 func (r *PostgresMealHistoryRepository) FindByUserID(ctx context.Context, userID string) (*aggregate.MealHistory, error) {
 	var gormHist GormMealHistory
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	if err := db.First(&gormHist, "user_id = ?", userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -356,7 +356,7 @@ func (r *PostgresMealHistoryRepository) FindByUserID(ctx context.Context, userID
 }
 
 func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggregate.MealHistory) error {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	return db.Transaction(func(tx *gorm.DB) error {
 		var existing GormMealHistory
 		err := tx.Where("user_id = ?", history.UserID()).First(&existing).Error

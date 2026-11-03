@@ -91,6 +91,10 @@ func (m *mockTxManager) ExecTx(ctx context.Context, fn func(ctx context.Context)
 	return fn(ctx)
 }
 
+func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
+	return fn(ctx)
+}
+
 type mockEventRecorder struct {
 	events []any
 }

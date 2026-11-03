@@ -25,7 +25,7 @@ func NewGormUserSnapshotRepository(db *gorm.DB) *GormUserSnapshotRepository {
 
 func (r *GormUserSnapshotRepository) GetByID(ctx context.Context, id string) (*entity.UserSnapshot, error) {
 	var m SocialUserModel
-	err := getDB(ctx, r.db).Where("id = ?", id).First(&m).Error
+	err := GetDB(ctx, r.db).Where("id = ?", id).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.NewUserSnapshot(id, "User", "", "user", time.Time{}), nil
@@ -43,7 +43,7 @@ func (r *GormUserSnapshotRepository) GetByIDs(ctx context.Context, ids []string)
 	}
 
 	var models []SocialUserModel
-	err := getDB(ctx, r.db).Where("id IN ?", ids).Find(&models).Error
+	err := GetDB(ctx, r.db).Where("id IN ?", ids).Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("find batch social user snapshots: %w", err)
 	}
@@ -83,7 +83,7 @@ func (r *GormUserSnapshotRepository) Upsert(ctx context.Context, user *entity.Us
 		UpdatedAt:      now,
 	}
 
-	err := getDB(ctx, r.db).Clauses(clause.OnConflict{
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"full_name":  gorm.Expr("CASE WHEN EXCLUDED.full_name <> '' THEN EXCLUDED.full_name ELSE social.users.full_name END"),
@@ -105,7 +105,7 @@ func (r *GormUserSnapshotRepository) UpdateRole(ctx context.Context, userID, new
 		return nil
 	}
 	now := time.Now().UTC()
-	err := getDB(ctx, r.db).Model(&SocialUserModel{}).
+	err := GetDB(ctx, r.db).Model(&SocialUserModel{}).
 		Where("id = ?", userID).
 		Updates(map[string]interface{}{
 			"role":       newRole,
@@ -126,7 +126,7 @@ func (r *GormUserSnapshotRepository) UpdateFollowCounts(ctx context.Context, fol
 	if delta < 0 {
 		exprFollowing = "GREATEST(following_count + ?, 0)"
 	}
-	res := getDB(ctx, r.db).Model(&SocialUserModel{}).
+	res := GetDB(ctx, r.db).Model(&SocialUserModel{}).
 		Where("id = ?", followerID).
 		UpdateColumn("following_count", gorm.Expr(exprFollowing, delta))
 	if res.Error != nil {
@@ -137,7 +137,7 @@ func (r *GormUserSnapshotRepository) UpdateFollowCounts(ctx context.Context, fol
 	if delta < 0 {
 		exprFollower = "GREATEST(follower_count + ?, 0)"
 	}
-	res = getDB(ctx, r.db).Model(&SocialUserModel{}).
+	res = GetDB(ctx, r.db).Model(&SocialUserModel{}).
 		Where("id = ?", followingID).
 		UpdateColumn("follower_count", gorm.Expr(exprFollower, delta))
 	if res.Error != nil {
@@ -161,7 +161,7 @@ func (r *GormUserSnapshotRepository) SearchUsers(
 		limit = 100
 	}
 
-	db := getDB(ctx, r.db).Model(&SocialUserModel{})
+	db := GetDB(ctx, r.db).Model(&SocialUserModel{})
 
 	// Luôn loại trừ role 'admin' theo yêu cầu nghiệp vụ
 	db = db.Where("role <> 'admin'")
