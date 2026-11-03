@@ -35,7 +35,7 @@ type CompleteWorkoutSessionHandler struct {
 	sessionRepo    repository.WorkoutSessionRepository
 	loadGuard      *service.TrainingLoadGuard
 	exerciseClient port.ExerciseCatalogClient
-	outbox         port.OutboxWriter
+	eventRecorder  port.EventRecorder
 	txManager      port.TxManager
 }
 
@@ -44,14 +44,14 @@ func NewCompleteWorkoutSessionHandler(
 	sessionRepo repository.WorkoutSessionRepository,
 	loadGuard *service.TrainingLoadGuard,
 	exerciseClient port.ExerciseCatalogClient,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *CompleteWorkoutSessionHandler {
 	return &CompleteWorkoutSessionHandler{
 		sessionRepo:    sessionRepo,
 		loadGuard:      loadGuard,
 		exerciseClient: exerciseClient,
-		outbox:         outbox,
+		eventRecorder:  eventRecorder,
 		txManager:      txManager,
 	}
 }
@@ -117,8 +117,8 @@ func (h *CompleteWorkoutSessionHandler) Handle(
 			return err
 		}
 		events := session.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); err != nil {
+		if len(events) > 0 && h.eventRecorder != nil {
+			if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
 				return err
 			}
 		}

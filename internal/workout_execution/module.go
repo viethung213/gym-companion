@@ -74,22 +74,22 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	outboxRepo := persistence.NewPostgresOutboxRepository(gormDB)
 	outboxLogRepo := persistence.NewPostgresOutboxLogRepository(gormDB)
 
-	outboxWriter := workoutEvent.NewOutboxWriter(outboxRepo)
+	eventRecorder := workoutEvent.NewOutboxWriter(outboxRepo)
 
 	loadGuard := service.NewTrainingLoadGuard(sessionRepo)
 	storageProvider := workoutStorage.NewS3StorageProviderFromEnv()
 
 	// Initialize Command Handlers
-	startSessionHandler := command.NewStartWorkoutSessionHandler(sessionRepo, nil, outboxWriter, txManager)
-	startScheduledSessionHandler := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
-	logSetHandler := command.NewLogWorkoutSetHandler(sessionRepo, outboxWriter, txManager)
-	completeSessionHandler := command.NewCompleteWorkoutSessionHandler(sessionRepo, loadGuard, nil, outboxWriter, txManager)
-	shareSessionHandler := command.NewShareWorkoutSessionHandler(sessionRepo, motionRepo, outboxWriter, txManager)
-	abortSessionHandler := command.NewAbortWorkoutSessionHandler(sessionRepo, outboxWriter, txManager)
-	syncLogsHandler := command.NewSyncWorkoutLogsHandler(sessionRepo, outboxWriter, txManager)
-	prProcessHandler := command.NewProcessCompletedSessionForPRHandler(sessionRepo, prRepo, outboxWriter, txManager)
-	updateMotionSpecHandler := command.NewUpdateMotionSpecificationHandler(motionRepo, outboxWriter, txManager)
-	patchMotionSpecAssetHandler := command.NewPatchMotionSpecificationAssetHandler(motionRepo, storageProvider, outboxWriter, txManager)
+	startSessionHandler := command.NewStartWorkoutSessionHandler(sessionRepo, nil, eventRecorder, txManager)
+	startScheduledSessionHandler := command.NewStartScheduledWorkoutSessionHandler(sessionRepo, eventRecorder, txManager)
+	logSetHandler := command.NewLogWorkoutSetHandler(sessionRepo, eventRecorder, txManager)
+	completeSessionHandler := command.NewCompleteWorkoutSessionHandler(sessionRepo, loadGuard, nil, eventRecorder, txManager)
+	shareSessionHandler := command.NewShareWorkoutSessionHandler(sessionRepo, motionRepo, eventRecorder, txManager)
+	abortSessionHandler := command.NewAbortWorkoutSessionHandler(sessionRepo, eventRecorder, txManager)
+	syncLogsHandler := command.NewSyncWorkoutLogsHandler(sessionRepo, eventRecorder, txManager)
+	prProcessHandler := command.NewProcessCompletedSessionForPRHandler(sessionRepo, prRepo, eventRecorder, txManager)
+	updateMotionSpecHandler := command.NewUpdateMotionSpecificationHandler(motionRepo, eventRecorder, txManager)
+	patchMotionSpecAssetHandler := command.NewPatchMotionSpecificationAssetHandler(motionRepo, storageProvider, eventRecorder, txManager)
 	deleteMotionSpecHandler := command.NewDeleteMotionSpecificationHandler(motionRepo)
 
 	// Initialize Query Handlers
@@ -113,7 +113,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		ruleProvider,
 		service.NewDefaultRuleEvaluator(),
 		liveSync,
-		outboxWriter,
+		eventRecorder,
 		sessionRepo,
 		txManager,
 	)
@@ -155,9 +155,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 
 	// Initialize Workers
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
-	timeoutWorker := worker.NewSessionTimeoutWorker(sessionRepo, outboxWriter, txManager, 5*time.Minute)
-	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, outboxWriter, txManager, 1*time.Minute, 5*time.Minute)
-	soloBotManager := worker.NewSoloBotManager(prRepo, liveSync, outboxWriter)
+	timeoutWorker := worker.NewSessionTimeoutWorker(sessionRepo, eventRecorder, txManager, 5*time.Minute)
+	criticalWorker := worker.NewCriticalInactivityWorker(sessionRepo, eventRecorder, txManager, 1*time.Minute, 5*time.Minute)
+	soloBotManager := worker.NewSoloBotManager(prRepo, liveSync, eventRecorder)
 	exerciseCreatedConsumer := workoutConsumer.NewExerciseCreatedConsumer(motionRepo, outboxLogRepo)
 	prConsumer := workoutConsumer.NewPREventConsumer(prProcessHandler)
 	soloMatchStartedConsumer := workoutConsumer.NewSoloMatchStartedConsumer(soloBotManager, outboxLogRepo)

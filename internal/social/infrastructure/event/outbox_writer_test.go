@@ -84,7 +84,7 @@ func TestOutboxWriter_PublishUserFollowedEvent(t *testing.T) {
 		FollowerAvatarURL: "https://cdn.example.com/avatar.jpg",
 	}
 
-	err := writer.PublishEvents(context.Background(), []any{ev})
+	err := writer.RecordEvents(context.Background(), []any{ev})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestOutboxWriter_PublishPostCreatedEvent(t *testing.T) {
 		CreatedAt:       time.Date(2026, 10, 5, 12, 1, 0, 0, time.UTC),
 	}
 
-	err := writer.PublishEvents(context.Background(), []any{ev})
+	err := writer.RecordEvents(context.Background(), []any{ev})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestOutboxWriter_PublishPostReactedEvent(t *testing.T) {
 		ReactedAt:     time.Date(2026, 10, 5, 12, 5, 0, 0, time.UTC),
 	}
 
-	err := writer.PublishEvents(context.Background(), []any{ev})
+	err := writer.RecordEvents(context.Background(), []any{ev})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestOutboxWriter_PublishPostCommentedEvent_RootComment(t *testing.T) {
 		CommentedAt:   time.Date(2026, 10, 5, 12, 10, 0, 0, time.UTC),
 	}
 
-	err := writer.PublishEvents(context.Background(), []any{ev})
+	err := writer.RecordEvents(context.Background(), []any{ev})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestOutboxWriter_PublishPostCommentedEvent_ReplyToComment(t *testing.T) {
 		CommentedAt:          time.Date(2026, 10, 5, 12, 15, 0, 0, time.UTC),
 	}
 
-	err := writer.PublishEvents(context.Background(), []any{ev})
+	err := writer.RecordEvents(context.Background(), []any{ev})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestOutboxWriter_PublishSelfInteraction_NoNotification(t *testing.T) {
 		UserID:       "same-user",
 		ReactionType: vo.ReactionTypeFire,
 	}
-	if err := writer.PublishEvents(context.Background(), []any{reactEv}); err != nil {
+	if err := writer.RecordEvents(context.Background(), []any{reactEv}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(repo.records) != 0 {
@@ -338,7 +338,7 @@ func TestOutboxWriter_PublishSelfInteraction_NoNotification(t *testing.T) {
 		UserID:      "same-user",
 		Content:     "My own comment",
 	}
-	if err := writer.PublishEvents(context.Background(), []any{commentEv}); err != nil {
+	if err := writer.RecordEvents(context.Background(), []any{commentEv}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(repo.records) != 0 {
@@ -364,7 +364,7 @@ func TestOutboxWriter_PublishReplyToSelfComment_OnlyNotifiesPostOwner(t *testing
 		CommentedAt:          time.Date(2026, 10, 5, 12, 20, 0, 0, time.UTC),
 	}
 
-	err := writer.PublishEvents(context.Background(), []any{ev})
+	err := writer.RecordEvents(context.Background(), []any{ev})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

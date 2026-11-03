@@ -38,11 +38,15 @@ type mockEventPublisher struct {
 	events []any
 }
 
-func (m *mockEventPublisher) PublishEvents(_ context.Context, events []any) error {
+func (m *mockEventPublisher) RecordEvents(_ context.Context, events []any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *mockEventPublisher) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 func (m *mockEventPublisher) Events() []any {

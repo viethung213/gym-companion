@@ -18,10 +18,10 @@ func TestSendOTPHandler(t *testing.T) {
 	ctx := context.Background()
 	otpRepo := newMockOTPRepo()
 	hasher := &mockHasher{}
-	publisher := &mockEventPublisher{}
+	eventRecorder := &mockEventRecorder{}
 	txMgr := &mockTxManager{}
 
-	handler := NewSendOTPHandler(otpRepo, hasher, publisher, txMgr)
+	handler := NewSendOTPHandler(otpRepo, hasher, eventRecorder, txMgr)
 
 	// Test 1: Send OTP Success
 	res, err := handler.Handle(ctx, SendOTPCommand{
@@ -34,12 +34,12 @@ func TestSendOTPHandler(t *testing.T) {
 	if !res.Success || res.OTPToken == "" {
 		t.Fatalf("expected success and valid otp token, got %+v", res)
 	}
-	if len(publisher.events) != 1 {
-		t.Fatalf("expected 1 outbox event published, got %d", len(publisher.events))
+	if len(eventRecorder.events) != 1 {
+		t.Fatalf("expected 1 outbox event recorded, got %d", len(eventRecorder.events))
 	}
-	otpEv, ok := publisher.events[0].(event.OTPSentEvent)
+	otpEv, ok := eventRecorder.events[0].(event.OTPSentEvent)
 	if !ok {
-		t.Fatalf("expected OTPSentEvent, got %T", publisher.events[0])
+		t.Fatalf("expected OTPSentEvent, got %T", eventRecorder.events[0])
 	}
 	if len(otpEv.Code) != 6 {
 		t.Fatalf("expected 6-digit otp code, got %s", otpEv.Code)
@@ -166,10 +166,10 @@ func TestRegisterHandler(t *testing.T) {
 	ctx := context.Background()
 	userRepo := &mockUserRepo{users: make(map[string]*aggregate.User)}
 	hasher := &mockHasher{}
-	publisher := &mockEventPublisher{}
+	eventRecorder := &mockEventRecorder{}
 	txMgr := &mockTxManager{}
 
-	handler := NewRegisterHandler(userRepo, hasher, publisher, txMgr)
+	handler := NewRegisterHandler(userRepo, hasher, eventRecorder, txMgr)
 
 	// Test 1: Successful email registration
 	res, err := handler.Handle(ctx, RegisterCommand{
@@ -186,13 +186,13 @@ func TestRegisterHandler(t *testing.T) {
 		t.Fatalf("expected success message, got empty")
 	}
 
-	// Check domain event was published with full metadata
-	if len(publisher.events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(publisher.events))
+	// Check domain event was recorded with full metadata
+	if len(eventRecorder.events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(eventRecorder.events))
 	}
-	ev, ok := publisher.events[0].(event.UserRegisteredEvent)
+	ev, ok := eventRecorder.events[0].(event.UserRegisteredEvent)
 	if !ok {
-		t.Fatalf("expected UserRegisteredEvent, got %T", publisher.events[0])
+		t.Fatalf("expected UserRegisteredEvent, got %T", eventRecorder.events[0])
 	}
 	if ev.Gender != "MALE" || ev.DateOfBirth != "1995-05-15" || ev.Identifier != "newuser@example.com" || ev.IdentityType != "email" {
 		t.Fatalf("event metadata mismatch: %+v", ev)
@@ -202,7 +202,7 @@ func TestRegisterHandler(t *testing.T) {
 	}
 
 	// Test 1b: Successful phone registration (auto-detected and normalized to +84...)
-	publisher.events = nil
+	eventRecorder.events = nil
 	resPhone, err := handler.Handle(ctx, RegisterCommand{
 		Identifier:  "0912345678",
 		Password:    "password123",
@@ -216,12 +216,12 @@ func TestRegisterHandler(t *testing.T) {
 	if resPhone.Message == "" {
 		t.Fatalf("expected success message")
 	}
-	if len(publisher.events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(publisher.events))
+	if len(eventRecorder.events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(eventRecorder.events))
 	}
-	evPhone, ok := publisher.events[0].(event.UserRegisteredEvent)
+	evPhone, ok := eventRecorder.events[0].(event.UserRegisteredEvent)
 	if !ok {
-		t.Fatalf("expected UserRegisteredEvent, got %T", publisher.events[0])
+		t.Fatalf("expected UserRegisteredEvent, got %T", eventRecorder.events[0])
 	}
 	if evPhone.IdentityType != "phone" || evPhone.Identifier != "+84912345678" {
 		t.Fatalf("expected phone identity +84912345678, got %+v", evPhone)

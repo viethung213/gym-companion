@@ -36,21 +36,21 @@ type LogWorkoutSetResult struct {
 
 // LogWorkoutSetHandler handles set logging.
 type LogWorkoutSetHandler struct {
-	sessionRepo repository.WorkoutSessionRepository
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
+	sessionRepo   repository.WorkoutSessionRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewLogWorkoutSetHandler constructs LogWorkoutSetHandler.
 func NewLogWorkoutSetHandler(
 	sessionRepo repository.WorkoutSessionRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *LogWorkoutSetHandler {
 	return &LogWorkoutSetHandler{
-		sessionRepo: sessionRepo,
-		outbox:      outbox,
-		txManager:   txManager,
+		sessionRepo:   sessionRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -102,9 +102,9 @@ func (h *LogWorkoutSetHandler) Handle(ctx context.Context, cmd LogWorkoutSetComm
 		}
 
 		events := session.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); err != nil {
-				return fmt.Errorf("failed to write outbox events: %w", err)
+		if len(events) > 0 && h.eventRecorder != nil {
+			if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
+				return fmt.Errorf("failed to record outbox events: %w", err)
 			}
 		}
 

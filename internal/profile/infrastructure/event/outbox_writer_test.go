@@ -59,14 +59,14 @@ func TestOutboxWriter(t *testing.T) {
 
 		inj, _ := entity.NewInjury("inj-compl", "Back", "MILD", "", time.Now())
 		ev := domainEvent.NewProfileCompletedEvent("user-ev-1", bio, []string{"FAT_LOSS"}, []*entity.Injury{inj}, []string{"MORNING"}, time.Now())
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		require.NoError(t, err)
 		assert.Len(t, repo.records, 1)
 		assert.Equal(t, "contracts.supporting.profile.v1.event.ProfileCompleted", repo.records[0].EventType)
 
 		// Fail save
 		repo.failSave = true
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		assert.Error(t, err)
 		repo.failSave = false
 	})
@@ -76,14 +76,14 @@ func TestOutboxWriter(t *testing.T) {
 		require.NoError(t, err)
 
 		ev := domainEvent.NewInjuryReportedEvent("user-ev-1", inj)
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		require.NoError(t, err)
 		assert.Len(t, repo.records, 2)
 		assert.Equal(t, "contracts.supporting.profile.v1.event.InjuryReported", repo.records[1].EventType)
 
 		// Fail save
 		repo.failSave = true
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		assert.Error(t, err)
 		repo.failSave = false
 	})
@@ -93,14 +93,14 @@ func TestOutboxWriter(t *testing.T) {
 		require.NoError(t, err)
 
 		ev := domainEvent.NewInjuryRecoveredEvent("user-ev-1", inj, time.Now())
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		require.NoError(t, err)
 		assert.Len(t, repo.records, 3)
 		assert.Equal(t, "contracts.supporting.profile.v1.event.InjuryRecovered", repo.records[2].EventType)
 
 		// Fail save
 		repo.failSave = true
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		assert.Error(t, err)
 		repo.failSave = false
 	})
@@ -112,7 +112,7 @@ func TestOutboxWriter(t *testing.T) {
 			"https://example.com/avatar_c.png",
 			time.Now(),
 		)
-		err := writer.PublishEvents(ctx, []any{ev})
+		err := writer.RecordEvents(ctx, []any{ev})
 		require.NoError(t, err)
 		assert.Len(t, repo.records, 4)
 
@@ -143,13 +143,13 @@ func TestOutboxWriter(t *testing.T) {
 
 		// Fail save
 		repo.failSave = true
-		err = writer.PublishEvents(ctx, []any{ev})
+		err = writer.RecordEvents(ctx, []any{ev})
 		assert.Error(t, err)
 		repo.failSave = false
 	})
 
 	t.Run("Publish unsupported event returns error", func(t *testing.T) {
-		err := writer.PublishEvents(ctx, []any{"unsupported-string-event"})
+		err := writer.RecordEvents(ctx, []any{"unsupported-string-event"})
 		assert.Error(t, err)
 	})
 }

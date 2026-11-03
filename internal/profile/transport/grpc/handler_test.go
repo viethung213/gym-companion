@@ -83,22 +83,26 @@ func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(ctx context
 	return fn(ctx)
 }
 
-type mockEventPub struct{}
+type mockEventRecorder struct{}
 
-func (m *mockEventPub) PublishEvents(ctx context.Context, events []any) error {
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
 	return nil
+}
+
+func (m *mockEventRecorder) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 func setupGRPCHandler(repo *mockRepo) *grpc.GRPCHandler {
 	txManager := &mockTxManager{}
-	eventPub := &mockEventPub{}
+	eventRecorder := &mockEventRecorder{}
 
-	saveHandler := command.NewSaveHealthProfileHandler(repo, eventPub, txManager)
-	updateHandler := command.NewUpdateProfileHandler(repo, eventPub, txManager)
-	updateIdentityHandler := command.NewUpdateIdentityHandler(repo, eventPub, txManager)
-	logHandler := command.NewLogPeriodicMetricsHandler(repo, eventPub, txManager)
-	reportHandler := command.NewReportInjuryHandler(repo, eventPub, txManager)
-	recoverHandler := command.NewRecoverInjuryHandler(repo, eventPub, txManager)
+	saveHandler := command.NewSaveHealthProfileHandler(repo, eventRecorder, txManager)
+	updateHandler := command.NewUpdateProfileHandler(repo, eventRecorder, txManager)
+	updateIdentityHandler := command.NewUpdateIdentityHandler(repo, eventRecorder, txManager)
+	logHandler := command.NewLogPeriodicMetricsHandler(repo, eventRecorder, txManager)
+	reportHandler := command.NewReportInjuryHandler(repo, eventRecorder, txManager)
+	recoverHandler := command.NewRecoverInjuryHandler(repo, eventRecorder, txManager)
 	getHandler := query.NewGetProfileHandler(repo)
 	getMetricsHandler := query.NewGetBodyMetricsHistoryHandler(repo)
 	getInjuriesHandler := query.NewGetInjuryHistoryHandler(repo)

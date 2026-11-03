@@ -42,7 +42,7 @@ type PatchMotionSpecificationAssetResult struct {
 type PatchMotionSpecificationAssetHandler struct {
 	motionRepo      repository.MotionSpecificationRepository
 	storageProvider port.ObjectStorageProvider
-	outbox          port.OutboxWriter
+	eventRecorder   port.EventRecorder
 	txManager       port.TxManager
 }
 
@@ -50,13 +50,13 @@ type PatchMotionSpecificationAssetHandler struct {
 func NewPatchMotionSpecificationAssetHandler(
 	motionRepo repository.MotionSpecificationRepository,
 	storageProvider port.ObjectStorageProvider,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *PatchMotionSpecificationAssetHandler {
 	return &PatchMotionSpecificationAssetHandler{
 		motionRepo:      motionRepo,
 		storageProvider: storageProvider,
-		outbox:          outbox,
+		eventRecorder:   eventRecorder,
 		txManager:       txManager,
 	}
 }
@@ -176,8 +176,8 @@ func (h *PatchMotionSpecificationAssetHandler) Handle(
 				return err
 			}
 			events := spec.PopEvents()
-			if len(events) > 0 && h.outbox != nil {
-				if err := h.outbox.WriteEvents(txCtx, "MotionSpecification", spec.ExerciseID(), events); err != nil {
+			if len(events) > 0 && h.eventRecorder != nil {
+				if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
 					return err
 				}
 			}

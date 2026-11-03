@@ -29,7 +29,7 @@ func TestOAuthLoginHandler_RegisterNew(t *testing.T) {
 	}
 	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
 	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
-	publisher := &mockEventPublisher{}
+	eventRecorder := &mockEventRecorder{}
 
 	handler := NewOAuthLoginHandler(
 		userRepo,
@@ -37,7 +37,7 @@ func TestOAuthLoginHandler_RegisterNew(t *testing.T) {
 		sessRepo,
 		mockTokenService{},
 		mockOAuthService{},
-		publisher,
+		eventRecorder,
 		&mockTxManager{},
 	)
 
@@ -71,13 +71,13 @@ func TestOAuthLoginHandler_RegisterNew(t *testing.T) {
 		t.Errorf("got session user %s, want %s", sess.UserID, userID)
 	}
 
-	// Verify domain event was published
-	if got, want := len(publisher.events), 1; got != want {
+	// Verify domain event was recorded
+	if got, want := len(eventRecorder.events), 1; got != want {
 		t.Fatalf("got %d events, want %d", got, want)
 	}
-	regEvent, ok := publisher.events[0].(event.UserRegisteredEvent)
+	regEvent, ok := eventRecorder.events[0].(event.UserRegisteredEvent)
 	if !ok {
-		t.Fatalf("expected UserRegisteredEvent, got %T", publisher.events[0])
+		t.Fatalf("expected UserRegisteredEvent, got %T", eventRecorder.events[0])
 	}
 	if regEvent.UserID != userID || regEvent.Identifier != "9e0dc099-0df4-436f-b258-004ea10a6234" || regEvent.IdentityType != "google" {
 		t.Errorf("unexpected event data: %+v", regEvent)
@@ -121,7 +121,7 @@ func TestOAuthLoginHandler_RegisterNew_CommitFailure(t *testing.T) {
 	}
 	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
 	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
-	publisher := &mockEventPublisher{}
+	eventRecorder := &mockEventRecorder{}
 
 	handler := NewOAuthLoginHandler(
 		userRepo,
@@ -129,7 +129,7 @@ func TestOAuthLoginHandler_RegisterNew_CommitFailure(t *testing.T) {
 		sessRepo,
 		mockTokenService{},
 		mockOAuthService{},
-		publisher,
+		eventRecorder,
 		&mockFailingCommitTxManager{},
 	)
 
@@ -166,7 +166,7 @@ func TestOAuthLoginHandler_StateValidationFailure(t *testing.T) {
 		&mockSessionRepo{},
 		mockTokenService{},
 		mockOAuthService{},
-		&mockEventPublisher{},
+		&mockEventRecorder{},
 		&mockTxManager{},
 	)
 
@@ -200,7 +200,7 @@ func TestOAuthLoginHandler_FindBySocialID_DBError(t *testing.T) {
 	}
 	keyRepo := &mockKeyRepo{keys: []*port.JWKRecord{key}}
 	sessRepo := &mockSessionRepo{sessions: make(map[string]*port.SessionRecord)}
-	publisher := &mockEventPublisher{}
+	eventRecorder := &mockEventRecorder{}
 
 	handler := NewOAuthLoginHandler(
 		userRepo,
@@ -208,7 +208,7 @@ func TestOAuthLoginHandler_FindBySocialID_DBError(t *testing.T) {
 		sessRepo,
 		mockTokenService{},
 		mockOAuthService{},
-		publisher,
+		eventRecorder,
 		&mockTxManager{},
 	)
 
@@ -258,7 +258,7 @@ func TestOAuthLoginHandler_UnverifiedEmail_Rejected(t *testing.T) {
 		sessRepo,
 		mockTokenService{},
 		mockUnverifiedOAuthService{},
-		&mockEventPublisher{},
+		&mockEventRecorder{},
 		&mockTxManager{},
 	)
 

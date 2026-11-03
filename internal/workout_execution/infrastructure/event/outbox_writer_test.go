@@ -48,6 +48,34 @@ func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, limit int, publishFn 
 }
 
 func TestOutboxWriter(t *testing.T) {
+	t.Run("RecordEvents with valid domain event automatically extracts metadata", func(t *testing.T) {
+		repo := &mockOutboxRepo{}
+		writer := infraEvent.NewOutboxWriter(repo)
+
+		ev := &event.WorkoutSessionStarted{
+			SessionID: "sess-rec-1",
+			UserID:    "user-rec-1",
+			PlanID:    "plan-rec-1",
+			StartedAt: time.Now().UTC(),
+		}
+
+		err := writer.RecordEvents(context.Background(), []any{ev})
+		if err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+		if repo.savedRecord == nil {
+			t.Fatal("savedRecord is nil")
+		}
+		if got, want := repo.savedRecord.AggregateType, "WorkoutSession"; got != want {
+			t.Errorf("got AggregateType = %v, want %v", got, want)
+		}
+		if got, want := repo.savedRecord.AggregateID, "sess-rec-1"; got != want {
+			t.Errorf("got AggregateID = %v, want %v", got, want)
+		}
+		if got, want := repo.savedRecord.PartitionKey, "user-rec-1"; got != want {
+			t.Errorf("got PartitionKey = %v, want %v", got, want)
+		}
+	})
 
 	t.Run("WriteEvents with valid domain event", func(t *testing.T) {
 

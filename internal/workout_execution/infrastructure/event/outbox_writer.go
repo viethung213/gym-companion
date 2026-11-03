@@ -21,39 +21,39 @@ type NameProvider interface {
 	EventName() string
 }
 
-// OutboxWriter implements port.OutboxWriter.
+// OutboxWriter implements port.EventRecorder.
 type OutboxWriter struct {
 	outboxRepo port.OutboxRepository
 }
 
-var _ port.OutboxWriter = (*OutboxWriter)(nil)
+var _ port.EventRecorder = (*OutboxWriter)(nil)
 
 // NewOutboxWriter constructs OutboxWriter.
 func NewOutboxWriter(outboxRepo port.OutboxRepository) *OutboxWriter {
 	return &OutboxWriter{outboxRepo: outboxRepo}
 }
 
-// WriteEvents serializes domain events to CloudEvents and writes to outbox.
-func (w *OutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
+// RecordEvents serializes domain events to CloudEvents and writes to outbox.
+func (w *OutboxWriter) RecordEvents(ctx context.Context, events []any) error {
 	for _, ev := range events {
-		if err := w.writeSingleEvent(ctx, aggregateType, aggregateID, ev); err != nil {
+		if err := w.recordSingleEvent(ctx, ev); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (w *OutboxWriter) writeSingleEvent(ctx context.Context, aggregateType, aggregateID string, ev interface{}) error {
-	eventType := "contracts.core.workout_execution.v1.unknownEvent"
-	if nameProvider, ok := ev.(NameProvider); ok {
-		eventType = nameProvider.EventName()
-	} else if ev != nil && reflect.TypeOf(ev).Kind() == reflect.Struct {
-		vp := reflect.New(reflect.TypeOf(ev))
-		vp.Elem().Set(reflect.ValueOf(ev))
-		if nameProvider, ok := vp.Interface().(NameProvider); ok {
-			eventType = nameProvider.EventName()
-		}
+// WriteEvents delegates to RecordEvents for backward compatibility.
+func (w *OutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
+	anyEvents := make([]any, len(events))
+	for i, ev := range events {
+		anyEvents[i] = ev
 	}
+	return w.RecordEvents(ctx, anyEvents)
+}
+
+func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
+	aggregateType, aggregateID, partitionKey, eventType := extractEventMetadata(ev)
 
 	var payloadBytes []byte
 	var err error
@@ -88,7 +88,6 @@ func (w *OutboxWriter) writeSingleEvent(ctx context.Context, aggregateType, aggr
 		return fmt.Errorf("marshal cloud event envelope: %w", err)
 	}
 
-	partitionKey := extractUserID(ev)
 	if partitionKey == "" {
 		partitionKey = aggregateID
 	}
@@ -110,6 +109,87 @@ func (w *OutboxWriter) writeSingleEvent(ctx context.Context, aggregateType, aggr
 	}
 
 	return nil
+}
+
+func extractEventMetadata(ev any) (aggregateType, aggregateID, partitionKey, eventType string) {
+	if ev == nil {
+		return "Unknown", "", "", "contracts.core.workout_execution.v1.unknownEvent"
+	}
+	switch e := ev.(type) {
+	case domainEvent.WorkoutSessionStarted:
+		return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+	case *domainEvent.WorkoutSessionStarted:
+		if e != nil {
+			return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+		}
+	case domainEvent.WorkoutSessionCompleted:
+		return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+	case *domainEvent.WorkoutSessionCompleted:
+		if e != nil {
+			return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+		}
+	case domainEvent.WorkoutSessionAborted:
+		return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+	case *domainEvent.WorkoutSessionAborted:
+		if e != nil {
+			return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+		}
+	case domainEvent.NewPersonalRecordAchieved:
+		return "PersonalRecord", e.ExerciseID, e.UserID, e.EventName()
+	case *domainEvent.NewPersonalRecordAchieved:
+		if e != nil {
+			return "PersonalRecord", e.ExerciseID, e.UserID, e.EventName()
+		}
+	case domainEvent.BodyMetricUpdated:
+		return "BodyMetric", e.UserID, e.UserID, e.EventName()
+	case *domainEvent.BodyMetricUpdated:
+		if e != nil {
+			return "BodyMetric", e.UserID, e.UserID, e.EventName()
+		}
+	case domainEvent.MotionSpecificationUpdated:
+		return "MotionSpecification", e.ExerciseID, e.ExerciseID, e.EventName()
+	case *domainEvent.MotionSpecificationUpdated:
+		if e != nil {
+			return "MotionSpecification", e.ExerciseID, e.ExerciseID, e.EventName()
+		}
+	case domainEvent.WorkoutSessionShared:
+		return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+	case *domainEvent.WorkoutSessionShared:
+		if e != nil {
+			return "WorkoutSession", e.SessionID, e.UserID, e.EventName()
+		}
+	case domainEvent.SoloTrackingCompleted:
+		return "SoloMatch", e.MatchID, e.UserID, e.EventName()
+	case *domainEvent.SoloTrackingCompleted:
+		if e != nil {
+			return "SoloMatch", e.MatchID, e.UserID, e.EventName()
+		}
+	case domainEvent.SoloTrackingAborted:
+		return "SoloMatch", e.MatchID, e.UserID, e.EventName()
+	case *domainEvent.SoloTrackingAborted:
+		if e != nil {
+			return "SoloMatch", e.MatchID, e.UserID, e.EventName()
+		}
+	case domainEvent.SoloMatchRoomReady:
+		return "SoloMatch", e.MatchID, e.MatchID, e.EventName()
+	case *domainEvent.SoloMatchRoomReady:
+		if e != nil {
+			return "SoloMatch", e.MatchID, e.MatchID, e.EventName()
+		}
+	}
+
+	eventType = "contracts.core.workout_execution.v1.unknownEvent"
+	if nameProvider, ok := ev.(NameProvider); ok {
+		eventType = nameProvider.EventName()
+	} else if ev != nil && reflect.TypeOf(ev).Kind() == reflect.Struct {
+		vp := reflect.New(reflect.TypeOf(ev))
+		vp.Elem().Set(reflect.ValueOf(ev))
+		if nameProvider, ok := vp.Interface().(NameProvider); ok {
+			eventType = nameProvider.EventName()
+		}
+	}
+	partitionKey = extractUserID(ev)
+	return "Generic", "", partitionKey, eventType
 }
 
 func extractUserID(ev interface{}) string {

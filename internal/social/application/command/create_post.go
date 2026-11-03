@@ -40,7 +40,7 @@ type CreatePostHandler struct {
 	feedItemRepo     repository.FeedItemRepository
 	followRepo       repository.FollowRepository
 	userSnapshotRepo repository.UserSnapshotRepository
-	eventPub         port.EventPublisher
+	eventRecorder    port.EventRecorder
 	txManager        port.TransactionManager
 }
 
@@ -56,14 +56,14 @@ func WithCreatePostUserSnapshotRepo(r repository.UserSnapshotRepository) CreateP
 
 func NewCreatePostHandler(
 	feedItemRepo repository.FeedItemRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 	opts ...CreatePostHandlerOption,
 ) *CreatePostHandler {
 	h := &CreatePostHandler{
-		feedItemRepo: feedItemRepo,
-		eventPub:     eventPub,
-		txManager:    txManager,
+		feedItemRepo:  feedItemRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -116,7 +116,7 @@ func (h *CreatePostHandler) Handle(ctx context.Context, cmd CreatePostCommand) (
 			}
 		}
 
-		if h.eventPub != nil {
+		if h.eventRecorder != nil {
 			ev := &event.PostCreatedEvent{
 				PostID:          item.ID(),
 				UserID:          cmd.UserID,
@@ -128,8 +128,8 @@ func (h *CreatePostHandler) Handle(ctx context.Context, cmd CreatePostCommand) (
 				FollowerUserIDs: followerUserIDs,
 				CreatedAt:       item.CreatedAt(),
 			}
-			if err := h.eventPub.PublishEvents(txCtx, []any{ev}); err != nil {
-				return fmt.Errorf("publish post created event: %w", err)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record post created event: %w", err)
 			}
 		}
 

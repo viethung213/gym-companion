@@ -22,29 +22,29 @@ const (
 
 // UpcomingMealReminderWorker scans nutrition plans for today and enqueues UpcomingMealReminder events ~30m before meal time.
 type UpcomingMealReminderWorker struct {
-	planRepo       repository.NutritionPlanRepository
-	eventPublisher port.EventPublisher
-	interval       time.Duration
-	stopChan       chan struct{}
-	mu             sync.Mutex
-	sentReminders  map[string]time.Time
+	planRepo      repository.NutritionPlanRepository
+	eventRecorder port.EventRecorder
+	interval      time.Duration
+	stopChan      chan struct{}
+	mu            sync.Mutex
+	sentReminders map[string]time.Time
 }
 
 // NewUpcomingMealReminderWorker constructs UpcomingMealReminderWorker.
 func NewUpcomingMealReminderWorker(
 	planRepo repository.NutritionPlanRepository,
-	eventPublisher port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	interval time.Duration,
 ) *UpcomingMealReminderWorker {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
 	return &UpcomingMealReminderWorker{
-		planRepo:       planRepo,
-		eventPublisher: eventPublisher,
-		interval:       interval,
-		stopChan:       make(chan struct{}),
-		sentReminders:  make(map[string]time.Time),
+		planRepo:      planRepo,
+		eventRecorder: eventRecorder,
+		interval:      interval,
+		stopChan:      make(chan struct{}),
+		sentReminders: make(map[string]time.Time),
 	}
 }
 
@@ -127,10 +127,10 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 					remindBeforeMealMinutes,
 				)
 
-				if err := w.eventPublisher.PublishEvents(ctx, []any{reminderEvent}); err != nil {
-					log.Printf("[UpcomingMealReminderWorker] Error publishing reminder for meal %s (user %s): %v", meal.MealType(), plan.UserID(), err)
+				if err := w.eventRecorder.RecordEvents(ctx, []any{reminderEvent}); err != nil {
+					log.Printf("[UpcomingMealReminderWorker] Error recording reminder for meal %s (user %s): %v", meal.MealType(), plan.UserID(), err)
 				} else {
-					log.Printf("[UpcomingMealReminderWorker] Published meal reminder for user %s, meal %s at %s", plan.UserID(), meal.MealType(), scheduledTimeStr)
+					log.Printf("[UpcomingMealReminderWorker] Recorded meal reminder for user %s, meal %s at %s", plan.UserID(), meal.MealType(), scheduledTimeStr)
 				}
 			}
 		}

@@ -19,15 +19,15 @@ type HandleMatchTimeoutCommand struct {
 }
 
 type HandleMatchTimeoutHandler struct {
-	matchRepo repository.SoloMatchRepository
-	eventPub  port.EventPublisher
-	txManager port.TransactionManager
-	botRepo   repository.BotRepository
+	matchRepo     repository.SoloMatchRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
+	botRepo       repository.BotRepository
 }
 
 func NewHandleMatchTimeoutHandler(
 	matchRepo repository.SoloMatchRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 	botRepo ...repository.BotRepository,
 ) *HandleMatchTimeoutHandler {
@@ -36,10 +36,10 @@ func NewHandleMatchTimeoutHandler(
 		br = botRepo[0]
 	}
 	return &HandleMatchTimeoutHandler{
-		matchRepo: matchRepo,
-		eventPub:  eventPub,
-		txManager: txManager,
-		botRepo:   br,
+		matchRepo:     matchRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
+		botRepo:       br,
 	}
 }
 
@@ -80,7 +80,7 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 				CancelledAt: endedAt,
 			}
 
-			return h.eventPub.PublishEvents(txCtx, []any{cancelledEv})
+			return h.eventRecorder.RecordEvents(txCtx, []any{cancelledEv})
 		}); txErr != nil {
 			log.Printf("[SoloMatch Timeout] Failed to cancel expired match %s: %v", match.ID(), txErr)
 		}
@@ -175,7 +175,7 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 					eventsToPublish = []any{cancelledEv}
 				}
 
-				return h.eventPub.PublishEvents(txCtx, eventsToPublish)
+				return h.eventRecorder.RecordEvents(txCtx, eventsToPublish)
 			}); txErr != nil {
 				log.Printf("[SoloMatch Timeout] Failed to timeout expired in-progress match %s: %v", match.ID(), txErr)
 			}

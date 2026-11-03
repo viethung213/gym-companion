@@ -63,21 +63,29 @@ func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(ctx context
 	return fn(ctx)
 }
 
-type mockEventPub struct {
+type mockEventRecorder struct {
+	recorded  []any
 	published []any
 }
 
-func (m *mockEventPub) PublishEvents(ctx context.Context, events []any) error {
+type mockEventPub = mockEventRecorder
+
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
+	m.recorded = append(m.recorded, events...)
 	m.published = append(m.published, events...)
 	return nil
 }
 
+func (m *mockEventRecorder) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
+}
+
 func TestSaveHealthProfileHandler(t *testing.T) {
 	repo := newMockRepo()
-	eventPub := &mockEventPub{}
+	eventRecorder := &mockEventRecorder{}
 	txManager := &mockTxManager{}
 
-	handler := command.NewSaveHealthProfileHandler(repo, eventPub, txManager)
+	handler := command.NewSaveHealthProfileHandler(repo, eventRecorder, txManager)
 
 	cmd := command.SaveHealthProfileCommand{
 		UserID:                "user-test-1",
@@ -99,7 +107,7 @@ func TestSaveHealthProfileHandler(t *testing.T) {
 	assert.Equal(t, "user-test-1", res.UserID)
 	assert.True(t, res.AICoachActivated)
 	assert.GreaterOrEqual(t, res.CompletionRate, 80.0)
-	assert.Len(t, eventPub.published, 2)
+	assert.Len(t, eventRecorder.recorded, 2)
 
 	saved, err := repo.FindByUserID(context.Background(), "user-test-1")
 	require.NoError(t, err)

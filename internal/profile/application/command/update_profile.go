@@ -30,20 +30,20 @@ type UpdateProfileCommand struct {
 }
 
 type UpdateProfileHandler struct {
-	repo      repository.UserProfileRepository
-	eventPub  port.EventPublisher
-	txManager port.TransactionManager
+	repo          repository.UserProfileRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
 }
 
 func NewUpdateProfileHandler(
 	repo repository.UserProfileRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *UpdateProfileHandler {
 	return &UpdateProfileHandler{
-		repo:      repo,
-		eventPub:  eventPub,
-		txManager: txManager,
+		repo:          repo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -88,9 +88,9 @@ func (h *UpdateProfileHandler) Handle(ctx context.Context, cmd UpdateProfileComm
 		if err := h.repo.Update(txCtx, profile); err != nil {
 			return err
 		}
-		if h.eventPub != nil && len(events) > 0 {
-			if err := h.eventPub.PublishEvents(txCtx, events); err != nil {
-				return fmt.Errorf("publish events on profile update: %w", err)
+		if h.eventRecorder != nil && len(events) > 0 {
+			if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
+				return fmt.Errorf("record events on profile update: %w", err)
 			}
 		}
 		return nil

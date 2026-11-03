@@ -42,7 +42,7 @@ type ReactTargetHandler struct {
 	interactionRepo  repository.InteractionRepository
 	feedItemRepo     repository.FeedItemRepository
 	userSnapshotRepo repository.UserSnapshotRepository
-	eventPub         port.EventPublisher
+	eventRecorder    port.EventRecorder
 	txManager        port.TransactionManager
 }
 
@@ -50,14 +50,14 @@ func NewReactTargetHandler(
 	interactionRepo repository.InteractionRepository,
 	feedItemRepo repository.FeedItemRepository,
 	userSnapshotRepo repository.UserSnapshotRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *ReactTargetHandler {
 	return &ReactTargetHandler{
 		interactionRepo:  interactionRepo,
 		feedItemRepo:     feedItemRepo,
 		userSnapshotRepo: userSnapshotRepo,
-		eventPub:         eventPub,
+		eventRecorder:    eventRecorder,
 		txManager:        txManager,
 	}
 }
@@ -141,7 +141,7 @@ func (h *ReactTargetHandler) Handle(ctx context.Context, cmd ReactTargetCommand)
 		}
 		currentReaction = string(rt)
 
-		if currentReaction != "" && h.eventPub != nil {
+		if currentReaction != "" && h.eventRecorder != nil {
 			ev := &event.PostReactedEvent{
 				FeedItemID:    cmd.FeedItemID,
 				PostOwnerID:   feedItem.UserID(),
@@ -151,8 +151,8 @@ func (h *ReactTargetHandler) Handle(ctx context.Context, cmd ReactTargetCommand)
 				ReactionType:  rt,
 				ReactedAt:     time.Now().UTC(),
 			}
-			if err := h.eventPub.PublishEvents(txCtx, []any{ev}); err != nil {
-				return fmt.Errorf("publish post reacted event: %w", err)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record post reacted event: %w", err)
 			}
 		}
 

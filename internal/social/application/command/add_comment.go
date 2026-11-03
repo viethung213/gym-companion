@@ -42,7 +42,7 @@ type AddCommentHandler struct {
 	interactionRepo  repository.InteractionRepository
 	feedItemRepo     repository.FeedItemRepository
 	userSnapshotRepo repository.UserSnapshotRepository
-	eventPub         port.EventPublisher
+	eventRecorder    port.EventRecorder
 	txManager        port.TransactionManager
 }
 
@@ -50,14 +50,14 @@ func NewAddCommentHandler(
 	interactionRepo repository.InteractionRepository,
 	feedItemRepo repository.FeedItemRepository,
 	userSnapshotRepo repository.UserSnapshotRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *AddCommentHandler {
 	return &AddCommentHandler{
 		interactionRepo:  interactionRepo,
 		feedItemRepo:     feedItemRepo,
 		userSnapshotRepo: userSnapshotRepo,
-		eventPub:         eventPub,
+		eventRecorder:    eventRecorder,
 		txManager:        txManager,
 	}
 }
@@ -135,8 +135,8 @@ func (h *AddCommentHandler) Handle(ctx context.Context, cmd AddCommentCommand) (
 			return fmt.Errorf("increment feed item comment count: %w", err)
 		}
 
-		// 6. Phát Event bình luận
-		if h.eventPub != nil {
+		// 6. Ghi Event bình luận vào outbox
+		if h.eventRecorder != nil {
 			ev := &event.PostCommentedEvent{
 				CommentID:            comment.ID(),
 				FeedItemID:           cmd.FeedItemID,
@@ -149,8 +149,8 @@ func (h *AddCommentHandler) Handle(ctx context.Context, cmd AddCommentCommand) (
 				ParentID:             comment.ParentID(),
 				CommentedAt:          comment.CreatedAt(),
 			}
-			if err := h.eventPub.PublishEvents(txCtx, []any{ev}); err != nil {
-				return fmt.Errorf("publish post commented event: %w", err)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record post commented event: %w", err)
 			}
 		}
 

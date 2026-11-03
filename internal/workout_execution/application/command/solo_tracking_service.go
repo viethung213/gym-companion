@@ -31,12 +31,12 @@ type StreamFrameResult struct {
 	MatchEnded              bool
 }
 
-// SoloTrackingService coordinates streaming sessions, referee evaluation, live sync, session persistence, and outbox event publishing.
+// SoloTrackingService coordinates streaming sessions, referee evaluation, live sync, session persistence, and outbox event recording.
 type SoloTrackingService struct {
 	ruleProvider          repository.ExerciseRuleProvider
 	ruleEvaluator         service.RuleEvaluator
 	liveSync              port.SoloMatchLiveSyncPort
-	outbox                port.OutboxWriter
+	eventRecorder         port.EventRecorder
 	sessionRepo           repository.WorkoutSessionRepository
 	txManager             port.TxManager
 	readyEmitted          sync.Map
@@ -51,7 +51,7 @@ func NewSoloTrackingService(
 	ruleProvider repository.ExerciseRuleProvider,
 	ruleEvaluator service.RuleEvaluator,
 	liveSync port.SoloMatchLiveSyncPort,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	sessionRepo repository.WorkoutSessionRepository,
 	txManager port.TxManager,
 ) *SoloTrackingService {
@@ -62,7 +62,7 @@ func NewSoloTrackingService(
 		ruleProvider:          ruleProvider,
 		ruleEvaluator:         ruleEvaluator,
 		liveSync:              liveSync,
-		outbox:                outbox,
+		eventRecorder:         eventRecorder,
 		sessionRepo:           sessionRepo,
 		txManager:             txManager,
 		disconnectGracePeriod: defaultDisconnectGracePeriod,

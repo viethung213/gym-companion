@@ -16,6 +16,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/config"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/email"
+	notificationEvent "github.com/viethung213/gym-companion/internal/notification/infrastructure/event"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence/postgres"
@@ -51,10 +52,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	fcmClient := fcm.NewClient(&cfg)
 	emailProvider := email.NewEmailProvider(&cfg)
 	smsProvider := sms.NewSMSProvider(&cfg)
+	eventRecorder := notificationEvent.NewOutboxWriter(outboxRepo)
 
 	// 2. Command Handlers
 	registerDeviceHandler := command.NewRegisterDeviceTokenHandler(deviceRepo)
-	sendPushHandler := command.NewSendPushNotificationHandler(deviceRepo, notificationRepo, settingRepo, fcmClient, txManager, outboxRepo)
+	sendPushHandler := command.NewSendPushNotificationHandler(deviceRepo, notificationRepo, settingRepo, fcmClient, txManager, eventRecorder)
 	sendEmailHandler := command.NewSendEmailNotificationHandler(settingRepo, emailProvider)
 	sendSMSHandler := command.NewSendSMSNotificationHandler(settingRepo, smsProvider)
 	updateSettingsHandler := command.NewUpdateNotificationSettingsHandler(settingRepo)

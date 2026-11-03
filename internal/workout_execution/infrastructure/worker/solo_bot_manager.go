@@ -26,9 +26,9 @@ var _ port.SoloBotManager = (*SoloBotManager)(nil)
 
 // SoloBotManager manages virtual bot lifecycles and background simulation runners.
 type SoloBotManager struct {
-	prRepo   repository.PersonalRecordRepository
-	liveSync port.SoloMatchLiveSyncPort
-	outbox   port.OutboxWriter
+	prRepo        repository.PersonalRecordRepository
+	liveSync      port.SoloMatchLiveSyncPort
+	eventRecorder port.EventRecorder
 
 	mu           sync.Mutex
 	repInterval  time.Duration
@@ -41,15 +41,15 @@ type SoloBotManager struct {
 func NewSoloBotManager(
 	prRepo repository.PersonalRecordRepository,
 	liveSync port.SoloMatchLiveSyncPort,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 ) *SoloBotManager {
 	return &SoloBotManager{
-		prRepo:       prRepo,
-		liveSync:     liveSync,
-		outbox:       outbox,
-		repInterval:  defaultRepInterval,
-		durInterval:  defaultDurInterval,
-		botCancelers: make(map[string]context.CancelFunc),
+		prRepo:        prRepo,
+		liveSync:      liveSync,
+		eventRecorder: eventRecorder,
+		repInterval:   defaultRepInterval,
+		durInterval:   defaultDurInterval,
+		botCancelers:  make(map[string]context.CancelFunc),
 	}
 }
 
@@ -308,7 +308,7 @@ func (m *SoloBotManager) emitBotCompleted(
 	chType vo.ChallengeType,
 	score int32,
 ) {
-	if m.outbox == nil {
+	if m.eventRecorder == nil {
 		return
 	}
 	durationSec := int32(60)
@@ -326,7 +326,7 @@ func (m *SoloBotManager) emitBotCompleted(
 		TotalDurationSeconds: durationSec,
 		CompletedAt:          time.Now().UTC(),
 	}
-	if err := m.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{botEvt}); err != nil {
+	if err := m.eventRecorder.RecordEvents(ctx, []any{botEvt}); err != nil {
 		log.Printf("[SoloBotManager] Virtual bot failed to write SoloTrackingCompleted to outbox: %v", err)
 	} else {
 		log.Printf("[SoloBotManager] Virtual bot successfully emitted SoloTrackingCompleted (score=%d) for match %s", score, matchID)

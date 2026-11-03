@@ -24,21 +24,21 @@ type UpdateMotionSpecificationCommand struct {
 
 // UpdateMotionSpecificationHandler handles updating a MotionSpecification.
 type UpdateMotionSpecificationHandler struct {
-	motionRepo repository.MotionSpecificationRepository
-	outbox     port.OutboxWriter
-	txManager  port.TxManager
+	motionRepo    repository.MotionSpecificationRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewUpdateMotionSpecificationHandler constructs the handler.
 func NewUpdateMotionSpecificationHandler(
 	motionRepo repository.MotionSpecificationRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *UpdateMotionSpecificationHandler {
 	return &UpdateMotionSpecificationHandler{
-		motionRepo: motionRepo,
-		outbox:     outbox,
-		txManager:  txManager,
+		motionRepo:    motionRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -72,8 +72,8 @@ func (h *UpdateMotionSpecificationHandler) Handle(
 			return err
 		}
 		events := spec.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(execCtx, "MotionSpecification", spec.ExerciseID(), events); err != nil {
+		if len(events) > 0 && h.eventRecorder != nil {
+			if err := h.eventRecorder.RecordEvents(execCtx, events); err != nil {
 				return err
 			}
 		}

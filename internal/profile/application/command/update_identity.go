@@ -21,20 +21,20 @@ type UpdateIdentityResult struct {
 }
 
 type UpdateIdentityHandler struct {
-	repo      repository.UserProfileRepository
-	eventPub  port.EventPublisher
-	txManager port.TransactionManager
+	repo          repository.UserProfileRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
 }
 
 func NewUpdateIdentityHandler(
 	repo repository.UserProfileRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *UpdateIdentityHandler {
 	return &UpdateIdentityHandler{
-		repo:      repo,
-		eventPub:  eventPub,
-		txManager: txManager,
+		repo:          repo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -55,9 +55,9 @@ func (h *UpdateIdentityHandler) Handle(ctx context.Context, cmd UpdateIdentityCo
 		if repoErr := h.repo.Update(txCtx, profile); repoErr != nil {
 			return repoErr
 		}
-		if h.eventPub != nil && len(events) > 0 {
-			if pubErr := h.eventPub.PublishEvents(txCtx, events); pubErr != nil {
-				return fmt.Errorf("publish events on identity update: %w", pubErr)
+		if h.eventRecorder != nil && len(events) > 0 {
+			if pubErr := h.eventRecorder.RecordEvents(txCtx, events); pubErr != nil {
+				return fmt.Errorf("record events on identity update: %w", pubErr)
 			}
 		}
 		return nil

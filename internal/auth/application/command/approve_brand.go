@@ -20,10 +20,10 @@ type ApproveBrandCommand struct {
 
 // ApproveBrandHandler processes the administrative approval of a brand request.
 type ApproveBrandHandler struct {
-	brandRepo    repository.BrandRequestRepository
-	userRepo     repository.UserRepository
-	txManager    port.TransactionManager
-	outboxWriter port.OutboxWriter
+	brandRepo     repository.BrandRequestRepository
+	userRepo      repository.UserRepository
+	txManager     port.TransactionManager
+	eventRecorder port.EventRecorder
 }
 
 // NewApproveBrandHandler creates a new instance of ApproveBrandHandler.
@@ -31,17 +31,17 @@ func NewApproveBrandHandler(
 	brandRepo repository.BrandRequestRepository,
 	userRepo repository.UserRepository,
 	txManager port.TransactionManager,
-	outboxWriter ...port.OutboxWriter,
+	eventRecorder ...port.EventRecorder,
 ) *ApproveBrandHandler {
-	var writer port.OutboxWriter
-	if len(outboxWriter) > 0 {
-		writer = outboxWriter[0]
+	var recorder port.EventRecorder
+	if len(eventRecorder) > 0 {
+		recorder = eventRecorder[0]
 	}
 	return &ApproveBrandHandler{
-		brandRepo:    brandRepo,
-		userRepo:     userRepo,
-		txManager:    txManager,
-		outboxWriter: writer,
+		brandRepo:     brandRepo,
+		userRepo:      userRepo,
+		txManager:     txManager,
+		eventRecorder: recorder,
 	}
 }
 
@@ -85,14 +85,14 @@ func (h *ApproveBrandHandler) Handle(
 		if err := h.brandRepo.Update(txCtx, brandReq); err != nil {
 			return fmt.Errorf("update brand request: %w", err)
 		}
-		if h.outboxWriter != nil {
+		if h.eventRecorder != nil {
 			ev := event.UserRoleUpdatedEvent{
 				UserID:    user.ID(),
 				OldRole:   "user",
 				NewRole:   "brand",
 				UpdatedAt: now,
 			}
-			if err := h.outboxWriter.Write(txCtx, ev); err != nil {
+			if err := h.eventRecorder.Write(txCtx, ev); err != nil {
 				return fmt.Errorf("write user role updated outbox event: %w", err)
 			}
 		}

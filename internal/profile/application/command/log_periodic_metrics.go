@@ -29,20 +29,20 @@ type LogPeriodicMetricsResult struct {
 }
 
 type LogPeriodicMetricsHandler struct {
-	repo      repository.UserProfileRepository
-	eventPub  port.EventPublisher
-	txManager port.TransactionManager
+	repo          repository.UserProfileRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
 }
 
 func NewLogPeriodicMetricsHandler(
 	repo repository.UserProfileRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *LogPeriodicMetricsHandler {
 	return &LogPeriodicMetricsHandler{
-		repo:      repo,
-		eventPub:  eventPub,
-		txManager: txManager,
+		repo:          repo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -98,9 +98,9 @@ func (h *LogPeriodicMetricsHandler) Handle(ctx context.Context, cmd LogPeriodicM
 		if saveErr := h.repo.Update(txCtx, profile); saveErr != nil {
 			return saveErr
 		}
-		if h.eventPub != nil && len(events) > 0 {
-			if pubErr := h.eventPub.PublishEvents(txCtx, events); pubErr != nil {
-				return fmt.Errorf("publish events on metric log: %w", pubErr)
+		if h.eventRecorder != nil && len(events) > 0 {
+			if pubErr := h.eventRecorder.RecordEvents(txCtx, events); pubErr != nil {
+				return fmt.Errorf("record events on metric log: %w", pubErr)
 			}
 		}
 		return nil

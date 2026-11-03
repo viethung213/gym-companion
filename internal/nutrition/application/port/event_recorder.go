@@ -2,8 +2,8 @@ package port
 
 import "context"
 
-type EventPublisher interface {
-	PublishEvents(ctx context.Context, events []any) error
+type EventRecorder interface {
+	RecordEvents(ctx context.Context, events []any) error
 }
 
 type BrokerPublisher interface {

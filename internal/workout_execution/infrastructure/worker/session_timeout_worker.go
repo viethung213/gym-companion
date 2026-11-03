@@ -11,16 +11,16 @@ import (
 
 // SessionTimeoutWorker periodically scans for active sessions exceeding 240 minutes and auto-aborts them.
 type SessionTimeoutWorker struct {
-	sessionRepo repository.WorkoutSessionRepository
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
-	interval    time.Duration
+	sessionRepo   repository.WorkoutSessionRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
+	interval      time.Duration
 }
 
 // NewSessionTimeoutWorker constructs a new SessionTimeoutWorker.
 func NewSessionTimeoutWorker(
 	sessionRepo repository.WorkoutSessionRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 	interval time.Duration,
 ) *SessionTimeoutWorker {
@@ -28,10 +28,10 @@ func NewSessionTimeoutWorker(
 		interval = 10 * time.Minute
 	}
 	return &SessionTimeoutWorker{
-		sessionRepo: sessionRepo,
-		outbox:      outbox,
-		txManager:   txManager,
-		interval:    interval,
+		sessionRepo:   sessionRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
+		interval:      interval,
 	}
 }
 
@@ -78,8 +78,8 @@ func (w *SessionTimeoutWorker) processTimedOutSessions(ctx context.Context) erro
 					return err
 				}
 				events := session.PopEvents()
-				if len(events) > 0 && w.outbox != nil {
-					return w.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events)
+				if len(events) > 0 && w.eventRecorder != nil {
+					return w.eventRecorder.RecordEvents(txCtx, events)
 				}
 				return nil
 			}

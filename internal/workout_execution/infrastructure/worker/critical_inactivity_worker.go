@@ -19,7 +19,7 @@ const defaultCriticalInactivityInterval = 1 * time.Minute
 // inactivity threshold, then marks them as ANOMALOUS and publishes a domain event.
 type CriticalInactivityWorker struct {
 	sessionRepo         repository.WorkoutSessionRepository
-	outbox              port.OutboxWriter
+	eventRecorder       port.EventRecorder
 	txManager           port.TxManager
 	interval            time.Duration
 	inactivityThreshold time.Duration
@@ -31,7 +31,7 @@ type CriticalInactivityWorker struct {
 // Zero or negative values fall back to sensible defaults.
 func NewCriticalInactivityWorker(
 	sessionRepo repository.WorkoutSessionRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 	interval time.Duration,
 	inactivityThreshold time.Duration,
@@ -44,7 +44,7 @@ func NewCriticalInactivityWorker(
 	}
 	return &CriticalInactivityWorker{
 		sessionRepo:         sessionRepo,
-		outbox:              outbox,
+		eventRecorder:       eventRecorder,
 		txManager:           txManager,
 		interval:            interval,
 		inactivityThreshold: inactivityThreshold,
@@ -107,8 +107,8 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 				return err
 			}
 			events := session.PopEvents()
-			if len(events) > 0 && w.outbox != nil {
-				return w.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events)
+			if len(events) > 0 && w.eventRecorder != nil {
+				return w.eventRecorder.RecordEvents(txCtx, events)
 			}
 			return nil
 		}

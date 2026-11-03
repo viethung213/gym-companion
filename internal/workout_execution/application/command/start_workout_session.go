@@ -26,24 +26,24 @@ type StartWorkoutSessionResult struct {
 
 // StartWorkoutSessionHandler handles initiating an ad-hoc workout session.
 type StartWorkoutSessionHandler struct {
-	sessionRepo repository.WorkoutSessionRepository
-	planClient  port.DailyWorkoutPlanClient
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
+	sessionRepo   repository.WorkoutSessionRepository
+	planClient    port.DailyWorkoutPlanClient
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewStartWorkoutSessionHandler constructs the command handler.
 func NewStartWorkoutSessionHandler(
 	sessionRepo repository.WorkoutSessionRepository,
 	planClient port.DailyWorkoutPlanClient,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *StartWorkoutSessionHandler {
 	return &StartWorkoutSessionHandler{
-		sessionRepo: sessionRepo,
-		planClient:  planClient,
-		outbox:      outbox,
-		txManager:   txManager,
+		sessionRepo:   sessionRepo,
+		planClient:    planClient,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -85,8 +85,8 @@ func (h *StartWorkoutSessionHandler) Handle(
 			return err
 		}
 		events := session.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); err != nil {
+		if len(events) > 0 && h.eventRecorder != nil {
+			if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
 				return err
 			}
 		}

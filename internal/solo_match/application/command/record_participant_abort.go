@@ -17,23 +17,23 @@ type RecordParticipantAbortCommand struct {
 }
 
 type RecordParticipantAbortHandler struct {
-	matchRepo repository.SoloMatchRepository
-	eventPub  port.EventPublisher
-	botRepo   repository.BotRepository
-	txManager port.TransactionManager
+	matchRepo     repository.SoloMatchRepository
+	eventRecorder port.EventRecorder
+	botRepo       repository.BotRepository
+	txManager     port.TransactionManager
 }
 
 func NewRecordParticipantAbortHandler(
 	matchRepo repository.SoloMatchRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 	botRepo repository.BotRepository,
 ) *RecordParticipantAbortHandler {
 	return &RecordParticipantAbortHandler{
-		matchRepo: matchRepo,
-		eventPub:  eventPub,
-		botRepo:   botRepo,
-		txManager: txManager,
+		matchRepo:     matchRepo,
+		eventRecorder: eventRecorder,
+		botRepo:       botRepo,
+		txManager:     txManager,
 	}
 }
 
@@ -109,8 +109,8 @@ func (h *RecordParticipantAbortHandler) Handle(ctx context.Context, cmd RecordPa
 			CompletedAt:   endedAt,
 		}
 
-		if err := h.eventPub.PublishEvents(txCtx, []any{forfeitedEv, completedEv}); err != nil {
-			return fmt.Errorf("publish outbox events: %w", err)
+		if err := h.eventRecorder.RecordEvents(txCtx, []any{forfeitedEv, completedEv}); err != nil {
+			return fmt.Errorf("record outbox events: %w", err)
 		}
 
 		return nil

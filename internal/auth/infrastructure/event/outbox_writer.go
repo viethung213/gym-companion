@@ -1,4 +1,4 @@
-// Package event provides CloudEvent serialization and outbox publishing adapters
+// Package event provides CloudEvent serialization and outbox recording adapters
 // for all domain events produced by the auth bounded context.
 package event
 
@@ -18,35 +18,49 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// OutboxWriter implements port.EventPublisher by serializing domain events
+// OutboxWriter implements port.EventRecorder by serializing domain events
 // into CloudEvent envelopes and persisting them to the outbox table.
 type OutboxWriter struct {
 	outboxRepo port.OutboxRepository
 }
 
 // Compile-time interface check
-var _ port.OutboxWriter = (*OutboxWriter)(nil)
+var _ port.EventRecorder = (*OutboxWriter)(nil)
 
 // NewOutboxWriter creates a new OutboxWriter instance.
 func NewOutboxWriter(outboxRepo port.OutboxRepository) *OutboxWriter {
 	return &OutboxWriter{outboxRepo: outboxRepo}
 }
 
+// RecordEvents records a slice of domain events into the outbox repository.
+func (p *OutboxWriter) RecordEvents(ctx context.Context, events []any) error {
+	for _, ev := range events {
+		dev, ok := ev.(domainEvent.DomainEvent)
+		if !ok {
+			return fmt.Errorf("unsupported domain event: %T", ev)
+		}
+		if err := p.Write(ctx, dev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Write serializes and stores the domain event as a CloudEvent into the outbox repository.
 func (p *OutboxWriter) Write(ctx context.Context, ev domainEvent.DomainEvent) error {
 	switch e := ev.(type) {
 	case domainEvent.UserRegisteredEvent:
-		return p.publishUserRegistered(ctx, e)
+		return p.recordUserRegistered(ctx, e)
 	case domainEvent.UserRoleUpdatedEvent:
-		return p.publishUserRoleUpdated(ctx, e)
+		return p.recordUserRoleUpdated(ctx, e)
 	case domainEvent.OTPSentEvent:
-		return p.publishOTPSent(ctx, e)
+		return p.recordOTPSent(ctx, e)
 	default:
 		return fmt.Errorf("unsupported domain event: %T", ev)
 	}
 }
 
-func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent.UserRegisteredEvent) error {
+func (p *OutboxWriter) recordUserRegistered(ctx context.Context, ev domainEvent.UserRegisteredEvent) error {
 	userRegisteredProto := &authv1event.UserRegistered{
 		UserId:       ev.UserID,
 		IdentityType: ev.IdentityType,
@@ -85,7 +99,7 @@ func (p *OutboxWriter) publishUserRegistered(ctx context.Context, ev domainEvent
 	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.UserID)
 }
 
-func (p *OutboxWriter) publishOTPSent(ctx context.Context, ev domainEvent.OTPSentEvent) error {
+func (p *OutboxWriter) recordOTPSent(ctx context.Context, ev domainEvent.OTPSentEvent) error {
 	channel := "SMS"
 	dataMap := map[string]string{
 		"code":             ev.Code,
@@ -139,7 +153,7 @@ func (p *OutboxWriter) publishOTPSent(ctx context.Context, ev domainEvent.OTPSen
 	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.Identifier)
 }
 
-func (p *OutboxWriter) publishUserRoleUpdated(ctx context.Context, ev domainEvent.UserRoleUpdatedEvent) error {
+func (p *OutboxWriter) recordUserRoleUpdated(ctx context.Context, ev domainEvent.UserRoleUpdatedEvent) error {
 	roleUpdatedProto := &authv1event.UserRoleUpdated{
 		UserId:    ev.UserID,
 		OldRole:   ev.OldRole,

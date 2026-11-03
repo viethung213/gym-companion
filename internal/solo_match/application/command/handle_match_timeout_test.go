@@ -65,9 +65,13 @@ type timeoutEventPubMock struct {
 	events []any
 }
 
-func (m *timeoutEventPubMock) PublishEvents(ctx context.Context, events []any) error {
+func (m *timeoutEventPubMock) RecordEvents(ctx context.Context, events []any) error {
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *timeoutEventPubMock) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 type timeoutTxManagerMock struct{}

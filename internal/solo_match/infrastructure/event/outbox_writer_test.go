@@ -36,7 +36,7 @@ func (m *mockOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 	return nil
 }
 
-func TestOutboxWriter_PublishEvents(t *testing.T) {
+func TestOutboxWriter_RecordEvents(t *testing.T) {
 	repo := &mockOutboxRepository{}
 	writer := infraEvent.NewOutboxWriter(repo)
 	ctx := context.Background()
@@ -53,9 +53,9 @@ func TestOutboxWriter_PublishEvents(t *testing.T) {
 		StartedAt:     now,
 	}
 
-	err := writer.PublishEvents(ctx, []any{startEvt})
+	err := writer.RecordEvents(ctx, []any{startEvt})
 	if err != nil {
-		t.Fatalf("PublishEvents err: %v", err)
+		t.Fatalf("RecordEvents err: %v", err)
 	}
 
 	if len(repo.savedRecords) != 1 {

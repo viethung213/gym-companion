@@ -84,7 +84,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	tokenServ := jwt.NewJWTSigner(keyRepo, cfg.JWTIssuer, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	keyGen := crypto.NewRSAKeyGenerator()
 	txManager := postgres.NewSQLTransactionManager(gormDB)
-	eventPub := authEvent.NewOutboxWriter(outboxRepo)
+	eventRecorder := authEvent.NewOutboxWriter(outboxRepo)
 
 	// 5. Initialize Application Handlers
 	oauthLoginHandler := command.NewOAuthLoginHandler(
@@ -93,7 +93,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		sessRepo,
 		tokenServ,
 		oauthServ,
-		eventPub,
+		eventRecorder,
 		txManager,
 	)
 	logoutHandler := command.NewLogoutHandler(sessRepo)
@@ -209,15 +209,15 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	otpRepo := postgres.NewOTPRepository(gormDB)
 	resetTokenRepo := postgres.NewPasswordResetTokenRepository(gormDB)
 
-	registerHandler := command.NewRegisterHandler(userRepo, argon2Hasher, eventPub, txManager)
+	registerHandler := command.NewRegisterHandler(userRepo, argon2Hasher, eventRecorder, txManager)
 	credentialsLoginHandler := command.NewCredentialsLoginHandler(userRepo, argon2Hasher, keyRepo, tokenServ, sessRepo)
-	sendOTPHandler := command.NewSendOTPHandler(otpRepo, argon2Hasher, eventPub, txManager)
+	sendOTPHandler := command.NewSendOTPHandler(otpRepo, argon2Hasher, eventRecorder, txManager)
 	verifyOTPHandler := command.NewVerifyOTPHandler(otpRepo, resetTokenRepo, userRepo, argon2Hasher)
 	changePasswordHandler := command.NewChangePasswordHandler(userRepo, argon2Hasher)
 	resetPasswordHandler := command.NewResetPasswordHandler(resetTokenRepo, userRepo, argon2Hasher, txManager)
 	brandRepo := postgres.NewBrandRequestRepository(gormDB)
 	registerBrandHandler := command.NewRegisterBrandHandler(brandRepo, userRepo)
-	approveBrandHandler := command.NewApproveBrandHandler(brandRepo, userRepo, txManager, eventPub)
+	approveBrandHandler := command.NewApproveBrandHandler(brandRepo, userRepo, txManager, eventRecorder)
 	rejectBrandHandler := command.NewRejectBrandHandler(brandRepo)
 	listBrandRequestsHandler := query.NewListBrandRequestsHandler(brandRepo)
 	listUsersHandler := query.NewListUsersHandler(userRepo)

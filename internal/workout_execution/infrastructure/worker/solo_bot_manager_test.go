@@ -151,9 +151,9 @@ type mockBotOutboxWriter struct {
 	err    error
 }
 
-var _ port.OutboxWriter = (*mockBotOutboxWriter)(nil)
+var _ port.EventRecorder = (*mockBotOutboxWriter)(nil)
 
-func (m *mockBotOutboxWriter) WriteEvents(_ context.Context, _, _ string, events []interface{}) error {
+func (m *mockBotOutboxWriter) RecordEvents(_ context.Context, events []any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -161,6 +161,10 @@ func (m *mockBotOutboxWriter) WriteEvents(_ context.Context, _, _ string, events
 	}
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *mockBotOutboxWriter) WriteEvents(ctx context.Context, _, _ string, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 func (m *mockBotOutboxWriter) Events() []interface{} {

@@ -190,8 +190,8 @@ func TestApproveBrandHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("success approve with outbox event publishing", func(t *testing.T) {
-		outbox := &mockOutboxWriter{}
+	t.Run("success approve with outbox event recording", func(t *testing.T) {
+		outbox := &mockEventRecorder{}
 		handlerWithOutbox := NewApproveBrandHandler(brandRepo, userRepo, txManager, outbox)
 
 		u := aggregate.RegisterUser("user-event", "Brand User", aggregate.Identity{}, "")
@@ -219,15 +219,6 @@ func TestApproveBrandHandler(t *testing.T) {
 			t.Errorf("unexpected event content: %+v", roleEvent)
 		}
 	})
-}
-
-type mockOutboxWriter struct {
-	events []event.DomainEvent
-}
-
-func (m *mockOutboxWriter) Write(ctx context.Context, ev event.DomainEvent) error {
-	m.events = append(m.events, ev)
-	return nil
 }
 
 func TestRejectBrandHandler(t *testing.T) {

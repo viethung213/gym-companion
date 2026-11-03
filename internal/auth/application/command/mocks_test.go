@@ -241,15 +241,24 @@ func (m *mockKeyGenerator) Generate(ctx context.Context) (string, string, error)
 }
 
 // ---------------------------------------------------------------------------
-// mockEventPublisher
+// mockEventRecorder
 // ---------------------------------------------------------------------------
 
-type mockEventPublisher struct {
+type mockEventRecorder struct {
 	events []event.DomainEvent
 }
 
-func (m *mockEventPublisher) Write(ctx context.Context, ev event.DomainEvent) error {
+func (m *mockEventRecorder) Write(ctx context.Context, ev event.DomainEvent) error {
 	m.events = append(m.events, ev)
+	return nil
+}
+
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
+	for _, ev := range events {
+		if dev, ok := ev.(event.DomainEvent); ok {
+			m.events = append(m.events, dev)
+		}
+	}
 	return nil
 }
 

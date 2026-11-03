@@ -45,9 +45,13 @@ type abortEventPubMock struct {
 	events []any
 }
 
-func (m *abortEventPubMock) PublishEvents(ctx context.Context, events []any) error {
+func (m *abortEventPubMock) RecordEvents(ctx context.Context, events []any) error {
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *abortEventPubMock) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 type abortTxManagerMock struct{}

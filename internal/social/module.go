@@ -47,22 +47,22 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	outboxRepo := persistence.NewGormOutboxRepository(gormDB)
 	outboxLogRepo := persistence.NewGormOutboxLogRepository(gormDB)
 	txManager := persistence.NewSQLTransactionManager(gormDB)
-	eventPub := socialEvent.NewOutboxWriter(outboxRepo)
+	eventRecorder := socialEvent.NewOutboxWriter(outboxRepo)
 	userSnapshotRepo := persistence.NewGormUserSnapshotRepository(gormDB)
 
 	// Command Handlers
-	followUserHandler := command.NewFollowUserHandler(followRepo, userSnapshotRepo, eventPub, txManager)
+	followUserHandler := command.NewFollowUserHandler(followRepo, userSnapshotRepo, eventRecorder, txManager)
 	unfollowUserHandler := command.NewUnfollowUserHandler(followRepo, userSnapshotRepo, txManager)
 	createPostHandler := command.NewCreatePostHandler(
 		feedItemRepo,
-		eventPub,
+		eventRecorder,
 		txManager,
 		command.WithCreatePostFollowRepo(followRepo),
 		command.WithCreatePostUserSnapshotRepo(userSnapshotRepo),
 	)
 	deleteFeedItemHandler := command.NewDeleteFeedItemHandler(feedItemRepo, txManager)
-	reactTargetHandler := command.NewReactTargetHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventPub, txManager)
-	addCommentHandler := command.NewAddCommentHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventPub, txManager)
+	reactTargetHandler := command.NewReactTargetHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventRecorder, txManager)
+	addCommentHandler := command.NewAddCommentHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventRecorder, txManager)
 	deleteCommentHandler := command.NewDeleteCommentHandler(interactionRepo, feedItemRepo, txManager)
 	ingestWorkoutActivityHandler := command.NewIngestWorkoutActivityHandler(feedItemRepo, txManager)
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(userSnapshotRepo, txManager)
