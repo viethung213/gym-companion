@@ -162,7 +162,7 @@ func IsAuthRequired(fullMethod string) bool {
 	}
 
 	for _, req := range op.Security {
-		if req.SecurityRequirement == nil || len(req.SecurityRequirement) == 0 {
+		if req == nil || len(req.SecurityRequirement) == 0 {
 			return false // Public bypass
 		}
 	}

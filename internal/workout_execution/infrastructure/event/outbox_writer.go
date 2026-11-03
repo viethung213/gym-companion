@@ -32,11 +32,7 @@ func (w *OutboxWriter) RecordEvents(ctx context.Context, events []any) error {
 
 // WriteEvents delegates to RecordEvents for backward compatibility.
 func (w *OutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
-	anyEvents := make([]any, len(events))
-	for i, ev := range events {
-		anyEvents[i] = ev
-	}
-	return w.RecordEvents(ctx, anyEvents)
+	return w.RecordEvents(ctx, events)
 }
 
 func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
