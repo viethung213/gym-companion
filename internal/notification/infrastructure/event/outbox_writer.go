@@ -58,7 +58,6 @@ func (w *OutboxWriter) recordNotificationSent(ctx context.Context, ev *domainEve
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	eventID := uuid.New().String()
 	eventType := "contracts.generic.notification.v1.event.NotificationSent"
 
 	payloadProto := &notificationv1event.NotificationSent{
@@ -75,12 +74,23 @@ func (w *OutboxWriter) recordNotificationSent(ctx context.Context, ev *domainEve
 		return fmt.Errorf("marshal NotificationSent proto payload: %w", err)
 	}
 
+	return w.writeCloudEvent(ctx, "Notification", ev.UserID, eventType, ev.UserID, now, payloadBytes)
+}
+
+func (w *OutboxWriter) writeCloudEvent(
+	ctx context.Context,
+	aggregateType, aggregateID, eventType, partitionKey string,
+	occurredAt time.Time,
+	payloadBytes []byte,
+) error {
+	eventID := uuid.New().String()
+
 	cloudEvent := map[string]interface{}{
 		"specversion":     "1.0",
 		"id":              eventID,
 		"source":          "services/notification-service",
 		"type":            eventType,
-		"time":            now.Format(time.RFC3339),
+		"time":            occurredAt.Format(time.RFC3339),
 		"datacontenttype": "application/json",
 		"data":            json.RawMessage(payloadBytes),
 	}
@@ -91,13 +101,15 @@ func (w *OutboxWriter) recordNotificationSent(ctx context.Context, ev *domainEve
 	}
 
 	outboxRec := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: ev.UserID,
-		Published:    false,
-		CreatedAt:    now,
+		ID:            uuid.New().String(),
+		EventID:       eventID,
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		Payload:       cloudEventBytes,
+		PartitionKey:  partitionKey,
+		Published:     false,
+		CreatedAt:     occurredAt,
 	}
 
 	if err := w.outboxRepo.Save(ctx, outboxRec); err != nil {

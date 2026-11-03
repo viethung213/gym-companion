@@ -38,8 +38,8 @@ func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) 
 
 	query := `
 		INSERT INTO notification.outbox (
-			id, event_id, event_type, payload, partition_key, created_at, published, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, status
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (event_id) DO NOTHING
 	`
 	status := "PENDING"
@@ -53,6 +53,8 @@ func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) 
 		query,
 		id,
 		eventID,
+		record.AggregateType,
+		record.AggregateID,
 		record.EventType,
 		record.Payload,
 		record.PartitionKey,
@@ -79,7 +81,7 @@ func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*
 	}
 
 	query := `
-		SELECT id, event_id, event_type, payload, partition_key, created_at, published, published_at
+		SELECT id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, published_at
 		FROM notification.outbox
 		WHERE published = FALSE
 		ORDER BY created_at ASC
@@ -95,9 +97,12 @@ func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*
 	for rows.Next() {
 		var rec port.OutboxRecord
 		var pubAt sql.NullTime
+		var aggType, aggID sql.NullString
 		if err := rows.Scan(
 			&rec.ID,
 			&rec.EventID,
+			&aggType,
+			&aggID,
 			&rec.EventType,
 			&rec.Payload,
 			&rec.PartitionKey,
@@ -106,6 +111,12 @@ func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*
 			&pubAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan notification outbox row: %w", err)
+		}
+		if aggType.Valid {
+			rec.AggregateType = aggType.String
+		}
+		if aggID.Valid {
+			rec.AggregateID = aggID.String
 		}
 		if pubAt.Valid {
 			rec.PublishedAt = &pubAt.Time
@@ -137,7 +148,7 @@ func (r *OutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDurati
 	lockedUntil := now.Add(lockDuration)
 
 	query := `
-		SELECT id, event_id, event_type, payload, partition_key, created_at, published, published_at
+		SELECT id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, published_at
 		FROM notification.outbox
 		WHERE published = FALSE AND (status = 'PENDING' OR locked_until IS NULL OR locked_until < $1)
 		ORDER BY created_at ASC
@@ -148,7 +159,7 @@ func (r *OutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDurati
 	if err != nil {
 		// Fallback without FOR UPDATE SKIP LOCKED for SQLite unit tests
 		fallbackQuery := `
-			SELECT id, event_id, event_type, payload, partition_key, created_at, published, published_at
+			SELECT id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, published_at
 			FROM notification.outbox
 			WHERE published = FALSE AND (status = 'PENDING' OR locked_until IS NULL OR locked_until < $1)
 			ORDER BY created_at ASC
@@ -165,9 +176,12 @@ func (r *OutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDurati
 	for rows.Next() {
 		var rec port.OutboxRecord
 		var pubAt sql.NullTime
+		var aggType, aggID sql.NullString
 		if err := rows.Scan(
 			&rec.ID,
 			&rec.EventID,
+			&aggType,
+			&aggID,
 			&rec.EventType,
 			&rec.Payload,
 			&rec.PartitionKey,
@@ -177,6 +191,12 @@ func (r *OutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDurati
 		); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan outbox claim row: %w", err)
+		}
+		if aggType.Valid {
+			rec.AggregateType = aggType.String
+		}
+		if aggID.Valid {
+			rec.AggregateID = aggID.String
 		}
 		if pubAt.Valid {
 			rec.PublishedAt = &pubAt.Time

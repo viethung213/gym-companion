@@ -29,14 +29,21 @@ func (r *GormOutboxRepository) getDB(ctx context.Context) *gorm.DB {
 }
 
 func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	m := &OutboxModel{
-		ID:           record.ID,
-		EventID:      record.EventID,
-		EventType:    record.EventType,
-		Payload:      record.Payload,
-		PartitionKey: record.PartitionKey,
-		CreatedAt:    time.Now(),
-		Published:    false,
+		ID:            record.ID,
+		EventID:       record.EventID,
+		AggregateType: record.AggregateType,
+		AggregateID:   record.AggregateID,
+		EventType:     record.EventType,
+		Payload:       record.Payload,
+		PartitionKey:  record.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     record.Published,
+		PublishedAt:   record.PublishedAt,
 	}
 	db := r.getDB(ctx)
 	if err := db.Create(m).Error; err != nil {
@@ -55,11 +62,16 @@ func (r *GormOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 	records := make([]*port.OutboxRecord, 0, len(models))
 	for _, m := range models {
 		records = append(records, &port.OutboxRecord{
-			ID:           m.ID,
-			EventID:      m.EventID,
-			EventType:    m.EventType,
-			Payload:      m.Payload,
-			PartitionKey: m.PartitionKey,
+			ID:            m.ID,
+			EventID:       m.EventID,
+			AggregateType: m.AggregateType,
+			AggregateID:   m.AggregateID,
+			EventType:     m.EventType,
+			Payload:       m.Payload,
+			PartitionKey:  m.PartitionKey,
+			Published:     m.Published,
+			CreatedAt:     m.CreatedAt,
+			PublishedAt:   m.PublishedAt,
 		})
 	}
 
@@ -126,11 +138,16 @@ func (r *GormOutboxRepository) ClaimBatch(
 		ids := make([]string, 0, len(models))
 		for _, m := range models {
 			records = append(records, &port.OutboxRecord{
-				ID:           m.ID,
-				EventID:      m.EventID,
-				EventType:    m.EventType,
-				Payload:      m.Payload,
-				PartitionKey: m.PartitionKey,
+				ID:            m.ID,
+				EventID:       m.EventID,
+				AggregateType: m.AggregateType,
+				AggregateID:   m.AggregateID,
+				EventType:     m.EventType,
+				Payload:       m.Payload,
+				PartitionKey:  m.PartitionKey,
+				Published:     m.Published,
+				CreatedAt:     m.CreatedAt,
+				PublishedAt:   m.PublishedAt,
 			})
 			ids = append(ids, m.ID)
 		}

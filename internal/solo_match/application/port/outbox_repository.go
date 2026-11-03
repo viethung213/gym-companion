@@ -7,18 +7,23 @@ import (
 
 // OutboxRecord represents an outbox table entry to be delivered asynchronously.
 type OutboxRecord struct {
-	ID           string
-	EventID      string
-	EventType    string
-	Payload      []byte
-	PartitionKey string
+	ID            string     `json:"id"`
+	EventID       string     `json:"eventId"`
+	AggregateType string     `json:"aggregateType"`
+	AggregateID   string     `json:"aggregateId"`
+	EventType     string     `json:"eventType"`
+	Payload       []byte     `json:"payload"`
+	PartitionKey  string     `json:"partitionKey"`
+	Published     bool       `json:"published"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
 }
 
 // OutboxRepository defines the persistence port for transactional outbox records.
 type OutboxRepository interface {
 	Save(ctx context.Context, record *OutboxRecord) error
-	SaveBatch(ctx context.Context, records []*OutboxRecord) error
 	FetchUnpublished(ctx context.Context, limit int) ([]*OutboxRecord, error)
 	ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*OutboxRecord, error)
 	MarkAsPublished(ctx context.Context, ids []string) error
+	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
 }

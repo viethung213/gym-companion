@@ -52,7 +52,7 @@ func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 		if err != nil {
 			return fmt.Errorf("marshal NutritionPlanGenerated proto payload: %w", err)
 		}
-		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.NutritionPlanGenerated", e.UserID(), payloadBytes)
+		return w.writeCloudEvent(ctx, "NutritionPlan", e.PlanID(), "contracts.core.nutrition.v1.event.NutritionPlanGenerated", e.UserID(), payloadBytes)
 
 	case *domainEvent.NutritionPlanRecalibratedEvent:
 		payloadProto := &nutritionv1event.NutritionPlanRecalibrated{
@@ -65,7 +65,7 @@ func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 		if err != nil {
 			return fmt.Errorf("marshal NutritionPlanRecalibrated proto payload: %w", err)
 		}
-		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.NutritionPlanRecalibrated", e.UserID(), payloadBytes)
+		return w.writeCloudEvent(ctx, "NutritionPlan", e.PlanID(), "contracts.core.nutrition.v1.event.NutritionPlanRecalibrated", e.UserID(), payloadBytes)
 
 	case *domainEvent.MealLoggedEvent:
 		payloadProto := &nutritionv1event.MealLogged{
@@ -80,7 +80,7 @@ func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 		if err != nil {
 			return fmt.Errorf("marshal MealLogged proto payload: %w", err)
 		}
-		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.MealLogged", e.UserID(), payloadBytes)
+		return w.writeCloudEvent(ctx, "MealLog", e.MealLogID(), "contracts.core.nutrition.v1.event.MealLogged", e.UserID(), payloadBytes)
 
 	case *domainEvent.LockoutAppliedEvent:
 		payloadProto := &nutritionv1event.LockoutApplied{
@@ -93,7 +93,7 @@ func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 		if err != nil {
 			return fmt.Errorf("marshal LockoutApplied proto payload: %w", err)
 		}
-		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.LockoutApplied", e.UserID(), payloadBytes)
+		return w.writeCloudEvent(ctx, "Lockout", e.UserID(), "contracts.core.nutrition.v1.event.LockoutApplied", e.UserID(), payloadBytes)
 
 	case *domainEvent.UpcomingMealReminderEvent:
 		payloadProto := &nutritionv1event.UpcomingMealReminder{
@@ -107,14 +107,14 @@ func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 		if err != nil {
 			return fmt.Errorf("marshal UpcomingMealReminder proto payload: %w", err)
 		}
-		return w.publishCloudEvent(ctx, "contracts.core.nutrition.v1.event.UpcomingMealReminder", e.UserID(), payloadBytes)
+		return w.writeCloudEvent(ctx, "NutritionPlan", e.UserID(), "contracts.core.nutrition.v1.event.UpcomingMealReminder", e.UserID(), payloadBytes)
 
 	default:
 		return fmt.Errorf("unsupported nutrition domain event: %T", ev)
 	}
 }
 
-func (w *OutboxWriter) publishCloudEvent(ctx context.Context, eventType, partitionKey string, payloadBytes []byte) error {
+func (w *OutboxWriter) writeCloudEvent(ctx context.Context, aggregateType, aggregateID, eventType, partitionKey string, payloadBytes []byte) error {
 	eventID := uuid.New().String()
 	now := time.Now()
 
@@ -134,12 +134,14 @@ func (w *OutboxWriter) publishCloudEvent(ctx context.Context, eventType, partiti
 	}
 
 	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: partitionKey,
-		CreatedAt:    now,
+		ID:            uuid.New().String(),
+		EventID:       eventID,
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		Payload:       cloudEventBytes,
+		PartitionKey:  partitionKey,
+		CreatedAt:     now,
 	}
 
 	return w.outboxRepo.Save(ctx, record)

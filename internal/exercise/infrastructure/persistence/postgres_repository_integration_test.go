@@ -172,6 +172,8 @@ func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
 		`CREATE TABLE exercise.outbox (
 			id UUID PRIMARY KEY,
 			event_id UUID NOT NULL UNIQUE,
+			aggregate_type VARCHAR(255),
+			aggregate_id VARCHAR(255),
 			event_type VARCHAR(255) NOT NULL,
 			payload JSONB NOT NULL,
 			partition_key VARCHAR(255) NOT NULL,

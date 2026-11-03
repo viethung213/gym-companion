@@ -57,7 +57,8 @@ func (w *OutboxWorker) processOutbox(ctx context.Context) error {
 	return w.outboxRepo.ProcessBatch(ctx, 100, func(publishCtx context.Context, records []port.OutboxRecord) error {
 		if w.publisher != nil {
 			if err := w.publisher.PublishBatch(publishCtx, records); err != nil {
-				for _, rec := range records {
+				for i := range records {
+					rec := &records[i]
 					if w.outboxLogRepo != nil {
 						_ = w.outboxLogRepo.SaveLog(publishCtx, &port.OutboxLogRecord{
 							ID:           uuid.New().String(),
@@ -74,7 +75,8 @@ func (w *OutboxWorker) processOutbox(ctx context.Context) error {
 			}
 		}
 
-		for _, rec := range records {
+		for i := range records {
+			rec := &records[i]
 			if w.outboxLogRepo != nil {
 				_ = w.outboxLogRepo.SaveLog(publishCtx, &port.OutboxLogRecord{
 					ID:           uuid.New().String(),

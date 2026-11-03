@@ -185,16 +185,18 @@ func (m *SessionModel) ToRepositoryRecord() *port.SessionRecord {
 
 // OutboxModel is the GORM model mapping to auth.outbox table.
 type OutboxModel struct {
-	ID           string       `gorm:"primaryKey;column:id"`
-	EventID      string       `gorm:"column:event_id;uniqueIndex;not null"`
-	EventType    string       `gorm:"column:event_type;not null"`
-	Payload      []byte       `gorm:"column:payload;not null;type:jsonb"`
-	PartitionKey string       `gorm:"column:partition_key;not null"`
-	CreatedAt    time.Time    `gorm:"column:created_at;index:idx_outbox_published_created,priority:2"`
-	Published    bool         `gorm:"column:published;default:false;index:idx_outbox_published_created,priority:1"`
-	PublishedAt  sql.NullTime `gorm:"column:published_at"`
-	Status       string       `gorm:"column:status;default:PENDING"`
-	LockedUntil  sql.NullTime `gorm:"column:locked_until"`
+	ID            string       `gorm:"primaryKey;column:id"`
+	EventID       string       `gorm:"column:event_id;uniqueIndex;not null"`
+	AggregateType string       `gorm:"column:aggregate_type"`
+	AggregateID   string       `gorm:"column:aggregate_id"`
+	EventType     string       `gorm:"column:event_type;not null"`
+	Payload       []byte       `gorm:"column:payload;not null;type:jsonb"`
+	PartitionKey  string       `gorm:"column:partition_key;not null"`
+	CreatedAt     time.Time    `gorm:"column:created_at;index:idx_outbox_published_created,priority:2"`
+	Published     bool         `gorm:"column:published;default:false;index:idx_outbox_published_created,priority:1"`
+	PublishedAt   sql.NullTime `gorm:"column:published_at"`
+	Status        string       `gorm:"column:status;default:PENDING"`
+	LockedUntil   sql.NullTime `gorm:"column:locked_until"`
 }
 
 func (OutboxModel) TableName() string {
@@ -202,12 +204,21 @@ func (OutboxModel) TableName() string {
 }
 
 func (m *OutboxModel) ToRepositoryRecord() *port.OutboxRecord {
+	var publishedAt *time.Time
+	if m.PublishedAt.Valid {
+		publishedAt = &m.PublishedAt.Time
+	}
 	return &port.OutboxRecord{
-		ID:           m.ID,
-		EventID:      m.EventID,
-		EventType:    m.EventType,
-		Payload:      m.Payload,
-		PartitionKey: m.PartitionKey,
+		ID:            m.ID,
+		EventID:       m.EventID,
+		AggregateType: m.AggregateType,
+		AggregateID:   m.AggregateID,
+		EventType:     m.EventType,
+		Payload:       m.Payload,
+		PartitionKey:  m.PartitionKey,
+		Published:     m.Published,
+		CreatedAt:     m.CreatedAt,
+		PublishedAt:   publishedAt,
 	}
 }
 

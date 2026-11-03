@@ -37,15 +37,22 @@ func (r *GORMOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 		eventID = uuid.New().String()
 	}
 
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	m := OutboxModel{
-		ID:           id,
-		EventID:      eventID,
-		EventType:    record.EventType,
-		Payload:      record.Payload,
-		PartitionKey: record.PartitionKey,
-		CreatedAt:    time.Now().UTC(),
-		Published:    false,
-		Status:       "PENDING",
+		ID:            id,
+		EventID:       eventID,
+		AggregateType: record.AggregateType,
+		AggregateID:   record.AggregateID,
+		EventType:     record.EventType,
+		Payload:       record.Payload,
+		PartitionKey:  record.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     record.Published,
+		PublishedAt:   record.PublishedAt,
+		Status:        "PENDING",
 	}
 
 	db := GetDB(ctx, r.db)
@@ -55,47 +62,6 @@ func (r *GORMOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 	}).Create(&m).Error
 	if err != nil {
 		return fmt.Errorf("create outbox record: %w", err)
-	}
-	return nil
-}
-
-// SaveBatch lưu hàng loạt OutboxRecord
-func (r *GORMOutboxRepository) SaveBatch(ctx context.Context, records []*port.OutboxRecord) error {
-	if len(records) == 0 {
-		return nil
-	}
-
-	now := time.Now().UTC()
-	models := make([]OutboxModel, 0, len(records))
-	for _, record := range records {
-		id := record.ID
-		if id == "" {
-			id = uuid.New().String()
-		}
-		eventID := record.EventID
-		if eventID == "" {
-			eventID = uuid.New().String()
-		}
-
-		models = append(models, OutboxModel{
-			ID:           id,
-			EventID:      eventID,
-			EventType:    record.EventType,
-			Payload:      record.Payload,
-			PartitionKey: record.PartitionKey,
-			CreatedAt:    now,
-			Published:    false,
-			Status:       "PENDING",
-		})
-	}
-
-	db := GetDB(ctx, r.db)
-	err := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "event_id"}},
-		DoNothing: true,
-	}).Create(&models).Error
-	if err != nil {
-		return fmt.Errorf("create outbox records batch: %w", err)
 	}
 	return nil
 }
@@ -116,11 +82,16 @@ func (r *GORMOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 	for i := range models {
 		m := &models[i]
 		records = append(records, &port.OutboxRecord{
-			ID:           m.ID,
-			EventID:      m.EventID,
-			EventType:    m.EventType,
-			Payload:      m.Payload,
-			PartitionKey: m.PartitionKey,
+			ID:            m.ID,
+			EventID:       m.EventID,
+			AggregateType: m.AggregateType,
+			AggregateID:   m.AggregateID,
+			EventType:     m.EventType,
+			Payload:       m.Payload,
+			PartitionKey:  m.PartitionKey,
+			Published:     m.Published,
+			CreatedAt:     m.CreatedAt,
+			PublishedAt:   m.PublishedAt,
 		})
 	}
 	return records, nil
@@ -185,11 +156,16 @@ func (r *GORMOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDu
 	for i := range claimedModels {
 		m := &claimedModels[i]
 		records = append(records, &port.OutboxRecord{
-			ID:           m.ID,
-			EventID:      m.EventID,
-			EventType:    m.EventType,
-			Payload:      m.Payload,
-			PartitionKey: m.PartitionKey,
+			ID:            m.ID,
+			EventID:       m.EventID,
+			AggregateType: m.AggregateType,
+			AggregateID:   m.AggregateID,
+			EventType:     m.EventType,
+			Payload:       m.Payload,
+			PartitionKey:  m.PartitionKey,
+			Published:     m.Published,
+			CreatedAt:     m.CreatedAt,
+			PublishedAt:   m.PublishedAt,
 		})
 	}
 	return records, nil
@@ -212,4 +188,30 @@ func (r *GORMOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 		return fmt.Errorf("mark outbox as published: %w", err)
 	}
 	return nil
+}
+
+// ProcessBatch claims unpublished outbox events, invokes publishFn with the batch outside
+// the database transaction, and marks the batch as published upon success.
+func (r *GORMOutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	records, err := r.ClaimBatch(ctx, limit, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return nil
+	}
+
+	if err := publishFn(ctx, records); err != nil {
+		return fmt.Errorf("publish outbox batch: %w", err)
+	}
+
+	ids := make([]string, len(records))
+	for i, rec := range records {
+		ids[i] = rec.ID
+	}
+	return r.MarkAsPublished(ctx, ids)
 }

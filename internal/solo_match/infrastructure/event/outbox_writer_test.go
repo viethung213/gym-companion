@@ -19,11 +19,6 @@ func (m *mockOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 	return nil
 }
 
-func (m *mockOutboxRepository) SaveBatch(ctx context.Context, records []*port.OutboxRecord) error {
-	m.savedRecords = append(m.savedRecords, records...)
-	return nil
-}
-
 func (m *mockOutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*port.OutboxRecord, error) {
 	return nil, nil
 }
@@ -33,6 +28,10 @@ func (m *mockOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDu
 }
 
 func (m *mockOutboxRepository) MarkAsPublished(ctx context.Context, ids []string) error {
+	return nil
+}
+
+func (m *mockOutboxRepository) ProcessBatch(ctx context.Context, batchSize int, fn func(context.Context, []*port.OutboxRecord) error) error {
 	return nil
 }
 

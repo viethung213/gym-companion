@@ -33,6 +33,8 @@ func setupOutboxRepoTestDB(t *testing.T) *gorm.DB {
 		CREATE TABLE IF NOT EXISTS solo_match.outbox (
 			id TEXT PRIMARY KEY,
 			event_id TEXT UNIQUE,
+			aggregate_type TEXT,
+			aggregate_id TEXT,
 			event_type TEXT,
 			payload BLOB,
 			partition_key TEXT,
@@ -103,42 +105,6 @@ func TestGORMOutboxRepository_Save(t *testing.T) {
 		err = repo.Save(ctx, rec)
 		if err != nil {
 			t.Fatalf("duplicate save should do nothing without error, got: %v", err)
-		}
-	})
-}
-
-func TestGORMOutboxRepository_SaveBatch(t *testing.T) {
-	db := setupOutboxRepoTestDB(t)
-	repo := persistence.NewGORMOutboxRepository(db)
-	ctx := context.Background()
-
-	t.Run("returns nil for empty slice", func(t *testing.T) {
-		err := repo.SaveBatch(ctx, nil)
-		if err != nil {
-			t.Fatalf("SaveBatch(nil) err: %v", err)
-		}
-		err = repo.SaveBatch(ctx, []*port.OutboxRecord{})
-		if err != nil {
-			t.Fatalf("SaveBatch([]) err: %v", err)
-		}
-	})
-
-	t.Run("saves batch of records with auto-generated IDs", func(t *testing.T) {
-		batch := []*port.OutboxRecord{
-			{ID: "batch_1", EventID: "evt_b_1", EventType: "test.evt1", Payload: []byte(`{}`), PartitionKey: "k1"},
-			{EventType: "test.evt2", Payload: []byte(`{}`), PartitionKey: "k2"}, // empty IDs
-		}
-		err := repo.SaveBatch(ctx, batch)
-		if err != nil {
-			t.Fatalf("SaveBatch failed: %v", err)
-		}
-
-		unpub, err := repo.FetchUnpublished(ctx, 10)
-		if err != nil {
-			t.Fatalf("fetch unpublished: %v", err)
-		}
-		if len(unpub) != 2 {
-			t.Fatalf("expected 2 records, got %d", len(unpub))
 		}
 	})
 }

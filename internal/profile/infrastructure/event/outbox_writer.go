@@ -42,21 +42,21 @@ func (w *OutboxWriter) PublishEvents(ctx context.Context, events []any) error {
 func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 	switch e := ev.(type) {
 	case *domainEvent.ProfileCompletedEvent:
-		return w.publishProfileCompleted(ctx, e)
+		return w.recordProfileCompleted(ctx, e)
 	case *domainEvent.ProfileUpdatedEvent:
-		return w.publishProfileUpdated(ctx, e)
+		return w.recordProfileUpdated(ctx, e)
 	case *domainEvent.InjuryReportedEvent:
-		return w.publishInjuryReported(ctx, e)
+		return w.recordInjuryReported(ctx, e)
 	case *domainEvent.InjuryRecoveredEvent:
-		return w.publishInjuryRecovered(ctx, e)
+		return w.recordInjuryRecovered(ctx, e)
 	case *domainEvent.UserIdentityUpdatedEvent:
-		return w.publishUserIdentityUpdated(ctx, e)
+		return w.recordUserIdentityUpdated(ctx, e)
 	default:
 		return fmt.Errorf("unsupported profile domain event: %T", ev)
 	}
 }
 
-func (w *OutboxWriter) publishProfileUpdated(ctx context.Context, ev *domainEvent.ProfileUpdatedEvent) error {
+func (w *OutboxWriter) recordProfileUpdated(ctx context.Context, ev *domainEvent.ProfileUpdatedEvent) error {
 	bio := ev.BiologicalMetrics()
 	dobStr := ""
 	if !bio.DateOfBirth().IsZero() {
@@ -79,36 +79,10 @@ func (w *OutboxWriter) publishProfileUpdated(ctx context.Context, ev *domainEven
 		return fmt.Errorf("marshal ProfileUpdated payload proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
-	eventType := "contracts.supporting.profile.v1.event.ProfileUpdated"
-
-	cloudEvent := map[string]interface{}{
-		"specversion":     "1.0",
-		"id":              eventID,
-		"source":          "services/profile-service",
-		"type":            eventType,
-		"time":            ev.UpdatedAt().Format(time.RFC3339),
-		"datacontenttype": "application/json",
-		"data":            json.RawMessage(payloadBytes),
-	}
-
-	cloudEventBytes, err := json.Marshal(cloudEvent)
-	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
-	}
-
-	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: ev.UserID(),
-	}
-
-	return w.outboxRepo.Save(ctx, record)
+	return w.writeCloudEvent(ctx, "UserProfile", ev.UserID(), "contracts.supporting.profile.v1.event.ProfileUpdated", ev.UserID(), ev.UpdatedAt(), payloadBytes)
 }
 
-func (w *OutboxWriter) publishProfileCompleted(ctx context.Context, ev *domainEvent.ProfileCompletedEvent) error {
+func (w *OutboxWriter) recordProfileCompleted(ctx context.Context, ev *domainEvent.ProfileCompletedEvent) error {
 	bio := ev.BiologicalMetrics()
 	registeredInjuries := make([]string, 0, len(ev.Injuries()))
 	for _, inj := range ev.Injuries() {
@@ -134,36 +108,11 @@ func (w *OutboxWriter) publishProfileCompleted(ctx context.Context, ev *domainEv
 		return fmt.Errorf("marshal ProfileCompleted payload proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
 	eventType := "contracts.supporting.profile.v1.event.ProfileCompleted"
-
-	cloudEvent := map[string]interface{}{
-		"specversion":     "1.0",
-		"id":              eventID,
-		"source":          "services/profile-service",
-		"type":            eventType,
-		"time":            ev.CompletedAt().Format(time.RFC3339),
-		"datacontenttype": "application/json",
-		"data":            json.RawMessage(payloadBytes),
-	}
-
-	cloudEventBytes, err := json.Marshal(cloudEvent)
-	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
-	}
-
-	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: ev.UserID(),
-	}
-
-	return w.outboxRepo.Save(ctx, record)
+	return w.writeCloudEvent(ctx, "UserProfile", ev.UserID(), eventType, ev.UserID(), ev.CompletedAt(), payloadBytes)
 }
 
-func (w *OutboxWriter) publishInjuryReported(ctx context.Context, ev *domainEvent.InjuryReportedEvent) error {
+func (w *OutboxWriter) recordInjuryReported(ctx context.Context, ev *domainEvent.InjuryReportedEvent) error {
 	inj := ev.Injury()
 	payloadProto := &profilev1event.InjuryReported{
 		UserId: ev.UserID(),
@@ -181,36 +130,10 @@ func (w *OutboxWriter) publishInjuryReported(ctx context.Context, ev *domainEven
 		return fmt.Errorf("marshal InjuryReported payload proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
-	eventType := "contracts.supporting.profile.v1.event.InjuryReported"
-
-	cloudEvent := map[string]interface{}{
-		"specversion":     "1.0",
-		"id":              eventID,
-		"source":          "services/profile-service",
-		"type":            eventType,
-		"time":            ev.OccurredAt().Format(time.RFC3339),
-		"datacontenttype": "application/json",
-		"data":            json.RawMessage(payloadBytes),
-	}
-
-	cloudEventBytes, err := json.Marshal(cloudEvent)
-	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
-	}
-
-	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: ev.UserID(),
-	}
-
-	return w.outboxRepo.Save(ctx, record)
+	return w.writeCloudEvent(ctx, "UserProfile", ev.UserID(), "contracts.supporting.profile.v1.event.InjuryReported", ev.UserID(), ev.OccurredAt(), payloadBytes)
 }
 
-func (w *OutboxWriter) publishInjuryRecovered(ctx context.Context, ev *domainEvent.InjuryRecoveredEvent) error {
+func (w *OutboxWriter) recordInjuryRecovered(ctx context.Context, ev *domainEvent.InjuryRecoveredEvent) error {
 	inj := ev.Injury()
 	payloadProto := &profilev1event.InjuryRecoveredData{
 		UserId:      ev.UserID(),
@@ -224,36 +147,10 @@ func (w *OutboxWriter) publishInjuryRecovered(ctx context.Context, ev *domainEve
 		return fmt.Errorf("marshal InjuryRecovered payload proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
-	eventType := "contracts.supporting.profile.v1.event.InjuryRecovered"
-
-	cloudEvent := map[string]interface{}{
-		"specversion":     "1.0",
-		"id":              eventID,
-		"source":          "services/profile-service",
-		"type":            eventType,
-		"time":            ev.RecoveredAt().Format(time.RFC3339),
-		"datacontenttype": "application/json",
-		"data":            json.RawMessage(payloadBytes),
-	}
-
-	cloudEventBytes, err := json.Marshal(cloudEvent)
-	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
-	}
-
-	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: ev.UserID(),
-	}
-
-	return w.outboxRepo.Save(ctx, record)
+	return w.writeCloudEvent(ctx, "UserProfile", ev.UserID(), "contracts.supporting.profile.v1.event.InjuryRecovered", ev.UserID(), ev.RecoveredAt(), payloadBytes)
 }
 
-func (w *OutboxWriter) publishUserIdentityUpdated(ctx context.Context, ev *domainEvent.UserIdentityUpdatedEvent) error {
+func (w *OutboxWriter) recordUserIdentityUpdated(ctx context.Context, ev *domainEvent.UserIdentityUpdatedEvent) error {
 	payloadProto := &profilev1event.UserIdentityUpdated{
 		UserId:    ev.UserID(),
 		FullName:  ev.FullName(),
@@ -266,15 +163,28 @@ func (w *OutboxWriter) publishUserIdentityUpdated(ctx context.Context, ev *domai
 		return fmt.Errorf("marshal UserIdentityUpdated payload proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
 	eventType := "contracts.supporting.profile.v1.event.UserIdentityUpdated"
+	return w.writeCloudEvent(ctx, "UserProfile", ev.UserID(), eventType, ev.UserID(), ev.UpdatedAt(), payloadBytes)
+}
+
+func (w *OutboxWriter) writeCloudEvent(
+	ctx context.Context,
+	aggregateType, aggregateID, eventType, partitionKey string,
+	occurredAt time.Time,
+	payloadBytes []byte,
+) error {
+	eventID := uuid.New().String()
+	now := occurredAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 
 	cloudEvent := map[string]interface{}{
 		"specversion":     "1.0",
 		"id":              eventID,
 		"source":          "services/profile-service",
 		"type":            eventType,
-		"time":            ev.UpdatedAt().Format(time.RFC3339),
+		"time":            now.Format(time.RFC3339),
 		"datacontenttype": "application/json",
 		"data":            json.RawMessage(payloadBytes),
 	}
@@ -285,11 +195,15 @@ func (w *OutboxWriter) publishUserIdentityUpdated(ctx context.Context, ev *domai
 	}
 
 	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      cloudEventBytes,
-		PartitionKey: ev.UserID(),
+		ID:            uuid.New().String(),
+		EventID:       eventID,
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		Payload:       cloudEventBytes,
+		PartitionKey:  partitionKey,
+		Published:     false,
+		CreatedAt:     now,
 	}
 
 	return w.outboxRepo.Save(ctx, record)

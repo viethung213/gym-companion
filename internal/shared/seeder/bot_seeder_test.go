@@ -64,6 +64,8 @@ func setupTestDatabase(t *testing.T) (*sql.DB, *gorm.DB) {
 		CREATE TABLE IF NOT EXISTS auth.outbox (
 			id TEXT PRIMARY KEY,
 			event_id TEXT NOT NULL UNIQUE,
+			aggregate_type TEXT,
+			aggregate_id TEXT,
 			event_type TEXT NOT NULL,
 			payload TEXT NOT NULL,
 			partition_key TEXT NOT NULL,

@@ -38,19 +38,15 @@ func (r *OutboxRepository) Save(ctx context.Context, rec *port.OutboxRecord) err
 	}
 
 	obr := outboxRecord{
-		ID: rec.ID,
-
-		EventID: rec.EventID,
-
-		EventType: rec.EventType,
-
-		Payload: rec.Payload,
-
-		PartitionKey: rec.PartitionKey,
-
-		CreatedAt: rec.CreatedAt,
-
-		Published: rec.Published,
+		ID:            rec.ID,
+		EventID:       rec.EventID,
+		AggregateType: rec.AggregateType,
+		AggregateID:   rec.AggregateID,
+		EventType:     rec.EventType,
+		Payload:       rec.Payload,
+		PartitionKey:  rec.PartitionKey,
+		CreatedAt:     rec.CreatedAt,
+		Published:     rec.Published,
 	}
 
 	if err := r.getDB(ctx).Create(&obr).Error; err != nil {
@@ -79,14 +75,21 @@ func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*
 	out := make([]*port.OutboxRecord, 0, len(recs))
 
 	for i := range recs {
+		var pubAt *time.Time
+		if recs[i].PublishedAt.Valid {
+			pubAt = &recs[i].PublishedAt.Time
+		}
 		out = append(out, &port.OutboxRecord{
-			ID:           recs[i].ID,
-			EventID:      recs[i].EventID,
-			EventType:    recs[i].EventType,
-			Payload:      recs[i].Payload,
-			PartitionKey: recs[i].PartitionKey,
-			CreatedAt:    recs[i].CreatedAt,
-			Published:    recs[i].Published,
+			ID:            recs[i].ID,
+			EventID:       recs[i].EventID,
+			AggregateType: recs[i].AggregateType,
+			AggregateID:   recs[i].AggregateID,
+			EventType:     recs[i].EventType,
+			Payload:       recs[i].Payload,
+			PartitionKey:  recs[i].PartitionKey,
+			CreatedAt:     recs[i].CreatedAt,
+			Published:     recs[i].Published,
+			PublishedAt:   pubAt,
 		})
 	}
 
@@ -164,14 +167,16 @@ func (r *OutboxRepository) ClaimBatch(
 				pubAt = &rec.PublishedAt.Time
 			}
 			records[i] = &port.OutboxRecord{
-				ID:           rec.ID,
-				EventID:      rec.EventID,
-				EventType:    rec.EventType,
-				Payload:      rec.Payload,
-				PartitionKey: rec.PartitionKey,
-				CreatedAt:    rec.CreatedAt,
-				Published:    rec.Published,
-				PublishedAt:  pubAt,
+				ID:            rec.ID,
+				EventID:       rec.EventID,
+				AggregateType: rec.AggregateType,
+				AggregateID:   rec.AggregateID,
+				EventType:     rec.EventType,
+				Payload:       rec.Payload,
+				PartitionKey:  rec.PartitionKey,
+				CreatedAt:     rec.CreatedAt,
+				Published:     rec.Published,
+				PublishedAt:   pubAt,
 			}
 			ids[i] = rec.ID
 		}

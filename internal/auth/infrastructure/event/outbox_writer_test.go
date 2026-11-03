@@ -22,6 +22,16 @@ type savedEventRecord struct {
 	PartitionKey string
 }
 
+func (m *mockOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
+	m.savedEvents = append(m.savedEvents, savedEventRecord{
+		EventID:      record.EventID,
+		EventType:    record.EventType,
+		Payload:      record.Payload,
+		PartitionKey: record.PartitionKey,
+	})
+	return nil
+}
+
 func (m *mockOutboxRepository) SaveEvent(ctx context.Context, eventID string, eventType string, payload []byte, partitionKey string) error {
 	m.savedEvents = append(m.savedEvents, savedEventRecord{
 		EventID:      eventID,

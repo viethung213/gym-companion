@@ -24,7 +24,8 @@ func (p *Publisher) PublishBatch(ctx context.Context, records []port.OutboxRecor
 	}
 
 	messages := make([]segmentio.Message, 0, len(records))
-	for _, rec := range records {
+	for i := range records {
+		rec := &records[i]
 		messages = append(messages, segmentio.Message{
 			Key:   []byte(rec.PartitionKey),
 			Value: rec.Payload,

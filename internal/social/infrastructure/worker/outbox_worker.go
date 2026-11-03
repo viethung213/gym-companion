@@ -6,18 +6,17 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/application/port"
-	"github.com/viethung213/gym-companion/internal/social/infrastructure/kafka"
 )
 
 type OutboxWorker struct {
 	outboxRepo port.OutboxRepository
-	publisher  *kafka.Publisher
+	publisher  port.BrokerPublisher
 	interval   time.Duration
 }
 
 func NewOutboxWorker(
 	outboxRepo port.OutboxRepository,
-	publisher *kafka.Publisher,
+	publisher port.BrokerPublisher,
 	interval time.Duration,
 ) *OutboxWorker {
 	return &OutboxWorker{
@@ -47,22 +46,7 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 }
 
 func (w *OutboxWorker) processOutbox(ctx context.Context) error {
-	records, err := w.outboxRepo.ClaimBatch(ctx, 50, 10*time.Second)
-	if err != nil {
-		return err
-	}
-	if len(records) == 0 {
-		return nil
-	}
-
-	if err := w.publisher.PublishBatch(ctx, records); err != nil {
-		return err
-	}
-
-	ids := make([]string, len(records))
-	for i, r := range records {
-		ids[i] = r.ID
-	}
-
-	return w.outboxRepo.MarkAsPublished(ctx, ids)
+	return w.outboxRepo.ProcessBatch(ctx, 50, func(publishCtx context.Context, records []*port.OutboxRecord) error {
+		return w.publisher.PublishBatch(publishCtx, records)
+	})
 }

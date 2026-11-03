@@ -16,6 +16,11 @@ type mockOutboxRepository struct {
 	publishedMap map[string]bool
 }
 
+func (m *mockOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
+	m.events = append(m.events, record)
+	return nil
+}
+
 func (m *mockOutboxRepository) SaveEvent(ctx context.Context, eventID string, eventType string, payload []byte, partitionKey string) error {
 	e := &port.OutboxRecord{
 		ID:           eventID, // simplify mock using eventID as record ID

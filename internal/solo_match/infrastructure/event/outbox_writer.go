@@ -3,6 +3,7 @@ package event
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
@@ -48,12 +49,37 @@ func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 		return fmt.Errorf("pack cloudevent for %s: %w", dev.EventName(), err)
 	}
 
+	aggregateType := "SoloMatch"
+	var aggregateID string
+	switch e := dev.(type) {
+	case *domainEvent.SoloMatchStarted:
+		aggregateID = e.MatchID
+	case *domainEvent.SoloMatchCompleted:
+		aggregateID = e.MatchID
+	case *domainEvent.SoloMatchForfeited:
+		aggregateID = e.MatchID
+	case *domainEvent.SoloMatchCancelled:
+		aggregateID = e.MatchID
+	}
+	if aggregateID == "" {
+		aggregateID = partitionKey
+	}
+
+	createdAt := dev.OccurredAt()
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+
 	record := &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      payload,
-		PartitionKey: partitionKey,
+		ID:            uuid.New().String(),
+		EventID:       eventID,
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		Payload:       payload,
+		PartitionKey:  partitionKey,
+		Published:     false,
+		CreatedAt:     createdAt,
 	}
 
 	return w.outboxRepo.Save(ctx, record)

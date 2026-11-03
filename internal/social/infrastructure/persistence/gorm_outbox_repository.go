@@ -37,15 +37,22 @@ func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 	}
 
 	status := "PENDING"
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	m := &OutboxModel{
-		ID:           id,
-		EventID:      eventID,
-		EventType:    record.EventType,
-		Payload:      record.Payload,
-		PartitionKey: record.PartitionKey,
-		CreatedAt:    time.Now().UTC(),
-		Published:    false,
-		Status:       status,
+		ID:            id,
+		EventID:       eventID,
+		AggregateType: record.AggregateType,
+		AggregateID:   record.AggregateID,
+		EventType:     record.EventType,
+		Payload:       record.Payload,
+		PartitionKey:  record.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     record.Published,
+		PublishedAt:   record.PublishedAt,
+		Status:        status,
 	}
 
 	db := getDB(ctx, r.db)
@@ -73,11 +80,16 @@ func (r *GormOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 	records := make([]*port.OutboxRecord, 0, len(models))
 	for _, m := range models {
 		records = append(records, &port.OutboxRecord{
-			ID:           m.ID,
-			EventID:      m.EventID,
-			EventType:    m.EventType,
-			Payload:      m.Payload,
-			PartitionKey: m.PartitionKey,
+			ID:            m.ID,
+			EventID:       m.EventID,
+			AggregateType: m.AggregateType,
+			AggregateID:   m.AggregateID,
+			EventType:     m.EventType,
+			Payload:       m.Payload,
+			PartitionKey:  m.PartitionKey,
+			Published:     m.Published,
+			CreatedAt:     m.CreatedAt,
+			PublishedAt:   m.PublishedAt,
 		})
 	}
 	return records, nil
@@ -141,11 +153,16 @@ func (r *GormOutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDu
 	records := make([]*port.OutboxRecord, 0, len(claimedModels))
 	for _, m := range claimedModels {
 		records = append(records, &port.OutboxRecord{
-			ID:           m.ID,
-			EventID:      m.EventID,
-			EventType:    m.EventType,
-			Payload:      m.Payload,
-			PartitionKey: m.PartitionKey,
+			ID:            m.ID,
+			EventID:       m.EventID,
+			AggregateType: m.AggregateType,
+			AggregateID:   m.AggregateID,
+			EventType:     m.EventType,
+			Payload:       m.Payload,
+			PartitionKey:  m.PartitionKey,
+			Published:     m.Published,
+			CreatedAt:     m.CreatedAt,
+			PublishedAt:   m.PublishedAt,
 		})
 	}
 	return records, nil
@@ -167,4 +184,30 @@ func (r *GormOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 		return fmt.Errorf("mark outbox as published: %w", err)
 	}
 	return nil
+}
+
+// ProcessBatch claims unpublished outbox events, invokes publishFn with the batch outside
+// the database transaction, and marks the batch as published upon success.
+func (r *GormOutboxRepository) ProcessBatch(
+	ctx context.Context,
+	limit int,
+	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
+) error {
+	records, err := r.ClaimBatch(ctx, limit, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return nil
+	}
+
+	if err := publishFn(ctx, records); err != nil {
+		return fmt.Errorf("publish outbox batch: %w", err)
+	}
+
+	ids := make([]string, len(records))
+	for i, rec := range records {
+		ids[i] = rec.ID
+	}
+	return r.MarkAsPublished(ctx, ids)
 }

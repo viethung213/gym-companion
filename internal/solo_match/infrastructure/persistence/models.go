@@ -164,16 +164,18 @@ func FromDomainUserSnapshot(s *entity.UserSnapshot) *UserSnapshotModel {
 
 // OutboxModel ánh xạ bảng solo_match.outbox (Transactional Outbox Pattern với FOR UPDATE SKIP LOCKED)
 type OutboxModel struct {
-	ID           string     `gorm:"primaryKey;column:id"`
-	EventID      string     `gorm:"column:event_id;not null"`
-	EventType    string     `gorm:"column:event_type;not null"`
-	Payload      []byte     `gorm:"column:payload;type:jsonb;not null"`
-	PartitionKey string     `gorm:"column:partition_key;not null"`
-	CreatedAt    time.Time  `gorm:"column:created_at"`
-	Published    bool       `gorm:"column:published;default:false"`
-	PublishedAt  *time.Time `gorm:"column:published_at"`
-	Status       string     `gorm:"column:status;default:'PENDING';not null"`
-	LockedUntil  *time.Time `gorm:"column:locked_until"`
+	ID            string     `gorm:"primaryKey;column:id"`
+	EventID       string     `gorm:"column:event_id;not null"`
+	AggregateType string     `gorm:"column:aggregate_type"`
+	AggregateID   string     `gorm:"column:aggregate_id"`
+	EventType     string     `gorm:"column:event_type;not null"`
+	Payload       []byte     `gorm:"column:payload;type:jsonb;not null"`
+	PartitionKey  string     `gorm:"column:partition_key;not null"`
+	CreatedAt     time.Time  `gorm:"column:created_at"`
+	Published     bool       `gorm:"column:published;default:false"`
+	PublishedAt   *time.Time `gorm:"column:published_at"`
+	Status        string     `gorm:"column:status;default:'PENDING';not null"`
+	LockedUntil   *time.Time `gorm:"column:locked_until"`
 }
 
 func (OutboxModel) TableName() string {

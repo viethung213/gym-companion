@@ -41,7 +41,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			created_at TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.outbox (
-			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, event_type TEXT,
+			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, aggregate_type TEXT, aggregate_id TEXT, event_type TEXT,
 			payload TEXT, partition_key TEXT, created_at TIMESTAMP,
 			published INTEGER DEFAULT 0, published_at TIMESTAMP,
 			locked_until TIMESTAMP, status TEXT

@@ -39,6 +39,8 @@ func getCoachingTestDB(t *testing.T) *gorm.DB {
 		CREATE TABLE IF NOT EXISTS coaching.outbox (
 			id VARCHAR(255) PRIMARY KEY,
 			event_id VARCHAR(255) UNIQUE NOT NULL,
+			aggregate_type VARCHAR(255),
+			aggregate_id VARCHAR(255),
 			event_type VARCHAR(255) NOT NULL,
 			payload JSONB NOT NULL,
 			partition_key VARCHAR(255) NOT NULL,

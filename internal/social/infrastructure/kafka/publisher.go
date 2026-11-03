@@ -13,6 +13,8 @@ type Publisher struct {
 	writer *kafka.Writer
 }
 
+var _ port.BrokerPublisher = (*Publisher)(nil)
+
 func NewPublisher(writer *kafka.Writer, notifWriters ...*kafka.Writer) *Publisher {
 	w := writer
 	if len(notifWriters) > 0 && notifWriters[0] != nil {
