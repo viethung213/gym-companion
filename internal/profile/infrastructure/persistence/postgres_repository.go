@@ -24,17 +24,13 @@ func NewPostgresUserProfileRepository(db *gorm.DB) *PostgresUserProfileRepositor
 	return &PostgresUserProfileRepository{db: db}
 }
 
-func (r *PostgresUserProfileRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 func (r *PostgresUserProfileRepository) Save(ctx context.Context, profile *aggregate.UserProfile) error {
 	userModel, metricModels, injuryModels, err := ToPersistenceModels(profile)
 	if err != nil {
 		return fmt.Errorf("map domain to persistence: %w", err)
 	}
 
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(userModel).Error; err != nil {
 		return fmt.Errorf("save user profile model: %w", err)
 	}
@@ -55,7 +51,7 @@ func (r *PostgresUserProfileRepository) Save(ctx context.Context, profile *aggre
 }
 
 func (r *PostgresUserProfileRepository) FindByUserID(ctx context.Context, userID string) (*aggregate.UserProfile, error) {
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	var userModel UserProfileModel
 	if err := db.First(&userModel, "user_id = ?", userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -84,7 +80,7 @@ func (r *PostgresUserProfileRepository) FindByUserID(ctx context.Context, userID
 }
 
 func (r *PostgresUserProfileRepository) FindBodyMetricsHistory(ctx context.Context, userID string) ([]vo.PeriodicMetric, error) {
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	var metricModels []*BodyMetricModel
 	if err := db.Order("logged_at DESC").Find(&metricModels, "user_id = ?", userID).Error; err != nil {
 		return nil, fmt.Errorf("query body metrics history: %w", err)
@@ -102,7 +98,7 @@ func (r *PostgresUserProfileRepository) FindBodyMetricsHistory(ctx context.Conte
 }
 
 func (r *PostgresUserProfileRepository) FindInjuryHistory(ctx context.Context, userID string) ([]*entity.Injury, error) {
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	var injuryModels []*InjuryModel
 	if err := db.Order("reported_at DESC").Find(&injuryModels, "user_id = ?", userID).Error; err != nil {
 		return nil, fmt.Errorf("query injury history: %w", err)

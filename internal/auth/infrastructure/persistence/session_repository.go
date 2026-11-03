@@ -27,10 +27,6 @@ func NewSessionRepository(db *gorm.DB) *SessionRepository {
 	return &SessionRepository{db: db}
 }
 
-func (r *SessionRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 // Save inserts or updates a session token.
 func (r *SessionRepository) Save(ctx context.Context, token string, userID string, expiresAt time.Time) error {
 	dbSess := &SessionModel{
@@ -39,7 +35,7 @@ func (r *SessionRepository) Save(ctx context.Context, token string, userID strin
 		CreatedAt: time.Now(),
 		ExpiresAt: expiresAt,
 	}
-	err := r.getDB(ctx).Clauses(clause.OnConflict{
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "token"}},
 		DoUpdates: clause.AssignmentColumns([]string{"expires_at"}),
 	}).Create(dbSess).Error
@@ -56,7 +52,7 @@ func (r *SessionRepository) FindByToken(
 	token string,
 ) (*port.SessionRecord, error) {
 	var dbSess SessionModel
-	err := r.getDB(ctx).First(&dbSess, "token = ?", hashToken(token)).Error
+	err := GetDB(ctx, r.db).First(&dbSess, "token = ?", hashToken(token)).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperror.ErrSessionNotFound
@@ -68,7 +64,7 @@ func (r *SessionRepository) FindByToken(
 
 // Delete removes a session token.
 func (r *SessionRepository) Delete(ctx context.Context, token string) error {
-	tx := r.getDB(ctx).Where("token = ?", hashToken(token)).Delete(&SessionModel{})
+	tx := GetDB(ctx, r.db).Where("token = ?", hashToken(token)).Delete(&SessionModel{})
 	if tx.Error != nil {
 		return fmt.Errorf("gorm delete session: %w", tx.Error)
 	}
@@ -85,7 +81,7 @@ func hashToken(token string) string {
 
 // DeleteAllByUserID revokes all active sessions for a user (e.g. force logout).
 func (r *SessionRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
-	err := r.getDB(ctx).Where("user_id = ?", userID).Delete(&SessionModel{}).Error
+	err := GetDB(ctx, r.db).Where("user_id = ?", userID).Delete(&SessionModel{}).Error
 	if err != nil {
 		return fmt.Errorf("gorm delete all user sessions: %w", err)
 	}

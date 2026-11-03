@@ -53,14 +53,10 @@ func (m *OTPModel) ToDomain() *entity.OTP {
 	)
 }
 
-func (r *OTPRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 // Save inserts a new OTP record.
 func (r *OTPRepository) Save(ctx context.Context, otp *entity.OTP) error {
 	m := toOTPModel(otp)
-	if err := r.getDB(ctx).Create(m).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(m).Error; err != nil {
 		return fmt.Errorf("failed to save otp: %w", err)
 	}
 	return nil
@@ -69,7 +65,7 @@ func (r *OTPRepository) Save(ctx context.Context, otp *entity.OTP) error {
 // FindByID retrieves an OTP record by its ID (otp_token).
 func (r *OTPRepository) FindByID(ctx context.Context, id string) (*entity.OTP, error) {
 	var m OTPModel
-	err := r.getDB(ctx).Where("id = ?", id).First(&m).Error
+	err := GetDB(ctx, r.db).Where("id = ?", id).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrNotFound
@@ -82,7 +78,7 @@ func (r *OTPRepository) FindByID(ctx context.Context, id string) (*entity.OTP, e
 // FindLatestActive finds the most recent active OTP for an identifier and purpose.
 func (r *OTPRepository) FindLatestActive(ctx context.Context, identifier string, purpose string) (*entity.OTP, error) {
 	var m OTPModel
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Where("identifier = ? AND purpose = ? AND is_used = ?", identifier, purpose, false).
 		Order("created_at DESC").
 		First(&m).Error
@@ -98,7 +94,7 @@ func (r *OTPRepository) FindLatestActive(ctx context.Context, identifier string,
 // Update updates an existing OTP record.
 func (r *OTPRepository) Update(ctx context.Context, otp *entity.OTP) error {
 	m := toOTPModel(otp)
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Model(&OTPModel{}).
 		Where("id = ?", m.ID).
 		Updates(map[string]interface{}{

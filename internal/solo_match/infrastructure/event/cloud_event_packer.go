@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	solomatchv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/event"
 	domainEvent "github.com/viethung213/gym-companion/internal/solo_match/domain/event"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // CloudEventEnvelope tuân thủ đặc tả CloudEvents 1.0 JSON format
@@ -38,52 +41,56 @@ func PackCloudEvent(ev domainEvent.DomainEvent) (eventID, eventType string, payl
 	switch e := ev.(type) {
 	case *domainEvent.SoloMatchStarted:
 		partitionKey = e.Player1ID
-		dataBytes, err = json.Marshal(map[string]any{
-			"matchId":       e.MatchID,
-			"exerciseId":    e.ExerciseID,
-			"exerciseName":  e.ExerciseName,
-			"challengeType": e.ChallengeType,
-			"player1Id":     e.Player1ID,
-			"player2Id":     e.Player2ID,
-			"botUserId":     e.BotUserID,
-			"startedAt":     e.StartedAt.Format(time.RFC3339),
-		})
+		protoMsg := &solomatchv1event.SoloMatchStarted{
+			MatchId:       e.MatchID,
+			ExerciseId:    e.ExerciseID,
+			ExerciseName:  e.ExerciseName,
+			ChallengeType: e.ChallengeType,
+			Player1Id:     e.Player1ID,
+			Player2Id:     e.Player2ID,
+			BotUserId:     e.BotUserID,
+			StartedAt:     timestamppb.New(e.StartedAt),
+		}
+		dataBytes, err = protojson.Marshal(protoMsg)
 	case *domainEvent.SoloMatchCompleted:
 		if e.WinnerID != "" {
 			partitionKey = e.WinnerID
 		} else {
 			partitionKey = e.Player1ID
 		}
-		dataBytes, err = json.Marshal(map[string]any{
-			"matchId":       e.MatchID,
-			"exerciseId":    e.ExerciseID,
-			"challengeType": e.ChallengeType,
-			"winnerId":      e.WinnerID,
-			"isDraw":        e.IsDraw,
-			"player1Id":     e.Player1ID,
-			"player1Score":  e.Player1Score,
-			"player2Id":     e.Player2ID,
-			"player2Score":  e.Player2Score,
-			"botUserId":     e.BotUserID,
-			"completedAt":   e.CompletedAt.Format(time.RFC3339),
-		})
+		protoMsg := &solomatchv1event.SoloMatchCompleted{
+			MatchId:       e.MatchID,
+			ExerciseId:    e.ExerciseID,
+			ChallengeType: e.ChallengeType,
+			WinnerId:      e.WinnerID,
+			IsDraw:        e.IsDraw,
+			Player1Id:     e.Player1ID,
+			Player1Score:  float32(e.Player1Score),
+			Player2Id:     e.Player2ID,
+			Player2Score:  float32(e.Player2Score),
+			BotUserId:     e.BotUserID,
+			CompletedAt:   timestamppb.New(e.CompletedAt),
+		}
+		dataBytes, err = protojson.Marshal(protoMsg)
 	case *domainEvent.SoloMatchForfeited:
 		partitionKey = e.ForfeitedByID
-		dataBytes, err = json.Marshal(map[string]any{
-			"matchId":       e.MatchID,
-			"forfeitedById": e.ForfeitedByID,
-			"winnerId":      e.WinnerID,
-			"botUserId":     e.BotUserID,
-			"reason":        e.Reason,
-			"forfeitedAt":   e.ForfeitedAt.Format(time.RFC3339),
-		})
+		protoMsg := &solomatchv1event.SoloMatchForfeited{
+			MatchId:       e.MatchID,
+			ForfeitedById: e.ForfeitedByID,
+			WinnerId:      e.WinnerID,
+			BotUserId:     e.BotUserID,
+			Reason:        e.Reason,
+			ForfeitedAt:   timestamppb.New(e.ForfeitedAt),
+		}
+		dataBytes, err = protojson.Marshal(protoMsg)
 	case *domainEvent.SoloMatchCancelled:
 		partitionKey = e.MatchID
-		dataBytes, err = json.Marshal(map[string]any{
-			"matchId":     e.MatchID,
-			"reason":      e.Reason,
-			"cancelledAt": e.CancelledAt.Format(time.RFC3339),
-		})
+		protoMsg := &solomatchv1event.SoloMatchCancelled{
+			MatchId:     e.MatchID,
+			Reason:      e.Reason,
+			CancelledAt: timestamppb.New(e.CancelledAt),
+		}
+		dataBytes, err = protojson.Marshal(protoMsg)
 	default:
 		// Fallback mặc định
 		partitionKey = "default"

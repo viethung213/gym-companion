@@ -21,15 +21,11 @@ func NewGormOutboxLogRepository(db *gorm.DB) *GormOutboxLogRepository {
 	return &GormOutboxLogRepository{db: db}
 }
 
-func (r *GormOutboxLogRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 func (r *GormOutboxLogRepository) IsProcessed(ctx context.Context, eventID string) (bool, error) {
 	if eventID == "" {
 		return false, nil
 	}
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	var logModel OutboxLogModel
 	err := db.Where("event_id = ? AND status = ?", eventID, "PROCESSED").First(&logModel).Error
 	if err != nil {
@@ -52,7 +48,7 @@ func (r *GormOutboxLogRepository) SaveLog(ctx context.Context, logRecord *port.O
 		Status:       logRecord.Status,
 		ErrorMessage: logRecord.ErrorMessage,
 	}
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(m).Error; err != nil {
 		return fmt.Errorf("save outbox log model: %w", err)
 	}

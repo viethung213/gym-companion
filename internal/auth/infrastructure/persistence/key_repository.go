@@ -24,14 +24,10 @@ func NewKeyRepository(db *gorm.DB) *KeyRepository {
 	return &KeyRepository{db: db}
 }
 
-func (r *KeyRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 // Save inserts a new JWK record.
 func (r *KeyRepository) Save(ctx context.Context, k *port.JWKRecord) error {
 	dbKey := toJSONWebKeyModel(k)
-	if err := r.getDB(ctx).Create(dbKey).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(dbKey).Error; err != nil {
 		return fmt.Errorf("gorm save key: %w", err)
 	}
 	return nil
@@ -40,7 +36,7 @@ func (r *KeyRepository) Save(ctx context.Context, k *port.JWKRecord) error {
 // GetActiveKey retrieves the currently active signing key.
 func (r *KeyRepository) GetActiveKey(ctx context.Context) (*port.JWKRecord, error) {
 	var dbKey JSONWebKeyModel
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Where("status = ?", port.KeyStatusActive).
 		Order("created_at DESC").
 		First(&dbKey).
@@ -58,7 +54,7 @@ func (r *KeyRepository) GetActiveKey(ctx context.Context) (*port.JWKRecord, erro
 // GetAllActiveAndInactiveKeys returns all keys that can be used for verification (active & inactive).
 func (r *KeyRepository) GetAllActiveAndInactiveKeys(ctx context.Context) ([]*port.JWKRecord, error) {
 	var dbKeys []JSONWebKeyModel
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Where("status IN ?", []string{port.KeyStatusActive, port.KeyStatusInactive}).
 		Order("created_at DESC").
 		Find(&dbKeys).
@@ -77,7 +73,7 @@ func (r *KeyRepository) GetAllActiveAndInactiveKeys(ctx context.Context) ([]*por
 
 // UpdateStatus changes the status of a key.
 func (r *KeyRepository) UpdateStatus(ctx context.Context, id string, status string) error {
-	tx := r.getDB(ctx).
+	tx := GetDB(ctx, r.db).
 		Model(&JSONWebKeyModel{}).
 		Where("id = ?", id).
 		Update("status", status)
@@ -93,7 +89,7 @@ func (r *KeyRepository) UpdateStatus(ctx context.Context, id string, status stri
 
 // DeactivateAllActiveKeys updates all active keys to inactive status.
 func (r *KeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Model(&JSONWebKeyModel{}).
 		Where("status = ?", port.KeyStatusActive).
 		Update("status", port.KeyStatusInactive).
@@ -107,7 +103,7 @@ func (r *KeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
 
 // DeleteExpiredKeys purges inactive keys whose expiration time has passed.
 func (r *KeyRepository) DeleteExpiredKeys(ctx context.Context) error {
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Where("status = ? AND expires_at < ?", port.KeyStatusInactive, time.Now()).
 		Delete(&JSONWebKeyModel{}).
 		Error

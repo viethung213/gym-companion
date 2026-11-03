@@ -26,32 +26,22 @@ func (r *OutboxLogRepository) LogProcessed(
 	payload []byte,
 	status, errMsg string,
 ) (bool, error) {
-	parsedEventUUID, err := uuid.Parse(eventID)
-	if err != nil {
-		parsedEventUUID = uuid.New()
-	}
-
-	id := uuid.New()
-	query := `
-		INSERT INTO notification.outbox_log (
-			id, event_id, event_type, payload, partition_key, processed_at, status, error_message
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`
 	if status == "" {
 		status = "SUCCESS"
 	}
 
-	res := GetDB(ctx, r.db).Exec(
-		query,
-		id,
-		parsedEventUUID,
-		eventType,
-		payload,
-		partitionKey,
-		time.Now().UTC(),
-		status,
-		errMsg,
-	)
+	model := &OutboxLogModel{
+		ID:           uuid.New().String(),
+		EventID:      eventID,
+		EventType:    eventType,
+		Payload:      payload,
+		PartitionKey: partitionKey,
+		ProcessedAt:  time.Now().UTC(),
+		Status:       status,
+		ErrorMessage: errMsg,
+	}
+
+	res := GetDB(ctx, r.db).Create(model)
 	if res.Error != nil {
 		return false, fmt.Errorf("insert notification outbox_log: %w", res.Error)
 	}
@@ -73,32 +63,23 @@ func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLo
 		eventID = uuid.New().String()
 	}
 
-	parsedEventUUID, err := uuid.Parse(eventID)
-	if err != nil {
-		parsedEventUUID = uuid.New()
-	}
-
-	query := `
-		INSERT INTO notification.outbox_log (
-			id, event_id, event_type, payload, partition_key, processed_at, status, error_message
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`
 	processedAt := record.ProcessedAt
 	if processedAt.IsZero() {
 		processedAt = time.Now().UTC()
 	}
 
-	err = GetDB(ctx, r.db).Exec(
-		query,
-		id,
-		parsedEventUUID,
-		record.EventType,
-		record.Payload,
-		record.PartitionKey,
-		processedAt,
-		record.Status,
-		record.ErrorMessage,
-	).Error
+	model := &OutboxLogModel{
+		ID:           id,
+		EventID:      eventID,
+		EventType:    record.EventType,
+		Payload:      record.Payload,
+		PartitionKey: record.PartitionKey,
+		ProcessedAt:  processedAt,
+		Status:       record.Status,
+		ErrorMessage: record.ErrorMessage,
+	}
+
+	err := GetDB(ctx, r.db).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("save outbound log in notification.outbox_log: %w", err)
 	}
@@ -110,50 +91,41 @@ func (r *OutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([
 		limit = 50
 	}
 
-	query := `
-		SELECT id, event_id, event_type, payload, partition_key, processed_at, status, COALESCE(error_message, '')
-		FROM notification.outbox_log
-		WHERE status = 'FAILED'
-		ORDER BY processed_at ASC
-		LIMIT $1
-	`
-	rows, err := GetDB(ctx, r.db).Raw(query, limit).Rows()
+	var models []OutboxLogModel
+	err := GetDB(ctx, r.db).
+		Where("status = ?", "FAILED").
+		Order("processed_at ASC").
+		Limit(limit).
+		Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("query failed notification outbox logs: %w", err)
 	}
-	defer rows.Close()
 
-	var records []*port.OutboxLogRecord
-	for rows.Next() {
-		var rec port.OutboxLogRecord
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.EventID,
-			&rec.EventType,
-			&rec.Payload,
-			&rec.PartitionKey,
-			&rec.ProcessedAt,
-			&rec.Status,
-			&rec.ErrorMessage,
-		); err != nil {
-			return nil, fmt.Errorf("scan failed outbox log row: %w", err)
-		}
-		records = append(records, &rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate failed outbox log rows: %w", err)
+	records := make([]*port.OutboxLogRecord, 0, len(models))
+	for i := range models {
+		records = append(records, &port.OutboxLogRecord{
+			ID:           models[i].ID,
+			EventID:      models[i].EventID,
+			EventType:    models[i].EventType,
+			Payload:      models[i].Payload,
+			PartitionKey: models[i].PartitionKey,
+			ProcessedAt:  models[i].ProcessedAt,
+			Status:       models[i].Status,
+			ErrorMessage: models[i].ErrorMessage,
+		})
 	}
 
 	return records, nil
 }
 
 func (r *OutboxLogRepository) UpdateLogStatus(ctx context.Context, id, status, errMsg string) error {
-	query := `
-		UPDATE notification.outbox_log
-		SET status = $1, error_message = $2, processed_at = $3
-		WHERE id = $4
-	`
-	err := GetDB(ctx, r.db).Exec(query, status, errMsg, time.Now().UTC(), id).Error
+	err := GetDB(ctx, r.db).Model(&OutboxLogModel{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":        status,
+			"error_message": errMsg,
+			"processed_at":  time.Now().UTC(),
+		}).Error
 	if err != nil {
 		return fmt.Errorf("update notification outbox_log status: %w", err)
 	}

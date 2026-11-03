@@ -26,14 +26,10 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 // Create inserts a new user record and all associated identities.
 func (r *UserRepository) Create(ctx context.Context, u *aggregate.User) error {
 	dbUser := toUserModel(u)
-	if err := r.getDB(ctx).Create(dbUser).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(dbUser).Error; err != nil {
 		return fmt.Errorf("gorm create user: %w", err)
 	}
 	return nil
@@ -42,7 +38,7 @@ func (r *UserRepository) Create(ctx context.Context, u *aggregate.User) error {
 // Update modifies an existing user record and upserts its identities.
 func (r *UserRepository) Update(ctx context.Context, u *aggregate.User) error {
 	dbUser := toUserModel(u)
-	tx := r.getDB(ctx).Model(dbUser).Select("FullName", "RoleID", "Status", "UpdatedAt").Updates(dbUser)
+	tx := GetDB(ctx, r.db).Model(dbUser).Select("FullName", "RoleID", "Status", "UpdatedAt").Updates(dbUser)
 	if tx.Error != nil {
 		return fmt.Errorf("gorm update user: %w", tx.Error)
 	}
@@ -51,7 +47,7 @@ func (r *UserRepository) Update(ctx context.Context, u *aggregate.User) error {
 	}
 
 	if dbUser.Identity != nil && dbUser.Identity.ID != "" {
-		err := r.getDB(ctx).Clauses(clause.OnConflict{
+		err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "user_id"},
 			},
@@ -74,7 +70,7 @@ func (r *UserRepository) Update(ctx context.Context, u *aggregate.User) error {
 // FindByID retrieves a user and their identity by ID.
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*aggregate.User, error) {
 	var dbUser UserModel
-	if err := r.getDB(ctx).Preload("Identity").First(&dbUser, "id = ?", id).Error; err != nil {
+	if err := GetDB(ctx, r.db).Preload("Identity").First(&dbUser, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrUserNotFound
 		}
@@ -90,7 +86,7 @@ func (r *UserRepository) FindByIdentity(
 	identifier string,
 ) (*aggregate.User, error) {
 	var ident UserIdentityModel
-	err := r.getDB(ctx).First(
+	err := GetDB(ctx, r.db).First(
 		&ident,
 		"identity_type = ? AND identifier = ?",
 		identityType,
@@ -110,7 +106,7 @@ func (r *UserRepository) List(
 	ctx context.Context,
 	filter repository.ListUsersFilter,
 ) ([]*aggregate.User, int, error) {
-	query := r.getDB(ctx).Model(&UserModel{})
+	query := GetDB(ctx, r.db).Model(&UserModel{})
 	if filter.Role != "" {
 		query = query.Where("role_id = ?", filter.Role)
 	}

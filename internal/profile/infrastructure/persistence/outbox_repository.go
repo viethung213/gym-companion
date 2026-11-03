@@ -21,10 +21,6 @@ func NewGormOutboxRepository(db *gorm.DB) *GormOutboxRepository {
 	return &GormOutboxRepository{db: db}
 }
 
-func (r *GormOutboxRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
 	createdAt := record.CreatedAt
 	if createdAt.IsZero() {
@@ -42,7 +38,7 @@ func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 		Published:     record.Published,
 		PublishedAt:   record.PublishedAt,
 	}
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	if err := db.Create(m).Error; err != nil {
 		return fmt.Errorf("create outbox record: %w", err)
 	}
@@ -50,7 +46,7 @@ func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxReco
 }
 
 func (r *GormOutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*port.OutboxRecord, error) {
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	var models []*OutboxModel
 	if err := db.Where("published = ?", false).Order("created_at ASC").Limit(limit).Find(&models).Error; err != nil {
 		return nil, fmt.Errorf("fetch unpublished outbox events: %w", err)
@@ -79,7 +75,7 @@ func (r *GormOutboxRepository) MarkAsPublished(ctx context.Context, ids []string
 	if len(ids) == 0 {
 		return nil
 	}
-	db := r.getDB(ctx)
+	db := GetDB(ctx, r.db)
 	now := time.Now()
 	err := db.Model(&OutboxModel{}).
 		Where("id IN ?", ids).

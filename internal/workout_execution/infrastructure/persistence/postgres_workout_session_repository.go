@@ -2,24 +2,18 @@ package persistence
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-func getDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
-	return GetDB(ctx, defaultDB)
-}
 
 // PostgresWorkoutSessionRepository implements repository.WorkoutSessionRepository.
 type PostgresWorkoutSessionRepository struct {
@@ -34,7 +28,7 @@ func NewPostgresWorkoutSessionRepository(db *gorm.DB) *PostgresWorkoutSessionRep
 }
 
 func (r *PostgresWorkoutSessionRepository) Save(ctx context.Context, session *aggregate.WorkoutSession) error {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	model := SessionToPersistence(session)
 
 	var count int64
@@ -95,7 +89,7 @@ func (r *PostgresWorkoutSessionRepository) Save(ctx context.Context, session *ag
 }
 
 func (r *PostgresWorkoutSessionRepository) FindByID(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var model WorkoutSessionModel
 	err := db.Preload("Sets.Reps").Preload("Errors").First(&model, "id = ?", id).Error
 	if err != nil {
@@ -108,7 +102,7 @@ func (r *PostgresWorkoutSessionRepository) FindByID(ctx context.Context, id stri
 }
 
 func (r *PostgresWorkoutSessionRepository) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var model WorkoutSessionModel
 	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("Sets.Reps").Preload("Errors").First(&model, "id = ?", id).Error
 	if err != nil {
@@ -121,7 +115,7 @@ func (r *PostgresWorkoutSessionRepository) FindByIDForUpdate(ctx context.Context
 }
 
 func (r *PostgresWorkoutSessionRepository) FindActiveSessionByUserID(ctx context.Context, userID string) (*aggregate.WorkoutSession, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var model WorkoutSessionModel
 	err := db.Preload("Sets.Reps").Preload("Errors").
 		First(&model, "user_id = ? AND status = ?", userID, "IN_PROGRESS").Error
@@ -135,7 +129,7 @@ func (r *PostgresWorkoutSessionRepository) FindActiveSessionByUserID(ctx context
 }
 
 func (r *PostgresWorkoutSessionRepository) FindTimedOutSessions(ctx context.Context, maxDurationMinutes int) ([]*aggregate.WorkoutSession, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	threshold := time.Now().UTC().Add(-time.Duration(maxDurationMinutes) * time.Minute)
 
 	var models []WorkoutSessionModel
@@ -158,7 +152,7 @@ func (r *PostgresWorkoutSessionRepository) FindSessionsWithCriticalInactivity(
 	ctx context.Context,
 	inactivityThreshold time.Duration,
 ) ([]*aggregate.WorkoutSession, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	cutoff := time.Now().UTC().Add(-inactivityThreshold)
 	spanSeconds := int((inactivityThreshold * 6 / 10).Seconds())
 
@@ -203,7 +197,7 @@ func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(
 	if offset < 0 {
 		offset = 0
 	}
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var models []WorkoutSessionModel
 	err := db.Preload("Sets.Reps").Preload("Errors").
 		Where("user_id = ? AND status = ?", userID, "COMPLETED").
@@ -227,7 +221,7 @@ func (r *PostgresWorkoutSessionRepository) GetRecentVolumesForMuscleGroup(
 	userID, _ string,
 	limit int,
 ) ([]float32, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var models []WorkoutSessionModel
 	err := db.Where("user_id = ? AND status = ?", userID, "COMPLETED").
 		Order("ended_at DESC").Limit(limit).Find(&models).Error
@@ -255,7 +249,7 @@ func NewPostgresPersonalRecordRepository(db *gorm.DB) *PostgresPersonalRecordRep
 }
 
 func (r *PostgresPersonalRecordRepository) Save(ctx context.Context, pr *aggregate.PersonalRecord) error {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	model := PersonalRecordToPersistence(pr)
 	err := db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "exercise_id"}},
@@ -278,7 +272,7 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseID(
 	ctx context.Context,
 	userID, exerciseID string,
 ) (*aggregate.PersonalRecord, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var model PersonalRecordModel
 	err := db.First(&model, "user_id = ? AND exercise_id = ?", userID, exerciseID).Error
 	if err != nil {
@@ -294,7 +288,7 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseIDForUpdate(
 	ctx context.Context,
 	userID, exerciseID string,
 ) (*aggregate.PersonalRecord, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var model PersonalRecordModel
 	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&model, "user_id = ? AND exercise_id = ?", userID, exerciseID).Error
@@ -312,7 +306,7 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseIDs(
 	userID string,
 	exerciseIDs []string,
 ) ([]*aggregate.PersonalRecord, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var models []PersonalRecordModel
 	q := db.Where("user_id = ?", userID)
 	if len(exerciseIDs) > 0 {
@@ -343,7 +337,7 @@ func NewPostgresMotionSpecificationRepository(db *gorm.DB) *PostgresMotionSpecif
 }
 
 func (r *PostgresMotionSpecificationRepository) Save(ctx context.Context, spec *aggregate.MotionSpecification) error {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 
 	model := &MotionSpecificationModel{
 		ExerciseID:             spec.ExerciseID(),
@@ -374,7 +368,7 @@ func isUUIDString(s string) bool {
 }
 
 func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Context, exerciseID string) (*aggregate.MotionSpecification, error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	var model MotionSpecificationModel
 	err := db.First(&model, "exercise_id = ?", exerciseID).Error
 	if err != nil {
@@ -392,7 +386,7 @@ func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Con
 }
 
 func (r *PostgresMotionSpecificationRepository) Delete(ctx context.Context, exerciseID string) error {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 	res := db.Delete(&MotionSpecificationModel{}, "exercise_id = ?", exerciseID)
 	if res.Error != nil {
 		return fmt.Errorf("failed to delete motion specification: %w", res.Error)
@@ -412,7 +406,7 @@ func (r *PostgresMotionSpecificationRepository) List(ctx context.Context, limit,
 	if offset < 0 {
 		offset = 0
 	}
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 
 	var total int64
 	if err := db.Model(&MotionSpecificationModel{}).Count(&total).Error; err != nil {
@@ -446,7 +440,7 @@ func (r *PostgresMotionSpecificationRepository) Search(ctx context.Context, keyw
 	if offset < 0 {
 		offset = 0
 	}
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 
 	query := db.Model(&MotionSpecificationModel{})
 
@@ -479,7 +473,7 @@ func (r *PostgresMotionSpecificationRepository) Search(ctx context.Context, keyw
 }
 
 func (r *PostgresMotionSpecificationRepository) GetStats(ctx context.Context) (total int, activeRules int, activeVoice int, readySpecs int, err error) {
-	db := getDB(ctx, r.db)
+	db := GetDB(ctx, r.db)
 
 	var totalCount int64
 	if err := db.Model(&MotionSpecificationModel{}).Count(&totalCount).Error; err != nil {
@@ -502,221 +496,4 @@ func (r *PostgresMotionSpecificationRepository) GetStats(ctx context.Context) (t
 	}
 
 	return int(totalCount), int(activeRulesCount), int(activeVoiceCount), int(readyCount), nil
-}
-
-// PostgresOutboxRepository implements port.OutboxRepository.
-type PostgresOutboxRepository struct {
-	db *gorm.DB
-}
-
-var _ port.OutboxRepository = (*PostgresOutboxRepository)(nil)
-
-// NewPostgresOutboxRepository constructs repo.
-func NewPostgresOutboxRepository(db *gorm.DB) *PostgresOutboxRepository {
-	return &PostgresOutboxRepository{db: db}
-}
-
-func (r *PostgresOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
-	db := getDB(ctx, r.db)
-	eventID := record.EventID
-	if eventID == "" {
-		eventID = record.ID
-	}
-	partitionKey := record.PartitionKey
-	if partitionKey == "" {
-		partitionKey = record.AggregateID
-	}
-	var pubAt sql.NullTime
-	if record.PublishedAt != nil {
-		pubAt = sql.NullTime{Time: *record.PublishedAt, Valid: true}
-	}
-	model := OutboxModel{
-		ID:            record.ID,
-		EventID:       eventID,
-		AggregateType: record.AggregateType,
-		AggregateID:   record.AggregateID,
-		EventType:     record.EventType,
-		Payload:       record.Payload,
-		PartitionKey:  partitionKey,
-		Published:     record.Published,
-		PublishedAt:   pubAt,
-		CreatedAt:     record.CreatedAt,
-	}
-	return db.Create(&model).Error
-}
-
-func (r *PostgresOutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*port.OutboxRecord, error) {
-	db := getDB(ctx, r.db)
-	var models []OutboxModel
-	err := db.Where("published = ?", false).Order("created_at ASC").Limit(limit).Find(&models).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch unpublished outbox events: %w", err)
-	}
-
-	res := make([]*port.OutboxRecord, len(models))
-	for i, m := range models {
-		res[i] = OutboxToDomain(&m)
-	}
-	return res, nil
-}
-
-func (r *PostgresOutboxRepository) MarkPublished(ctx context.Context, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	db := getDB(ctx, r.db)
-	now := time.Now().UTC()
-	return db.Model(&OutboxModel{}).Where("id IN ?", ids).Updates(map[string]interface{}{
-		"published":    true,
-		"published_at": now,
-		"status":       "PUBLISHED",
-	}).Error
-}
-
-func (r *PostgresOutboxRepository) ClaimBatch(
-	ctx context.Context,
-	limit int,
-	lockDuration time.Duration,
-) ([]*port.OutboxRecord, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	if lockDuration <= 0 {
-		lockDuration = 30 * time.Second
-	}
-
-	var res []*port.OutboxRecord
-	now := time.Now().UTC()
-	lockedUntil := now.Add(lockDuration)
-
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var models []OutboxModel
-		err := tx.
-			Clauses(clause.Locking{
-				Strength: "UPDATE",
-				Options:  "SKIP LOCKED",
-			}).
-			Where("published = ? AND (status = ? OR locked_until IS NULL OR locked_until < ?)", false, "PENDING", now).
-			Order("created_at ASC").
-			Limit(limit).
-			Find(&models).
-			Error
-
-		if err != nil {
-			return fmt.Errorf("failed to fetch unpublished outbox events for update: %w", err)
-		}
-
-		if len(models) == 0 {
-			return nil
-		}
-
-		res = make([]*port.OutboxRecord, len(models))
-		ids := make([]string, len(models))
-		for i, m := range models {
-			res[i] = OutboxToDomain(&m)
-			ids[i] = m.ID
-		}
-
-		err = tx.Model(&OutboxModel{}).
-			Where("id IN ?", ids).
-			Updates(map[string]interface{}{
-				"status":       "PROCESSING",
-				"locked_until": lockedUntil,
-			}).
-			Error
-
-		if err != nil {
-			return fmt.Errorf("failed to claim outbox events: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func (r *PostgresOutboxRepository) ProcessBatch(
-	ctx context.Context,
-	limit int,
-	publishFn func(ctx context.Context, records []*port.OutboxRecord) error,
-) error {
-	records, err := r.ClaimBatch(ctx, limit, 30*time.Second)
-	if err != nil {
-		return err
-	}
-	if len(records) == 0 {
-		return nil
-	}
-
-	if pubErr := publishFn(ctx, records); pubErr != nil {
-		return fmt.Errorf("publish outbox batch: %w", pubErr)
-	}
-
-	ids := make([]string, len(records))
-	for i, rec := range records {
-		ids[i] = rec.ID
-	}
-
-	return r.MarkPublished(ctx, ids)
-}
-
-// PostgresOutboxLogRepository implements port.OutboxLogRepository for consumer idempotency tracking.
-type PostgresOutboxLogRepository struct {
-	db *gorm.DB
-}
-
-var _ port.OutboxLogRepository = (*PostgresOutboxLogRepository)(nil)
-
-// NewPostgresOutboxLogRepository constructs repository.
-func NewPostgresOutboxLogRepository(db *gorm.DB) *PostgresOutboxLogRepository {
-	return &PostgresOutboxLogRepository{db: db}
-}
-
-func (r *PostgresOutboxLogRepository) IsProcessed(ctx context.Context, eventID string) (bool, error) {
-	if eventID == "" {
-		return false, nil
-	}
-	db := getDB(ctx, r.db)
-	var count int64
-	err := db.Model(&OutboxLogModel{}).
-		Where("event_id = ? AND status = ?", eventID, "PROCESSED").
-		Count(&count).Error
-	if err != nil {
-		return false, fmt.Errorf("failed to check outbox_log idempotency: %w", err)
-	}
-	return count > 0, nil
-}
-
-func (r *PostgresOutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {
-	if record == nil {
-		return nil
-	}
-	db := getDB(ctx, r.db)
-
-	id := record.ID
-	if id == "" {
-		id = record.EventID
-	}
-	if id == "" {
-		id = uuid.New().String()
-	}
-
-	model := &OutboxLogModel{
-		ID:           id,
-		EventID:      record.EventID,
-		EventType:    record.EventType,
-		Payload:      record.Payload,
-		PartitionKey: record.PartitionKey,
-		ProcessedAt:  time.Now().UTC(),
-		Status:       record.Status,
-		ErrorMessage: record.ErrorMessage,
-	}
-
-	if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(model).Error; err != nil {
-		return fmt.Errorf("failed to save outbox_log record: %w", err)
-	}
-	return nil
 }

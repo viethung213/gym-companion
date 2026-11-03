@@ -3,11 +3,12 @@ package persistence
 import (
 	"context"
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var _ repository.DeviceRepository = (*DeviceRepository)(nil)
@@ -21,27 +22,16 @@ func NewDeviceRepository(db *gorm.DB) *DeviceRepository {
 }
 
 func (r *DeviceRepository) Save(ctx context.Context, device *aggregate.Device) error {
-	query := `
-		INSERT INTO notification.user_devices (
-			id, user_id, device_token, device_type, is_active, created_at, updated_at, last_used_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (user_id, device_token) DO UPDATE SET
-			is_active = EXCLUDED.is_active,
-			device_type = EXCLUDED.device_type,
-			updated_at = EXCLUDED.updated_at,
-			last_used_at = EXCLUDED.last_used_at
-	`
-	err := GetDB(ctx, r.db).Exec(
-		query,
-		device.ID(),
-		device.UserID(),
-		device.DeviceToken(),
-		device.DeviceType().String(),
-		device.IsActive(),
-		device.CreatedAt(),
-		device.UpdatedAt(),
-		device.LastUsedAt(),
-	).Error
+	model := ToDeviceModel(device)
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "device_token"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"is_active",
+			"device_type",
+			"updated_at",
+			"last_used_at",
+		}),
+	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("upsert user device token: %w", err)
 	}
@@ -49,43 +39,23 @@ func (r *DeviceRepository) Save(ctx context.Context, device *aggregate.Device) e
 }
 
 func (r *DeviceRepository) GetActiveDevicesByUserID(ctx context.Context, userID string) ([]*aggregate.Device, error) {
-	query := `
-		SELECT id, user_id, device_token, device_type, is_active, created_at, updated_at, last_used_at
-		FROM notification.user_devices
-		WHERE user_id = $1 AND is_active = TRUE
-		ORDER BY last_used_at DESC
-	`
-	rows, err := GetDB(ctx, r.db).Raw(query, userID).Rows()
+	var models []DeviceModel
+	err := GetDB(ctx, r.db).
+		Where("user_id = ? AND is_active = ?", userID, true).
+		Order("last_used_at DESC").
+		Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("query active devices: %w", err)
 	}
-	defer rows.Close()
 
-	var devices []*aggregate.Device
-	for rows.Next() {
-		var m DeviceModel
-		if err := rows.Scan(
-			&m.ID,
-			&m.UserID,
-			&m.DeviceToken,
-			&m.DeviceType,
-			&m.IsActive,
-			&m.CreatedAt,
-			&m.UpdatedAt,
-			&m.LastUsedAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan device row: %w", err)
-		}
-		dev, err := m.ToDomain()
+	devices := make([]*aggregate.Device, 0, len(models))
+	for i := range models {
+		dev, err := models[i].ToDomain()
 		if err != nil {
-			return nil, fmt.Errorf("convert device row to domain: %w", err)
+			return nil, fmt.Errorf("convert device model to domain: %w", err)
 		}
 		devices = append(devices, dev)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate device rows: %w", err)
-	}
-
 	return devices, nil
 }
 
@@ -94,20 +64,13 @@ func (r *DeviceRepository) DeactivateTokens(ctx context.Context, tokens []string
 		return nil
 	}
 
-	placeholders := make([]string, len(tokens))
-	args := make([]interface{}, len(tokens))
-	for i, tok := range tokens {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i] = tok
-	}
-
-	query := fmt.Sprintf(`
-		UPDATE notification.user_devices
-		SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
-		WHERE device_token IN (%s)
-	`, strings.Join(placeholders, ","))
-
-	if err := GetDB(ctx, r.db).Exec(query, args...).Error; err != nil {
+	err := GetDB(ctx, r.db).Model(&DeviceModel{}).
+		Where("device_token IN ?", tokens).
+		Updates(map[string]interface{}{
+			"is_active":  false,
+			"updated_at": time.Now().UTC(),
+		}).Error
+	if err != nil {
 		return fmt.Errorf("deactivate device tokens: %w", err)
 	}
 	return nil
