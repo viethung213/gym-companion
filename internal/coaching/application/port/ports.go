@@ -41,14 +41,16 @@ type RoadmapRepository interface {
 
 // OutboxRecord mirrors coaching.outbox row structure.
 type OutboxRecord struct {
-	ID           string
-	EventID      string
-	EventType    string
-	Payload      []byte
-	PartitionKey string
-	CreatedAt    time.Time
-	Published    bool
-	PublishedAt  *time.Time
+	ID            string     `json:"id"`
+	EventID       string     `json:"eventId"`
+	AggregateType string     `json:"aggregateType"`
+	AggregateID   string     `json:"aggregateId"`
+	EventType     string     `json:"eventType"`
+	Payload       []byte     `json:"payload"`
+	PartitionKey  string     `json:"partitionKey"`
+	Published     bool       `json:"published"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
 }
 
 // OutboxRepository manages rows in coaching.outbox and coaching.outbox_log.

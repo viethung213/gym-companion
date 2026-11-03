@@ -61,16 +61,18 @@ func (InjuryModel) TableName() string {
 }
 
 type OutboxModel struct {
-	ID           string       `gorm:"primaryKey;column:id"`
-	EventID      string       `gorm:"column:event_id;uniqueIndex;not null"`
-	EventType    string       `gorm:"column:event_type;not null"`
-	Payload      []byte       `gorm:"column:payload;not null;type:jsonb"`
-	PartitionKey string       `gorm:"column:partition_key;not null"`
-	CreatedAt    time.Time    `gorm:"column:created_at"`
-	Published    bool         `gorm:"column:published"`
-	PublishedAt  *time.Time   `gorm:"column:published_at"`
-	Status       string       `gorm:"column:status;default:PENDING"`
-	LockedUntil  sql.NullTime `gorm:"column:locked_until"`
+	ID            string       `gorm:"primaryKey;column:id"`
+	EventID       string       `gorm:"column:event_id;uniqueIndex;not null"`
+	AggregateType string       `gorm:"column:aggregate_type"`
+	AggregateID   string       `gorm:"column:aggregate_id"`
+	EventType     string       `gorm:"column:event_type;not null"`
+	Payload       []byte       `gorm:"column:payload;not null;type:jsonb"`
+	PartitionKey  string       `gorm:"column:partition_key;not null"`
+	CreatedAt     time.Time    `gorm:"column:created_at"`
+	Published     bool         `gorm:"column:published"`
+	PublishedAt   *time.Time   `gorm:"column:published_at"`
+	Status        string       `gorm:"column:status;default:PENDING"`
+	LockedUntil   sql.NullTime `gorm:"column:locked_until"`
 }
 
 func (OutboxModel) TableName() string {

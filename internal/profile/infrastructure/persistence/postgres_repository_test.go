@@ -71,6 +71,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		CREATE TABLE profile.outbox (
 			id TEXT PRIMARY KEY,
 			event_id TEXT UNIQUE NOT NULL,
+			aggregate_type TEXT,
+			aggregate_id TEXT,
 			event_type TEXT NOT NULL,
 			payload BLOB NOT NULL,
 			partition_key TEXT NOT NULL,

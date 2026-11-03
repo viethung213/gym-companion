@@ -22,6 +22,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/service"
 	infraEvent "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/event"
 	exerciseclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/exercise_client"
+	soloMatchKafka "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/matchmaker"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/worker"
@@ -145,7 +146,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	var wg sync.WaitGroup
 
 	// 1. Outbox Publisher Worker
-	outboxPub := worker.NewOutboxPublisherWorker(outboxRepo, kafkaWriter, 2*time.Second)
+	var kafkaPub *soloMatchKafka.Publisher
+	if kafkaWriter != nil {
+		kafkaPub = soloMatchKafka.NewPublisher(kafkaWriter)
+	}
+	outboxPub := worker.NewOutboxPublisherWorker(outboxRepo, kafkaPub, 2*time.Second)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

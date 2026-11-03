@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -31,22 +32,59 @@ func (r *OutboxRepository) getDB(ctx context.Context) *gorm.DB {
 	return r.db.WithContext(ctx)
 }
 
+// Save persists an OutboxRecord into the auth.outbox table.
+func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
+	if record == nil {
+		return fmt.Errorf("nil outbox record")
+	}
+	id := record.ID
+	if id == "" {
+		id = uuid.New().String()
+	}
+	eventID := record.EventID
+	if eventID == "" {
+		eventID = uuid.New().String()
+	}
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	var pubAt sql.NullTime
+	if record.PublishedAt != nil {
+		pubAt = sql.NullTime{Time: *record.PublishedAt, Valid: true}
+	}
+	dbOutbox := &OutboxModel{
+		ID:            id,
+		EventID:       eventID,
+		AggregateType: record.AggregateType,
+		AggregateID:   record.AggregateID,
+		EventType:     record.EventType,
+		Payload:       record.Payload,
+		PartitionKey:  record.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     record.Published,
+		PublishedAt:   pubAt,
+		Status:        "PENDING",
+	}
+	if record.Published {
+		dbOutbox.Status = "PUBLISHED"
+	}
+	if err := r.getDB(ctx).Create(dbOutbox).Error; err != nil {
+		return fmt.Errorf("gorm save outbox record: %w", err)
+	}
+	return nil
+}
+
 // SaveEvent inserts a new event log entry directly into the auth.outbox table.
 func (r *OutboxRepository) SaveEvent(ctx context.Context, eventID string, eventType string, payload []byte, partitionKey string) error {
-	dbOutbox := &OutboxModel{
+	return r.Save(ctx, &port.OutboxRecord{
 		ID:           uuid.New().String(),
 		EventID:      eventID,
 		EventType:    eventType,
 		Payload:      payload,
 		PartitionKey: partitionKey,
-		CreatedAt:    time.Now(),
-		Published:    false,
-	}
-	err := r.getDB(ctx).Create(dbOutbox).Error
-	if err != nil {
-		return fmt.Errorf("gorm save outbox event: %w", err)
-	}
-	return nil
+		CreatedAt:    time.Now().UTC(),
+	})
 }
 
 // FetchUnpublished queries all unpublished outbox entries up to the given limit.

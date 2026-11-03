@@ -45,10 +45,6 @@ type PostReactedEvent = domainEvent.PostReactedEvent
 type PostCommentedEvent = domainEvent.PostCommentedEvent
 
 func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
-	return w.publishSingleEvent(ctx, ev)
-}
-
-func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
 	switch e := ev.(type) {
 	case *domainEvent.UserFollowedEvent:
 		return w.handleUserFollowedNotification(ctx, e)
@@ -80,7 +76,7 @@ func (w *OutboxWriter) handleUserFollowedNotification(ctx context.Context, e *do
 		"type":              "USER_FOLLOWED",
 	}
 	body := actorName + " đã bắt đầu theo dõi bạn"
-	return w.publishNotificationRequested(ctx, []string{e.FollowingID}, "Người theo dõi mới", body, dataMap)
+	return w.writeNotificationRequested(ctx, []string{e.FollowingID}, "Người theo dõi mới", body, dataMap)
 }
 
 func (w *OutboxWriter) handlePostCreatedNotification(ctx context.Context, e *domainEvent.PostCreatedEvent) error {
@@ -101,9 +97,8 @@ func (w *OutboxWriter) handlePostCreatedNotification(ctx context.Context, e *dom
 		"type":           "POST_CREATED",
 	}
 	title := "Bài viết mới"
-	body := actorName + " vừa đăng một bài viết mới"
-
-	return w.publishNotificationRequested(ctx, e.FollowerUserIDs, title, body, dataMap)
+	body := actorName + " vừa đăng bài viết mới"
+	return w.writeNotificationRequested(ctx, e.FollowerUserIDs, title, body, dataMap)
 }
 
 func (w *OutboxWriter) handlePostCommentedNotification(ctx context.Context, e *domainEvent.PostCommentedEvent) error {
@@ -128,7 +123,7 @@ func (w *OutboxWriter) handlePostCommentedNotification(ctx context.Context, e *d
 					"actorAvatarUrl": e.UserAvatarURL,
 				}
 				body := actorName + " đã trả lời bình luận của bạn"
-				if err := w.publishNotificationRequested(ctx, []string{e.PostOwnerID}, "Phản hồi mới", body, dataMap); err != nil {
+				if err := w.writeNotificationRequested(ctx, []string{e.PostOwnerID}, "Phản hồi mới", body, dataMap); err != nil {
 					return err
 				}
 			}
@@ -145,7 +140,7 @@ func (w *OutboxWriter) handlePostCommentedNotification(ctx context.Context, e *d
 					"actorAvatarUrl": e.UserAvatarURL,
 				}
 				body := actorName + " đã trả lời bình luận của bạn"
-				if err := w.publishNotificationRequested(ctx, []string{parentOwner}, "Phản hồi mới", body, dataMap); err != nil {
+				if err := w.writeNotificationRequested(ctx, []string{parentOwner}, "Phản hồi mới", body, dataMap); err != nil {
 					return err
 				}
 			}
@@ -160,7 +155,7 @@ func (w *OutboxWriter) handlePostCommentedNotification(ctx context.Context, e *d
 					"actorAvatarUrl": e.UserAvatarURL,
 				}
 				body := actorName + " đã bình luận trên bài viết của bạn"
-				if err := w.publishNotificationRequested(ctx, []string{e.PostOwnerID}, "Bình luận mới", body, dataMap); err != nil {
+				if err := w.writeNotificationRequested(ctx, []string{e.PostOwnerID}, "Bình luận mới", body, dataMap); err != nil {
 					return err
 				}
 			}
@@ -179,7 +174,7 @@ func (w *OutboxWriter) handlePostCommentedNotification(ctx context.Context, e *d
 			"actorAvatarUrl": e.UserAvatarURL,
 		}
 		body := actorName + " đã bình luận bài viết của bạn"
-		if err := w.publishNotificationRequested(ctx, []string{e.PostOwnerID}, "Bình luận mới", body, dataMap); err != nil {
+		if err := w.writeNotificationRequested(ctx, []string{e.PostOwnerID}, "Bình luận mới", body, dataMap); err != nil {
 			return err
 		}
 	}
@@ -206,10 +201,10 @@ func (w *OutboxWriter) handlePostReactedNotification(ctx context.Context, e *dom
 		"actorAvatarUrl": e.UserAvatarURL,
 	}
 	body := actorName + " đã bày tỏ cảm xúc về bài viết của bạn"
-	return w.publishNotificationRequested(ctx, []string{e.PostOwnerID}, "Tương tác mới", body, dataMap)
+	return w.writeNotificationRequested(ctx, []string{e.PostOwnerID}, "Tương tác mới", body, dataMap)
 }
 
-func (w *OutboxWriter) publishNotificationRequested(
+func (w *OutboxWriter) writeNotificationRequested(
 	ctx context.Context,
 	recipientIDs []string,
 	title string,
@@ -252,16 +247,26 @@ func (w *OutboxWriter) publishNotificationRequested(
 		return fmt.Errorf("marshal NormalPriorityNotificationRequested proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
 	eventType := "contracts.generic.notification.v1.event.NormalPriorityNotificationRequested"
+	return w.writeCloudEvent(ctx, "SocialNotification", recipientIDs[0], eventType, recipientIDs[0], now, dataBytes)
+}
+
+func (w *OutboxWriter) writeCloudEvent(
+	ctx context.Context,
+	aggregateType, aggregateID, eventType, partitionKey string,
+	occurredAt time.Time,
+	payloadBytes []byte,
+) error {
+	eventID := uuid.New().String()
+
 	cloudEvent := map[string]any{
 		"specversion":     "1.0",
 		"id":              eventID,
 		"source":          "services/social-service",
 		"type":            eventType,
-		"time":            now.Format(time.RFC3339),
+		"time":            occurredAt.Format(time.RFC3339),
 		"datacontenttype": "application/json",
-		"data":            json.RawMessage(dataBytes),
+		"data":            json.RawMessage(payloadBytes),
 	}
 
 	envelopeBytes, err := json.Marshal(cloudEvent)
@@ -270,10 +275,14 @@ func (w *OutboxWriter) publishNotificationRequested(
 	}
 
 	return w.outboxRepo.Save(ctx, &port.OutboxRecord{
-		ID:           uuid.New().String(),
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      envelopeBytes,
-		PartitionKey: recipientIDs[0],
+		ID:            uuid.New().String(),
+		EventID:       eventID,
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		Payload:       envelopeBytes,
+		PartitionKey:  partitionKey,
+		CreatedAt:     occurredAt,
+		Published:     false,
 	})
 }

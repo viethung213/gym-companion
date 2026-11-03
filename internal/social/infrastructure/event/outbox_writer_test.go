@@ -35,6 +35,10 @@ func (m *mockOutboxRepo) MarkAsPublished(ctx context.Context, ids []string) erro
 	return nil
 }
 
+func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*port.OutboxRecord) error) error {
+	return nil
+}
+
 type cloudEventEnvelope struct {
 	SpecVersion     string          `json:"specversion"`
 	ID              string          `json:"id"`

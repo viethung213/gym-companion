@@ -85,16 +85,18 @@ func (tagRecord) TableName() string {
 }
 
 type outboxRecord struct {
-	ID           string       `gorm:"column:id;primaryKey"`
-	EventID      string       `gorm:"column:event_id;not null"`
-	EventType    string       `gorm:"column:event_type;not null"`
-	Payload      []byte       `gorm:"column:payload;not null;type:jsonb"`
-	PartitionKey string       `gorm:"column:partition_key;not null"`
-	CreatedAt    time.Time    `gorm:"column:created_at"`
-	Published    bool         `gorm:"column:published;default:false"`
-	PublishedAt  sql.NullTime `gorm:"column:published_at"`
-	Status       string       `gorm:"column:status;default:PENDING"`
-	LockedUntil  sql.NullTime `gorm:"column:locked_until"`
+	ID            string       `gorm:"column:id;primaryKey"`
+	EventID       string       `gorm:"column:event_id;not null"`
+	AggregateType string       `gorm:"column:aggregate_type"`
+	AggregateID   string       `gorm:"column:aggregate_id"`
+	EventType     string       `gorm:"column:event_type;not null"`
+	Payload       []byte       `gorm:"column:payload;not null;type:jsonb"`
+	PartitionKey  string       `gorm:"column:partition_key;not null"`
+	CreatedAt     time.Time    `gorm:"column:created_at"`
+	Published     bool         `gorm:"column:published;default:false"`
+	PublishedAt   sql.NullTime `gorm:"column:published_at"`
+	Status        string       `gorm:"column:status;default:PENDING"`
+	LockedUntil   sql.NullTime `gorm:"column:locked_until"`
 }
 
 func (outboxRecord) TableName() string {

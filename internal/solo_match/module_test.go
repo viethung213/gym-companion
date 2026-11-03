@@ -74,6 +74,8 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 		CREATE TABLE IF NOT EXISTS solo_match.outbox (
 			id TEXT PRIMARY KEY,
 			event_id TEXT NOT NULL,
+			aggregate_type TEXT,
+			aggregate_id TEXT,
 			event_type TEXT NOT NULL,
 			payload TEXT NOT NULL,
 			partition_key TEXT NOT NULL,

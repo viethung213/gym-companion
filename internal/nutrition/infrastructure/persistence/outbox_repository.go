@@ -23,15 +23,22 @@ func NewPostgresOutboxRepository(db *gorm.DB) *PostgresOutboxRepository {
 }
 
 func (r *PostgresOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	gormRecord := &GormOutbox{
-		ID:           record.ID,
-		EventID:      record.EventID,
-		EventType:    record.EventType,
-		Payload:      record.Payload,
-		PartitionKey: record.PartitionKey,
-		CreatedAt:    time.Now(),
-		Published:    false,
-		Status:       "PENDING",
+		ID:            record.ID,
+		EventID:       record.EventID,
+		AggregateType: record.AggregateType,
+		AggregateID:   record.AggregateID,
+		EventType:     record.EventType,
+		Payload:       record.Payload,
+		PartitionKey:  record.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     record.Published,
+		PublishedAt:   record.PublishedAt,
+		Status:        "PENDING",
 	}
 
 	db := getDB(ctx, r.db)
@@ -69,13 +76,16 @@ func (r *PostgresOutboxRepository) FetchUnpublished(ctx context.Context, limit i
 	for i := range gormRecords {
 		rec := &gormRecords[i]
 		result = append(result, port.OutboxRecord{
-			ID:           rec.ID,
-			EventID:      rec.EventID,
-			EventType:    rec.EventType,
-			Payload:      rec.Payload,
-			PartitionKey: rec.PartitionKey,
-			CreatedAt:    rec.CreatedAt,
-			Published:    rec.Published,
+			ID:            rec.ID,
+			EventID:       rec.EventID,
+			AggregateType: rec.AggregateType,
+			AggregateID:   rec.AggregateID,
+			EventType:     rec.EventType,
+			Payload:       rec.Payload,
+			PartitionKey:  rec.PartitionKey,
+			CreatedAt:     rec.CreatedAt,
+			Published:     rec.Published,
+			PublishedAt:   rec.PublishedAt,
 		})
 	}
 	return result, nil
@@ -124,13 +134,16 @@ func (r *PostgresOutboxRepository) ClaimBatch(
 		for i := range models {
 			m := &models[i]
 			records = append(records, port.OutboxRecord{
-				ID:           m.ID,
-				EventID:      m.EventID,
-				EventType:    m.EventType,
-				Payload:      m.Payload,
-				PartitionKey: m.PartitionKey,
-				CreatedAt:    m.CreatedAt,
-				Published:    m.Published,
+				ID:            m.ID,
+				EventID:       m.EventID,
+				AggregateType: m.AggregateType,
+				AggregateID:   m.AggregateID,
+				EventType:     m.EventType,
+				Payload:       m.Payload,
+				PartitionKey:  m.PartitionKey,
+				CreatedAt:     m.CreatedAt,
+				Published:     m.Published,
+				PublishedAt:   m.PublishedAt,
 			})
 			ids = append(ids, m.ID)
 		}
@@ -197,8 +210,8 @@ func (r *PostgresOutboxRepository) ProcessBatch(
 	}
 
 	ids := make([]string, 0, len(records))
-	for _, rec := range records {
-		ids = append(ids, rec.ID)
+	for i := range records {
+		ids = append(ids, records[i].ID)
 	}
 
 	return r.MarkAsPublished(ctx, ids)

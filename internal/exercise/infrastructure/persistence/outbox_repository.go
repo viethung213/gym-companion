@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -28,14 +29,25 @@ func (r *OutboxRepository) getDB(ctx context.Context) *gorm.DB {
 }
 
 func (r *OutboxRepository) Save(ctx context.Context, rec *port.OutboxRecord) error {
+	createdAt := rec.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	var pubAt sql.NullTime
+	if rec.PublishedAt != nil {
+		pubAt = sql.NullTime{Time: *rec.PublishedAt, Valid: true}
+	}
 	obr := outboxRecord{
-		ID:           rec.ID,
-		EventID:      rec.EventID,
-		EventType:    rec.EventType,
-		Payload:      rec.Payload,
-		PartitionKey: rec.PartitionKey,
-		CreatedAt:    time.Now(),
-		Published:    false,
+		ID:            rec.ID,
+		EventID:       rec.EventID,
+		AggregateType: rec.AggregateType,
+		AggregateID:   rec.AggregateID,
+		EventType:     rec.EventType,
+		Payload:       rec.Payload,
+		PartitionKey:  rec.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     rec.Published,
+		PublishedAt:   pubAt,
 	}
 	return r.getDB(ctx).Create(&obr).Error
 }
@@ -59,12 +71,21 @@ func (r *OutboxRepository) FetchUnpublished(
 	results := make([]*port.OutboxRecord, len(records))
 	for i := range records {
 		rec := &records[i]
+		var pubAt *time.Time
+		if rec.PublishedAt.Valid {
+			pubAt = &rec.PublishedAt.Time
+		}
 		results[i] = &port.OutboxRecord{
-			ID:           rec.ID,
-			EventID:      rec.EventID,
-			EventType:    rec.EventType,
-			Payload:      rec.Payload,
-			PartitionKey: rec.PartitionKey,
+			ID:            rec.ID,
+			EventID:       rec.EventID,
+			AggregateType: rec.AggregateType,
+			AggregateID:   rec.AggregateID,
+			EventType:     rec.EventType,
+			Payload:       rec.Payload,
+			PartitionKey:  rec.PartitionKey,
+			Published:     rec.Published,
+			CreatedAt:     rec.CreatedAt,
+			PublishedAt:   pubAt,
 		}
 	}
 	return results, nil
@@ -131,12 +152,21 @@ func (r *OutboxRepository) ClaimBatch(
 		ids := make([]string, len(records))
 		for i := range records {
 			rec := &records[i]
+			var pubAt *time.Time
+			if rec.PublishedAt.Valid {
+				pubAt = &rec.PublishedAt.Time
+			}
 			results[i] = &port.OutboxRecord{
-				ID:           rec.ID,
-				EventID:      rec.EventID,
-				EventType:    rec.EventType,
-				Payload:      rec.Payload,
-				PartitionKey: rec.PartitionKey,
+				ID:            rec.ID,
+				EventID:       rec.EventID,
+				AggregateType: rec.AggregateType,
+				AggregateID:   rec.AggregateID,
+				EventType:     rec.EventType,
+				Payload:       rec.Payload,
+				PartitionKey:  rec.PartitionKey,
+				Published:     rec.Published,
+				CreatedAt:     rec.CreatedAt,
+				PublishedAt:   pubAt,
 			}
 			ids[i] = rec.ID
 		}

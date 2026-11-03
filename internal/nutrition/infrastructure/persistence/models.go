@@ -99,16 +99,18 @@ func (g *GormLockoutRegistry) TableName() string {
 }
 
 type GormOutbox struct {
-	ID           string     `gorm:"column:id;primaryKey"`
-	EventID      string     `gorm:"column:event_id;uniqueIndex"`
-	EventType    string     `gorm:"column:event_type"`
-	Payload      []byte     `gorm:"column:payload;type:jsonb"`
-	PartitionKey string     `gorm:"column:partition_key"`
-	CreatedAt    time.Time  `gorm:"column:created_at"`
-	Published    bool       `gorm:"column:published"`
-	PublishedAt  *time.Time `gorm:"column:published_at"`
-	LockedUntil  *time.Time `gorm:"column:locked_until"`
-	Status       string     `gorm:"column:status"`
+	ID            string     `gorm:"column:id;primaryKey"`
+	EventID       string     `gorm:"column:event_id;uniqueIndex"`
+	AggregateType string     `gorm:"column:aggregate_type"`
+	AggregateID   string     `gorm:"column:aggregate_id"`
+	EventType     string     `gorm:"column:event_type"`
+	Payload       []byte     `gorm:"column:payload;type:jsonb"`
+	PartitionKey  string     `gorm:"column:partition_key"`
+	CreatedAt     time.Time  `gorm:"column:created_at"`
+	Published     bool       `gorm:"column:published"`
+	PublishedAt   *time.Time `gorm:"column:published_at"`
+	LockedUntil   *time.Time `gorm:"column:locked_until"`
+	Status        string     `gorm:"column:status"`
 }
 
 func (g *GormOutbox) TableName() string {

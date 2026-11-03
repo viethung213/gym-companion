@@ -171,7 +171,7 @@ func createTestTables(db *sql.DB) error {
 			item_name TEXT, unlocked_at DATETIME, created_at DATETIME
 		)`,
 		`CREATE TABLE IF NOT EXISTS outbox (
-			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, event_type TEXT,
+			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, aggregate_type TEXT, aggregate_id TEXT, event_type TEXT,
 			payload TEXT, partition_key TEXT, created_at DATETIME,
 			published NUMERIC DEFAULT 0, published_at DATETIME,
 			locked_until DATETIME, status TEXT

@@ -6,11 +6,16 @@ import (
 )
 
 type OutboxRecord struct {
-	ID           string
-	EventID      string
-	EventType    string
-	Payload      []byte
-	PartitionKey string
+	ID            string     `json:"id"`
+	EventID       string     `json:"eventId"`
+	AggregateType string     `json:"aggregateType"`
+	AggregateID   string     `json:"aggregateId"`
+	EventType     string     `json:"eventType"`
+	Payload       []byte     `json:"payload"`
+	PartitionKey  string     `json:"partitionKey"`
+	Published     bool       `json:"published"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
 }
 
 type OutboxRepository interface {

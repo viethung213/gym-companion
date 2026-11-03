@@ -6,10 +6,20 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/worker"
 	"gorm.io/gorm"
 )
+
+type mockPublisher struct {
+	published []*port.OutboxRecord
+}
+
+func (m *mockPublisher) PublishBatch(ctx context.Context, records []*port.OutboxRecord) error {
+	m.published = append(m.published, records...)
+	return nil
+}
 
 func TestOutboxPublisherWorker_ProcessPendingEvents(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:outbox_worker_test?mode=memory&cache=shared"), &gorm.Config{})
@@ -31,6 +41,8 @@ func TestOutboxPublisherWorker_ProcessPendingEvents(t *testing.T) {
 		CREATE TABLE IF NOT EXISTS solo_match.outbox (
 			id TEXT PRIMARY KEY,
 			event_id TEXT UNIQUE,
+			aggregate_type TEXT,
+			aggregate_id TEXT,
 			event_type TEXT,
 			payload BLOB,
 			partition_key TEXT,
@@ -62,7 +74,8 @@ func TestOutboxPublisherWorker_ProcessPendingEvents(t *testing.T) {
 	}
 
 	outboxRepo := persistence.NewGORMOutboxRepository(db)
-	pub := worker.NewOutboxPublisherWorker(outboxRepo, nil, 100*time.Millisecond)
+	mockPub := &mockPublisher{}
+	pub := worker.NewOutboxPublisherWorker(outboxRepo, mockPub, 100*time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -83,5 +96,8 @@ func TestOutboxPublisherWorker_ProcessPendingEvents(t *testing.T) {
 	}
 	if !updated.Published {
 		t.Errorf("got published false, want true")
+	}
+	if len(mockPub.published) != 1 {
+		t.Errorf("got %d published records in mock, want 1", len(mockPub.published))
 	}
 }

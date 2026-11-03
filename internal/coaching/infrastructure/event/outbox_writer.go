@@ -69,13 +69,15 @@ func (w *OutboxWriter) enqueueOne(ctx context.Context, partitionKey string, ev d
 	}
 
 	rec := &port.OutboxRecord{
-		ID:           uuid.NewString(),
-		EventID:      eventID,
-		EventType:    ev.EventName(),
-		Payload:      envBytes,
-		PartitionKey: partitionKey,
-		CreatedAt:    now,
-		Published:    false,
+		ID:            uuid.NewString(),
+		EventID:       eventID,
+		AggregateType: "Roadmap",
+		AggregateID:   partitionKey,
+		EventType:     ev.EventName(),
+		Payload:       envBytes,
+		PartitionKey:  partitionKey,
+		CreatedAt:     now,
+		Published:     false,
 	}
 
 	return w.outbox.Save(ctx, rec)

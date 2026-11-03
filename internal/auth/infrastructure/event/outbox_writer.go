@@ -78,25 +78,7 @@ func (p *OutboxWriter) recordUserRegistered(ctx context.Context, ev domainEvent.
 		return fmt.Errorf("marshal user registered proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
-	eventType := ev.EventName()
-
-	cloudEvent := map[string]interface{}{
-		"specversion":     "1.0",
-		"id":              eventID,
-		"source":          "services/auth-service",
-		"type":            eventType,
-		"time":            ev.RegisteredAt.Format(time.RFC3339),
-		"datacontenttype": "application/json",
-		"data":            json.RawMessage(payloadBytes),
-	}
-
-	envelopeBytes, err := json.Marshal(cloudEvent)
-	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
-	}
-
-	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.UserID)
+	return p.writeCloudEvent(ctx, "User", ev.UserID, ev.EventName(), ev.UserID, ev.RegisteredAt, payloadBytes)
 }
 
 func (p *OutboxWriter) recordOTPSent(ctx context.Context, ev domainEvent.OTPSentEvent) error {
@@ -132,25 +114,12 @@ func (p *OutboxWriter) recordOTPSent(ctx context.Context, ev domainEvent.OTPSent
 		return fmt.Errorf("marshal high priority notification proto: %w", err)
 	}
 
-	eventID := uuid.New().String()
-	eventType := ev.EventName()
-
-	cloudEvent := map[string]interface{}{
-		"specversion":     "1.0",
-		"id":              eventID,
-		"source":          "services/auth-service",
-		"type":            eventType,
-		"time":            ev.SentAt.Format(time.RFC3339),
-		"datacontenttype": "application/json",
-		"data":            json.RawMessage(payloadBytes),
+	sentAt := ev.SentAt
+	if sentAt.IsZero() {
+		sentAt = time.Now().UTC()
 	}
 
-	envelopeBytes, err := json.Marshal(cloudEvent)
-	if err != nil {
-		return fmt.Errorf("marshal cloudevent envelope: %w", err)
-	}
-
-	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.Identifier)
+	return p.writeCloudEvent(ctx, "OTP", ev.Identifier, ev.EventName(), ev.Identifier, sentAt, payloadBytes)
 }
 
 func (p *OutboxWriter) recordUserRoleUpdated(ctx context.Context, ev domainEvent.UserRoleUpdatedEvent) error {
@@ -166,15 +135,18 @@ func (p *OutboxWriter) recordUserRoleUpdated(ctx context.Context, ev domainEvent
 		return fmt.Errorf("marshal user role updated proto: %w", err)
 	}
 
+	return p.writeCloudEvent(ctx, "User", ev.UserID, ev.EventName(), ev.UserID, ev.UpdatedAt, payloadBytes)
+}
+
+func (p *OutboxWriter) writeCloudEvent(ctx context.Context, aggregateType, aggregateID, eventType, partitionKey string, occurredAt time.Time, payloadBytes []byte) error {
 	eventID := uuid.New().String()
-	eventType := ev.EventName()
 
 	cloudEvent := map[string]interface{}{
 		"specversion":     "1.0",
 		"id":              eventID,
 		"source":          "services/auth-service",
 		"type":            eventType,
-		"time":            ev.UpdatedAt.Format(time.RFC3339),
+		"time":            occurredAt.Format(time.RFC3339),
 		"datacontenttype": "application/json",
 		"data":            json.RawMessage(payloadBytes),
 	}
@@ -184,5 +156,16 @@ func (p *OutboxWriter) recordUserRoleUpdated(ctx context.Context, ev domainEvent
 		return fmt.Errorf("marshal cloudevent envelope: %w", err)
 	}
 
-	return p.outboxRepo.SaveEvent(ctx, eventID, eventType, envelopeBytes, ev.UserID)
+	record := &port.OutboxRecord{
+		ID:            uuid.New().String(),
+		EventID:       eventID,
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		Payload:       envelopeBytes,
+		PartitionKey:  partitionKey,
+		Published:     false,
+		CreatedAt:     occurredAt,
+	}
+	return p.outboxRepo.Save(ctx, record)
 }

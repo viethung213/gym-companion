@@ -33,6 +33,24 @@ func (m *mockOutboxRepo) MarkAsPublished(ctx context.Context, ids []string) erro
 	return nil
 }
 
+func (m *mockOutboxRepo) ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*port.OutboxRecord) error) error {
+	records, err := m.ClaimBatch(ctx, limit, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	if err := publishFn(ctx, records); err != nil {
+		return err
+	}
+	ids := make([]string, len(records))
+	for i, r := range records {
+		ids[i] = r.ID
+	}
+	return m.MarkAsPublished(ctx, ids)
+}
+
 func TestOutboxWorker_StartCancellation(t *testing.T) {
 	repo := &mockOutboxRepo{}
 	pub := kafka.NewPublisher(nil)
