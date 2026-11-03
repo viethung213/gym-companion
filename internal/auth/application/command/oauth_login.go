@@ -24,13 +24,13 @@ type OAuthLoginCommand struct {
 
 // OAuthLoginHandler exchanges OAuth authorization code for tokens and manages user accounts.
 type OAuthLoginHandler struct {
-	userRepo  repository.UserRepository
-	keyRepo   port.KeyRepository
-	sessRepo  port.SessionRepository
-	tokenServ port.TokenService
-	oauthServ port.OAuthService
-	publisher port.OutboxWriter
-	txManager port.TransactionManager
+	userRepo      repository.UserRepository
+	keyRepo       port.KeyRepository
+	sessRepo      port.SessionRepository
+	tokenServ     port.TokenService
+	oauthServ     port.OAuthService
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
 }
 
 // NewOAuthLoginHandler creates a new OAuthLoginHandler instance.
@@ -40,17 +40,17 @@ func NewOAuthLoginHandler(
 	sessRepo port.SessionRepository,
 	tokenServ port.TokenService,
 	oauthServ port.OAuthService,
-	publisher port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *OAuthLoginHandler {
 	return &OAuthLoginHandler{
-		userRepo:  userRepo,
-		keyRepo:   keyRepo,
-		sessRepo:  sessRepo,
-		tokenServ: tokenServ,
-		oauthServ: oauthServ,
-		publisher: publisher,
-		txManager: txManager,
+		userRepo:      userRepo,
+		keyRepo:       keyRepo,
+		sessRepo:      sessRepo,
+		tokenServ:     tokenServ,
+		oauthServ:     oauthServ,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -132,9 +132,9 @@ func (h *OAuthLoginHandler) Handle(ctx context.Context, cmd OAuthLoginCommand) (
 				return fmt.Errorf("save new user: %w", createErr)
 			}
 
-			// Publish domain events
+			// Record domain events into outbox
 			for _, ev := range user.DomainEvents() {
-				if pubErr := h.publisher.Write(txCtx, ev); pubErr != nil {
+				if pubErr := h.eventRecorder.Write(txCtx, ev); pubErr != nil {
 					return fmt.Errorf("dispatch domain event: %w", pubErr)
 				}
 			}

@@ -25,8 +25,12 @@ func (m *mockTx) WithTransaction(ctx context.Context, fn func(ctx context.Contex
 
 type mockPublisher struct{}
 
-func (m *mockPublisher) PublishEvents(ctx context.Context, events []any) error {
+func (m *mockPublisher) RecordEvents(ctx context.Context, events []any) error {
 	return nil
+}
+
+func (m *mockPublisher) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 type testFollowRepo struct {

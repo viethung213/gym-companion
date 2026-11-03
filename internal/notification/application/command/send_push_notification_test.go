@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
+	"github.com/viethung213/gym-companion/internal/notification/domain/event"
 	"github.com/viethung213/gym-companion/internal/notification/domain/vo"
 )
 
@@ -90,6 +91,15 @@ func (m *mockTxManager) ExecTx(ctx context.Context, fn func(ctx context.Context)
 	return fn(ctx)
 }
 
+type mockEventRecorder struct {
+	events []any
+}
+
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
+	m.events = append(m.events, events...)
+	return nil
+}
+
 func TestSendPushNotificationHandler(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +129,33 @@ func TestSendPushNotificationHandler(t *testing.T) {
 
 		if got, want := res.Status, "SENT"; got != want {
 			t.Errorf("got status %s, want %s", got, want)
+		}
+	})
+
+	t.Run("successful push records outbox event", func(t *testing.T) {
+		rec := &mockEventRecorder{}
+		h := command.NewSendPushNotificationHandler(deviceRepo, notifRepo, settingRepo, provider, txMgr, rec)
+		cmd := command.SendPushNotificationCommand{
+			UserID: "usr-1",
+			Title:  "Outbox Test",
+			Body:   "Verifying recorder",
+		}
+		res, err := h.Handle(context.Background(), cmd)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "SENT" {
+			t.Errorf("got status %s, want SENT", res.Status)
+		}
+		if len(rec.events) != 1 {
+			t.Fatalf("expected 1 recorded event, got %d", len(rec.events))
+		}
+		sentEv, ok := rec.events[0].(event.NotificationSentEvent)
+		if !ok {
+			t.Fatalf("expected NotificationSentEvent, got %T", rec.events[0])
+		}
+		if sentEv.UserID != "usr-1" || sentEv.Title != "Outbox Test" {
+			t.Errorf("unexpected event content: %+v", sentEv)
 		}
 	})
 

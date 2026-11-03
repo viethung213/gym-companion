@@ -29,24 +29,24 @@ type ShareWorkoutSessionResult struct {
 
 // ShareWorkoutSessionHandler coordinates the business logic for sharing a workout session.
 type ShareWorkoutSessionHandler struct {
-	sessionRepo repository.WorkoutSessionRepository
-	motionRepo  repository.MotionSpecificationRepository
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
+	sessionRepo   repository.WorkoutSessionRepository
+	motionRepo    repository.MotionSpecificationRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewShareWorkoutSessionHandler constructs a new ShareWorkoutSessionHandler.
 func NewShareWorkoutSessionHandler(
 	sessionRepo repository.WorkoutSessionRepository,
 	motionRepo repository.MotionSpecificationRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *ShareWorkoutSessionHandler {
 	return &ShareWorkoutSessionHandler{
-		sessionRepo: sessionRepo,
-		motionRepo:  motionRepo,
-		outbox:      outbox,
-		txManager:   txManager,
+		sessionRepo:   sessionRepo,
+		motionRepo:    motionRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -113,8 +113,8 @@ func (h *ShareWorkoutSessionHandler) Handle(
 		}
 
 		events := session.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); err != nil {
+		if len(events) > 0 && h.eventRecorder != nil {
+			if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
 				return err
 			}
 		}

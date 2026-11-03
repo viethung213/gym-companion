@@ -115,8 +115,8 @@ func TestSeedSystemBots(t *testing.T) {
 	outboxRepo := authPostgres.NewOutboxRepository(gormDB)
 	argon2Hasher := authCrypto.NewArgon2Hasher()
 	txManager := authPostgres.NewSQLTransactionManager(gormDB)
-	eventPub := authEvent.NewOutboxWriter(outboxRepo)
-	registerHandler := authCommand.NewRegisterHandler(userRepo, argon2Hasher, eventPub, txManager)
+	outboxWriter := authEvent.NewOutboxWriter(outboxRepo)
+	registerHandler := authCommand.NewRegisterHandler(userRepo, argon2Hasher, outboxWriter, txManager)
 
 	// Auth API Handler (Transport layer)
 	authHandler := authGRPC.NewGRPCHandler(
@@ -235,8 +235,8 @@ func TestSeedSystemBots_SnapshotTimeout(t *testing.T) {
 	outboxRepo := authPostgres.NewOutboxRepository(gormDB)
 	argon2Hasher := authCrypto.NewArgon2Hasher()
 	txManager := authPostgres.NewSQLTransactionManager(gormDB)
-	eventPub := authEvent.NewOutboxWriter(outboxRepo)
-	registerHandler := authCommand.NewRegisterHandler(userRepo, argon2Hasher, eventPub, txManager)
+	outboxWriter := authEvent.NewOutboxWriter(outboxRepo)
+	registerHandler := authCommand.NewRegisterHandler(userRepo, argon2Hasher, outboxWriter, txManager)
 
 	authHandler := authGRPC.NewGRPCHandler(
 		nil, nil, nil, nil, nil, nil,

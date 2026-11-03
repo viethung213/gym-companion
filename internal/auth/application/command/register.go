@@ -31,24 +31,24 @@ type RegisterResult struct {
 
 // RegisterHandler processes user sign-up requests.
 type RegisterHandler struct {
-	userRepo     repository.UserRepository
-	hasher       port.Hasher
-	outboxWriter port.OutboxWriter
-	txManager    port.TxManager
+	userRepo      repository.UserRepository
+	hasher        port.Hasher
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewRegisterHandler creates a new RegisterHandler.
 func NewRegisterHandler(
 	userRepo repository.UserRepository,
 	hasher port.Hasher,
-	outboxWriter port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *RegisterHandler {
 	return &RegisterHandler{
-		userRepo:     userRepo,
-		hasher:       hasher,
-		outboxWriter: outboxWriter,
-		txManager:    txManager,
+		userRepo:      userRepo,
+		hasher:        hasher,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -132,7 +132,7 @@ func (h *RegisterHandler) Handle(ctx context.Context, cmd RegisterCommand) (*Reg
 		}
 
 		for _, ev := range user.DomainEvents() {
-			if err := h.outboxWriter.Write(txCtx, ev); err != nil {
+			if err := h.eventRecorder.Write(txCtx, ev); err != nil {
 				return fmt.Errorf("write outbox event: %w", err)
 			}
 		}

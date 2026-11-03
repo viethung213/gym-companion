@@ -2,20 +2,17 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/google/uuid"
-	notificationv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/event"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
+	domainEvent "github.com/viethung213/gym-companion/internal/notification/domain/event"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type SendPushNotificationCommand struct {
@@ -38,7 +35,7 @@ type SendPushNotificationHandler struct {
 	settingRepo      repository.SettingRepository
 	pushProvider     port.PushProvider
 	txManager        port.TxManager
-	outboxRepo       port.OutboxRepository
+	eventRecorder    port.EventRecorder
 }
 
 func NewSendPushNotificationHandler(
@@ -47,7 +44,7 @@ func NewSendPushNotificationHandler(
 	settingRepo repository.SettingRepository,
 	pushProvider port.PushProvider,
 	txManager port.TxManager,
-	outboxRepo port.OutboxRepository,
+	eventRecorder port.EventRecorder,
 ) *SendPushNotificationHandler {
 	return &SendPushNotificationHandler{
 		deviceRepo:       deviceRepo,
@@ -55,7 +52,7 @@ func NewSendPushNotificationHandler(
 		settingRepo:      settingRepo,
 		pushProvider:     pushProvider,
 		txManager:        txManager,
-		outboxRepo:       outboxRepo,
+		eventRecorder:    eventRecorder,
 	}
 }
 
@@ -73,50 +70,17 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 			return fmt.Errorf("save in-app notification: %w", saveErr)
 		}
 
-		if h.outboxRepo != nil {
-			now := time.Now().UTC()
-			eventID := uuid.New().String()
-			eventType := "contracts.generic.notification.v1.event.NotificationSent"
-
-			payloadProto := &notificationv1event.NotificationSent{
-				NotificationId: inAppNotif.ID(),
-				UserId:         cmd.UserID,
-				Channel:        "PUSH",
-				Title:          cmd.Title,
-				Body:           cmd.Body,
-				SentAt:         timestamppb.New(now),
-			}
-			payloadBytes, marshalErr := protojson.Marshal(payloadProto)
-			if marshalErr != nil {
-				return fmt.Errorf("marshal NotificationSent proto payload: %w", marshalErr)
-			}
-
-			cloudEvent := map[string]interface{}{
-				"specversion":     "1.0",
-				"id":              eventID,
-				"source":          "services/notification-service",
-				"type":            eventType,
-				"time":            now.Format(time.RFC3339),
-				"datacontenttype": "application/json",
-				"data":            json.RawMessage(payloadBytes),
-			}
-
-			cloudEventBytes, jsonErr := json.Marshal(cloudEvent)
-			if jsonErr != nil {
-				return fmt.Errorf("marshal cloudevent envelope: %w", jsonErr)
-			}
-
-			outboxRec := &port.OutboxRecord{
-				ID:           uuid.New().String(),
-				EventID:      eventID,
-				EventType:    eventType,
-				Payload:      cloudEventBytes,
-				PartitionKey: cmd.UserID,
-				Published:    false,
-				CreatedAt:    now,
-			}
-			if outboxErr := h.outboxRepo.Save(txCtx, outboxRec); outboxErr != nil {
-				return fmt.Errorf("save outbox event: %w", outboxErr)
+		if h.eventRecorder != nil {
+			ev := domainEvent.NewNotificationSentEvent(
+				inAppNotif.ID(),
+				cmd.UserID,
+				"PUSH",
+				cmd.Title,
+				cmd.Body,
+				cmd.Data,
+			)
+			if outboxErr := h.eventRecorder.RecordEvents(txCtx, []any{ev}); outboxErr != nil {
+				return fmt.Errorf("record notification outbox event: %w", outboxErr)
 			}
 		}
 		return nil

@@ -73,10 +73,16 @@ func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(ctx context
 	return fn(ctx)
 }
 
-type mockOutboxWriter struct {
+type mockEventRecorder struct {
 	err error
 }
 
-func (m *mockOutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
 	return m.err
 }
+
+func (m *mockEventRecorder) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []any) error {
+	return m.err
+}
+
+type mockOutboxWriter = mockEventRecorder

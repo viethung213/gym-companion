@@ -20,16 +20,16 @@ type RecordParticipantResultCommand struct {
 }
 
 type RecordParticipantResultHandler struct {
-	matchRepo repository.SoloMatchRepository
-	eventPub  port.EventPublisher
-	botRepo   repository.BotRepository
-	txManager port.TransactionManager
-	resolver  *service.MatchResolver
+	matchRepo     repository.SoloMatchRepository
+	eventRecorder port.EventRecorder
+	botRepo       repository.BotRepository
+	txManager     port.TransactionManager
+	resolver      *service.MatchResolver
 }
 
 func NewRecordParticipantResultHandler(
 	matchRepo repository.SoloMatchRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 	resolver *service.MatchResolver,
 	botRepo repository.BotRepository,
@@ -38,11 +38,11 @@ func NewRecordParticipantResultHandler(
 		resolver = service.NewMatchResolver()
 	}
 	return &RecordParticipantResultHandler{
-		matchRepo: matchRepo,
-		eventPub:  eventPub,
-		botRepo:   botRepo,
-		txManager: txManager,
-		resolver:  resolver,
+		matchRepo:     matchRepo,
+		eventRecorder: eventRecorder,
+		botRepo:       botRepo,
+		txManager:     txManager,
+		resolver:      resolver,
 	}
 }
 
@@ -114,8 +114,8 @@ func (h *RecordParticipantResultHandler) Handle(ctx context.Context, cmd RecordP
 				BotUserID:     botUserID,
 				CompletedAt:   endedAt,
 			}
-			if err := h.eventPub.PublishEvents(txCtx, []any{ev}); err != nil {
-				return fmt.Errorf("publish outbox event: %w", err)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record outbox event: %w", err)
 			}
 		}
 

@@ -15,10 +15,14 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
 )
 
-type failEventPub struct{}
+type failEventRecorder struct{}
 
-func (f *failEventPub) PublishEvents(ctx context.Context, events []any) error {
-	return errors.New("publish events failed")
+func (f *failEventRecorder) RecordEvents(ctx context.Context, events []any) error {
+	return errors.New("record events failed")
+}
+
+func (f *failEventRecorder) PublishEvents(ctx context.Context, events []any) error {
+	return f.RecordEvents(ctx, events)
 }
 
 func TestUpdateIdentityHandler_Success(t *testing.T) {
@@ -113,7 +117,7 @@ func TestUpdateIdentityHandler_Errors(t *testing.T) {
 	})
 
 	t.Run("Publish events failure", func(t *testing.T) {
-		failPubHandler := command.NewUpdateIdentityHandler(repo, &failEventPub{}, txManager)
+		failPubHandler := command.NewUpdateIdentityHandler(repo, &failEventRecorder{}, txManager)
 		name := "Valid New Name"
 		cmd := command.UpdateIdentityCommand{
 			UserID:   "user-identity-err",

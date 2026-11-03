@@ -44,39 +44,6 @@ type OutboxRepository interface {
 }
 
 // BrokerPublisher sends serialized outbox events to Kafka.
-
 type BrokerPublisher interface {
 	PublishBatch(ctx context.Context, events []*OutboxRecord) error
-}
-
-// OutboxWriter serializes domain events to CloudEvents and writes to Outbox.
-
-type OutboxWriter interface {
-	WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error
-}
-
-// OutboxLogRecord represents an entry in the consumer outbox_log idempotency table.
-
-type OutboxLogRecord struct {
-	ID string
-
-	EventID string
-
-	EventType string
-
-	Payload []byte
-
-	PartitionKey string
-
-	Status string
-
-	ErrorMessage string
-}
-
-// OutboxLogRepository defines persistence for tracking consumer event idempotency.
-
-type OutboxLogRepository interface {
-	IsProcessed(ctx context.Context, eventID string) (bool, error)
-
-	SaveLog(ctx context.Context, record *OutboxLogRecord) error
 }

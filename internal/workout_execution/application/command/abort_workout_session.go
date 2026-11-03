@@ -25,21 +25,21 @@ type AbortWorkoutSessionResult struct {
 
 // AbortWorkoutSessionHandler handles session abortion.
 type AbortWorkoutSessionHandler struct {
-	sessionRepo repository.WorkoutSessionRepository
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
+	sessionRepo   repository.WorkoutSessionRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewAbortWorkoutSessionHandler constructs AbortWorkoutSessionHandler.
 func NewAbortWorkoutSessionHandler(
 	sessionRepo repository.WorkoutSessionRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *AbortWorkoutSessionHandler {
 	return &AbortWorkoutSessionHandler{
-		sessionRepo: sessionRepo,
-		outbox:      outbox,
-		txManager:   txManager,
+		sessionRepo:   sessionRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -73,8 +73,8 @@ func (h *AbortWorkoutSessionHandler) Handle(
 			return saveErr
 		}
 		events := session.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if writeErr := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); writeErr != nil {
+		if len(events) > 0 && h.eventRecorder != nil {
+			if writeErr := h.eventRecorder.RecordEvents(txCtx, events); writeErr != nil {
 				return writeErr
 			}
 		}

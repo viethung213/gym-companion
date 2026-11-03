@@ -41,9 +41,9 @@ func (s *SoloTrackingService) initWorkoutSessionInDB(
 				return fmt.Errorf("save aborted active session: %w", saveErr)
 			}
 			abortedEvents := active.PopEvents()
-			if len(abortedEvents) > 0 && s.outbox != nil {
-				if outboxErr := s.outbox.WriteEvents(txCtx, "WorkoutSession", active.ID(), abortedEvents); outboxErr != nil {
-					return fmt.Errorf("write outbox events for aborted session: %w", outboxErr)
+			if len(abortedEvents) > 0 && s.eventRecorder != nil {
+				if outboxErr := s.eventRecorder.RecordEvents(txCtx, abortedEvents); outboxErr != nil {
+					return fmt.Errorf("record outbox events for aborted session: %w", outboxErr)
 				}
 			}
 		}
@@ -57,9 +57,9 @@ func (s *SoloTrackingService) initWorkoutSessionInDB(
 			return fmt.Errorf("save workout session: %w", err)
 		}
 		events := workoutSess.PopEvents()
-		if len(events) > 0 && s.outbox != nil {
-			if err := s.outbox.WriteEvents(txCtx, "WorkoutSession", workoutSess.ID(), events); err != nil {
-				return fmt.Errorf("write outbox events: %w", err)
+		if len(events) > 0 && s.eventRecorder != nil {
+			if err := s.eventRecorder.RecordEvents(txCtx, events); err != nil {
+				return fmt.Errorf("record outbox events: %w", err)
 			}
 		}
 		referee.SetWorkoutSessionID(sessionID)
@@ -102,9 +102,9 @@ func (s *SoloTrackingService) completeWorkoutSessionInDB(
 	}
 
 	if s.sessionRepo == nil || referee.WorkoutSessionID() == "" {
-		if s.outbox != nil {
-			if err := s.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{soloEvent}); err != nil {
-				return fmt.Errorf("write solo match completed outbox: %w", err)
+		if s.eventRecorder != nil {
+			if err := s.eventRecorder.RecordEvents(ctx, []any{soloEvent}); err != nil {
+				return fmt.Errorf("record solo match completed outbox: %w", err)
 			}
 		}
 		return nil
@@ -134,16 +134,16 @@ func (s *SoloTrackingService) completeWorkoutSessionInDB(
 			return fmt.Errorf("save completed session: %w", err)
 		}
 
-		if s.outbox != nil {
+		if s.eventRecorder != nil {
 			events := sess.PopEvents()
 			if len(events) > 0 {
-				if err := s.outbox.WriteEvents(txCtx, "WorkoutSession", sess.ID(), events); err != nil {
-					return fmt.Errorf("write session outbox: %w", err)
+				if err := s.eventRecorder.RecordEvents(txCtx, events); err != nil {
+					return fmt.Errorf("record session outbox: %w", err)
 				}
 			}
 
-			if err := s.outbox.WriteEvents(txCtx, "SoloMatch", matchID, []interface{}{soloEvent}); err != nil {
-				return fmt.Errorf("write solo match completed outbox: %w", err)
+			if err := s.eventRecorder.RecordEvents(txCtx, []any{soloEvent}); err != nil {
+				return fmt.Errorf("record solo match completed outbox: %w", err)
 			}
 		}
 		return nil
@@ -177,9 +177,9 @@ func (s *SoloTrackingService) abortWorkoutSessionInDB(
 	}
 
 	if s.sessionRepo == nil || referee.WorkoutSessionID() == "" {
-		if s.outbox != nil {
-			if err := s.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{soloAbortedEv}); err != nil {
-				return fmt.Errorf("write solo aborted outbox: %w", err)
+		if s.eventRecorder != nil {
+			if err := s.eventRecorder.RecordEvents(ctx, []any{soloAbortedEv}); err != nil {
+				return fmt.Errorf("record solo aborted outbox: %w", err)
 			}
 		}
 		return nil
@@ -206,16 +206,16 @@ func (s *SoloTrackingService) abortWorkoutSessionInDB(
 			if err := s.sessionRepo.Save(txCtx, sess); err != nil {
 				return fmt.Errorf("save aborted session: %w", err)
 			}
-			if s.outbox != nil {
+			if s.eventRecorder != nil {
 				events := sess.PopEvents()
 				if len(events) > 0 {
-					if err := s.outbox.WriteEvents(txCtx, "WorkoutSession", sess.ID(), events); err != nil {
-						return fmt.Errorf("write aborted session outbox: %w", err)
+					if err := s.eventRecorder.RecordEvents(txCtx, events); err != nil {
+						return fmt.Errorf("record aborted session outbox: %w", err)
 					}
 				}
 
-				if err := s.outbox.WriteEvents(txCtx, "SoloMatch", matchID, []interface{}{soloAbortedEv}); err != nil {
-					return fmt.Errorf("write solo aborted outbox: %w", err)
+				if err := s.eventRecorder.RecordEvents(txCtx, []any{soloAbortedEv}); err != nil {
+					return fmt.Errorf("record solo aborted outbox: %w", err)
 				}
 			}
 		}

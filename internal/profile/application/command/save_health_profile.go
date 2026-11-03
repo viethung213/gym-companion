@@ -45,20 +45,20 @@ type SaveHealthProfileResult struct {
 }
 
 type SaveHealthProfileHandler struct {
-	repo      repository.UserProfileRepository
-	eventPub  port.EventPublisher
-	txManager port.TransactionManager
+	repo          repository.UserProfileRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
 }
 
 func NewSaveHealthProfileHandler(
 	repo repository.UserProfileRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *SaveHealthProfileHandler {
 	return &SaveHealthProfileHandler{
-		repo:      repo,
-		eventPub:  eventPub,
-		txManager: txManager,
+		repo:          repo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -138,9 +138,9 @@ func (h *SaveHealthProfileHandler) Handle(ctx context.Context, cmd SaveHealthPro
 			return fmt.Errorf("save profile: %w", saveErr)
 		}
 		eventsToPublish = profile.PopEvents()
-		if h.eventPub != nil && len(eventsToPublish) > 0 {
-			if pubErr := h.eventPub.PublishEvents(txCtx, eventsToPublish); pubErr != nil {
-				return fmt.Errorf("publish events: %w", pubErr)
+		if h.eventRecorder != nil && len(eventsToPublish) > 0 {
+			if pubErr := h.eventRecorder.RecordEvents(txCtx, eventsToPublish); pubErr != nil {
+				return fmt.Errorf("record events: %w", pubErr)
 			}
 		}
 		return nil

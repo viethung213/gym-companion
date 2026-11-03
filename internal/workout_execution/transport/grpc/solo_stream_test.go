@@ -60,9 +60,15 @@ type testOutboxWriter struct {
 	events []interface{}
 }
 
-func (t *testOutboxWriter) WriteEvents(ctx context.Context, aggType, aggID string, evs []interface{}) error {
-	t.events = append(t.events, evs...)
+func (t *testOutboxWriter) RecordEvents(ctx context.Context, evs []any) error {
+	for _, e := range evs {
+		t.events = append(t.events, e)
+	}
 	return nil
+}
+
+func (t *testOutboxWriter) WriteEvents(ctx context.Context, aggType, aggID string, evs []interface{}) error {
+	return t.RecordEvents(ctx, evs)
 }
 
 func TestStreamSoloMatchTracking(t *testing.T) {

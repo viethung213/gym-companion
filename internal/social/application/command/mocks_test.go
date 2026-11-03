@@ -14,13 +14,21 @@ func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(ctx context
 	return fn(ctx)
 }
 
-type mockEventPublisher struct {
+type mockEventRecorder struct {
+	recorded  []any
 	published []any
 }
 
-func (m *mockEventPublisher) PublishEvents(ctx context.Context, events []any) error {
+type mockEventPublisher = mockEventRecorder
+
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
+	m.recorded = append(m.recorded, events...)
 	m.published = append(m.published, events...)
 	return nil
+}
+
+func (m *mockEventRecorder) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 type mockUserSnapshotRepo struct {

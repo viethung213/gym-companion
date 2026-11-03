@@ -20,23 +20,23 @@ type RecalibratePlanWithPantryCommand struct {
 }
 
 type RecalibratePlanWithPantryHandler struct {
-	planRepo       repository.NutritionPlanRepository
-	historyRepo    repository.MealHistoryRepository
-	eventPublisher port.EventPublisher
-	menuGenerator  *service.MenuGenerator
+	planRepo      repository.NutritionPlanRepository
+	historyRepo   repository.MealHistoryRepository
+	eventRecorder port.EventRecorder
+	menuGenerator *service.MenuGenerator
 }
 
 func NewRecalibratePlanWithPantryHandler(
 	planRepo repository.NutritionPlanRepository,
 	historyRepo repository.MealHistoryRepository,
-	eventPublisher port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	menuGenerator *service.MenuGenerator,
 ) *RecalibratePlanWithPantryHandler {
 	return &RecalibratePlanWithPantryHandler{
-		planRepo:       planRepo,
-		historyRepo:    historyRepo,
-		eventPublisher: eventPublisher,
-		menuGenerator:  menuGenerator,
+		planRepo:      planRepo,
+		historyRepo:   historyRepo,
+		eventRecorder: eventRecorder,
+		menuGenerator: menuGenerator,
 	}
 }
 
@@ -70,14 +70,14 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd Recal
 		return nil, fmt.Errorf("recalibrate pantry update: %w", updateErr)
 	}
 
-	if h.eventPublisher != nil {
+	if h.eventRecorder != nil {
 		ev := domainEvent.NewNutritionPlanRecalibratedEvent(
 			plan.ID(),
 			plan.UserID(),
 			"Pantry ingredient availability recalibration",
 			time.Now(),
 		)
-		_ = h.eventPublisher.PublishEvents(ctx, []any{ev})
+		_ = h.eventRecorder.RecordEvents(ctx, []any{ev})
 	}
 
 	return plan, nil

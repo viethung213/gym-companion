@@ -9,30 +9,35 @@ import (
 	domainEvent "github.com/viethung213/gym-companion/internal/solo_match/domain/event"
 )
 
-// OutboxWriter implements port.EventPublisher by transforming domain events
+// OutboxWriter implements port.EventRecorder by transforming domain events
 // into CloudEvents 1.0 JSON payloads and writing them to port.OutboxRepository.
 type OutboxWriter struct {
 	outboxRepo port.OutboxRepository
 }
 
-var _ port.EventPublisher = (*OutboxWriter)(nil)
+var _ port.EventRecorder = (*OutboxWriter)(nil)
 
 // NewOutboxWriter creates a new OutboxWriter instance.
 func NewOutboxWriter(outboxRepo port.OutboxRepository) *OutboxWriter {
 	return &OutboxWriter{outboxRepo: outboxRepo}
 }
 
-// PublishEvents converts each event into a standardized CloudEvent outbox record and saves it.
-func (w *OutboxWriter) PublishEvents(ctx context.Context, events []any) error {
+// RecordEvents converts each event into a standardized CloudEvent outbox record and saves it.
+func (w *OutboxWriter) RecordEvents(ctx context.Context, events []any) error {
 	for _, ev := range events {
-		if err := w.publishSingleEvent(ctx, ev); err != nil {
+		if err := w.recordSingleEvent(ctx, ev); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (w *OutboxWriter) publishSingleEvent(ctx context.Context, ev any) error {
+// PublishEvents delegates to RecordEvents for backward compatibility.
+func (w *OutboxWriter) PublishEvents(ctx context.Context, events []any) error {
+	return w.RecordEvents(ctx, events)
+}
+
+func (w *OutboxWriter) recordSingleEvent(ctx context.Context, ev any) error {
 	dev, ok := ev.(domainEvent.DomainEvent)
 	if !ok {
 		return fmt.Errorf("unsupported event type %T: must implement domainEvent.DomainEvent", ev)

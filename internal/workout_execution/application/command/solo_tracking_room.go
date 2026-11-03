@@ -33,14 +33,14 @@ func (s *SoloTrackingService) emitRoomReadyEvent(ctx context.Context, matchID st
 	if _, loaded := s.readyEmitted.LoadOrStore(matchID, true); loaded {
 		return
 	}
-	if s.outbox == nil {
+	if s.eventRecorder == nil {
 		return
 	}
 	readyEvt := &domainEvent.SoloMatchRoomReady{
 		MatchID:   matchID,
 		StartedAt: time.Now().UTC(),
 	}
-	if err := s.outbox.WriteEvents(ctx, "SoloMatch", matchID, []interface{}{readyEvt}); err != nil {
+	if err := s.eventRecorder.RecordEvents(ctx, []any{readyEvt}); err != nil {
 		s.readyEmitted.Delete(matchID)
 		slog.WarnContext(ctx, "failed to write SoloMatchRoomReady event to outbox",
 			slog.String("match_id", matchID),

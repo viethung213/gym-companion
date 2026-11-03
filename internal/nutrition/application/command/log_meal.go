@@ -27,23 +27,23 @@ type LogMealCommand struct {
 }
 
 type LogMealHandler struct {
-	planRepo       repository.NutritionPlanRepository
-	historyRepo    repository.MealHistoryRepository
-	eventPublisher port.EventPublisher
-	aiService      repository.AIService
+	planRepo      repository.NutritionPlanRepository
+	historyRepo   repository.MealHistoryRepository
+	eventRecorder port.EventRecorder
+	aiService     repository.AIService
 }
 
 func NewLogMealHandler(
 	planRepo repository.NutritionPlanRepository,
 	historyRepo repository.MealHistoryRepository,
-	eventPublisher port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	aiService repository.AIService,
 ) *LogMealHandler {
 	return &LogMealHandler{
-		planRepo:       planRepo,
-		historyRepo:    historyRepo,
-		eventPublisher: eventPublisher,
-		aiService:      aiService,
+		planRepo:      planRepo,
+		historyRepo:   historyRepo,
+		eventRecorder: eventRecorder,
+		aiService:     aiService,
 	}
 }
 
@@ -120,7 +120,7 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 		return nil, fmt.Errorf("log meal save: %w", saveErr)
 	}
 
-	if h.eventPublisher != nil {
+	if h.eventRecorder != nil {
 		ev1 := domainEvent.NewMealLoggedEvent(
 			mealLog.ID(),
 			cmd.UserID,
@@ -135,7 +135,7 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 			mealName,
 			now.Add(vo.DurationProtein),
 		)
-		_ = h.eventPublisher.PublishEvents(ctx, []any{ev1, ev2})
+		_ = h.eventRecorder.RecordEvents(ctx, []any{ev1, ev2})
 	}
 
 	return &mealLog, nil

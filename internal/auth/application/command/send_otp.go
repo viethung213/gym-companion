@@ -30,26 +30,26 @@ type SendOTPResult struct {
 	OTPToken         string
 }
 
-// SendOTPHandler handles OTP generation and outbox event publishing.
+// SendOTPHandler handles OTP generation and outbox event recording.
 type SendOTPHandler struct {
-	otpRepo      repository.OTPRepository
-	hasher       port.Hasher
-	outboxWriter port.OutboxWriter
-	txManager    port.TxManager
+	otpRepo       repository.OTPRepository
+	hasher        port.Hasher
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewSendOTPHandler creates a new SendOTPHandler.
 func NewSendOTPHandler(
 	otpRepo repository.OTPRepository,
 	hasher port.Hasher,
-	outboxWriter port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *SendOTPHandler {
 	return &SendOTPHandler{
-		otpRepo:      otpRepo,
-		hasher:       hasher,
-		outboxWriter: outboxWriter,
-		txManager:    txManager,
+		otpRepo:       otpRepo,
+		hasher:        hasher,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -123,7 +123,7 @@ func (h *SendOTPHandler) Handle(ctx context.Context, cmd SendOTPCommand) (*SendO
 			SentAt:           now,
 		}
 
-		if err := h.outboxWriter.Write(txCtx, otpEvent); err != nil {
+		if err := h.eventRecorder.Write(txCtx, otpEvent); err != nil {
 			return fmt.Errorf("write otp outbox event: %w", err)
 		}
 

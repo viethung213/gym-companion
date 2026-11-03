@@ -77,8 +77,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	outboxLogRepo := persistence.NewGORMOutboxLogRepository(gormDB)
 	botRepo := persistence.NewGORMBotRepository(gormDB)
 
-	// Event Publisher Adapter
-	eventPub := infraEvent.NewOutboxWriter(outboxRepo)
+	// Event Recorder Adapter (Outbox)
+	eventRecorder := infraEvent.NewOutboxWriter(outboxRepo)
 
 	// Domain Services
 	matchResolver := service.NewMatchResolver()
@@ -94,7 +94,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		matchRepo,
 		botRepo,
 		exerciseProvider,
-		eventPub,
+		eventRecorder,
 		250*time.Millisecond,
 		5*time.Minute,
 	)
@@ -102,9 +102,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	// Application Command & Query Handlers
 	joinQueueHandler := command.NewJoinMatchmakingQueueHandler(queuePort, matchRepo)
 	cancelQueueHandler := command.NewCancelMatchmakingHandler(queuePort)
-	recordResultHandler := command.NewRecordParticipantResultHandler(matchRepo, eventPub, txManager, matchResolver, botRepo)
-	recordAbortHandler := command.NewRecordParticipantAbortHandler(matchRepo, eventPub, txManager, botRepo)
-	timeoutHandler := command.NewHandleMatchTimeoutHandler(matchRepo, eventPub, txManager, botRepo)
+	recordResultHandler := command.NewRecordParticipantResultHandler(matchRepo, eventRecorder, txManager, matchResolver, botRepo)
+	recordAbortHandler := command.NewRecordParticipantAbortHandler(matchRepo, eventRecorder, txManager, botRepo)
+	timeoutHandler := command.NewHandleMatchTimeoutHandler(matchRepo, eventRecorder, txManager, botRepo)
 	syncSnapshotHandler := command.NewSyncUserSnapshotHandler(snapshotRepo)
 
 	getMatchHandler := query.NewGetSoloMatchByIDHandler(matchRepo, snapshotRepo)

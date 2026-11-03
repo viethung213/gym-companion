@@ -29,7 +29,7 @@ type RedisMatchmakerAdapter struct {
 	matchRepo        repository.SoloMatchRepository
 	botRepo          repository.BotRepository
 	exerciseProvider port.ExerciseProvider
-	eventPub         port.EventPublisher
+	eventRecorder    port.EventRecorder
 	pollInterval     time.Duration
 	botTimeout       time.Duration
 	triggerCh        chan struct{}
@@ -44,7 +44,7 @@ func NewRedisMatchmakerAdapter(
 	matchRepo repository.SoloMatchRepository,
 	botRepo repository.BotRepository,
 	exerciseProvider port.ExerciseProvider,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	pollInterval time.Duration,
 	botTimeout time.Duration,
 ) *RedisMatchmakerAdapter {
@@ -60,7 +60,7 @@ func NewRedisMatchmakerAdapter(
 		matchRepo:        matchRepo,
 		botRepo:          botRepo,
 		exerciseProvider: exerciseProvider,
-		eventPub:         eventPub,
+		eventRecorder:    eventRecorder,
 		pollInterval:     pollInterval,
 		botTimeout:       botTimeout,
 		triggerCh:        make(chan struct{}, 10),
@@ -352,9 +352,9 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 		BotUserID:     "",
 		StartedAt:     now,
 	}
-	if a.eventPub != nil {
-		if pubErr := a.eventPub.PublishEvents(ctx, []any{startEvt}); pubErr != nil {
-			log.Printf("[SoloMatch Matchmaker] Failed to publish SoloMatchStarted event for PvP %s: %v", matchID, pubErr)
+	if a.eventRecorder != nil {
+		if pubErr := a.eventRecorder.RecordEvents(ctx, []any{startEvt}); pubErr != nil {
+			log.Printf("[SoloMatch Matchmaker] Failed to record SoloMatchStarted event for PvP %s: %v", matchID, pubErr)
 		}
 	}
 
@@ -481,9 +481,9 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 		BotUserID:     botUserID,
 		StartedAt:     now,
 	}
-	if a.eventPub != nil {
-		if pubErr := a.eventPub.PublishEvents(ctx, []any{startEvt}); pubErr != nil {
-			log.Printf("[SoloMatch Matchmaker] Failed to publish SoloMatchStarted event for bot match %s: %v", matchID, pubErr)
+	if a.eventRecorder != nil {
+		if pubErr := a.eventRecorder.RecordEvents(ctx, []any{startEvt}); pubErr != nil {
+			log.Printf("[SoloMatch Matchmaker] Failed to record SoloMatchStarted event for bot match %s: %v", matchID, pubErr)
 			a.notifyTicketsError(ctx, []string{ticketID}, "failed to initialize bot match event")
 			return
 		}

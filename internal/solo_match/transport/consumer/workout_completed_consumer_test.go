@@ -53,9 +53,13 @@ type mockEventPub struct {
 	events []any
 }
 
-func (m *mockEventPub) PublishEvents(ctx context.Context, events []any) error {
+func (m *mockEventPub) RecordEvents(ctx context.Context, events []any) error {
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *mockEventPub) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 type mockTxManager struct{}

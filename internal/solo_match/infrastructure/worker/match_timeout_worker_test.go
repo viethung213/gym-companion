@@ -31,6 +31,7 @@ func (m *mockTimeoutRepo) ListByUserID(_ context.Context, _ string, _, _ int) ([
 
 type mockEventPub struct{}
 
+func (m *mockEventPub) RecordEvents(_ context.Context, _ []any) error  { return nil }
 func (m *mockEventPub) PublishEvents(_ context.Context, _ []any) error { return nil }
 
 type mockTxManager struct{}

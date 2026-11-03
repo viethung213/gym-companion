@@ -175,13 +175,13 @@ func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(ctx context
 	return fn(ctx)
 }
 
-type mockOutboxWriter struct {
+type mockEventRecorder struct {
 	err          error
 	writtenCount int
-	events       []interface{}
+	events       []any
 }
 
-func (m *mockOutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
 	if m.err != nil {
 		return m.err
 	}
@@ -189,3 +189,9 @@ func (m *mockOutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggre
 	m.writtenCount += len(events)
 	return nil
 }
+
+func (m *mockEventRecorder) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []any) error {
+	return m.RecordEvents(ctx, events)
+}
+
+type mockOutboxWriter = mockEventRecorder

@@ -102,14 +102,22 @@ type Repositories struct {
 	TxManager        port.TransactionManager
 }
 
-// MockEventPublisher ghi nhận các events được bắn ra
-type MockEventPublisher struct {
+// MockEventRecorder ghi nhận các events được ghi vào database outbox
+type MockEventRecorder struct {
+	Recorded  []any
 	Published []any
 }
 
-func (m *MockEventPublisher) PublishEvents(_ context.Context, events []any) error {
+type MockEventPublisher = MockEventRecorder
+
+func (m *MockEventRecorder) RecordEvents(_ context.Context, events []any) error {
+	m.Recorded = append(m.Recorded, events...)
 	m.Published = append(m.Published, events...)
 	return nil
+}
+
+func (m *MockEventRecorder) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 // NewTestDB tạo GORM DB SQLite in-memory với các bảng của module Social

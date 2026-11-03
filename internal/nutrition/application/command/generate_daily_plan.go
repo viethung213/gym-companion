@@ -28,7 +28,7 @@ type GenerateDailyPlanCommand struct {
 type GenerateDailyPlanHandler struct {
 	planRepo       repository.NutritionPlanRepository
 	historyRepo    repository.MealHistoryRepository
-	eventPublisher port.EventPublisher
+	eventRecorder  port.EventRecorder
 	tdeeCalculator *service.TDEECalculator
 	menuGenerator  *service.MenuGenerator
 }
@@ -36,14 +36,14 @@ type GenerateDailyPlanHandler struct {
 func NewGenerateDailyPlanHandler(
 	planRepo repository.NutritionPlanRepository,
 	historyRepo repository.MealHistoryRepository,
-	eventPublisher port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	tdeeCalculator *service.TDEECalculator,
 	menuGenerator *service.MenuGenerator,
 ) *GenerateDailyPlanHandler {
 	return &GenerateDailyPlanHandler{
 		planRepo:       planRepo,
 		historyRepo:    historyRepo,
-		eventPublisher: eventPublisher,
+		eventRecorder:  eventRecorder,
 		tdeeCalculator: tdeeCalculator,
 		menuGenerator:  menuGenerator,
 	}
@@ -93,14 +93,14 @@ func (h *GenerateDailyPlanHandler) Handle(ctx context.Context, cmd GenerateDaily
 		return nil, fmt.Errorf("generate daily plan save: %w", saveErr)
 	}
 
-	if h.eventPublisher != nil {
+	if h.eventRecorder != nil {
 		ev := domainEvent.NewNutritionPlanGeneratedEvent(
 			plan.ID(),
 			plan.UserID(),
 			plan.PlanDate(),
 			time.Now(),
 		)
-		_ = h.eventPublisher.PublishEvents(ctx, []any{ev})
+		_ = h.eventRecorder.RecordEvents(ctx, []any{ev})
 	}
 
 	return plan, nil

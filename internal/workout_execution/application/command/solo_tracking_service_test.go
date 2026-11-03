@@ -104,13 +104,26 @@ func (m *mockLiveSyncPort) SubscribeMatchUpdates(ctx context.Context, matchID, m
 }
 
 type mockOutboxWriter struct {
-	events []interface{}
+	events []any
+	err    error
 }
 
-func (m *mockOutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
+func (m *mockOutboxWriter) RecordEvents(ctx context.Context, events []any) error {
+	if m.err != nil {
+		return m.err
+	}
 	m.events = append(m.events, events...)
 	return nil
 }
+
+func (m *mockOutboxWriter) WriteEvents(ctx context.Context, aggregateType, aggregateID string, events []interface{}) error {
+	for _, ev := range events {
+		m.events = append(m.events, ev)
+	}
+	return m.err
+}
+
+type mockEventRecorder = mockOutboxWriter
 
 func TestSoloTrackingService(t *testing.T) {
 	ctx := context.Background()

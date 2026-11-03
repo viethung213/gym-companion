@@ -15,24 +15,24 @@ import (
 // ProcessCompletedSessionForPRHandler handles async 1RM personal record calculation
 // upon session completion.
 type ProcessCompletedSessionForPRHandler struct {
-	sessionRepo repository.WorkoutSessionRepository
-	prRepo      repository.PersonalRecordRepository
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
+	sessionRepo   repository.WorkoutSessionRepository
+	prRepo        repository.PersonalRecordRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewProcessCompletedSessionForPRHandler creates a new handler instance.
 func NewProcessCompletedSessionForPRHandler(
 	sessionRepo repository.WorkoutSessionRepository,
 	prRepo repository.PersonalRecordRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *ProcessCompletedSessionForPRHandler {
 	return &ProcessCompletedSessionForPRHandler{
-		sessionRepo: sessionRepo,
-		prRepo:      prRepo,
-		outbox:      outbox,
-		txManager:   txManager,
+		sessionRepo:   sessionRepo,
+		prRepo:        prRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -108,8 +108,8 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 				return saveErr
 			}
 			events := pr.PopEvents()
-			if len(events) > 0 && h.outbox != nil {
-				if writeErr := h.outbox.WriteEvents(txCtx, "PersonalRecord", pr.ID(), events); writeErr != nil {
+			if len(events) > 0 && h.eventRecorder != nil {
+				if writeErr := h.eventRecorder.RecordEvents(txCtx, events); writeErr != nil {
 					return writeErr
 				}
 			}

@@ -32,20 +32,20 @@ func (c FollowUserCommand) Validate() error {
 type FollowUserHandler struct {
 	followRepo       repository.FollowRepository
 	userSnapshotRepo repository.UserSnapshotRepository
-	eventPub         port.EventPublisher
+	eventRecorder    port.EventRecorder
 	txManager        port.TransactionManager
 }
 
 func NewFollowUserHandler(
 	followRepo repository.FollowRepository,
 	userSnapshotRepo repository.UserSnapshotRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *FollowUserHandler {
 	return &FollowUserHandler{
 		followRepo:       followRepo,
 		userSnapshotRepo: userSnapshotRepo,
-		eventPub:         eventPub,
+		eventRecorder:    eventRecorder,
 		txManager:        txManager,
 	}
 }
@@ -92,7 +92,7 @@ func (h *FollowUserHandler) Handle(ctx context.Context, cmd FollowUserCommand) e
 			}
 		}
 
-		if h.eventPub != nil {
+		if h.eventRecorder != nil {
 			ev := &event.UserFollowedEvent{
 				FollowerID:        cmd.FollowerID,
 				FollowingID:       cmd.FollowingID,
@@ -100,8 +100,8 @@ func (h *FollowUserHandler) Handle(ctx context.Context, cmd FollowUserCommand) e
 				FollowerName:      followerName,
 				FollowerAvatarURL: followerAvatarURL,
 			}
-			if err := h.eventPub.PublishEvents(txCtx, []any{ev}); err != nil {
-				return fmt.Errorf("publish user followed event: %w", err)
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev}); err != nil {
+				return fmt.Errorf("record user followed event: %w", err)
 			}
 		}
 

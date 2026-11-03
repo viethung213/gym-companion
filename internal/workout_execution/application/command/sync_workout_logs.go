@@ -32,21 +32,21 @@ type SyncWorkoutLogsCommand struct {
 
 // SyncWorkoutLogsHandler handles posture error batch sync.
 type SyncWorkoutLogsHandler struct {
-	sessionRepo repository.WorkoutSessionRepository
-	outbox      port.OutboxWriter
-	txManager   port.TxManager
+	sessionRepo   repository.WorkoutSessionRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TxManager
 }
 
 // NewSyncWorkoutLogsHandler constructs handler.
 func NewSyncWorkoutLogsHandler(
 	sessionRepo repository.WorkoutSessionRepository,
-	outbox port.OutboxWriter,
+	eventRecorder port.EventRecorder,
 	txManager port.TxManager,
 ) *SyncWorkoutLogsHandler {
 	return &SyncWorkoutLogsHandler{
-		sessionRepo: sessionRepo,
-		outbox:      outbox,
-		txManager:   txManager,
+		sessionRepo:   sessionRepo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -88,8 +88,8 @@ func (h *SyncWorkoutLogsHandler) Handle(ctx context.Context, cmd SyncWorkoutLogs
 			return err
 		}
 		events := session.PopEvents()
-		if len(events) > 0 && h.outbox != nil {
-			if err := h.outbox.WriteEvents(txCtx, "WorkoutSession", session.ID(), events); err != nil {
+		if len(events) > 0 && h.eventRecorder != nil {
+			if err := h.eventRecorder.RecordEvents(txCtx, events); err != nil {
 				return err
 			}
 		}

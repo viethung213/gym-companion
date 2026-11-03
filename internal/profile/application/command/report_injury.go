@@ -19,20 +19,20 @@ type ReportInjuryCommand struct {
 }
 
 type ReportInjuryHandler struct {
-	repo      repository.UserProfileRepository
-	eventPub  port.EventPublisher
-	txManager port.TransactionManager
+	repo          repository.UserProfileRepository
+	eventRecorder port.EventRecorder
+	txManager     port.TransactionManager
 }
 
 func NewReportInjuryHandler(
 	repo repository.UserProfileRepository,
-	eventPub port.EventPublisher,
+	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
 ) *ReportInjuryHandler {
 	return &ReportInjuryHandler{
-		repo:      repo,
-		eventPub:  eventPub,
-		txManager: txManager,
+		repo:          repo,
+		eventRecorder: eventRecorder,
+		txManager:     txManager,
 	}
 }
 
@@ -57,9 +57,9 @@ func (h *ReportInjuryHandler) Handle(ctx context.Context, cmd ReportInjuryComman
 		if saveErr := h.repo.Update(txCtx, profile); saveErr != nil {
 			return saveErr
 		}
-		if h.eventPub != nil && len(events) > 0 {
-			if pubErr := h.eventPub.PublishEvents(txCtx, events); pubErr != nil {
-				return fmt.Errorf("publish injury event: %w", pubErr)
+		if h.eventRecorder != nil && len(events) > 0 {
+			if pubErr := h.eventRecorder.RecordEvents(txCtx, events); pubErr != nil {
+				return fmt.Errorf("record injury event: %w", pubErr)
 			}
 		}
 		return nil

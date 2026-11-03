@@ -38,16 +38,20 @@ func (m *mockNutritionPlanRepo) SaveUserMealSchedules(ctx context.Context, userI
 	return nil
 }
 
-type mockEventPublisher struct {
+type mockEventRecorder struct {
 	mu     sync.Mutex
 	events []any
 }
 
-func (m *mockEventPublisher) PublishEvents(ctx context.Context, events []any) error {
+func (m *mockEventRecorder) RecordEvents(ctx context.Context, events []any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *mockEventRecorder) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
 }
 
 func TestUpcomingMealReminderWorker_RunCheck(t *testing.T) {
@@ -63,22 +67,22 @@ func TestUpcomingMealReminderWorker_RunCheck(t *testing.T) {
 	plan := aggregate.NewNutritionPlan("plan_001", "usr_100", futureMealTime, alloc, []aggregate.DailyMeal{dailyMeal})
 
 	repo := &mockNutritionPlanRepo{plans: []*aggregate.NutritionPlan{plan}}
-	publisher := &mockEventPublisher{}
+	recorder := &mockEventRecorder{}
 
-	worker := NewUpcomingMealReminderWorker(repo, publisher, 100*time.Millisecond)
+	worker := NewUpcomingMealReminderWorker(repo, recorder, 100*time.Millisecond)
 	worker.runCheck(context.Background())
 
-	publisher.mu.Lock()
-	count := len(publisher.events)
-	publisher.mu.Unlock()
+	recorder.mu.Lock()
+	count := len(recorder.events)
+	recorder.mu.Unlock()
 
 	if got, want := count, 1; got != want {
 		t.Fatalf("events count got %d, want %d", got, want)
 	}
 
-	reminder, ok := publisher.events[0].(*event.UpcomingMealReminderEvent)
+	reminder, ok := recorder.events[0].(*event.UpcomingMealReminderEvent)
 	if !ok {
-		t.Fatalf("event type got %T, want *event.UpcomingMealReminderEvent", publisher.events[0])
+		t.Fatalf("event type got %T, want *event.UpcomingMealReminderEvent", recorder.events[0])
 	}
 
 	if got, want := reminder.UserID(), "usr_100"; got != want {
