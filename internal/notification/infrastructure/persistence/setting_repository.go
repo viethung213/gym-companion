@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/derror"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var _ repository.SettingRepository = (*SettingRepository)(nil)
@@ -23,24 +23,10 @@ func NewSettingRepository(db *gorm.DB) *SettingRepository {
 }
 
 func (r *SettingRepository) GetByUserID(ctx context.Context, userID string) (*aggregate.Setting, error) {
-	query := `
-		SELECT user_id, enable_push, enable_email, enable_sms, quiet_hours_start, quiet_hours_end, created_at, updated_at
-		FROM notification.user_settings
-		WHERE user_id = $1
-	`
 	var m SettingModel
-	err := GetDB(ctx, r.db).Raw(query, userID).Row().Scan(
-		&m.UserID,
-		&m.EnablePush,
-		&m.EnableEmail,
-		&m.EnableSMS,
-		&m.QuietHoursStart,
-		&m.QuietHoursEnd,
-		&m.CreatedAt,
-		&m.UpdatedAt,
-	)
+	err := GetDB(ctx, r.db).Where("user_id = ?", userID).First(&m).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrSettingNotFound
 		}
 		return nil, fmt.Errorf("query user notification setting: %w", err)
@@ -50,29 +36,18 @@ func (r *SettingRepository) GetByUserID(ctx context.Context, userID string) (*ag
 }
 
 func (r *SettingRepository) Save(ctx context.Context, setting *aggregate.Setting) error {
-	query := `
-		INSERT INTO notification.user_settings (
-			user_id, enable_push, enable_email, enable_sms, quiet_hours_start, quiet_hours_end, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (user_id) DO UPDATE SET
-			enable_push = EXCLUDED.enable_push,
-			enable_email = EXCLUDED.enable_email,
-			enable_sms = EXCLUDED.enable_sms,
-			quiet_hours_start = EXCLUDED.quiet_hours_start,
-			quiet_hours_end = EXCLUDED.quiet_hours_end,
-			updated_at = EXCLUDED.updated_at
-	`
-	err := GetDB(ctx, r.db).Exec(
-		query,
-		setting.UserID(),
-		setting.EnablePush(),
-		setting.EnableEmail(),
-		setting.EnableSMS(),
-		setting.QuietHoursStart(),
-		setting.QuietHoursEnd(),
-		setting.CreatedAt(),
-		setting.UpdatedAt(),
-	).Error
+	m := ToSettingModel(setting)
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"enable_push",
+			"enable_email",
+			"enable_sms",
+			"quiet_hours_start",
+			"quiet_hours_end",
+			"updated_at",
+		}),
+	}).Create(m).Error
 	if err != nil {
 		return fmt.Errorf("upsert user notification setting: %w", err)
 	}

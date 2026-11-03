@@ -31,8 +31,3 @@ func GetDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
 	}
 	return defaultDB.WithContext(ctx)
 }
-
-// getDB is an alias for GetDB for backward compatibility.
-func getDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
-	return GetDB(ctx, defaultDB)
-}

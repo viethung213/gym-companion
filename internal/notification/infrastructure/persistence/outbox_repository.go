@@ -2,15 +2,14 @@ package persistence
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var _ port.OutboxRepository = (*OutboxRepository)(nil)
@@ -37,30 +36,33 @@ func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) 
 		eventID = uuid.New().String()
 	}
 
-	query := `
-		INSERT INTO notification.outbox (
-			id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (event_id) DO NOTHING
-	`
 	status := "PENDING"
 	if record.Published {
 		status = "PUBLISHED"
 	}
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 
-	err := GetDB(ctx, r.db).Exec(
-		query,
-		id,
-		eventID,
-		record.AggregateType,
-		record.AggregateID,
-		record.EventType,
-		record.Payload,
-		record.PartitionKey,
-		record.CreatedAt,
-		record.Published,
-		status,
-	).Error
+	model := &OutboxModel{
+		ID:            id,
+		EventID:       eventID,
+		AggregateType: record.AggregateType,
+		AggregateID:   record.AggregateID,
+		EventType:     record.EventType,
+		Payload:       record.Payload,
+		PartitionKey:  record.PartitionKey,
+		CreatedAt:     createdAt,
+		Published:     record.Published,
+		PublishedAt:   record.PublishedAt,
+		Status:        status,
+	}
+
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "event_id"}},
+		DoNothing: true,
+	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("insert notification outbox: %w", err)
 	}
@@ -72,51 +74,19 @@ func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*
 		limit = 100
 	}
 
-	query := `
-		SELECT id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, published_at
-		FROM notification.outbox
-		WHERE published = FALSE
-		ORDER BY created_at ASC
-		LIMIT $1
-	`
-	rows, err := GetDB(ctx, r.db).Raw(query, limit).Rows()
+	var models []OutboxModel
+	err := GetDB(ctx, r.db).
+		Where("published = ?", false).
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("fetch unpublished notification outbox: %w", err)
 	}
-	defer rows.Close()
 
-	var records []*port.OutboxRecord
-	for rows.Next() {
-		var rec port.OutboxRecord
-		var pubAt sql.NullTime
-		var aggType, aggID sql.NullString
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.EventID,
-			&aggType,
-			&aggID,
-			&rec.EventType,
-			&rec.Payload,
-			&rec.PartitionKey,
-			&rec.CreatedAt,
-			&rec.Published,
-			&pubAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan notification outbox row: %w", err)
-		}
-		if aggType.Valid {
-			rec.AggregateType = aggType.String
-		}
-		if aggID.Valid {
-			rec.AggregateID = aggID.String
-		}
-		if pubAt.Valid {
-			rec.PublishedAt = &pubAt.Time
-		}
-		records = append(records, &rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate notification outbox rows: %w", err)
+	records := make([]*port.OutboxRecord, 0, len(models))
+	for i := range models {
+		records = append(records, models[i].ToDomain())
 	}
 
 	return records, nil
@@ -132,84 +102,51 @@ func (r *OutboxRepository) ClaimBatch(ctx context.Context, limit int, lockDurati
 
 	var records []*port.OutboxRecord
 
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := GetDB(ctx, r.db).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
 		lockedUntil := now.Add(lockDuration)
 
-		query := `
-			SELECT id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, published_at
-			FROM notification.outbox
-			WHERE published = FALSE AND (status = 'PENDING' OR locked_until IS NULL OR locked_until < $1)
-			ORDER BY created_at ASC
-			LIMIT $2
-			FOR UPDATE SKIP LOCKED
-		`
-		rows, err := tx.Raw(query, now, limit).Rows()
+		var models []OutboxModel
+		err := tx.
+			Clauses(clause.Locking{
+				Strength: "UPDATE",
+				Options:  "SKIP LOCKED",
+			}).
+			Where("published = ? AND (status = ? OR locked_until IS NULL OR locked_until < ?)", false, "PENDING", now).
+			Order("created_at ASC").
+			Limit(limit).
+			Find(&models).Error
 		if err != nil {
-			// Fallback without FOR UPDATE SKIP LOCKED for SQLite unit tests
-			fallbackQuery := `
-				SELECT id, event_id, aggregate_type, aggregate_id, event_type, payload, partition_key, created_at, published, published_at
-				FROM notification.outbox
-				WHERE published = FALSE AND (status = 'PENDING' OR locked_until IS NULL OR locked_until < $1)
-				ORDER BY created_at ASC
-				LIMIT $2
-			`
-			rows, err = tx.Raw(fallbackQuery, now, limit).Rows()
+			// Fallback without FOR UPDATE SKIP LOCKED for SQLite in-memory unit tests
+			err = tx.
+				Where("published = ? AND (status = ? OR locked_until IS NULL OR locked_until < ?)", false, "PENDING", now).
+				Order("created_at ASC").
+				Limit(limit).
+				Find(&models).Error
 		}
 		if err != nil {
 			return fmt.Errorf("select outbox for update: %w", err)
 		}
 
-		var ids []string
-		for rows.Next() {
-			var rec port.OutboxRecord
-			var pubAt sql.NullTime
-			var aggType, aggID sql.NullString
-			if err := rows.Scan(
-				&rec.ID,
-				&rec.EventID,
-				&aggType,
-				&aggID,
-				&rec.EventType,
-				&rec.Payload,
-				&rec.PartitionKey,
-				&rec.CreatedAt,
-				&rec.Published,
-				&pubAt,
-			); err != nil {
-				rows.Close()
-				return fmt.Errorf("scan outbox claim row: %w", err)
-			}
-			if aggType.Valid {
-				rec.AggregateType = aggType.String
-			}
-			if aggID.Valid {
-				rec.AggregateID = aggID.String
-			}
-			if pubAt.Valid {
-				rec.PublishedAt = &pubAt.Time
-			}
-			records = append(records, &rec)
-			ids = append(ids, rec.ID)
+		if len(models) == 0 {
+			return nil
 		}
-		rows.Close()
 
-		if len(ids) > 0 {
-			placeholders := make([]string, len(ids))
-			args := make([]interface{}, len(ids)+1)
-			args[0] = lockedUntil
-			for i, id := range ids {
-				placeholders[i] = fmt.Sprintf("$%d", i+2)
-				args[i+1] = id
-			}
-			updateQuery := fmt.Sprintf(`
-				UPDATE notification.outbox
-				SET status = 'PROCESSING', locked_until = $1
-				WHERE id IN (%s)
-			`, strings.Join(placeholders, ","))
-			if err := tx.Exec(updateQuery, args...).Error; err != nil {
-				return fmt.Errorf("update claimed outbox status: %w", err)
-			}
+		ids := make([]string, len(models))
+		records = make([]*port.OutboxRecord, len(models))
+		for i := range models {
+			records[i] = models[i].ToDomain()
+			ids[i] = models[i].ID
+		}
+
+		err = tx.Model(&OutboxModel{}).
+			Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"status":       "PROCESSING",
+				"locked_until": &lockedUntil,
+			}).Error
+		if err != nil {
+			return fmt.Errorf("update claimed outbox status: %w", err)
 		}
 
 		return nil
@@ -226,20 +163,15 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) erro
 		return nil
 	}
 
-	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids)+1)
-	args[0] = time.Now().UTC()
-	for i, id := range ids {
-		placeholders[i] = fmt.Sprintf("$%d", i+2)
-		args[i+1] = id
-	}
-	query := fmt.Sprintf(`
-		UPDATE notification.outbox
-		SET published = TRUE, published_at = $1, status = 'PUBLISHED'
-		WHERE id IN (%s)
-	`, strings.Join(placeholders, ","))
-
-	if err := GetDB(ctx, r.db).Exec(query, args...).Error; err != nil {
+	now := time.Now().UTC()
+	err := GetDB(ctx, r.db).Model(&OutboxModel{}).
+		Where("id IN ?", ids).
+		Updates(map[string]interface{}{
+			"published":    true,
+			"published_at": &now,
+			"status":       "PUBLISHED",
+		}).Error
+	if err != nil {
 		return fmt.Errorf("mark notification outbox published: %w", err)
 	}
 	return nil

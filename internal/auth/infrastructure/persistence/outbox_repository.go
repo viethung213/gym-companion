@@ -25,10 +25,6 @@ func NewOutboxRepository(db *gorm.DB) *OutboxRepository {
 	return &OutboxRepository{db: db}
 }
 
-func (r *OutboxRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 // Save persists an OutboxRecord into the auth.outbox table.
 func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {
 	if record == nil {
@@ -66,7 +62,7 @@ func (r *OutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) 
 	if record.Published {
 		dbOutbox.Status = "PUBLISHED"
 	}
-	if err := r.getDB(ctx).Create(dbOutbox).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(dbOutbox).Error; err != nil {
 		return fmt.Errorf("gorm save outbox record: %w", err)
 	}
 	return nil
@@ -87,7 +83,7 @@ func (r *OutboxRepository) SaveEvent(ctx context.Context, eventID string, eventT
 // FetchUnpublished queries all unpublished outbox entries up to the given limit.
 func (r *OutboxRepository) FetchUnpublished(ctx context.Context, limit int) ([]*port.OutboxRecord, error) {
 	var dbOutboxes []OutboxModel
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Where("published = ?", false).
 		Order("created_at ASC").
 		Limit(limit).
@@ -110,7 +106,7 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) erro
 	if len(ids) == 0 {
 		return nil
 	}
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Model(&OutboxModel{}).
 		Where("id IN ?", ids).
 		Updates(map[string]interface{}{
@@ -145,7 +141,7 @@ func (r *OutboxRepository) ClaimBatch(
 	now := time.Now()
 	lockedUntil := now.Add(lockDuration)
 
-	err := r.getDB(ctx).Transaction(func(tx *gorm.DB) error {
+	err := GetDB(ctx, r.db).Transaction(func(tx *gorm.DB) error {
 		var dbOutboxes []OutboxModel
 		err := tx.
 			Clauses(clause.Locking{

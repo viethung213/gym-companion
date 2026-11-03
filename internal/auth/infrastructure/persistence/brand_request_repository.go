@@ -78,14 +78,10 @@ func NewBrandRequestRepository(db *gorm.DB) *BrandRequestRepository {
 	return &BrandRequestRepository{db: db}
 }
 
-func (r *BrandRequestRepository) getDB(ctx context.Context) *gorm.DB {
-	return GetDB(ctx, r.db)
-}
-
 // Create inserts a new brand request record into the database.
 func (r *BrandRequestRepository) Create(ctx context.Context, req *entity.BrandRequest) error {
 	m := toBrandRequestModel(req)
-	if err := r.getDB(ctx).Create(m).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(m).Error; err != nil {
 		return fmt.Errorf("gorm create brand request: %w", err)
 	}
 	return nil
@@ -94,7 +90,7 @@ func (r *BrandRequestRepository) Create(ctx context.Context, req *entity.BrandRe
 // Update modifies an existing brand request in the database.
 func (r *BrandRequestRepository) Update(ctx context.Context, req *entity.BrandRequest) error {
 	m := toBrandRequestModel(req)
-	res := r.getDB(ctx).Model(m).
+	res := GetDB(ctx, r.db).Model(m).
 		Select("Status", "RejectionReason", "ReviewedBy", "ReviewedAt", "UpdatedAt").
 		Updates(m)
 	if res.Error != nil {
@@ -109,7 +105,7 @@ func (r *BrandRequestRepository) Update(ctx context.Context, req *entity.BrandRe
 // FindByID retrieves a brand request by its ID.
 func (r *BrandRequestRepository) FindByID(ctx context.Context, id string) (*entity.BrandRequest, error) {
 	var m BrandRequestModel
-	if err := r.getDB(ctx).First(&m, "id = ?", id).Error; err != nil {
+	if err := GetDB(ctx, r.db).First(&m, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrBrandRequestNotFound
 		}
@@ -121,7 +117,7 @@ func (r *BrandRequestRepository) FindByID(ctx context.Context, id string) (*enti
 // FindPendingByUserID retrieves an active pending brand request for a user.
 func (r *BrandRequestRepository) FindPendingByUserID(ctx context.Context, userID string) (*entity.BrandRequest, error) {
 	var m BrandRequestModel
-	err := r.getDB(ctx).
+	err := GetDB(ctx, r.db).
 		Where("user_id = ? AND status = ?", userID, entity.BrandRequestStatusPending).
 		First(&m).Error
 	if err != nil {
@@ -138,7 +134,7 @@ func (r *BrandRequestRepository) List(
 	ctx context.Context,
 	filter repository.ListBrandRequestsFilter,
 ) ([]*entity.BrandRequest, int, error) {
-	query := r.getDB(ctx).Model(&BrandRequestModel{})
+	query := GetDB(ctx, r.db).Model(&BrandRequestModel{})
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
 	}
