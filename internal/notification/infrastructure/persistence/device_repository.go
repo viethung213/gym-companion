@@ -1,22 +1,22 @@
-package postgres
+package persistence
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
+	"gorm.io/gorm"
 )
 
 var _ repository.DeviceRepository = (*DeviceRepository)(nil)
 
 type DeviceRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewDeviceRepository(db *sql.DB) *DeviceRepository {
+func NewDeviceRepository(db *gorm.DB) *DeviceRepository {
 	return &DeviceRepository{db: db}
 }
 
@@ -31,8 +31,7 @@ func (r *DeviceRepository) Save(ctx context.Context, device *aggregate.Device) e
 			updated_at = EXCLUDED.updated_at,
 			last_used_at = EXCLUDED.last_used_at
 	`
-	_, err := r.db.ExecContext(
-		ctx,
+	err := GetDB(ctx, r.db).Exec(
 		query,
 		device.ID(),
 		device.UserID(),
@@ -42,7 +41,7 @@ func (r *DeviceRepository) Save(ctx context.Context, device *aggregate.Device) e
 		device.CreatedAt(),
 		device.UpdatedAt(),
 		device.LastUsedAt(),
-	)
+	).Error
 	if err != nil {
 		return fmt.Errorf("upsert user device token: %w", err)
 	}
@@ -56,7 +55,7 @@ func (r *DeviceRepository) GetActiveDevicesByUserID(ctx context.Context, userID 
 		WHERE user_id = $1 AND is_active = TRUE
 		ORDER BY last_used_at DESC
 	`
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	rows, err := GetDB(ctx, r.db).Raw(query, userID).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("query active devices: %w", err)
 	}
@@ -108,7 +107,7 @@ func (r *DeviceRepository) DeactivateTokens(ctx context.Context, tokens []string
 		WHERE device_token IN (%s)
 	`, strings.Join(placeholders, ","))
 
-	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+	if err := GetDB(ctx, r.db).Exec(query, args...).Error; err != nil {
 		return fmt.Errorf("deactivate device tokens: %w", err)
 	}
 	return nil

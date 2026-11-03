@@ -1,4 +1,4 @@
-package postgres
+package persistence
 
 import (
 	"context"
@@ -19,4 +19,15 @@ func GetTx(ctx context.Context) *gorm.DB {
 		return tx
 	}
 	return nil
+}
+
+// GetDB returns the transaction if present in context, otherwise returns defaultDB with context.
+func GetDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
+	if tx := GetTx(ctx); tx != nil {
+		return tx
+	}
+	if defaultDB == nil {
+		return nil
+	}
+	return defaultDB.WithContext(ctx)
 }

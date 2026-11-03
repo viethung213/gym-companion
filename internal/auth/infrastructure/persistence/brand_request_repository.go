@@ -1,4 +1,4 @@
-package postgres
+package persistence
 
 import (
 	"context"
@@ -79,10 +79,7 @@ func NewBrandRequestRepository(db *gorm.DB) *BrandRequestRepository {
 }
 
 func (r *BrandRequestRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx := GetTx(ctx); tx != nil {
-		return tx.WithContext(ctx)
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 // Create inserts a new brand request record into the database.

@@ -25,10 +25,7 @@ func NewPostgresUserProfileRepository(db *gorm.DB) *PostgresUserProfileRepositor
 }
 
 func (r *PostgresUserProfileRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
-		return tx
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 func (r *PostgresUserProfileRepository) Save(ctx context.Context, profile *aggregate.UserProfile) error {

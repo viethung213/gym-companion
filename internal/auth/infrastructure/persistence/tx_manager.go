@@ -1,8 +1,7 @@
-package postgres
+package persistence
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 	"gorm.io/gorm"
@@ -26,29 +25,15 @@ func (m *SQLTransactionManager) WithTransaction(
 	ctx context.Context,
 	fn func(ctx context.Context) error,
 ) error {
-	tx := m.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return fmt.Errorf("begin gorm transaction: %w", tx.Error)
+	if existingTx := GetTx(ctx); existingTx != nil {
+		return fn(ctx)
 	}
 
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p) // Re-throw panic after rollback
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txCtx := WithTx(ctx, tx)
+		if err := fn(txCtx); err != nil {
+			return err
 		}
-	}()
-
-	// Inject transaction into context
-	ctxWithTx := WithTx(ctx, tx)
-
-	if err := fn(ctxWithTx); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return fmt.Errorf("commit gorm transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }

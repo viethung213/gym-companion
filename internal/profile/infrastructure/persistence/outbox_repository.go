@@ -22,10 +22,7 @@ func NewGormOutboxRepository(db *gorm.DB) *GormOutboxRepository {
 }
 
 func (r *GormOutboxRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
-		return tx
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 func (r *GormOutboxRepository) Save(ctx context.Context, record *port.OutboxRecord) error {

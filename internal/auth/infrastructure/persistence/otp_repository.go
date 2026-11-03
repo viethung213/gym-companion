@@ -1,4 +1,4 @@
-package postgres
+package persistence
 
 import (
 	"context"
@@ -54,10 +54,7 @@ func (m *OTPModel) ToDomain() *entity.OTP {
 }
 
 func (r *OTPRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx := GetTx(ctx); tx != nil {
-		return tx.WithContext(ctx)
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 // Save inserts a new OTP record.

@@ -22,10 +22,7 @@ func NewGormOutboxLogRepository(db *gorm.DB) *GormOutboxLogRepository {
 }
 
 func (r *GormOutboxLogRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
-		return tx
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 func (r *GormOutboxLogRepository) IsProcessed(ctx context.Context, eventID string) (bool, error) {

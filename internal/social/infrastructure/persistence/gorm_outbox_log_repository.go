@@ -44,7 +44,7 @@ func (r *GormOutboxLogRepository) Save(
 	}
 
 	// Idempotent: bỏ qua nếu đã log event_id này với status trùng khớp
-	err := getDB(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(m).Error
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(m).Error
 	if err != nil {
 		return fmt.Errorf("create outbox log: %w", err)
 	}
@@ -53,7 +53,7 @@ func (r *GormOutboxLogRepository) Save(
 
 func (r *GormOutboxLogRepository) IsProcessed(ctx context.Context, eventID string) (bool, error) {
 	var count int64
-	err := getDB(ctx, r.db).Model(&OutboxLogModel{}).
+	err := GetDB(ctx, r.db).Model(&OutboxLogModel{}).
 		Where("event_id = ? AND status IN ('PROCESSED', 'SUCCESS')", eventID).
 		Count(&count).Error
 	if err != nil {

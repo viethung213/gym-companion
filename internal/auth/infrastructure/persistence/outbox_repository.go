@@ -1,4 +1,4 @@
-package postgres
+package persistence
 
 import (
 	"context"
@@ -26,10 +26,7 @@ func NewOutboxRepository(db *gorm.DB) *OutboxRepository {
 }
 
 func (r *OutboxRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx := GetTx(ctx); tx != nil {
-		return tx.WithContext(ctx)
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 // Save persists an OutboxRecord into the auth.outbox table.

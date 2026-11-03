@@ -26,5 +26,8 @@ func GetDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
 	if tx := GetTx(ctx); tx != nil {
 		return tx
 	}
+	if defaultDB == nil {
+		return nil
+	}
 	return defaultDB.WithContext(ctx)
 }

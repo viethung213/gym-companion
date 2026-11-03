@@ -1,4 +1,4 @@
-package postgres_test
+package persistence_test
 
 import (
 	"context"
@@ -6,19 +6,27 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/glebarez/sqlite"
+	"github.com/glebarez/sqlite"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/vo"
-	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence/postgres"
+	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence"
+	"gorm.io/gorm"
 )
 
-func setupTestDB(t *testing.T) *sql.DB {
+func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 	t.Helper()
 
-	db, err := sql.Open("sqlite", ":memory:")
+	gormDB, err := gorm.Open(sqlite.Open("file:notification_test?mode=memory&cache=shared"), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
 	if err != nil {
-		t.Fatalf("failed to open memory sqlite db: %v", err)
+		t.Fatalf("failed to open sqlite db: %v", err)
+	}
+
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql.DB: %v", err)
 	}
 
 	queries := []string{
@@ -54,19 +62,19 @@ func setupTestDB(t *testing.T) *sql.DB {
 	}
 
 	for _, q := range queries {
-		if _, err := db.Exec(q); err != nil {
+		if _, err := sqlDB.Exec(q); err != nil {
 			t.Fatalf("failed to execute setup query (%s): %v", q, err)
 		}
 	}
 
-	return db
+	return sqlDB, gormDB
 }
 
 func TestPostgresDeviceRepository(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
 
-	repo := postgres.NewDeviceRepository(db)
+	repo := persistence.NewDeviceRepository(db)
 	ctx := context.Background()
 
 	dev, err := aggregate.NewDevice("dev-1", "usr-1", "fcm-token-1", vo.DeviceTypeAndroid)
@@ -106,10 +114,10 @@ func TestPostgresDeviceRepository(t *testing.T) {
 }
 
 func TestPostgresSettingRepository(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
 
-	repo := postgres.NewSettingRepository(db)
+	repo := persistence.NewSettingRepository(db)
 	ctx := context.Background()
 
 	// 1. Get non-existing returns ErrSettingNotFound
@@ -142,10 +150,10 @@ func TestPostgresSettingRepository(t *testing.T) {
 }
 
 func TestPostgresNotificationRepository(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
 
-	repo := postgres.NewNotificationRepository(db)
+	repo := persistence.NewNotificationRepository(db)
 	ctx := context.Background()
 
 	item, err := aggregate.NewInAppNotification("notif-1", "usr-notif-1", "Test Title", "Test Body", map[string]string{"foo": "bar"})
@@ -183,11 +191,11 @@ func TestPostgresNotificationRepository(t *testing.T) {
 }
 
 func TestPostgresOutboxAndLogRepository(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
 
-	outboxRepo := postgres.NewOutboxRepository(db)
-	outboxLogRepo := postgres.NewOutboxLogRepository(db)
+	outboxRepo := persistence.NewOutboxRepository(db)
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
 	ctx := context.Background()
 
 	// 1. Test Outbox Save & FetchUnpublished
@@ -236,10 +244,10 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 }
 
 func TestTxManager(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
 
-	txMgr := postgres.NewTxManager(db)
+	txMgr := persistence.NewTxManager(db)
 	ctx := context.Background()
 
 	err := txMgr.ExecTx(ctx, func(txCtx context.Context) error {
@@ -247,5 +255,12 @@ func TestTxManager(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("ExecTx error: %v", err)
+	}
+
+	err = txMgr.WithTransaction(ctx, func(txCtx context.Context) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithTransaction error: %v", err)
 	}
 }

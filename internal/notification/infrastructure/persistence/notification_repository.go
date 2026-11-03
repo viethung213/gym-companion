@@ -1,30 +1,23 @@
-package postgres
+package persistence
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
+	"gorm.io/gorm"
 )
 
 var _ repository.NotificationRepository = (*NotificationRepository)(nil)
 
 type NotificationRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewNotificationRepository(db *sql.DB) *NotificationRepository {
+func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
-}
-
-func (r *NotificationRepository) getExecutor(ctx context.Context) DBExecutor {
-	if tx := GetTx(ctx); tx != nil {
-		return tx
-	}
-	return r.db
 }
 
 func (r *NotificationRepository) Save(ctx context.Context, item *aggregate.InAppNotification) error {
@@ -38,9 +31,7 @@ func (r *NotificationRepository) Save(ctx context.Context, item *aggregate.InApp
 			id, user_id, title, body, data, is_read, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
-	executor := r.getExecutor(ctx)
-	_, err = executor.ExecContext(
-		ctx,
+	err = GetDB(ctx, r.db).Exec(
 		query,
 		item.ID(),
 		item.UserID(),
@@ -49,7 +40,7 @@ func (r *NotificationRepository) Save(ctx context.Context, item *aggregate.InApp
 		dataBytes,
 		item.IsRead(),
 		item.CreatedAt(),
-	)
+	).Error
 	if err != nil {
 		return fmt.Errorf("insert in-app notification: %w", err)
 	}
@@ -57,14 +48,13 @@ func (r *NotificationRepository) Save(ctx context.Context, item *aggregate.InApp
 }
 
 func (r *NotificationRepository) ListByUserID(ctx context.Context, userID string, limit, offset int32) ([]*aggregate.InAppNotification, int32, error) {
-	executor := r.getExecutor(ctx)
 	countQuery := `
 		SELECT COUNT(*)
 		FROM notification.in_app_notifications
 		WHERE user_id = $1
 	`
 	var total int32
-	if err := executor.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
+	if err := GetDB(ctx, r.db).Raw(countQuery, userID).Row().Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count in-app notifications: %w", err)
 	}
 
@@ -75,7 +65,7 @@ func (r *NotificationRepository) ListByUserID(ctx context.Context, userID string
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`
-	rows, err := executor.QueryContext(ctx, query, userID, limit, offset)
+	rows, err := GetDB(ctx, r.db).Raw(query, userID, limit, offset).Rows()
 	if err != nil {
 		return nil, 0, fmt.Errorf("query in-app notifications: %w", err)
 	}
@@ -114,8 +104,7 @@ func (r *NotificationRepository) MarkAsRead(ctx context.Context, userID, notific
 		SET is_read = TRUE
 		WHERE user_id = $1 AND id = $2
 	`
-	executor := r.getExecutor(ctx)
-	_, err := executor.ExecContext(ctx, query, userID, notificationID)
+	err := GetDB(ctx, r.db).Exec(query, userID, notificationID).Error
 	if err != nil {
 		return fmt.Errorf("mark notification as read: %w", err)
 	}
@@ -128,8 +117,7 @@ func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID strin
 		SET is_read = TRUE
 		WHERE user_id = $1 AND is_read = FALSE
 	`
-	executor := r.getExecutor(ctx)
-	_, err := executor.ExecContext(ctx, query, userID)
+	err := GetDB(ctx, r.db).Exec(query, userID).Error
 	if err != nil {
 		return fmt.Errorf("mark all notifications as read: %w", err)
 	}

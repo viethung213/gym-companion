@@ -1,4 +1,4 @@
-package postgres
+package persistence
 
 import (
 	"context"
@@ -28,10 +28,7 @@ func NewSessionRepository(db *gorm.DB) *SessionRepository {
 }
 
 func (r *SessionRepository) getDB(ctx context.Context) *gorm.DB {
-	if tx := GetTx(ctx); tx != nil {
-		return tx.WithContext(ctx)
-	}
-	return r.db.WithContext(ctx)
+	return GetDB(ctx, r.db)
 }
 
 // Save inserts or updates a session token.
