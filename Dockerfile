@@ -41,7 +41,6 @@ WORKDIR /app
 COPY --from=core-builder /bin/fitai-core /app/fitai-core
 
 EXPOSE 8080
-EXPOSE 9090
 
 CMD ["/app/fitai-core"]
 
@@ -68,7 +67,6 @@ COPY internal/coaching/infrastructure/ai/adk/prompts ./internal/coaching/infrast
 COPY internal/coaching/infrastructure/ai/adk/skills ./internal/coaching/infrastructure/ai/adk/skills
 
 EXPOSE 8082
-EXPOSE 9092
 
 CMD ["/app/fitai-ai"]
 

@@ -60,7 +60,7 @@ services:
   gateway:
     image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-gateway:${IMAGE_TAG:-latest}
     container_name: fitai-gateway
-    restart: unless-stopped
+    restart: on-failure:5
     env_file:
       - ./secrets/.env.gateway.prod
     ports:
@@ -69,7 +69,7 @@ services:
     networks:
       - fitai-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8000/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8001/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -82,12 +82,11 @@ services:
   core:
     image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-core:${IMAGE_TAG:-latest}
     container_name: fitai-core
-    restart: unless-stopped
+    restart: on-failure:5
     env_file:
       - ./secrets/.env.core.prod
     ports:
       - "8080:8080"
-      - "9090:9090"
     depends_on:
       redis:
         condition: service_healthy
@@ -109,14 +108,19 @@ services:
   ai:
     image: ghcr.io/${GHCR_OWNER:-viethung213}/fitai-ai:${IMAGE_TAG:-latest}
     container_name: fitai-ai
-    restart: unless-stopped
+    restart: on-failure:5
     env_file:
       - ./secrets/.env.ai.prod
     ports:
       - "8082:8082"
-      - "9092:9092"
     networks:
       - fitai-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8082/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     <<: *default-logging
 
 volumes:

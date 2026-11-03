@@ -100,8 +100,8 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 	}
 
 	// Configure pool parameters
-	conn.SetMaxOpenConns(25)
-	conn.SetMaxIdleConns(25)
+	conn.SetMaxOpenConns(5)
+	conn.SetMaxIdleConns(3)
 	conn.SetConnMaxLifetime(5 * time.Minute)
 
 	// Verify connection
