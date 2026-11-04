@@ -35,6 +35,11 @@ func ToSoloMatchView(d *dto.SoloMatchDTO) *solomatchv1message.SoloMatchView {
 		endedAt = timestamppb.New(*d.EndedAt)
 	}
 
+	var readyDeadline *timestamppb.Timestamp
+	if !d.ReadyDeadline.IsZero() {
+		readyDeadline = timestamppb.New(d.ReadyDeadline)
+	}
+
 	return &solomatchv1message.SoloMatchView{
 		MatchId:       d.MatchID,
 		ExerciseId:    d.ExerciseID,
@@ -46,5 +51,6 @@ func ToSoloMatchView(d *dto.SoloMatchDTO) *solomatchv1message.SoloMatchView {
 		IsDraw:        d.IsDraw,
 		StartedAt:     startedAt,
 		EndedAt:       endedAt,
+		ReadyDeadline: readyDeadline,
 	}
 }
