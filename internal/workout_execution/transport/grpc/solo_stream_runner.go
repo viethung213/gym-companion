@@ -629,6 +629,9 @@ func runSoloMatchTrackingLoop(
 				RemainingCeilingSeconds: result.RemainingCeilingSeconds,
 				MatchEnded:              result.MatchEnded,
 				Timestamp:               timestamppb.Now(),
+				CurrentAngle:            result.CurrentAngle,
+				RepPhase:                result.RepPhase,
+				PersonDetected:          result.PersonDetected,
 			}
 
 			if err := safeSend(resp); err != nil {
