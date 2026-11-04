@@ -1,0 +1,102 @@
+{
+  "display_name": "Barbell Bench Press",
+  "rep_type": "counted",
+  "notes": "Bài tập đẩy ngực thanh đòn. Yêu cầu hai cổ tay đẩy đều nhau, khuỷu tay khép góc 45-75° so với thân người.",
+  "phase_detection": {
+    "metric": "elbow_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 130,
+        "comment": "Đẩy thẳng tay khóa khớp trên ngực"
+      },
+      "transition": {
+        "gt": 95,
+        "lte": 130,
+        "comment": "Đang hạ thanh đòn hoặc đẩy lên"
+      },
+      "active": {
+        "lte": 95,
+        "comment": "Thanh đòn chạm sát ngực (đáy rep)"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Elbow (P7, P8)",
+        "Wrist (P9, P10)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "wrist_symmetry",
+      "description": "Độ cân bằng cao độ hai cổ tay khi đẩy tạ",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "front",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.20
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.20,
+          "max": 0.30
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.30,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Left Wrist (P9)",
+          "Right Wrist (P10)"
+        ],
+        "formula": "wrist_symmetry = |Y_wrist_left - Y_wrist_right| / torso_length"
+      }
+    },
+    {
+      "metric": "elbow_flare",
+      "description": "Góc mở khuỷu tay quá ngang vai (Gây chèn ép khớp vai)",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 95.0
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 95.0,
+          "max": 105.0
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 105.0,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Hip (P11, P12)",
+          "Shoulder (P5, P6)",
+          "Elbow (P7, P8)"
+        ],
+        "formula": "elbow_flare = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+      }
+    }
+  ]
+}

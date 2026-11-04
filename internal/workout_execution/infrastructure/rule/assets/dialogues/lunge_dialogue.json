@@ -1,0 +1,39 @@
+{
+  "exercise": "lunge",
+  "display_name": "Lunge",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Lunge",
+  "voice_feedbacks": {
+    "torso_lean": {
+      "metric_name": "torso_lean",
+      "description": "Thân người đổ về phía trước",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ thân trên thẳng đứng khi hạ gối xuống!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "knee_over_toe": {
+      "metric_name": "knee_over_toe",
+      "description": "Gối vượt mũi chân quá xa",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Bước rộng hơn một chút để đầu gối không đẩy quá cổ chân!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

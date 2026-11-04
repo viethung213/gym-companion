@@ -1,0 +1,39 @@
+{
+  "exercise": "bench_press",
+  "display_name": "Barbell Bench Press",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Bench Press",
+  "voice_feedbacks": {
+    "wrist_symmetry": {
+      "metric_name": "wrist_symmetry",
+      "description": "Lệch hai tay khi đẩy ngực",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Đẩy đều lực cả hai tay, thanh đòn đang bị nghiêng lệch!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "elbow_flare": {
+      "metric_name": "elbow_flare",
+      "description": "Mở khuỷu tay quá rộng ngang vai",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Khép nhẹ cùi chỏ về phía mạng sườn khoảng 45 đến 60 độ để bảo vệ khớp vai!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "exercise": "bicep_curl",
+  "display_name": "Bicep Curl",
+  "description": "Các câu thoại hướng dẫn giọng nói cho bài tập Bicep Curl theo từng mức độ lỗi và phong cách",
+  "voice_feedbacks": {
+    "elbow_sway": {
+      "metric_name": "elbow_sway",
+      "description": "Di động cùi chỏ ra trước (Elbow Sway)",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ cố định cùi chỏ sát sườn khi cuốn tạ lên!",
+              "url": ""
+            },
+            "strict": {
+              "text": "Khóa cùi chỏ lại! Không vung tay lấy đà!",
+              "url": ""
+            }
+          }
+        },
+        "danger": {
+          "severity_level": 2,
+          "status": "Danger",
+          "styles": {
+            "normal": {
+              "text": "Cùi chỏ vung quá xa! Hãy ép sát khuỷu tay vào thân người!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "spine_sway_angle": {
+      "metric_name": "spine_sway_angle",
+      "description": "Ngửa lưng lấy đà (Back Arching Cheat)",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ thẳng lưng, không ngả người ra sau để ăn gian lực!",
+              "url": ""
+            }
+          }
+        },
+        "danger": {
+          "severity_level": 2,
+          "status": "Danger",
+          "styles": {
+            "normal": {
+              "text": "Nguy hiểm cột sống! Đứng thẳng lưng và gồng chặt cơ bụng!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

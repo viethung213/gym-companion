@@ -1,0 +1,39 @@
+{
+  "exercise": "deadlift",
+  "display_name": "Barbell Deadlift",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Deadlift",
+  "voice_feedbacks": {
+    "excessive_knee_flexion": {
+      "metric_name": "excessive_knee_flexion",
+      "description": "Gập gối quá sâu như Squat",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ hông cao hơn, đẩy mông ra sau chứ đừng ngồi xổm!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "bar_drift": {
+      "metric_name": "bar_drift",
+      "description": "Tạ rời xa ống đồng",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Kéo thanh tạ đi sát dọc theo ống đồng để bảo vệ lưng dưới!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "exercise": "triceps_dip",
+  "display_name": "Triceps Dip",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Triceps Dip",
+  "voice_feedbacks": {
+    "hips_too_far": {
+      "metric_name": "hips_too_far",
+      "description": "Mông đưa quá xa điểm đặt tay",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Hạ lưng sát mép ghế hơn, không đẩy mông ra quá xa phía trước!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "torso_lean": {
+      "metric_name": "torso_lean",
+      "description": "Đổ thân trên quá nhiều",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ thân trên thẳng đứng để ăn lực vào cơ tay sau!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

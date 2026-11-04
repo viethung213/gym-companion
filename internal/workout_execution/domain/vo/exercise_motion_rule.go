@@ -6,8 +6,13 @@ import "time"
 type FormulaType string
 
 const (
-	FormulaAngle3D  FormulaType = "ANGLE_3D"
-	FormulaDistance FormulaType = "DISTANCE"
+	FormulaAngle3D               FormulaType = "ANGLE_3D"
+	FormulaDistance              FormulaType = "DISTANCE"
+	FormulaHorizontalOffsetRatio FormulaType = "HORIZONTAL_OFFSET_RATIO"
+	FormulaVerticalAngle         FormulaType = "VERTICAL_ANGLE"
+	FormulaHorizontalAngle       FormulaType = "HORIZONTAL_ANGLE"
+	FormulaBilateralWidthRatio   FormulaType = "BILATERAL_WIDTH_RATIO"
+	FormulaVerticalDiffRatio     FormulaType = "VERTICAL_DIFF_RATIO"
 )
 
 // ValidAngleRange specifies minimum and maximum valid angles in degrees.
@@ -27,6 +32,7 @@ type RuleCriterion struct {
 	AudioCue        string
 	PenaltyPerError float32
 	ApplyForView    string
+	ApplyInPhases   []string
 }
 
 // ThresholdCondition defines comparison operators (gt, gte, lt, lte) for a phase boundary.
