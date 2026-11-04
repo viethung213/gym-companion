@@ -141,6 +141,21 @@ service WorkoutExecutionService {
       };
     };
   }
+
+  // Luồng stream thời gian thực phục vụ AI trọng tài form, đếm rep và bắt lỗi kỹ thuật cho set tập cá nhân
+  rpc StreamWorkoutTracking (stream contracts.core.workout_execution.v1.message.StreamWorkoutTrackingRequest)
+      returns (stream contracts.core.workout_execution.v1.message.StreamWorkoutTrackingResponse) {
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Luồng stream realtime phục vụ AI trọng tài form, đếm rep và bắt lỗi kỹ thuật cho set tập cá nhân";
+      tags: "Workout Execution / Camera Referee Streaming";
+      security: {
+        security_requirement: {
+          key: "BearerAuth";
+          value: {};
+        }
+      };
+    };
+  }
 }
 
 // Service dành riêng cho Admin tra cứu thông tin tập luyện của người dùng

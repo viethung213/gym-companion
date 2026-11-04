@@ -283,6 +283,7 @@ enum ParticipantStreamStatus {
   PARTICIPANT_STREAM_STATUS_SPECTATING = 2;
   PARTICIPANT_STREAM_STATUS_COMPLETED = 3;
   PARTICIPANT_STREAM_STATUS_WAITING = 4;
+  PARTICIPANT_STREAM_STATUS_DISCONNECTED = 5;
 }
 
 message SkeletonLandmark {
@@ -340,7 +341,61 @@ message StreamSoloMatchTrackingResponse {
   int32 remaining_ceiling_seconds = 11;
   bool match_ended = 12;
   google.protobuf.Timestamp timestamp = 13;
+  // Server-authoritative live telemetry so thin clients never recompute biomechanics.
+  float current_angle = 14;
+  string rep_phase = 15;
+  bool person_detected = 16;
 }
 
+enum WorkoutTrackingChallengeType {
+  WORKOUT_TRACKING_CHALLENGE_TYPE_UNSPECIFIED = 0;
+  WORKOUT_TRACKING_CHALLENGE_TYPE_REPS = 1;
+  WORKOUT_TRACKING_CHALLENGE_TYPE_DURATION = 2;
+}
 
+message WorkoutTrackingInit {
+  string session_id = 1;
+  string exercise_id = 2;
+  WorkoutTrackingChallengeType challenge_type = 3;
+  string camera_angle = 4;
+  int32 target_reps = 5;
+  int32 target_duration_seconds = 6;
+}
+
+message WorkoutTrackingFrame {
+  google.protobuf.Timestamp timestamp = 1;
+  repeated SkeletonLandmark landmarks = 2;
+  string camera_angle = 3;
+}
+
+message WorkoutTrackingSubmit {
+  // Gửi khi người dùng hoàn thành hoặc kết thúc hiệp tập
+}
+
+message WorkoutTrackingHeartbeat {
+  google.protobuf.Timestamp client_timestamp = 1;
+}
+
+message StreamWorkoutTrackingRequest {
+  oneof payload {
+    WorkoutTrackingInit init = 1;
+    WorkoutTrackingFrame frame = 2;
+    WorkoutTrackingSubmit submit = 3;
+    WorkoutTrackingHeartbeat heartbeat = 4;
+  }
+}
+
+message StreamWorkoutTrackingResponse {
+  int32 reps_completed = 1;
+  float hold_duration_seconds = 2;
+  float form_score = 3;
+  bool is_valid_form = 4;
+  bool is_set_completed = 5;
+  repeated string detected_errors = 6;
+  string audio_cue = 7;
+  google.protobuf.Timestamp timestamp = 8;
+  float current_angle = 9;
+  string rep_phase = 10;
+  bool person_detected = 11;
+}
 
