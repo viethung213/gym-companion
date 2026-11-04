@@ -272,13 +272,16 @@ func run() error {
 
 	// Run background seeder tasks for Core
 	go func() {
-		seedCtx := context.Background()
+		seedCtx := ctx
 		log.Println("🌱 Triggering background seeding for System Bots and Exercise catalog...")
 		if seedErr := seeder.SeedSystemBots(seedCtx, db, authGRPCHandler); seedErr != nil {
 			log.Printf("⚠️ Background seeding system bots error: %v", seedErr)
 		}
 		if seedErr := seeder.SeedExercises(seedCtx, exerciseDB, exerciseServer); seedErr != nil {
 			log.Printf("⚠️ Background seeding exercise catalog error: %v", seedErr)
+		}
+		if seedErr := seeder.SeedAIMotionSpecifications(seedCtx, workoutDB, exerciseDB); seedErr != nil {
+			log.Printf("⚠️ Background seeding AI motion specifications error: %v", seedErr)
 		}
 	}()
 
