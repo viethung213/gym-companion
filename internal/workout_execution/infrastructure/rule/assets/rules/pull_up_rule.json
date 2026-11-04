@@ -1,0 +1,102 @@
+{
+  "display_name": "Pull-up",
+  "rep_type": "counted",
+  "notes": "Bài tập kéo xà đơn. Từ tư thế treo thẳng tay (Dead Hang >155°) kéo ngực/cằm lên ngang xà (khuỷu tay ≤85°), không vung chân lấy đà.",
+  "phase_detection": {
+    "metric": "elbow_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 155,
+        "comment": "Treo người thẳng tay (Dead Hang)"
+      },
+      "transition": {
+        "gt": 85,
+        "lte": 155,
+        "comment": "Đang kéo người lên hoặc hạ người xuống"
+      },
+      "active": {
+        "lte": 85,
+        "comment": "Đỉnh Pull-up: Cằm qua xà"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Elbow (P7, P8)",
+        "Wrist (P9, P10)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "kipping_swing",
+      "description": "Gập hông/đạp gối vung người lấy đà (Kipping)",
+      "evaluation_type": "lower_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "all",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 150.0,
+          "max": 180.0
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 130.0,
+          "max": 150.0
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.0,
+          "max": 130.0
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Hip (P11, P12)",
+          "Knee (P13, P14)"
+        ],
+        "formula": "hip_angle = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+      }
+    },
+    {
+      "metric": "spine_sway_angle",
+      "description": "Đung đưa thân người qua lại khi kéo xà",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "all",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 18.0
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 18.0,
+          "max": 28.0
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 28.0,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Hip (P11, P12)"
+        ],
+        "formula": "spine_sway_angle = atan2(|X_shoulder - X_hip|, |Y_shoulder - Y_hip|) * (180 / π)"
+      }
+    }
+  ]
+}

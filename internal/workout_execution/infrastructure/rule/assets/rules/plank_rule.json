@@ -1,0 +1,108 @@
+{
+  "display_name": "Plank",
+  "rep_type": "timed",
+  "notes": "Bài tập giữ tĩnh tính thời gian. Yêu cầu toàn bộ cơ thể tạo thành một đường thẳng từ vai qua hông đến cổ chân, khuỷu tay chống vuông góc.",
+  "phase_detection": {
+    "metric": "body_incline_angle",
+    "thresholds": {
+      "idle": {
+        "gt": 35.0,
+        "comment": "Thân người nghiêng > 35° so với phương ngang (chưa vào tư thế Plank) -> Tạm dừng tính giờ"
+      },
+      "always": {
+        "lte": 35.0,
+        "comment": "Thân người nằm ngang sàn (≤ 35°) -> Kích hoạt đánh giá form và tính giờ giữ Plank"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Ankle (P15, P16)"
+      ],
+      "formula": "θ_incline = |arctan2(Y_shoulder_mid - Y_ankle_mid, X_shoulder_mid - X_ankle_mid)| * (180 / π)",
+      "description": "Góc nghiêng của trục cơ thể (Vai - Cổ chân) so với phương ngang"
+    }
+  },
+  "rules": [
+    {
+      "metric": "body_incline_angle",
+      "description": "Góc nghiêng cơ thể so với phương nằm ngang",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["always", "idle"],
+      "apply_for_view": "side",
+      "ranges": [
+        {"severity": 0, "status": "Correct", "min": 0.0, "max": 25.0},
+        {"severity": 1, "status": "Warning", "min": 25.0, "max": 35.0},
+        {"severity": 2, "status": "Danger", "min": 35.0, "max": null}
+      ],
+      "calculation": {
+        "landmarks": ["Shoulder (P5, P6)", "Ankle (P15, P16)"],
+        "formula": "body_incline_angle = |arctan2(Y_shoulder_mid - Y_ankle_mid, X_shoulder_mid - X_ankle_mid)| * (180 / π)"
+      }
+    },
+    {
+      "metric": "arm_to_torso_angle",
+      "description": "Góc giữa bắp tay và thân người Hip-Shoulder-Elbow",
+      "evaluation_type": "two_sided",
+      "apply_in_phases": ["always"],
+      "apply_for_view": "side",
+      "ranges": [
+        {"severity": 0, "status": "Correct", "min": 70.0, "max": 110.0},
+        {"severity": 1, "status": "Warning", "min": 60.0, "max": 120.0},
+        {"severity": 2, "status": "Danger", "min": 0.0, "max": null}
+      ],
+      "calculation": {
+        "landmarks": ["Hip (P11, P12)", "Shoulder (P5, P6)", "Elbow (P7, P8)"],
+        "formula": "arm_to_torso_angle = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+      }
+    },
+    {
+      "metric": "signed_hip_y_diff",
+      "description": "Độ lệch hông (võng lưng hoặc chổng mông) so với đường thẳng vai-cổ chân",
+      "evaluation_type": "absolute_upper_bound",
+      "apply_in_phases": ["always"],
+      "apply_for_view": "side",
+      "ranges": [
+        {"severity": 0, "status": "Correct", "min": 0.0, "max": 0.11},
+        {"severity": 1, "status": "Warning", "min": 0.11, "max": 0.20},
+        {"severity": 2, "status": "Danger", "min": 0.20, "max": null}
+      ],
+      "calculation": {
+        "landmarks": ["Shoulder (P5, P6)", "Hip (P11, P12)", "Ankle (P15, P16)"],
+        "formula": "signed_hip_y_diff = signed_distance_point_to_line(P_hip_mid, P_shoulder_mid, P_ankle_mid) / torso_length"
+      }
+    },
+    {
+      "metric": "elbow_angle",
+      "description": "Góc gập khớp khuỷu tay chống sàn",
+      "evaluation_type": "two_sided",
+      "apply_in_phases": ["always"],
+      "apply_for_view": "side",
+      "ranges": [
+        {"severity": 0, "status": "Correct", "min": 70.0, "max": 110.0},
+        {"severity": 1, "status": "Warning", "min": 60.0, "max": 120.0},
+        {"severity": 2, "status": "Danger", "min": 0.0, "max": null}
+      ],
+      "calculation": {
+        "landmarks": ["Shoulder (P5, P6)", "Elbow (P7, P8)", "Wrist (P9, P10)"],
+        "formula": "elbow_angle = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+      }
+    },
+    {
+      "metric": "hand_width_ratio",
+      "description": "Độ rộng đặt hai khuỷu tay so với độ rộng vai",
+      "evaluation_type": "two_sided",
+      "apply_in_phases": ["always"],
+      "apply_for_view": "front",
+      "ranges": [
+        {"severity": 0, "status": "Correct", "min": 0.80, "max": 1.25},
+        {"severity": 1, "status": "Warning", "min": 0.65, "max": 1.45},
+        {"severity": 2, "status": "Danger", "min": 0.0, "max": null}
+      ],
+      "calculation": {
+        "landmarks": ["Shoulder (P5, P6)", "Elbow (P7, P8)"],
+        "formula": "hand_width_ratio = |X_elbow_left - X_elbow_right| / |X_shoulder_left - X_shoulder_right|"
+      }
+    }
+  ]
+}

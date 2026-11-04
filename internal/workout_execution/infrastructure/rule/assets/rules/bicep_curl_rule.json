@@ -1,0 +1,122 @@
+{
+  "display_name": "Bicep Curl",
+  "rep_type": "counted",
+  "notes": "Bài tập đếm rep. Cùi chỏ cố định sát sườn, không vung/lắc. Cột sống thẳng, không ngửa ra sau.",
+  "phase_detection": {
+    "metric": "elbow_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 135,
+        "comment": "Tay duỗi thẳng (đáy rep), chuẩn bị cuốn lên"
+      },
+      "transition": {
+        "gt": 85,
+        "lte": 135,
+        "comment": "Đang cuốn lên/xuống (giữa ROM)"
+      },
+      "active": {
+        "lte": 85,
+        "comment": "Đỉnh curl (tạ gần vai), peak contraction"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Elbow (P7, P8)",
+        "Wrist (P9, P10)"
+      ],
+      "vectors": [
+        "U = Shoulder - Elbow",
+        "W = Wrist - Elbow"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)",
+      "description": "Góc gập khớp khuỷu tay hợp bởi cánh tay (vai-khuỷu) và cẳng tay (cổ tay-khuỷu)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "elbow_sway",
+      "description": "Độ di chuyển cùi chỏ ra trước/sau (Elbow Sway - Cheat Curl)",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["rest", "transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.09,
+          "comment": "≤9% torso_length: cùi chỏ cố định"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.09,
+          "max": 0.18,
+          "comment": "9-18% torso_length: cùi chỏ bắt đầu vung"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.18,
+          "max": null,
+          "comment": ">18% torso_length: cheat curl rõ"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Elbow (P7, P8)"
+        ],
+        "formula": "sway = |X_elbow - X_shoulder| / torso_length",
+        "description": "Độ lắc ngang X của cùi chỏ so với vai chuẩn hóa theo torso_length"
+      }
+    },
+    {
+      "metric": "spine_sway_angle",
+      "description": "Góc ngửa cột sống thắt lưng ra sau (Back Arching Cheat)",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["rest", "transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 10.0,
+          "comment": "≤10°: thân thẳng, cơ lõi ổn định"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 10.0,
+          "max": 18.0,
+          "comment": "10-18°: bắt đầu ngửa lưng lấy đà"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 18.0,
+          "max": null,
+          "comment": ">18°: cheat rõ rệt"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Mid-Shoulder (P5, P6)",
+          "Mid-Hip (P11, P12)"
+        ],
+        "vectors": [
+          "S = Mid-Shoulder - Mid-Hip",
+          "V = [0, -1, 0] (Vertical Vector)"
+        ],
+        "formula": "θ = arccos((S · V) / (||S|| * ||V||)) * (180 / π)",
+        "description": "Góc nghiêng/ưỡn của cột sống thắt lưng"
+      }
+    }
+  ],
+  "audio_cooldown_seconds": {
+    "warning": 3.0,
+    "danger": 1.5
+  }
+}

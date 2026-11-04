@@ -1,0 +1,39 @@
+{
+  "exercise": "push_up",
+  "display_name": "Push-up",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Push-up",
+  "voice_feedbacks": {
+    "signed_hip_y_diff": {
+      "metric_name": "signed_hip_y_diff",
+      "description": "Võng lưng hoặc chổng mông khi hít đất",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Siết chặt cơ bụng và mông, giữ lưng-hông-chân trên một đường thẳng!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "hand_width_ratio": {
+      "metric_name": "hand_width_ratio",
+      "description": "Đặt tay quá rộng hoặc quá hẹp",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Điều chỉnh khoảng cách hai bàn tay rộng hơn vai một chút!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
+	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
@@ -45,7 +46,6 @@ func NewCachedRuleProvider(
 }
 
 // SetRule allows explicitly populating or overriding an exercise rule in the in-memory cache (useful for testing or cache warming).
-// testing
 func (p *CachedRuleProvider) SetRule(exerciseID string, rule *vo.ExerciseMotionRule) {
 	if exerciseID != "" && rule != nil {
 		p.cache.Store(exerciseID, rule)
@@ -55,6 +55,8 @@ func (p *CachedRuleProvider) SetRule(exerciseID string, rule *vo.ExerciseMotionR
 // GetRule returns the ExerciseMotionRule for the given exerciseID.
 // It checks in-memory cache first, then fetches MotionSpecification from DB, downloads rule and dialogue assets,
 // parses and merges them, and saves the result in cache.
+// For the 12 canonical exercises, if the DB specification is missing or not configured, it seamlessly loads
+// from the embedded canonical rule and dialogue assets.
 func (p *CachedRuleProvider) GetRule(ctx context.Context, exerciseID string) (*vo.ExerciseMotionRule, error) {
 	exerciseID = strings.TrimSpace(exerciseID)
 	if exerciseID == "" {
@@ -68,26 +70,52 @@ func (p *CachedRuleProvider) GetRule(ctx context.Context, exerciseID string) (*v
 		}
 	}
 
-	// 2. Fetch MotionSpecification from repository
-	if p.specRepo == nil {
-		return nil, fmt.Errorf("motion specification repository is not configured")
+	// 2. Fetch MotionSpecification from repository if configured
+	var spec *aggregate.MotionSpecification
+	var specErr error
+	if p.specRepo != nil {
+		spec, specErr = p.specRepo.FindByExerciseID(ctx, exerciseID)
+	} else {
+		specErr = fmt.Errorf("motion specification repository is not configured")
 	}
 
-	spec, err := p.specRepo.FindByExerciseID(ctx, exerciseID)
-	if err != nil {
-		if errors.Is(err, derror.ErrMotionSpecNotFound) {
-			return nil, fmt.Errorf("motion specification not found for exercise_id: %s: %w", exerciseID, err)
+	if specErr != nil || spec == nil || strings.TrimSpace(spec.LocalRulesURL()) == "" {
+		// Check if exerciseID (or spec.ExerciseName) is one of the 12 canonical embedded exercises
+		candidateID := exerciseID
+		var specName, camAngle string
+		if spec != nil {
+			specName = spec.ExerciseName()
+			camAngle = spec.RecommendedCameraAngle()
+			if normalizeExerciseSlug(candidateID, "") == "" && specName != "" {
+				candidateID = specName
+			}
 		}
-		return nil, fmt.Errorf("find motion specification for %s: %w", exerciseID, err)
-	}
-	if spec == nil {
-		return nil, fmt.Errorf("motion specification not found for exercise_id: %s", exerciseID)
+		if ruleBytes, ok := GetEmbeddedExerciseAsset("rules", candidateID); ok {
+			dialogueBytes, _ := GetEmbeddedExerciseAsset("dialogues", candidateID)
+			if camAngle == "" {
+				camAngle = defaultCameraAngleForExercise(candidateID)
+			}
+			motionRule, parseErr := ParseMotionRuleBytes(exerciseID, specName, camAngle, ruleBytes, dialogueBytes)
+			if parseErr != nil {
+				return nil, fmt.Errorf("parse embedded motion rule asset for exercise %s: %w", exerciseID, parseErr)
+			}
+			p.cache.Store(exerciseID, motionRule)
+			return motionRule, nil
+		}
+
+		if specErr != nil {
+			if errors.Is(specErr, derror.ErrMotionSpecNotFound) {
+				return nil, fmt.Errorf("motion specification not found for exercise_id: %s: %w", exerciseID, specErr)
+			}
+			return nil, fmt.Errorf("find motion specification for %s: %w", exerciseID, specErr)
+		}
+		if spec == nil {
+			return nil, fmt.Errorf("motion specification not found for exercise_id: %s", exerciseID)
+		}
+		return nil, fmt.Errorf("local_rules_url is not configured for exercise_id: %s", exerciseID)
 	}
 
 	rulesURL := spec.LocalRulesURL()
-	if strings.TrimSpace(rulesURL) == "" {
-		return nil, fmt.Errorf("local_rules_url is not configured for exercise_id: %s", exerciseID)
-	}
 
 	// 3. Download rules JSON asset
 	ruleBytes, err := p.fetchAsset(ctx, rulesURL, "rules", exerciseID)
@@ -103,10 +131,12 @@ func (p *CachedRuleProvider) GetRule(ctx context.Context, exerciseID string) (*v
 		if diaErr == nil && len(diaData) > 0 {
 			dialogueBytes = diaData
 		}
+	} else if diaData, ok := GetEmbeddedExerciseAsset("dialogues", exerciseID); ok {
+		dialogueBytes = diaData
 	}
 
 	// 5. Parse and merge both JSON files into vo.ExerciseMotionRule
-	motionRule, err := parseMotionRule(exerciseID, spec.ExerciseName(), spec.RecommendedCameraAngle(), ruleBytes, dialogueBytes)
+	motionRule, err := ParseMotionRuleBytes(exerciseID, spec.ExerciseName(), spec.RecommendedCameraAngle(), ruleBytes, dialogueBytes)
 	if err != nil {
 		return nil, fmt.Errorf("parse motion rule asset for exercise %s: %w", exerciseID, err)
 	}
@@ -116,13 +146,34 @@ func (p *CachedRuleProvider) GetRule(ctx context.Context, exerciseID string) (*v
 	return motionRule, nil
 }
 
+func defaultCameraAngleForExercise(exerciseID string) string {
+	slug := normalizeExerciseSlug(exerciseID, "")
+	switch slug {
+	case "shoulder_press", "pull_up", "lateral_raise":
+		return "FRONT"
+	default:
+		return "SIDE"
+	}
+}
+
 func (p *CachedRuleProvider) fetchAsset(ctx context.Context, fileURL, assetType, exerciseID string) ([]byte, error) {
 	fileURL = strings.TrimSpace(fileURL)
 	if fileURL == "" {
 		return nil, fmt.Errorf("empty file URL")
 	}
 
-	// 1. Nếu link đã có sẵn thành phần http/https (như link Supabase Storage public trong DB), tải trực tiếp qua HTTP GET
+	// 1. Try ObjectStorageProvider first if configured and has the object (for S3 or mock storage in tests)
+	if p.storageProvider != nil {
+		objectKey := deriveObjectKey(fileURL, assetType, exerciseID)
+		if objectKey != "" {
+			data, err := p.storageProvider.GetObject(ctx, objectKey)
+			if err == nil && len(data) > 0 {
+				return data, nil
+			}
+		}
+	}
+
+	// 2. If URL has http/https, download via HTTP GET
 	if strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://") {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
 		if err == nil {
@@ -143,15 +194,9 @@ func (p *CachedRuleProvider) fetchAsset(ctx context.Context, fileURL, assetType,
 		}
 	}
 
-	// 2. Thử ObjectStorageProvider (cho internal S3 object key hoặc mock storage trong test)
-	if p.storageProvider != nil {
-		objectKey := deriveObjectKey(fileURL, assetType, exerciseID)
-		if objectKey != "" {
-			data, err := p.storageProvider.GetObject(ctx, objectKey)
-			if err == nil && len(data) > 0 {
-				return data, nil
-			}
-		}
+	// 3. Fallback to embedded canonical assets for the 12 core exercises
+	if data, ok := loadEmbeddedExerciseAsset(assetType, exerciseID, fileURL); ok {
+		return data, nil
 	}
 
 	return nil, fmt.Errorf("could not fetch asset from %s", fileURL)
@@ -243,6 +288,47 @@ type rawAudioStyle struct {
 
 var landmarkNumberRegex = regexp.MustCompile(`[pP]?(\d+)`)
 
+func getSemanticLandmark(name string) (int, bool) {
+	switch name {
+	case "nose":
+		return 0, true
+	case "left_eye", "eye":
+		return 1, true
+	case "right_eye":
+		return 2, true
+	case "left_ear", "ear":
+		return 3, true
+	case "right_ear":
+		return 4, true
+	case "left_shoulder", "mid_shoulder", "shoulder":
+		return 5, true
+	case "right_shoulder":
+		return 6, true
+	case "left_elbow", "elbow":
+		return 7, true
+	case "right_elbow":
+		return 8, true
+	case "left_wrist", "wrist":
+		return 9, true
+	case "right_wrist":
+		return 10, true
+	case "left_hip", "mid_hip", "hip":
+		return 11, true
+	case "right_hip":
+		return 12, true
+	case "left_knee", "knee":
+		return 13, true
+	case "right_knee":
+		return 14, true
+	case "left_ankle", "ankle":
+		return 15, true
+	case "right_ankle":
+		return 16, true
+	default:
+		return 0, false
+	}
+}
+
 func parseLandmarkNumbers(landmarks []string) []int {
 	var joints []int
 	for _, lm := range landmarks {
@@ -250,10 +336,68 @@ func parseLandmarkNumbers(landmarks []string) []int {
 		if len(matches) > 0 {
 			if val, err := strconv.Atoi(matches[0][1]); err == nil {
 				joints = append(joints, val)
+				continue
 			}
+		}
+		clean := strings.ToLower(strings.TrimSpace(lm))
+		clean = strings.ReplaceAll(clean, "-", "_")
+		if idx, ok := getSemanticLandmark(clean); ok {
+			joints = append(joints, idx)
 		}
 	}
 	return joints
+}
+
+func classifyFormula(metricName, formulaStr string, numJoints int) vo.FormulaType {
+	m := strings.ToLower(strings.TrimSpace(metricName))
+	f := strings.ToLower(strings.TrimSpace(formulaStr))
+
+	if numJoints >= 3 {
+		if m == "signed_hip_y_diff" ||
+			strings.Contains(m, "distance") ||
+			strings.Contains(m, "hip_sag") ||
+			strings.Contains(m, "hip_pike") ||
+			strings.Contains(f, "point_to_line") ||
+			strings.Contains(f, "distance") {
+			return vo.FormulaDistance
+		}
+		return vo.FormulaAngle3D
+	}
+
+	if numJoints == 2 {
+		if strings.Contains(m, "hand_width") ||
+			strings.Contains(m, "stance_width") ||
+			strings.Contains(m, "grip_width") ||
+			strings.Contains(f, "width_ratio") ||
+			strings.Contains(f, "x_shoulder_left - x_shoulder_right") {
+			return vo.FormulaBilateralWidthRatio
+		}
+		if strings.Contains(m, "incline") ||
+			strings.Contains(f, "arctan2(y_") ||
+			strings.Contains(f, "horizontal") {
+			return vo.FormulaHorizontalAngle
+		}
+		if strings.Contains(m, "spine_sway") ||
+			strings.Contains(m, "torso_lean") ||
+			strings.Contains(m, "trunk_lean") ||
+			strings.Contains(m, "back_lean") ||
+			strings.Contains(m, "torso_incline") ||
+			strings.Contains(f, "vertical") ||
+			strings.Contains(f, "arccos") {
+			return vo.FormulaVerticalAngle
+		}
+		if strings.Contains(m, "chin") ||
+			strings.Contains(m, "wrist_symmetry") ||
+			strings.Contains(m, "foot_lift") ||
+			strings.Contains(m, "ankle_lift") ||
+			strings.Contains(m, "vertical_diff") ||
+			strings.Contains(f, "y_diff") {
+			return vo.FormulaVerticalDiffRatio
+		}
+		return vo.FormulaHorizontalOffsetRatio
+	}
+
+	return vo.FormulaAngle3D
 }
 
 func extractDialogueText(fb rawVoiceFeedback) string {
@@ -280,6 +424,11 @@ func extractDialogueText(fb rawVoiceFeedback) string {
 		}
 	}
 	return ""
+}
+
+// ParseMotionRuleBytes parses raw rule JSON and optional dialogue JSON into an ExerciseMotionRule.
+func ParseMotionRuleBytes(exerciseID, specName, recommendedCameraAngle string, ruleBytes, dialogueBytes []byte) (*vo.ExerciseMotionRule, error) {
+	return parseMotionRule(exerciseID, specName, recommendedCameraAngle, ruleBytes, dialogueBytes)
 }
 
 func parseMotionRule(exerciseID, specName, recommendedCameraAngle string, ruleBytes, dialogueBytes []byte) (*vo.ExerciseMotionRule, error) {
@@ -315,12 +464,15 @@ func parseMotionRule(exerciseID, specName, recommendedCameraAngle string, ruleBy
 	// 1. Process PhaseDetection
 	phaseDetection := rawRule.PhaseDetection
 	if phaseDetection != nil {
-		formulaStr := strings.ToLower(string(phaseDetection.Calculation.Formula))
-		if strings.Contains(formulaStr, "arccos") || strings.Contains(formulaStr, "arctan2") || strings.Contains(formulaStr, "angle") {
-			phaseDetection.Calculation.Formula = vo.FormulaAngle3D
-		} else if phaseDetection.Calculation.Formula == "" {
-			phaseDetection.Calculation.Formula = vo.FormulaAngle3D
+		if len(phaseDetection.Calculation.Joints) == 0 && len(phaseDetection.Calculation.Landmarks) > 0 {
+			phaseDetection.Calculation.Joints = parseLandmarkNumbers(phaseDetection.Calculation.Landmarks)
 		}
+
+		phaseDetection.Calculation.Formula = classifyFormula(
+			phaseDetection.Metric,
+			string(phaseDetection.Calculation.Formula),
+			len(phaseDetection.Calculation.Joints),
+		)
 
 		// For timed/DURATION challenges (like Plank): map always -> Active, idle -> Rest
 		if challengeType == vo.ChallengeTypeDuration {
@@ -331,35 +483,37 @@ func parseMotionRule(exerciseID, specName, recommendedCameraAngle string, ruleBy
 				phaseDetection.Thresholds.Rest = phaseDetection.Thresholds.Idle
 			}
 		}
-
-		if len(phaseDetection.Calculation.Joints) == 0 && len(phaseDetection.Calculation.Landmarks) > 0 {
-			phaseDetection.Calculation.Joints = parseLandmarkNumbers(phaseDetection.Calculation.Landmarks)
-		}
 	}
 
 	// 2. Process criteria rules and map dialogue audio cues
 	var criteria []vo.RuleCriterion
 	for _, r := range rawRule.Rules {
+		var phases []string
+		for _, ph := range r.ApplyInPhases {
+			if clean := strings.ToLower(strings.TrimSpace(ph)); clean != "" {
+				phases = append(phases, clean)
+			}
+		}
+
 		crit := vo.RuleCriterion{
 			Name:            r.Metric,
 			PenaltyPerError: 10.0,
 			ApplyForView:    strings.ToLower(strings.TrimSpace(r.ApplyForView)),
+			ApplyInPhases:   phases,
 		}
 
 		evalType := strings.ToLower(strings.TrimSpace(r.EvaluationType))
 		metricUpper := strings.ToUpper(r.Metric)
-		if evalType == "two_sided" {
+		switch evalType {
+		case "two_sided":
 			crit.ErrorCodeBelow = "ERR_" + metricUpper + "_TOO_LOW"
 			crit.ErrorCodeAbove = "ERR_" + metricUpper + "_TOO_HIGH"
-		} else {
+		case "lower_bound":
+			crit.ErrorCodeBelow = "ERR_" + metricUpper
 			crit.ErrorCodeAbove = "ERR_" + metricUpper
-		}
-
-		calcFormula := strings.ToLower(r.Calculation.Formula)
-		if strings.Contains(calcFormula, "sway") || strings.Contains(calcFormula, "distance") || strings.Contains(calcFormula, "torso_length") || strings.Contains(calcFormula, "diff") || strings.Contains(calcFormula, "ratio") {
-			crit.Formula = vo.FormulaDistance
-		} else {
-			crit.Formula = vo.FormulaAngle3D
+		default:
+			crit.ErrorCodeAbove = "ERR_" + metricUpper
+			crit.ErrorCodeBelow = "ERR_" + metricUpper
 		}
 
 		if len(r.Calculation.Joints) > 0 {
@@ -367,6 +521,8 @@ func parseMotionRule(exerciseID, specName, recommendedCameraAngle string, ruleBy
 		} else {
 			crit.Joints = parseLandmarkNumbers(r.Calculation.Landmarks)
 		}
+
+		crit.Formula = classifyFormula(r.Metric, r.Calculation.Formula, len(crit.Joints))
 
 		for _, rng := range r.Ranges {
 			if rng.Severity == 0 {

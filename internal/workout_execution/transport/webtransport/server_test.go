@@ -28,7 +28,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
-	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
+	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/rule"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -66,39 +66,9 @@ func (m *mockLiveSync) DelRoom(ctx context.Context, matchID string) error {
 
 const goodToken = "good-token"
 
-type testRuleProvider struct{}
-
-func (m *testRuleProvider) GetRule(_ context.Context, exerciseID string) (*vo.ExerciseMotionRule, error) {
-	return &vo.ExerciseMotionRule{
-		ExerciseID:    exerciseID,
-		ExerciseName:  "Test Exercise",
-		ChallengeType: vo.ChallengeTypeReps,
-		TimeCeiling:   10 * time.Minute,
-		PhaseDetection: &vo.PhaseDetectionConfig{
-			Metric: "elbow_angle",
-			Thresholds: vo.PhaseThresholds{
-				Rest:       vo.ThresholdCondition{GTE: 135},
-				Transition: vo.ThresholdCondition{GT: 85, LT: 135},
-				Active:     vo.ThresholdCondition{LTE: 85},
-			},
-		},
-		Rules: []vo.RuleCriterion{
-			{
-				Name:    "elbow_angle",
-				Formula: vo.FormulaAngle3D,
-				Joints:  []int{6, 8, 10},
-				ValidRange: vo.ValidAngleRange{
-					Min: 0,
-					Max: 180,
-				},
-			},
-		},
-	}, nil
-}
-
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
-	ruleProv := &testRuleProvider{}
+	ruleProv := rule.NewCachedRuleProvider(nil, nil)
 	evaluator := service.NewDefaultRuleEvaluator()
 	workoutSvc := command.NewWorkoutTrackingService(ruleProv, evaluator)
 	soloSvc := command.NewSoloTrackingService(ruleProv, evaluator, &mockLiveSync{}, nil, nil, nil)

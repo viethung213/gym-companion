@@ -1,0 +1,102 @@
+{
+  "display_name": "Lateral Raise",
+  "rep_type": "counted",
+  "notes": "Bài tập dang tạ đơn vai giữa. Từ vị trí tay khép dọc thân người (góc nách ≤25°), nâng cánh tay sang ngang đến ngang vai (≥75°), giữ khuỷu tay hơi mở ổn định.",
+  "phase_detection": {
+    "metric": "shoulder_abduction_angle",
+    "thresholds": {
+      "rest": {
+        "lte": 28,
+        "comment": "Hai tay hạ dọc sát thân người"
+      },
+      "transition": {
+        "gt": 28,
+        "lt": 75,
+        "comment": "Đang nâng tạ sang ngang hoặc hạ xuống"
+      },
+      "active": {
+        "gte": 75,
+        "comment": "Đỉnh Lateral Raise: Cánh tay dang ngang vai"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Hip (P11, P12)",
+        "Shoulder (P5, P6)",
+        "Elbow (P7, P8)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "bent_elbow_cheat",
+      "description": "Gập cẳng tay quá nhiều làm giảm cánh tay đòn",
+      "evaluation_type": "lower_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "front",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 135.0,
+          "max": 180.0
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 110.0,
+          "max": 135.0
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.0,
+          "max": 110.0
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Elbow (P7, P8)",
+          "Wrist (P9, P10)"
+        ],
+        "formula": "elbow_angle = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+      }
+    },
+    {
+      "metric": "wrist_symmetry",
+      "description": "Hai tay nâng cao thấp không đều nhau",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["active"],
+      "apply_for_view": "front",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.25
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.25,
+          "max": 0.35
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.35,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Left Wrist (P9)",
+          "Right Wrist (P10)"
+        ],
+        "formula": "wrist_symmetry = |Y_wrist_left - Y_wrist_right| / torso_length"
+      }
+    }
+  ]
+}
