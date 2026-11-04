@@ -61,3 +61,17 @@ func RequireAdmin(ctx context.Context) (Actor, error) {
 	}
 	return actor, nil
 }
+
+// KeyProvider defines the interface to fetch the public key PEM for JWT verification.
+type KeyProvider interface {
+	GetPublicKeyPEM(ctx context.Context, kid string) (string, error)
+}
+
+// TokenValidator validates a raw JWT and returns the authenticated identity.
+type TokenValidator func(ctx context.Context, token string) (userID, role string, err error)
+
+// WithActor returns a context carrying the authenticated actor, as read by RequireAuthenticated.
+func WithActor(ctx context.Context, userID, role string) context.Context {
+	ctx = context.WithValue(ctx, UserIDKey, userID)
+	return context.WithValue(ctx, UserRoleKey, role)
+}

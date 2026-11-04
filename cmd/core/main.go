@@ -21,6 +21,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	"github.com/viethung213/gym-companion/internal/shared/discovery"
+	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
@@ -215,6 +216,26 @@ func run() error {
 		gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors),
 	}
 	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)...)
+
+	// Register WebTransport HTTP/3 and WebSocket fallback handlers
+	wtPort := os.Getenv("WT_PORT")
+	if wtPort == "" {
+		wtPort = "8443"
+	}
+	wtValidator := func(_ context.Context, token string) (string, string, error) {
+		claims, valErr := internaltoken.Validate(token, internalSecret)
+		if valErr != nil {
+			return "", "", valErr
+		}
+		return claims.UserID, claims.Role, nil
+	}
+	shutdownWT, wtEndpoints, err := workoutexecution.RegisterWebTransport(mux, workoutServer, wtValidator, ":"+wtPort)
+	if err != nil {
+		log.Printf("Warning: failed to start WebTransport server: %v", err)
+	} else {
+		defer shutdownWT()
+		prefixes = append(prefixes, wtEndpoints...)
+	}
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
