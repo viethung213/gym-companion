@@ -26,6 +26,7 @@ type JWKKeyDTO struct {
 type GetJWKSQuery struct{}
 
 // GetJWKSHandler handles the query to fetch public key sets formatted as JWKS.
+// It also implements middleware.KeyProvider via GetPublicKeyPEM.
 type GetJWKSHandler struct {
 	keyRepo port.KeyRepository
 }
@@ -33,6 +34,20 @@ type GetJWKSHandler struct {
 // NewGetJWKSHandler creates a new instance of GetJWKSHandler.
 func NewGetJWKSHandler(keyRepo port.KeyRepository) *GetJWKSHandler {
 	return &GetJWKSHandler{keyRepo: keyRepo}
+}
+
+// GetPublicKeyPEM retrieves the PEM-encoded RSA public key for kid, satisfying middleware.KeyProvider.
+func (h *GetJWKSHandler) GetPublicKeyPEM(ctx context.Context, kid string) (string, error) {
+	keys, err := h.keyRepo.GetAllActiveAndInactiveKeys(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get active and inactive keys: %w", err)
+	}
+	for _, k := range keys {
+		if k.ID == kid {
+			return k.PublicKeyPEM, nil
+		}
+	}
+	return "", fmt.Errorf("public key not found for kid: %s", kid)
 }
 
 // Handle handles the query and converts key records to JWKS public key format.

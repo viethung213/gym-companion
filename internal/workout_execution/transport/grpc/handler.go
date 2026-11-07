@@ -44,6 +44,7 @@ type GRPCHandler struct {
 	getPresignedUploadURLQuery   *query.GetPresignedUploadURLQueryHandler
 	patchMotionSpecAssetHandler  *command.PatchMotionSpecificationAssetHandler
 	soloTrackingService          *command.SoloTrackingService
+	workoutTrackingService       *command.WorkoutTrackingService
 }
 
 var _ workoutexecutionv1service.WorkoutExecutionServiceServer = (*GRPCHandler)(nil)
@@ -92,6 +93,21 @@ func NewGRPCHandler(
 		patchMotionSpecAssetHandler:  patchMotionSpecAssetHandler,
 		soloTrackingService:          soloTrackingService,
 	}
+}
+
+// SoloTrackingService returns the underlying SoloTrackingService instance.
+func (h *GRPCHandler) SoloTrackingService() *command.SoloTrackingService {
+	return h.soloTrackingService
+}
+
+// WorkoutTrackingService returns the underlying WorkoutTrackingService instance.
+func (h *GRPCHandler) WorkoutTrackingService() *command.WorkoutTrackingService {
+	return h.workoutTrackingService
+}
+
+// SetWorkoutTrackingService sets the WorkoutTrackingService instance.
+func (h *GRPCHandler) SetWorkoutTrackingService(s *command.WorkoutTrackingService) {
+	h.workoutTrackingService = s
 }
 
 func extractUserID(ctx context.Context) (string, error) {
@@ -744,9 +760,9 @@ func (h *GRPCHandler) StreamSoloMatchTracking(
 
 // StreamWorkoutTracking handles bi-directional gRPC streaming for single-player workout sets.
 func (h *GRPCHandler) StreamWorkoutTracking(
-	_ workoutexecutionv1service.WorkoutExecutionService_StreamWorkoutTrackingServer,
+	stream workoutexecutionv1service.WorkoutExecutionService_StreamWorkoutTrackingServer,
 ) error {
-	return status.Error(codes.Unimplemented, "StreamWorkoutTracking is not implemented yet")
+	return RunWorkoutTrackingLoop(stream.Context(), stream, h.workoutTrackingService)
 }
 
 // --- ConnectRPC Adapter ---
@@ -935,13 +951,14 @@ func (c *ConnectWorkoutExecutionHandler) StreamSoloMatchTracking(
 }
 
 func (c *ConnectWorkoutExecutionHandler) StreamWorkoutTracking(
-	_ context.Context,
-	_ *connect.BidiStream[
+	ctx context.Context,
+	stream *connect.BidiStream[
 		workoutexecutionv1message.StreamWorkoutTrackingRequest,
 		workoutexecutionv1message.StreamWorkoutTrackingResponse,
 	],
 ) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("StreamWorkoutTracking is not implemented yet"))
+	adapter := &connectWorkoutStreamAdapter{ctx: ctx, stream: stream}
+	return RunWorkoutTrackingLoop(ctx, adapter, c.grpcHandler.workoutTrackingService)
 }
 
 func mapParticipantStatusToProto(status string) workoutexecutionv1message.ParticipantStreamStatus {
@@ -954,6 +971,8 @@ func mapParticipantStatusToProto(status string) workoutexecutionv1message.Partic
 		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_COMPLETED
 	case "WAITING":
 		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_WAITING
+	case "DISCONNECTED":
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_DISCONNECTED
 	default:
 		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED
 	}
