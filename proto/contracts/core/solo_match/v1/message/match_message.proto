@@ -58,6 +58,14 @@ message SoloMatchView {
   google.protobuf.Timestamp started_at = 9;
   google.protobuf.Timestamp timeout_at = 10;
   google.protobuf.Timestamp ended_at = 11;
+  google.protobuf.Timestamp ready_deadline = 12;
+}
+
+message GetActiveMatchRequest {
+}
+
+message GetActiveMatchResponse {
+  SoloMatchView match = 1;
 }
 
 message GetMatchRequest {
