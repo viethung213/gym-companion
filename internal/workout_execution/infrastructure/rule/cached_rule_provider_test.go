@@ -532,3 +532,34 @@ func TestCachedRuleProvider_PlankTimedExercise(t *testing.T) {
 func timeNow() time.Time {
 	return time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 }
+
+func TestCachedRuleProvider_CanonicalUUIDFallback(t *testing.T) {
+	mockRepo := newMockMotionSpecRepo()
+	provider := NewCachedRuleProvider(mockRepo, nil)
+
+	testCases := []struct {
+		name       string
+		exerciseID string
+	}{
+		{"Bicep Curl UUID", "e99ba23f-3450-4897-bf20-42618dded05a"},
+		{"3/4 Sit-up UUID", "fe1ef684-3071-4522-b0fb-338aeeb26879"},
+		{"Bench Press UUID", "24e6981b-60df-42e2-9567-74559290f6b1"},
+		{"Weighted Squat UUID", "24776ced-3998-4529-a7a1-9333fddea59f"},
+		{"Dumbbell Lateral Raise Catalog Name", "Dumbbell Lateral Raise"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rule, err := provider.GetRule(context.Background(), tc.exerciseID)
+			if err != nil {
+				t.Fatalf("expected successful fallback for %s, got error: %v", tc.exerciseID, err)
+			}
+			if rule == nil {
+				t.Fatalf("expected non-nil rule for %s", tc.exerciseID)
+			}
+			if rule.ExerciseID != tc.exerciseID {
+				t.Errorf("expected ExerciseID %s, got %s", tc.exerciseID, rule.ExerciseID)
+			}
+		})
+	}
+}

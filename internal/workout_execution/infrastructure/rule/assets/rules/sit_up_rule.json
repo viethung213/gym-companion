@@ -1,0 +1,67 @@
+{
+  "display_name": "Sit-up",
+  "rep_type": "counted",
+  "notes": "Bài tập gập bụng từ tư thế nằm ngửa co gối. Gập thân trên lên đến khi góc hông ≤75°, bàn chân giữ cố định trên mặt sàn.",
+  "phase_detection": {
+    "metric": "hip_flexion_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 125,
+        "comment": "Nằm ngửa lưng chạm sàn"
+      },
+      "transition": {
+        "gt": 102,
+        "lte": 125,
+        "comment": "Đang gập bụng lên hoặc hạ lưng xuống"
+      },
+      "active": {
+        "lte": 102,
+        "comment": "Đỉnh Sit-up: Thân trên gập sát về phía đùi"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Hip (P11, P12)",
+        "Knee (P13, P14)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "ankle_lift",
+      "description": "Nhấc bàn chân khỏi sàn để lấy đà khi gập bụng",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.16
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.16,
+          "max": 0.28
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.28,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Hip (P11, P12)",
+          "Ankle (P15, P16)"
+        ],
+        "formula": "ankle_lift = |Y_hip - Y_ankle| / torso_length"
+      }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "exercise": "pull_up",
+  "display_name": "Pull-up",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Pull-up",
+  "voice_feedbacks": {
+    "kipping_swing": {
+      "metric_name": "kipping_swing",
+      "description": "Đạp chân vung người lấy đà",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Duỗi thẳng hông và chân, không đạp gối lấy đà khi kéo xà!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "spine_sway_angle": {
+      "metric_name": "spine_sway_angle",
+      "description": "Đung đưa người khi kéo xà",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ thân người ổn định, kéo lên theo trục thẳng đứng!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

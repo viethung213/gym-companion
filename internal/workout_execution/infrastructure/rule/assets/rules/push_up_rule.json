@@ -1,0 +1,106 @@
+{
+  "display_name": "Push-up",
+  "rep_type": "counted",
+  "notes": "Bài tập hít đất. Thân người thẳng từ vai xuống cổ chân, hạ ngực sát sàn khuỷu tay ≤95°.",
+  "phase_detection": {
+    "metric": "elbow_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 148,
+        "comment": "Tay chống thẳng ở vị trí cao"
+      },
+      "transition": {
+        "gt": 98,
+        "lte": 148,
+        "comment": "Đang hạ ngực xuống hoặc đẩy người lên"
+      },
+      "active": {
+        "lte": 98,
+        "comment": "Đáy Push-up (ngực hạ sát sàn)"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Elbow (P7, P8)",
+        "Wrist (P9, P10)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)",
+      "description": "Góc gập khớp khuỷu tay"
+    }
+  },
+  "rules": [
+    {
+      "metric": "signed_hip_y_diff",
+      "description": "Độ lệch hông (võng lưng hoặc chổng mông) so với đường thẳng Vai-Cổ chân",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["rest", "transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.26,
+          "comment": "Thân người giữ thẳng như tấm ván"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.26,
+          "max": 0.35,
+          "comment": "Hông bắt đầu sụp xuống hoặc đẩy cao"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.35,
+          "max": null,
+          "comment": "Võng lưng/chổng mông nặng"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Hip (P11, P12)",
+          "Ankle (P15, P16)"
+        ],
+        "formula": "signed_hip_y_diff = distance_point_to_line(P_hip, P_shoulder, P_ankle) / torso_length"
+      }
+    },
+    {
+      "metric": "hand_width_ratio",
+      "description": "Độ rộng hai bàn tay so với độ rộng hai vai",
+      "evaluation_type": "two_sided",
+      "apply_in_phases": ["rest", "transition", "active"],
+      "apply_for_view": "front",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.85,
+          "max": 1.65
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.65,
+          "max": 1.90
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.0,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Wrist (P9, P10)"
+        ],
+        "formula": "hand_width_ratio = |X_wrist_left - X_wrist_right| / |X_shoulder_left - X_shoulder_right|"
+      }
+    }
+  ]
+}

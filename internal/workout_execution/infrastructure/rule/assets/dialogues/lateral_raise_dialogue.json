@@ -1,0 +1,39 @@
+{
+  "exercise": "lateral_raise",
+  "display_name": "Lateral Raise",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Lateral Raise",
+  "voice_feedbacks": {
+    "bent_elbow_cheat": {
+      "metric_name": "bent_elbow_cheat",
+      "description": "Gập khuỷu tay quá nhiều khi dang tạ",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Duỗi rộng khuỷu tay hơn, không gập sát cẳng tay vào người!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "wrist_symmetry": {
+      "metric_name": "wrist_symmetry",
+      "description": "Hai tay nâng lệch nhau",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Nâng đều cả hai bên vai lên ngang nhau!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

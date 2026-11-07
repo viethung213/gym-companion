@@ -1,0 +1,106 @@
+{
+  "display_name": "Lunge",
+  "rep_type": "counted",
+  "notes": "Bài tập chùng chân. Yêu cầu thân người thẳng đứng, đầu gối chân bước lên vuông góc và không vượt quá xa cổ chân.",
+  "phase_detection": {
+    "metric": "knee_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 158,
+        "comment": "Đứng thẳng chuẩn bị"
+      },
+      "transition": {
+        "gt": 146,
+        "lte": 158,
+        "comment": "Đang hạ gối xuống hoặc đạp lên"
+      },
+      "active": {
+        "lte": 146,
+        "comment": "Đáy Lunge (gối trước hạ vuông góc)"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Hip (P11, P12)",
+        "Knee (P13, P14)",
+        "Ankle (P15, P16)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)",
+      "description": "Góc gập khớp gối chân trụ"
+    }
+  },
+  "rules": [
+    {
+      "metric": "torso_lean",
+      "description": "Góc nghiêng thân người khi bước chùng chân",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 22.0,
+          "comment": "≤22°: thân người giữ thẳng đứng"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 22.0,
+          "max": 32.0,
+          "comment": "22-32°: bắt đầu đổ người về trước"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 32.0,
+          "max": null,
+          "comment": ">32°: đổ lưng quá sâu"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Hip (P11, P12)"
+        ],
+        "formula": "torso_lean = atan2(|X_shoulder - X_hip|, |Y_shoulder - Y_hip|) * (180 / π)",
+        "description": "Độ nghiêng của trục lưng so với phương thẳng đứng"
+      }
+    },
+    {
+      "metric": "knee_over_toe",
+      "description": "Đầu gối trước nhô quá xa cổ chân trước",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.35
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.35,
+          "max": 0.48
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.48,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Knee (P13, P14)",
+          "Ankle (P15, P16)"
+        ],
+        "formula": "knee_over_toe = |X_knee - X_ankle| / torso_length"
+      }
+    }
+  ]
+}
