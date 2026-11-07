@@ -27,6 +27,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	wt "github.com/quic-go/webtransport-go"
 	workoutexecutionv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
+	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	workoutgrpc "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
@@ -58,6 +59,9 @@ type Config struct {
 	// PublicHost overrides the host placed in the URL returned by the config endpoint.
 	// When empty, the host of the incoming config request is used.
 	PublicHost string
+	// InternalSecret, if set, enables ConfigHandler to issue a short-lived internal stream token
+	// returned in ConfigResponse.Token for direct WebTransport/WebSocket connections.
+	InternalSecret string
 	// Validator authenticates the JWT carried in the `token` query parameter (browsers cannot set
 	// headers on a WebTransport/WebSocket handshake) or an `Authorization: Bearer` header.
 	Validator middleware.TokenValidator
@@ -227,6 +231,7 @@ type ConfigResponse struct {
 	FallbackPath     string `json:"fallbackPath"`
 	SoloURL          string `json:"soloUrl"`
 	SoloFallbackPath string `json:"soloFallbackPath"`
+	Token            string `json:"token,omitempty"`
 	CertExpiresAt    string `json:"certExpiresAt"`
 }
 
@@ -241,9 +246,16 @@ func (s *Server) ConfigHandler() http.Handler {
 			http.Error(w, "webtransport not started", http.StatusServiceUnavailable)
 			return
 		}
-		if _, _, ok := s.authenticate(r); !ok {
+		uid, role, ok := s.authenticate(r)
+		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
+		}
+		var streamToken string
+		if s.cfg.InternalSecret != "" {
+			if tok, err := internaltoken.Generate(uid, role, "wt-stream", 15*time.Minute, s.cfg.InternalSecret); err == nil {
+				streamToken = tok
+			}
 		}
 		host := s.cfg.PublicHost
 		if host == "" {
@@ -268,6 +280,7 @@ func (s *Server) ConfigHandler() http.Handler {
 			FallbackPath:     WebSocketPath,
 			SoloURL:          soloU.String(),
 			SoloFallbackPath: SoloWebSocketPath,
+			Token:            streamToken,
 			CertExpiresAt:    bundle.notAfter.UTC().Format(time.RFC3339),
 		})
 	})
@@ -281,6 +294,9 @@ func (s *Server) authenticate(r *http.Request) (userID, role string, ok bool) {
 		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 			token = strings.TrimPrefix(h, "Bearer ")
 		}
+	}
+	if token == "" {
+		token = r.Header.Get(middleware.HeaderInternalToken)
 	}
 	if token == "" {
 		return "", "", false

@@ -376,6 +376,7 @@ func RegisterWebTransport(
 	grpcHandler *workoutGRPC.GRPCHandler,
 	validator middleware.TokenValidator,
 	wtAddr string,
+	internalSecret string,
 ) (func(), []string, error) {
 	if grpcHandler == nil || grpcHandler.SoloTrackingService() == nil {
 		return func() {}, nil, fmt.Errorf("solo tracking service is not configured")
@@ -386,6 +387,7 @@ func RegisterWebTransport(
 	}
 	wtServer, err := webtransport.New(webtransport.Config{
 		Addr:           wtAddr,
+		InternalSecret: internalSecret,
 		Validator:      validator,
 		WorkoutService: grpcHandler.WorkoutTrackingService(),
 		Service:        grpcHandler.SoloTrackingService(),

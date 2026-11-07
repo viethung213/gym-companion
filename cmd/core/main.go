@@ -222,14 +222,19 @@ func run() error {
 	if wtPort == "" {
 		wtPort = "8443"
 	}
-	wtValidator := func(_ context.Context, token string) (string, string, error) {
+	wtValidator := func(ctx context.Context, token string) (string, string, error) {
 		claims, valErr := internaltoken.Validate(token, internalSecret)
-		if valErr != nil {
-			return "", "", valErr
+		if valErr == nil {
+			return claims.UserID, claims.Role, nil
 		}
-		return claims.UserID, claims.Role, nil
+		if authGRPCHandler != nil {
+			if uid, role, aErr := authGRPCHandler.ValidateAccessToken(ctx, token); aErr == nil {
+				return uid, role, nil
+			}
+		}
+		return "", "", valErr
 	}
-	shutdownWT, wtEndpoints, err := workoutexecution.RegisterWebTransport(mux, workoutServer, wtValidator, ":"+wtPort)
+	shutdownWT, wtEndpoints, err := workoutexecution.RegisterWebTransport(mux, workoutServer, wtValidator, ":"+wtPort, internalSecret)
 	if err != nil {
 		log.Printf("Warning: failed to start WebTransport server: %v", err)
 	} else {
