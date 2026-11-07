@@ -110,6 +110,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 
 	getMatchHandler := query.NewGetSoloMatchByIDHandler(matchRepo, snapshotRepo)
 	getHistoryHandler := query.NewGetUserMatchHistoryHandler(matchRepo, snapshotRepo)
+	getActiveMatchHandler := query.NewGetActiveMatchHandler(matchRepo, snapshotRepo)
 
 	// Transport Handlers
 	grpcHandler := grpc.NewHandler(
@@ -118,6 +119,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		getMatchHandler,
 		getHistoryHandler,
 		snapshotRepo,
+		getActiveMatchHandler,
 	)
 
 	// Kafka Setup
