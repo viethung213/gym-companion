@@ -23,6 +23,8 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	wt "github.com/quic-go/webtransport-go"
 	msg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
+	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
@@ -526,6 +528,71 @@ func TestConfigHandler_ReturnsPinMatchingServedCertificate(t *testing.T) {
 		t.Fatalf("dial using URL+pin from config endpoint: %v", err)
 	}
 	_ = sess.CloseWithError(0, "")
+}
+
+func TestConfigHandler_IssuesStreamTokenAndAcceptsInternalHeader(t *testing.T) {
+	ruleProv := &testRuleProvider{}
+	evaluator := service.NewDefaultRuleEvaluator()
+	workoutSvc := command.NewWorkoutTrackingService(ruleProv, evaluator)
+	soloSvc := command.NewSoloTrackingService(ruleProv, evaluator, &mockLiveSync{}, nil, nil, nil)
+	const secret = "test-internal-secret-for-stream-token"
+
+	s, err := New(Config{
+		Addr:           "127.0.0.1:0",
+		WorkoutService: workoutSvc,
+		Service:        soloSvc,
+		InternalSecret: secret,
+		Validator: func(_ context.Context, token string) (string, string, error) {
+			if claims, valErr := internaltoken.Validate(token, secret); valErr == nil {
+				return claims.UserID, claims.Role, nil
+			}
+			if token == goodToken {
+				return "user-wt-1", "User", nil
+			}
+			return "", "", errors.New("bad token")
+		},
+		IdleTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ts := httptest.NewServer(s.ConfigHandler())
+	defer ts.Close()
+
+	// 1. Call config with X-Internal-Token header (simulating API Gateway forward)
+	inTok, err := internaltoken.Generate("gateway-user-1", "Member", "test-req", 5*time.Minute, secret)
+	if err != nil {
+		t.Fatalf("generate internal token: %v", err)
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL, nil)
+	req.Header.Set(middleware.HeaderInternalToken, inTok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("config with X-Internal-Token status = %d, want 200", resp.StatusCode)
+	}
+	var cfg ConfigResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Token == "" {
+		t.Fatal("expected non-empty stream token in ConfigResponse")
+	}
+	claims, err := internaltoken.Validate(cfg.Token, secret)
+	if err != nil {
+		t.Fatalf("issued stream token failed validation: %v", err)
+	}
+	if claims.UserID != "gateway-user-1" {
+		t.Errorf("claims.UserID = %q, want 'gateway-user-1'", claims.UserID)
+	}
 }
 
 func TestWebSocketFallback_SameProtocolSameReferee(t *testing.T) {

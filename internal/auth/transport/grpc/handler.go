@@ -2,11 +2,15 @@ package grpc
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
 	"github.com/viethung213/gym-companion/internal/auth/application/query"
@@ -203,6 +207,60 @@ func (h *GRPCHandler) GetJWKS(
 	return &authv1message.GetJWKSResponse{
 		Keys: pbKeys,
 	}, nil
+}
+
+// ValidateAccessToken verifies a public user access token (RS256) and returns the user ID and role.
+func (h *GRPCHandler) ValidateAccessToken(ctx context.Context, tokenStr string) (string, string, error) {
+	if tokenStr == "" {
+		return "", "", errors.New("empty access token")
+	}
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		kid, _ := t.Header["kid"].(string)
+		if kid == "" {
+			return nil, errors.New("missing kid in token header")
+		}
+		pemStr, pErr := h.getJWKSHandler.GetPublicKeyPEM(ctx, kid)
+		if pErr != nil {
+			return nil, pErr
+		}
+		block, _ := pem.Decode([]byte(pemStr))
+		if block == nil {
+			return nil, errors.New("failed to decode PEM block for public key")
+		}
+		pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse public key: %w", err)
+		}
+		rsaPub, ok := pubKey.(*rsa.PublicKey)
+		if !ok {
+			return nil, errors.New("key is not RSA public key")
+		}
+		return rsaPub, nil
+	})
+
+	if err != nil {
+		return "", "", fmt.Errorf("verify jwt: %w", err)
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return "", "", errors.New("invalid token claims")
+	}
+
+	sub, _ := claims["sub"].(string)
+	if sub == "" {
+		sub, _ = claims["userId"].(string)
+	}
+	roleVal, _ := claims["role"].(string)
+	if roleVal == "" {
+		roleVal = "Member"
+	}
+
+	return sub, roleVal, nil
 }
 
 // LoginWithOAuth processes OAuth codes for standard authentication.
