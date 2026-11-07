@@ -22,11 +22,12 @@ import (
 
 type Handler struct {
 	solomatchv1service.UnimplementedSoloMatchServiceServer
-	joinQueueHandler   *command.JoinMatchmakingQueueHandler
-	cancelQueueHandler *command.CancelMatchmakingHandler
-	getMatchHandler    *query.GetSoloMatchByIDHandler
-	getHistoryHandler  *query.GetUserMatchHistoryHandler
-	snapshotRepo       repository.UserSnapshotRepository
+	joinQueueHandler      *command.JoinMatchmakingQueueHandler
+	cancelQueueHandler    *command.CancelMatchmakingHandler
+	getMatchHandler       *query.GetSoloMatchByIDHandler
+	getHistoryHandler     *query.GetUserMatchHistoryHandler
+	snapshotRepo          repository.UserSnapshotRepository
+	getActiveMatchHandler *query.GetActiveMatchHandler
 }
 
 var _ solomatchv1service.SoloMatchServiceServer = (*Handler)(nil)
@@ -37,13 +38,19 @@ func NewHandler(
 	getMatchHandler *query.GetSoloMatchByIDHandler,
 	getHistoryHandler *query.GetUserMatchHistoryHandler,
 	snapshotRepo repository.UserSnapshotRepository,
+	getActiveMatchHandler ...*query.GetActiveMatchHandler,
 ) *Handler {
+	var activeHandler *query.GetActiveMatchHandler
+	if len(getActiveMatchHandler) > 0 {
+		activeHandler = getActiveMatchHandler[0]
+	}
 	return &Handler{
-		joinQueueHandler:   joinQueueHandler,
-		cancelQueueHandler: cancelQueueHandler,
-		getMatchHandler:    getMatchHandler,
-		getHistoryHandler:  getHistoryHandler,
-		snapshotRepo:       snapshotRepo,
+		joinQueueHandler:      joinQueueHandler,
+		cancelQueueHandler:    cancelQueueHandler,
+		getMatchHandler:       getMatchHandler,
+		getHistoryHandler:     getHistoryHandler,
+		snapshotRepo:          snapshotRepo,
+		getActiveMatchHandler: activeHandler,
 	}
 }
 
@@ -175,6 +182,36 @@ func (h *Handler) CancelQueue(
 	}
 
 	return &solomatchv1message.CancelQueueResponse{Success: true}, nil
+}
+
+func (h *Handler) GetActiveMatch(
+	ctx context.Context,
+	_ *solomatchv1message.GetActiveMatchRequest,
+) (*solomatchv1message.GetActiveMatchResponse, error) {
+	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	if !ok || userID == "" {
+		return nil, status.Error(codes.Unauthenticated, "user authentication required")
+	}
+
+	if h.getActiveMatchHandler == nil {
+		return nil, status.Error(codes.Unimplemented, "get active match handler not configured")
+	}
+
+	matchDTO, err := h.getActiveMatchHandler.Handle(ctx, query.GetActiveMatchQuery{
+		UserID: userID,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get active match: %v", err)
+	}
+	if matchDTO == nil {
+		return &solomatchv1message.GetActiveMatchResponse{
+			Match: nil,
+		}, nil
+	}
+
+	return &solomatchv1message.GetActiveMatchResponse{
+		Match: ToSoloMatchView(matchDTO),
+	}, nil
 }
 
 func (h *Handler) GetMatch(

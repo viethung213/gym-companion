@@ -33,12 +33,14 @@ func TestConnectSoloMatchHandler(t *testing.T) {
 	getMatchHandler := query.NewGetSoloMatchByIDHandler(mockMatchRepo, mockSnapshotRepo)
 	getHistoryHandler := query.NewGetUserMatchHistoryHandler(mockMatchRepo, mockSnapshotRepo)
 
+	getActiveMatchHandler := query.NewGetActiveMatchHandler(mockMatchRepo, mockSnapshotRepo)
 	grpcHandler := transportgrpc.NewHandler(
 		joinHandler,
 		cancelHandler,
 		getMatchHandler,
 		getHistoryHandler,
 		mockSnapshotRepo,
+		getActiveMatchHandler,
 	)
 
 	connectHandler := transportgrpc.NewConnectSoloMatchHandler(grpcHandler)
@@ -105,5 +107,25 @@ func TestConnectSoloMatchHandler(t *testing.T) {
 	}
 	if len(historyRes.Msg.Matches) != 1 {
 		t.Errorf("got %d matches, want 1", len(historyRes.Msg.Matches))
+	}
+
+	// 5. GetActiveMatch test
+	mockMatchRepo.activeMatch = match
+	activeRes, err := connectHandler.GetActiveMatch(ctx, connect.NewRequest(&solomatchv1message.GetActiveMatchRequest{}))
+	if err != nil {
+		t.Fatalf("unexpected get active match err: %v", err)
+	}
+	if activeRes.Msg.Match == nil || activeRes.Msg.Match.MatchId != "match_found" {
+		t.Errorf("got active match %+v, want match_found", activeRes.Msg.Match)
+	}
+
+	// 6. GetActiveMatch when no active match
+	mockMatchRepo.activeMatch = nil
+	noActiveRes, err := connectHandler.GetActiveMatch(ctx, connect.NewRequest(&solomatchv1message.GetActiveMatchRequest{}))
+	if err != nil {
+		t.Fatalf("unexpected get active match err: %v", err)
+	}
+	if noActiveRes.Msg.Match != nil {
+		t.Errorf("expected nil active match, got %+v", noActiveRes.Msg.Match)
 	}
 }

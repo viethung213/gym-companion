@@ -37,6 +37,17 @@ func (c *ConnectSoloMatchHandler) CancelQueue(
 	return connect.NewResponse(res), nil
 }
 
+func (c *ConnectSoloMatchHandler) GetActiveMatch(
+	ctx context.Context,
+	req *connect.Request[solomatchv1message.GetActiveMatchRequest],
+) (*connect.Response[solomatchv1message.GetActiveMatchResponse], error) {
+	res, err := c.grpcHandler.GetActiveMatch(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
 func (c *ConnectSoloMatchHandler) GetMatch(
 	ctx context.Context,
 	req *connect.Request[solomatchv1message.GetMatchRequest],

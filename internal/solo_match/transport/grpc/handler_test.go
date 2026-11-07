@@ -138,12 +138,14 @@ func TestGRPCHandler(t *testing.T) {
 	getMatchHandler := query.NewGetSoloMatchByIDHandler(matchRepo, snapshotRepo)
 	getHistoryHandler := query.NewGetUserMatchHistoryHandler(matchRepo, snapshotRepo)
 
+	getActiveMatchHandler := query.NewGetActiveMatchHandler(matchRepo, snapshotRepo)
 	handler := transportgrpc.NewHandler(
 		joinQueueHandler,
 		cancelQueueHandler,
 		getMatchHandler,
 		getHistoryHandler,
 		snapshotRepo,
+		getActiveMatchHandler,
 	)
 
 	// 0. JoinQueue rejects when active match exists
@@ -224,5 +226,19 @@ func TestGRPCHandler(t *testing.T) {
 	histResp, err := handler.GetMatchHistory(ctx, &solomatchv1message.GetMatchHistoryRequest{PageSize: 10})
 	if err != nil || len(histResp.Matches) != 1 {
 		t.Fatalf("GetMatchHistory err=%v, count=%d", err, len(histResp.Matches))
+	}
+
+	// 5. GetActiveMatch when matchRepo has active match
+	matchRepo.activeMatch = match
+	activeResp, err := handler.GetActiveMatch(ctx, &solomatchv1message.GetActiveMatchRequest{})
+	if err != nil || activeResp.Match == nil || activeResp.Match.MatchId != "m_1" {
+		t.Fatalf("GetActiveMatch err=%v, resp=%+v", err, activeResp)
+	}
+
+	// 6. GetActiveMatch when no active match
+	matchRepo.activeMatch = nil
+	noActiveResp, err := handler.GetActiveMatch(ctx, &solomatchv1message.GetActiveMatchRequest{})
+	if err != nil || noActiveResp.Match != nil {
+		t.Fatalf("expected nil match when no active match, got err=%v, resp=%+v", err, noActiveResp)
 	}
 }
