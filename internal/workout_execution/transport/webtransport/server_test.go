@@ -357,7 +357,7 @@ func TestConfigHandler_ReturnsPinMatchingServedCertificate(t *testing.T) {
 }
 
 func TestConfigHandler_IssuesStreamTokenAndAcceptsInternalHeader(t *testing.T) {
-	ruleProv := &testRuleProvider{}
+	ruleProv := rule.NewCachedRuleProvider(nil, nil)
 	evaluator := service.NewDefaultRuleEvaluator()
 	soloSvc := command.NewSoloTrackingService(ruleProv, evaluator, &mockLiveSync{}, nil, nil, nil)
 	const secret = "test-internal-secret-for-stream-token"
