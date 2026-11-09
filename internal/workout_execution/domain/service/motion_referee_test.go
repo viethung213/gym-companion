@@ -7,8 +7,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/vo"
 )
 
-func TestSoloRefereeSession_NilRule_ReturnsError(t *testing.T) {
-	session, err := NewSoloRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, nil)
+func TestMotionRefereeSession_NilRule_ReturnsError(t *testing.T) {
+	session, err := NewMotionRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, nil)
 	if err == nil {
 		t.Fatal("expected error when rule is nil, got nil")
 	}
@@ -17,9 +17,9 @@ func TestSoloRefereeSession_NilRule_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Duration_EmptyRules_ReturnsError(t *testing.T) {
+func TestMotionRefereeSession_Duration_EmptyRules_ReturnsError(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{ExerciseID: "plank_01", ChallengeType: vo.ChallengeTypeDuration}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err == nil {
 		t.Fatal("expected error when duration rule has no criteria, got nil")
 	}
@@ -28,13 +28,13 @@ func TestSoloRefereeSession_Duration_EmptyRules_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Duration_AccumulatesTime(t *testing.T) {
+func TestMotionRefereeSession_Duration_AccumulatesTime(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,13 +52,13 @@ func TestSoloRefereeSession_Duration_AccumulatesTime(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Duration_ViolationBefore5s_DoesNotResetAccumulated(t *testing.T) {
+func TestMotionRefereeSession_Duration_ViolationBefore5s_DoesNotResetAccumulated(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,13 +93,13 @@ func TestSoloRefereeSession_Duration_ViolationBefore5s_DoesNotResetAccumulated(t
 	}
 }
 
-func TestSoloRefereeSession_Duration_5sViolation_TransitionsToSpectating(t *testing.T) {
+func TestMotionRefereeSession_Duration_5sViolation_TransitionsToSpectating(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 30*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,12 +129,12 @@ func TestSoloRefereeSession_Duration_5sViolation_TransitionsToSpectating(t *test
 	}
 }
 
-func TestSoloRefereeSession_Reps_NilPhaseDetection_ReturnsError(t *testing.T) {
+func TestMotionRefereeSession_Reps_NilPhaseDetection_ReturnsError(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "squat_01",
 		ChallengeType: vo.ChallengeTypeReps,
 	}
-	session, err := NewSoloRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
+	session, err := NewMotionRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
 	if err == nil {
 		t.Fatal("expected error when phase_detection is nil for rep challenge, got nil")
 	}
@@ -143,7 +143,7 @@ func TestSoloRefereeSession_Reps_NilPhaseDetection_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Reps_CycleIncrementsCount(t *testing.T) {
+func TestMotionRefereeSession_Reps_CycleIncrementsCount(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID: "squat_01",
 		PhaseDetection: &vo.PhaseDetectionConfig{
@@ -155,7 +155,7 @@ func TestSoloRefereeSession_Reps_CycleIncrementsCount(t *testing.T) {
 			},
 		},
 	}
-	session, err := NewSoloRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
+	session, err := NewMotionRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestSoloRefereeSession_Reps_CycleIncrementsCount(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_PhaseDetection_IncrementsRepCycle(t *testing.T) {
+func TestMotionRefereeSession_PhaseDetection_IncrementsRepCycle(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:  "bicep_curl_01",
 		DisplayName: "Bicep Curl",
@@ -208,7 +208,7 @@ func TestSoloRefereeSession_PhaseDetection_IncrementsRepCycle(t *testing.T) {
 			},
 		},
 	}
-	session, err := NewSoloRefereeSession("bicep_curl_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
+	session, err := NewMotionRefereeSession("bicep_curl_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestSoloRefereeSession_PhaseDetection_IncrementsRepCycle(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_StrictSequence_SkipTransition_DoesNotCount(t *testing.T) {
+func TestMotionRefereeSession_StrictSequence_SkipTransition_DoesNotCount(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID: "squat_01",
 		PhaseDetection: &vo.PhaseDetectionConfig{
@@ -294,7 +294,7 @@ func TestSoloRefereeSession_StrictSequence_SkipTransition_DoesNotCount(t *testin
 			},
 		},
 	}
-	session, err := NewSoloRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
+	session, err := NewMotionRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestSoloRefereeSession_StrictSequence_SkipTransition_DoesNotCount(t *testin
 	}
 }
 
-func TestSoloRefereeSession_StrictSequence_SkipReturnTransition_DoesNotCount(t *testing.T) {
+func TestMotionRefereeSession_StrictSequence_SkipReturnTransition_DoesNotCount(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID: "squat_01",
 		PhaseDetection: &vo.PhaseDetectionConfig{
@@ -329,7 +329,7 @@ func TestSoloRefereeSession_StrictSequence_SkipReturnTransition_DoesNotCount(t *
 			},
 		},
 	}
-	session, err := NewSoloRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
+	session, err := NewMotionRefereeSession("squat_01", vo.ChallengeTypeReps, 10*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestSoloRefereeSession_StrictSequence_SkipReturnTransition_DoesNotCount(t *
 	}
 }
 
-func TestSoloRefereeSession_TimeoutCeiling(t *testing.T) {
+func TestMotionRefereeSession_TimeoutCeiling(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "pushup_01",
 		ChallengeType: vo.ChallengeTypeReps,
@@ -364,7 +364,7 @@ func TestSoloRefereeSession_TimeoutCeiling(t *testing.T) {
 			},
 		},
 	}
-	session, err := NewSoloRefereeSession("pushup_01", vo.ChallengeTypeReps, 3*time.Second, rule)
+	session, err := NewMotionRefereeSession("pushup_01", vo.ChallengeTypeReps, 3*time.Second, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -386,13 +386,13 @@ func TestSoloRefereeSession_TimeoutCeiling(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Duration_HardCeilingAt30Minutes(t *testing.T) {
+func TestMotionRefereeSession_Duration_HardCeilingAt30Minutes(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 60*time.Minute, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 60*time.Minute, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -427,13 +427,13 @@ func TestSoloRefereeSession_Duration_HardCeilingAt30Minutes(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_Duration_DefaultCeilingIs30Minutes(t *testing.T) {
+func TestMotionRefereeSession_Duration_DefaultCeilingIs30Minutes(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 0, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 0, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -442,14 +442,14 @@ func TestSoloRefereeSession_Duration_DefaultCeilingIs30Minutes(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_WallClock_CeilingExpiresWithoutFrames(t *testing.T) {
+func TestMotionRefereeSession_WallClock_CeilingExpiresWithoutFrames(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
 	ceiling := 10 * time.Minute
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, ceiling, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, ceiling, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -473,13 +473,13 @@ func TestSoloRefereeSession_WallClock_CeilingExpiresWithoutFrames(t *testing.T) 
 	}
 }
 
-func TestSoloRefereeSession_WaitingState_DoesNotCountTime(t *testing.T) {
+func TestMotionRefereeSession_WaitingState_DoesNotCountTime(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "plank_01",
 		ChallengeType: vo.ChallengeTypeDuration,
 		Rules:         []vo.RuleCriterion{{Name: "body_incline"}},
 	}
-	session, err := NewSoloRefereeSession("plank_01", vo.ChallengeTypeDuration, 0, rule)
+	session, err := NewMotionRefereeSession("plank_01", vo.ChallengeTypeDuration, 0, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -503,7 +503,7 @@ func TestSoloRefereeSession_WaitingState_DoesNotCountTime(t *testing.T) {
 	}
 }
 
-func TestSoloRefereeSession_SpectatingState_WallElapsedContinues(t *testing.T) {
+func TestMotionRefereeSession_SpectatingState_WallElapsedContinues(t *testing.T) {
 	rule := &vo.ExerciseMotionRule{
 		ExerciseID:    "squat_01",
 		ChallengeType: vo.ChallengeTypeReps,
@@ -517,7 +517,7 @@ func TestSoloRefereeSession_SpectatingState_WallElapsedContinues(t *testing.T) {
 		},
 	}
 	ceiling := 300 * time.Second
-	session, err := NewSoloRefereeSession("pushup_01", vo.ChallengeTypeReps, ceiling, rule)
+	session, err := NewMotionRefereeSession("pushup_01", vo.ChallengeTypeReps, ceiling, rule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
