@@ -35,12 +35,8 @@ import (
 )
 
 const (
-	// WebTransportPath is the HTTP/3 CONNECT path for WebTransport sessions.
-	WebTransportPath = "/api/v1/execution/wt"
 	// ConfigPath returns the WebTransport URL and certificate pin (served on the main HTTP server).
 	ConfigPath = "/api/v1/execution/wt-config"
-	// WebSocketPath is the TCP fallback endpoint (served on the main HTTP server).
-	WebSocketPath = "/api/v1/execution/wt-stream"
 	// SoloWebTransportPath is the HTTP/3 CONNECT path for Solo Match sessions.
 	SoloWebTransportPath = "/api/v1/execution/solo-wt"
 	// SoloWebSocketPath is the TCP fallback endpoint for Solo Match sessions.
@@ -67,8 +63,6 @@ type Config struct {
 	Validator middleware.TokenValidator
 	// Service is the referee/persistence service driving each stream.
 	Service *command.SoloTrackingService
-	// WorkoutService is the pure referee service for individual workout sets (clean DDD).
-	WorkoutService *command.WorkoutTrackingService
 	// AllowedOrigins restricts browser origins. Empty allows any origin (same posture as the API CORS config);
 	// authentication still requires a valid JWT.
 	AllowedOrigins []string
@@ -94,8 +88,8 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Validator == nil {
 		return nil, errors.New("webtransport: token validator is required")
 	}
-	if cfg.Service == nil && cfg.WorkoutService == nil {
-		return nil, errors.New("webtransport: at least one tracking service is required")
+	if cfg.Service == nil {
+		return nil, errors.New("webtransport: solo tracking service is required")
 	}
 	if cfg.IdleTimeout <= 0 {
 		cfg.IdleTimeout = defaultIdleTimeout
@@ -159,7 +153,6 @@ func (s *Server) Start() error {
 	}
 	wt.ConfigureHTTP3Server(h3)
 	s.wt = &wt.Server{H3: h3, CheckOrigin: s.checkOrigin}
-	mux.HandleFunc(WebTransportPath, s.handleWebTransport)
 	mux.HandleFunc(SoloWebTransportPath, s.handleSoloWebTransport)
 
 	go func() {
@@ -226,11 +219,9 @@ func (s *Server) renewLoop() {
 
 // ConfigResponse is the JSON returned by the config endpoint.
 type ConfigResponse struct {
-	URL              string `json:"url"`
-	CertHashB64      string `json:"certHashBase64"`
-	FallbackPath     string `json:"fallbackPath"`
 	SoloURL          string `json:"soloUrl"`
 	SoloFallbackPath string `json:"soloFallbackPath"`
+	CertHashB64      string `json:"certHashBase64"`
 	Token            string `json:"token,omitempty"`
 	CertExpiresAt    string `json:"certExpiresAt"`
 }
@@ -268,18 +259,15 @@ func (s *Server) ConfigHandler() http.Handler {
 		if udpAddr, ok := s.udp.LocalAddr().(*net.UDPAddr); ok {
 			port = udpAddr.Port
 		}
-		u := url.URL{Scheme: "https", Host: net.JoinHostPort(strings.Trim(host, "[]"), fmt.Sprint(port)), Path: WebTransportPath}
 		soloU := url.URL{Scheme: "https", Host: net.JoinHostPort(strings.Trim(host, "[]"), fmt.Sprint(port)), Path: SoloWebTransportPath}
 		bundle := s.cert.Load()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(ConfigResponse{
-			URL:              u.String(),
-			CertHashB64:      bundle.hashB64,
-			FallbackPath:     WebSocketPath,
 			SoloURL:          soloU.String(),
 			SoloFallbackPath: SoloWebSocketPath,
+			CertHashB64:      bundle.hashB64,
 			Token:            streamToken,
 			CertExpiresAt:    bundle.notAfter.UTC().Format(time.RFC3339),
 		})
@@ -324,51 +312,6 @@ func (s *Server) checkOrigin(r *http.Request) bool {
 	return false
 }
 
-func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
-	uid, role, ok := s.authenticate(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	sess, err := s.wt.Upgrade(w, r)
-	if err != nil {
-		slog.Warn("webtransport upgrade failed", slog.Any("err", err))
-		return
-	}
-
-	ctx := middleware.WithActor(sess.Context(), uid, role)
-	acceptCtx, cancel := context.WithTimeout(ctx, acceptStreamTimeout)
-	stream, err := sess.AcceptStream(acceptCtx)
-	cancel()
-	if err != nil {
-		_ = sess.CloseWithError(1, "no stream opened")
-		return
-	}
-
-	if s.cfg.WorkoutService != nil {
-		workoutAdapter := &protoWorkoutStream{
-			ctx:         ctx,
-			r:           bufio.NewReader(stream),
-			w:           stream,
-			idle:        s.cfg.IdleTimeout,
-			setReadDead: stream.SetReadDeadline,
-		}
-		if loopErr := workoutgrpc.RunWorkoutTrackingLoop(ctx, workoutAdapter, s.cfg.WorkoutService); loopErr != nil {
-			slog.Warn("webtransport workout tracking loop ended with error", slog.String("user_id", uid), slog.Any("err", loopErr))
-		}
-	} else {
-		slog.Error("workout tracking service is not configured on webtransport server")
-	}
-
-	// Gracefully finish the write side so the final response is flushed before the session is torn down.
-	_ = stream.Close()
-	select {
-	case <-sess.Context().Done():
-	case <-time.After(closeFlushGrace):
-	}
-	_ = sess.CloseWithError(0, "")
-}
-
 func (s *Server) handleSoloWebTransport(w http.ResponseWriter, r *http.Request) {
 	uid, role, ok := s.authenticate(r)
 	if !ok {
@@ -411,37 +354,6 @@ func (s *Server) handleSoloWebTransport(w http.ResponseWriter, r *http.Request) 
 	case <-time.After(closeFlushGrace):
 	}
 	_ = sess.CloseWithError(0, "")
-}
-
-// WebSocketHandler serves the TCP fallback. Each binary WebSocket message is one protobuf message.
-func (s *Server) WebSocketHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		uid, role, ok := s.authenticate(r)
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		conn, err := s.upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return // Upgrade already wrote the HTTP error.
-		}
-		defer conn.Close()
-		conn.SetReadLimit(maxMessageBytes)
-
-		ctx, cancel := context.WithCancel(middleware.WithActor(r.Context(), uid, role))
-		defer cancel()
-
-		if s.cfg.WorkoutService != nil {
-			workoutAdapter := &wsWorkoutStream{ctx: ctx, conn: conn, idle: s.cfg.IdleTimeout}
-			if loopErr := workoutgrpc.RunWorkoutTrackingLoop(ctx, workoutAdapter, s.cfg.WorkoutService); loopErr != nil {
-				slog.Warn("websocket workout tracking loop ended with error", slog.String("user_id", uid), slog.Any("err", loopErr))
-			}
-		} else {
-			slog.Error("workout tracking service is not configured on websocket handler")
-		}
-		_ = conn.WriteControl(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
-	})
 }
 
 // SoloWebSocketHandler serves the TCP fallback dedicated to Solo Match streaming.
@@ -538,77 +450,6 @@ func (w *wsStream) Recv() (*workoutexecutionv1message.StreamSoloMatchTrackingReq
 }
 
 func (w *wsStream) Send(resp *workoutexecutionv1message.StreamSoloMatchTrackingResponse) error {
-	raw, err := proto.Marshal(resp)
-	if err != nil {
-		return fmt.Errorf("encode response: %w", err)
-	}
-	_ = w.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	return w.conn.WriteMessage(websocket.BinaryMessage, raw)
-}
-
-// protoWorkoutStream adapts a WebTransport stream to grpc.WorkoutMatchStream.
-type protoWorkoutStream struct {
-	ctx         context.Context
-	r           *bufio.Reader
-	w           interface{ Write([]byte) (int, error) }
-	idle        time.Duration
-	setReadDead func(time.Time) error
-}
-
-func (p *protoWorkoutStream) Context() context.Context { return p.ctx }
-
-func (p *protoWorkoutStream) Recv() (*workoutexecutionv1message.StreamWorkoutTrackingRequest, error) {
-	if p.setReadDead != nil {
-		_ = p.setReadDead(time.Now().Add(p.idle))
-	}
-	raw, err := readMessage(p.r)
-	if err != nil {
-		return nil, err
-	}
-	req := &workoutexecutionv1message.StreamWorkoutTrackingRequest{}
-	if err := proto.Unmarshal(raw, req); err != nil {
-		return nil, fmt.Errorf("decode request: %w", err)
-	}
-	return req, nil
-}
-
-func (p *protoWorkoutStream) Send(resp *workoutexecutionv1message.StreamWorkoutTrackingResponse) error {
-	raw, err := proto.Marshal(resp)
-	if err != nil {
-		return fmt.Errorf("encode response: %w", err)
-	}
-	return writeMessage(p.w, raw)
-}
-
-// wsWorkoutStream adapts a WebSocket connection to grpc.WorkoutMatchStream.
-type wsWorkoutStream struct {
-	ctx  context.Context
-	conn *websocket.Conn
-	idle time.Duration
-}
-
-func (w *wsWorkoutStream) Context() context.Context { return w.ctx }
-
-func (w *wsWorkoutStream) Recv() (*workoutexecutionv1message.StreamWorkoutTrackingRequest, error) {
-	_ = w.conn.SetReadDeadline(time.Now().Add(w.idle))
-	mt, raw, err := w.conn.ReadMessage()
-	if err != nil {
-		if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-			return nil, io.EOF
-		}
-		return nil, err
-	}
-	if mt != websocket.BinaryMessage {
-		return nil, errors.New("websocket: binary messages required")
-	}
-	req := &workoutexecutionv1message.StreamWorkoutTrackingRequest{}
-	if err := proto.Unmarshal(raw, req); err != nil {
-		return nil, fmt.Errorf("decode request: %w", err)
-	}
-	return req, nil
-}
-
-func (w *wsWorkoutStream) Send(resp *workoutexecutionv1message.StreamWorkoutTrackingResponse) error {
 	raw, err := proto.Marshal(resp)
 	if err != nil {
 		return fmt.Errorf("encode response: %w", err)

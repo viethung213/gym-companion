@@ -142,8 +142,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		patchMotionSpecAssetHandler,
 		soloTrackingService,
 	)
-	workoutTrackingService := command.NewWorkoutTrackingService(ruleProvider, service.NewDefaultRuleEvaluator())
-	grpcHandler.SetWorkoutTrackingService(workoutTrackingService)
 
 	// Kafka Setup
 	appCfg := workoutConfig.LoadConfig()
@@ -389,7 +387,6 @@ func RegisterWebTransport(
 		Addr:           wtAddr,
 		InternalSecret: internalSecret,
 		Validator:      validator,
-		WorkoutService: grpcHandler.WorkoutTrackingService(),
 		Service:        grpcHandler.SoloTrackingService(),
 		IdleTimeout:    30 * time.Second,
 	})
@@ -403,15 +400,13 @@ func RegisterWebTransport(
 
 	// Mount HTTP config endpoint and WebSocket fallback on the shared HTTP mux
 	mux.Handle(webtransport.ConfigPath, wtServer.ConfigHandler())
-	mux.Handle(webtransport.WebSocketPath, wtServer.WebSocketHandler())
 	mux.Handle(webtransport.SoloWebSocketPath, wtServer.SoloWebSocketHandler())
 
 	log.Printf("WebTransport HTTP/3 server listening on %s (UDP)", wtAddr)
-	log.Printf("WebTransport config mounted at %s, fallback at %s", webtransport.ConfigPath, webtransport.WebSocketPath)
+	log.Printf("WebTransport config mounted at %s, fallback at %s", webtransport.ConfigPath, webtransport.SoloWebSocketPath)
 
 	endpoints := []string{
 		webtransport.ConfigPath,
-		webtransport.WebSocketPath,
 		webtransport.SoloWebSocketPath,
 	}
 
