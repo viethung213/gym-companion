@@ -31,12 +31,19 @@ type EstimatedNutrientResult struct {
 // AIMenuPromptContext là ngữ cảnh đầu vào cho AI khi sinh thực đơn.
 // AI tự quyết định chọn combo thực phẩm, phân bổ Macro, và tính định lượng Gram.
 type AIMenuPromptContext struct {
-	UserID               string
-	MealType             string
-	TargetMealCalories   float64
-	AvailableIngredients []vo.FoodNutrient
-	UserRestrictions     []string
-	PlanDate             time.Time
+	UserID                   string
+	MealType                 string
+	NutritionGoal            string
+	TargetMealCalories       float64
+	TargetDailyCalories      float64
+	TargetProteinGrams       float64
+	TargetCarbGrams          float64
+	TargetFatGrams           float64
+	MandatoryUserIngredients []vo.FoodNutrient
+	SupplementaryIngredients []vo.FoodNutrient
+	AvailableIngredients     []vo.FoodNutrient
+	UserRestrictions         []string
+	PlanDate                 time.Time
 }
 
 // DailyNutritionData chứa dữ liệu dinh dưỡng tổng hợp của một ngày.

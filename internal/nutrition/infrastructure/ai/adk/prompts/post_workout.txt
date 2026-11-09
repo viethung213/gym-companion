@@ -6,4 +6,6 @@ Rules:
 2. MUST generate AT LEAST 2 different meal options (options array has min 2 options) for user selection.
 3. Increase Protein and Carb grams corresponding to burned Calories.
 4. Do not alter previously consumed meals.
-5. Return ONLY 1 JSON contract (options & new_food_catalog_items). NO greetings, NO intro text, NO markdown code block wrappers.
+5. COOKING STEPS & BREVITY:
+   - `cooking_steps`: no limit on number of steps (typically 3-6 steps as needed). Each single step must be under 15 words (< 15 words per step). The 15-word limit applies per step, NOT to the sum of all steps.
+6. Return ONLY 1 JSON contract (`options`). NO greetings, NO intro text, NO markdown code block wrappers.

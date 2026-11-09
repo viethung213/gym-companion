@@ -47,7 +47,7 @@ type Module struct {
 	TxManager            *persistence.SQLTransactionManager
 }
 
-func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry *sharedKafka.Registry, profileCli repository.ProfileClient) *Module {
+func NewModule(ctx context.Context, db *gorm.DB, kafkaRegistry *sharedKafka.Registry, profileCli repository.ProfileClient) *Module {
 	txManager := persistence.NewSQLTransactionManager(db)
 
 	foodRepo := persistence.NewPostgresFoodItemRepository(db)
@@ -58,15 +58,14 @@ func NewModule(ctx context.Context, db *gorm.DB, aiAPIKey string, kafkaRegistry 
 	outboxLogRepo := persistence.NewPostgresOutboxLogRepository(db)
 
 	outboxWriter := nutritionEvent.NewOutboxWriter(outboxRepo)
-	aiAgent, err := nutritionAdk.NewNutritionAgent(ctx, aiAPIKey, foodRepo)
+	aiAgent, err := nutritionAdk.NewNutritionAgent(ctx, foodRepo)
 	if err != nil {
 		log.Printf("[Nutrition Module] ADK agent init failed (fallback): %v", err)
 		aiAgent = nil
 	}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, recipeCacheRepo, foodRepo, aiAgent)
+	menuGen := service.NewMenuGenerator(recipeCacheRepo, foodRepo, aiAgent)
 
 	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, outboxWriter, tdeeCalc, menuGen, txManager)
 	recalPlanHdlr := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, outboxWriter, menuGen, txManager)
@@ -148,7 +147,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 		profileCli = profileclient.NewConnectProfileClient(deps.GatewayURL, deps.InternalSecret, nil)
 	}
 
-	mod := NewModule(ctx, gormDB, "", deps.KafkaRegistry, profileCli)
+	mod := NewModule(ctx, gormDB, deps.KafkaRegistry, profileCli)
 
 	workerCtx, cancel := context.WithCancel(ctx)
 	mod.StartWorkers(workerCtx)

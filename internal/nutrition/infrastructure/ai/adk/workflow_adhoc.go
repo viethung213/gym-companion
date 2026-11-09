@@ -18,7 +18,8 @@ func (a *NutritionAgent) ExecuteAdhocMealSuggestionWorkflow(
 	domainFoods := ToFoodNutrientDomains(promptCtx.AvailableIngredients)
 	filteredFoods := lockoutRegistry.FilterAvailableIngredients(domainFoods, promptCtx.PlanDate)
 	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
-	plan, err := a.runAdhocWorkflow(ctx, promptCtx.UserID, availableDTOs)
+	promptCtx.AvailableIngredients = availableDTOs
+	plan, err := a.runAdhocWorkflow(ctx, promptCtx)
 	if err != nil {
 		return nil, err
 	}

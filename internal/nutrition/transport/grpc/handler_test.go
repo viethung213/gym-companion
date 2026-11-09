@@ -146,8 +146,7 @@ func TestGRPCHandler_Integration(t *testing.T) {
 	aiStub := &mockAIServiceForTransport{}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, cacheRepo, foodRepo, aiStub)
+	menuGen := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
 
 	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, nil, tdeeCalc, menuGen)
 	recalPlanHdlr := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, nil, menuGen)
@@ -239,8 +238,7 @@ func TestGRPCHandler_GetNutritionHistory(t *testing.T) {
 	aiStub := &mockAIServiceForTransport{}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, cacheRepo, foodRepo, aiStub)
+	menuGen := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
 
 	handler := grpc.NewGRPCHandler(
 		command.NewGenerateDailyPlanHandler(planRepo, historyRepo, nil, tdeeCalc, menuGen),
@@ -301,8 +299,7 @@ func TestGRPCHandler_GetNutritionSummary(t *testing.T) {
 	aiStub := &mockAIServiceForTransport{}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, cacheRepo, foodRepo, aiStub)
+	menuGen := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
 
 	handler := grpc.NewGRPCHandler(
 		command.NewGenerateDailyPlanHandler(planRepo, historyRepo, nil, tdeeCalc, menuGen),

@@ -39,7 +39,7 @@ func TestFallbackLLM_SuccessOnPrimary(t *testing.T) {
 	model1 := &mockLLM{name: "gemini-2.5-flash", responses: []*model.LLMResponse{{}}}
 	model2 := &mockLLM{name: "gemini-2.0-flash", responses: []*model.LLMResponse{{}}}
 
-	fallback := &FallbackLLM{models: []model.LLM{model1, model2}}
+	fallback := NewFallbackLLMWrapper([]model.LLM{model1, model2})
 
 	var resps []*model.LLMResponse
 	var errs []error
@@ -71,7 +71,7 @@ func TestFallbackLLM_FallbackOn429(t *testing.T) {
 	model1 := &mockLLM{name: "gemini-2.5-flash", err: errors.New("googleapi: Error 429: ResourceExhausted")}
 	model2 := &mockLLM{name: "gemini-2.0-flash", responses: []*model.LLMResponse{{}}}
 
-	fallback := &FallbackLLM{models: []model.LLM{model1, model2}}
+	fallback := NewFallbackLLMWrapper([]model.LLM{model1, model2})
 
 	var resps []*model.LLMResponse
 	var errs []error
@@ -103,7 +103,7 @@ func TestFallbackLLM_AllModelsFail(t *testing.T) {
 	model1 := &mockLLM{name: "gemini-2.5-flash", err: errors.New("429 Too Many Requests")}
 	model2 := &mockLLM{name: "gemini-2.0-flash", err: errors.New("429 ResourceExhausted")}
 
-	fallback := &FallbackLLM{models: []model.LLM{model1, model2}}
+	fallback := NewFallbackLLMWrapper([]model.LLM{model1, model2})
 
 	var errs []error
 	for _, err := range fallback.GenerateContent(ctx, &model.LLMRequest{}, false) {
@@ -117,5 +117,24 @@ func TestFallbackLLM_AllModelsFail(t *testing.T) {
 	}
 	if !strings.Contains(errs[0].Error(), "gemini-2.0-flash") {
 		t.Fatalf("expected error message to contain final model name, got: %v", errs[0])
+	}
+}
+
+func TestNewGroqFallbackLLM_EmptyModels(t *testing.T) {
+	ctx := context.Background()
+	_, err := NewGroqFallbackLLM(ctx, []string{}, "dummy-key", "https://api.groq.com/openai/v1")
+	if err == nil {
+		t.Fatal("expected error for empty modelNames list, got nil")
+	}
+}
+
+func TestNewGroqFallbackLLM_ValidModels(t *testing.T) {
+	ctx := context.Background()
+	llm, err := NewGroqFallbackLLM(ctx, []string{"openai/gpt-oss-120b", "openai/gpt-oss-20b"}, "dummy-key", "https://api.groq.com/openai/v1")
+	if err != nil {
+		t.Fatalf("unexpected error creating Groq fallback LLM: %v", err)
+	}
+	if llm.Name() != "openai/gpt-oss-120b" {
+		t.Fatalf("got primary model name %q, want %q", llm.Name(), "openai/gpt-oss-120b")
 	}
 }

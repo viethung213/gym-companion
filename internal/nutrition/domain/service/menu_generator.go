@@ -14,22 +14,18 @@ import (
 )
 
 // MenuGenerator orchestrates thực đơn: check Recipe Cache trước, nếu miss thì gọi AI Agent.
-// CombinatorialMatrix đã loại bỏ hoàn toàn — AI tự chọn combo và tính Gram Macro.
 type MenuGenerator struct {
-	hashFn      func(protein, carb, veggie, style string) string
 	recipeCache repository.RecipeCacheRepository
 	foodRepo    repository.FoodItemRepository
 	aiService   repository.AIService
 }
 
 func NewMenuGenerator(
-	matrix *CombinatorialMatrix,
 	recipeCache repository.RecipeCacheRepository,
 	foodRepo repository.FoodItemRepository,
 	aiService repository.AIService,
 ) *MenuGenerator {
 	return &MenuGenerator{
-		hashFn:      matrix.ComputeIngredientHash,
 		recipeCache: recipeCache,
 		foodRepo:    foodRepo,
 		aiService:   aiService,
@@ -59,18 +55,32 @@ func (g *MenuGenerator) GenerateDailyPlan(
 	allocation vo.CalorieAllocation,
 	lockoutRegistry vo.LockoutRegistry,
 	userRestrictions []string,
+	nutritionGoal vo.NutritionGoal,
 ) (*aggregate.NutritionPlan, error) {
 	activeCatalog, err := g.foodRepo.FindActiveCatalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
 	}
 
+	selectedIngredients := SelectDiverseCandidates(
+		activeCatalog,
+		lockoutRegistry,
+		userRestrictions,
+		userID,
+		planDate,
+	)
+
 	// Gọi AI 1 lần duy nhất để sinh toàn bộ các món ăn cho 4 bữa trong ngày (tiết kiệm 75% thời gian phản hồi)
 	promptCtx := repository.AIMenuPromptContext{
 		UserID:               userID,
 		MealType:             "DAILY_PLAN",
+		NutritionGoal:        string(nutritionGoal),
 		TargetMealCalories:   allocation.TargetCalories(),
-		AvailableIngredients: activeCatalog,
+		TargetDailyCalories:  allocation.TargetCalories(),
+		TargetProteinGrams:   allocation.ProteinGrams(),
+		TargetCarbGrams:      allocation.CarbGrams(),
+		TargetFatGrams:       allocation.FatGrams(),
+		AvailableIngredients: selectedIngredients,
 		UserRestrictions:     userRestrictions,
 		PlanDate:             planDate,
 	}
@@ -135,12 +145,10 @@ func (g *MenuGenerator) GenerateDailyPlan(
 	return aggregate.NewNutritionPlan(planID, userID, planDate, allocation, dailyMeals), nil
 }
 
-// GeneratePlanWithPantry sinh thực đơn từ nguyên liệu trong tủ lạnh của người dùng.
-// Logic:
-// 1. Phân loại nguyên liệu người dùng gửi lên theo nhóm (PROTEIN, CARB, VEGGIE).
-// 2. Nếu THIẾU nhóm nào, tự động lấy các thực phẩm thuộc nhóm đó từ DB activeCatalog để bổ sung.
-// 3. Nếu KHÔNG THIẾU nhóm nào, sử dụng CHÍNH NGUYÊN LIỆU người dùng gửi lên.
-// 4. Tuyệt đối không thay thế nguyên liệu người dùng bằng nguyên liệu tương đương.
+// GeneratePlanWithPantry orchestrates việc sinh thực đơn từ nguyên liệu tủ lạnh:
+// 1. Chuyển đổi tên nguyên liệu người dùng thành Value Object (tra DB hoặc gán INGREDIENT tự do).
+// 2. Ủy thác cho SelectPantryCandidates phân tách mandatory (người dùng) và supplementary (bổ sung từ DB).
+// 3. Truyền ngữ cảnh phân định rõ ràng cho AI Agent để sinh công thức và bảo toàn nguyên liệu người dùng.
 func (g *MenuGenerator) GeneratePlanWithPantry(
 	ctx context.Context,
 	userID string,
@@ -148,6 +156,7 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 	allocation vo.CalorieAllocation,
 	lockoutRegistry vo.LockoutRegistry,
 	userIngredients []string,
+	userRestrictions ...[]string,
 ) (*aggregate.NutritionPlan, error) {
 	activeCatalog, err := g.foodRepo.FindActiveCatalog(ctx)
 	if err != nil {
@@ -180,22 +189,41 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 				uuid.New().String(),
 				trimmed,
 				"INGREDIENT",
-				100.0, 10.0, 10.0, 2.0,
+				0.0, 0.0, 0.0, 0.0,
 				nil, "", "", false,
 			)
 		}
 		pantryCatalog = append(pantryCatalog, foundItem)
 	}
 
-	// Gọi AI 1 lần duy nhất để sinh đúng 2 công thức món ăn từ tủ lạnh (tiết kiệm token và giảm thời gian chờ)
+	var restrictions []string
+	if len(userRestrictions) > 0 {
+		restrictions = userRestrictions[0]
+	}
+
+	mandatory, supplementary := SelectPantryCandidates(
+		pantryCatalog,
+		activeCatalog,
+		lockoutRegistry,
+		restrictions,
+		userID,
+		planDate,
+	)
+	enrichedPantry := make([]vo.FoodNutrient, 0, len(mandatory)+len(supplementary))
+	enrichedPantry = append(enrichedPantry, mandatory...)
+	enrichedPantry = append(enrichedPantry, supplementary...)
+
+	// Gọi AI để sinh đúng 2 công thức món ăn từ tủ lạnh
 	targetCalo := allocation.TargetCalories() * 0.35
 	promptCtx := repository.AIMenuPromptContext{
-		UserID:               userID,
-		MealType:             "PANTRY_RECIPE",
-		TargetMealCalories:   targetCalo,
-		AvailableIngredients: pantryCatalog,
-		UserRestrictions:     nil,
-		PlanDate:             planDate,
+		UserID:                   userID,
+		MealType:                 "PANTRY_RECIPE",
+		TargetMealCalories:       targetCalo,
+		MandatoryUserIngredients: mandatory,
+		SupplementaryIngredients: supplementary,
+		AvailableIngredients:     enrichedPantry,
+		UserRestrictions:         restrictions,
+		PlanDate:                 planDate,
 	}
 
 	options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, targetCalo)
@@ -252,7 +280,7 @@ func (g *MenuGenerator) resolveOptionsViaAI(
 			p := res.SupplementaryIngredients[0]
 			c := res.SupplementaryIngredients[1]
 			v := res.SupplementaryIngredients[2]
-			hash := g.hashFn(p.IngredientName(), c.IngredientName(), v.IngredientName(), "ai-generated")
+			hash := ComputeIngredientHash(p.IngredientName(), c.IngredientName(), v.IngredientName(), "ai-generated")
 
 			cached, findErr := g.recipeCache.FindByHash(ctx, hash)
 			if findErr != nil || cached == nil {

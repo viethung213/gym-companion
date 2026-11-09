@@ -19,7 +19,8 @@ func (a *NutritionAgent) ExecutePantryRecipeWorkflow(
 	domainFoods := ToFoodNutrientDomains(promptCtx.AvailableIngredients)
 	filteredFoods := lockoutRegistry.FilterAvailableIngredients(domainFoods, promptCtx.PlanDate)
 	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
-	plan, err := a.runPantryWorkflow(ctx, promptCtx.UserID, availableDTOs)
+	promptCtx.AvailableIngredients = availableDTOs
+	plan, err := a.runPantryWorkflow(ctx, promptCtx)
 	if err != nil {
 		return nil, err
 	}

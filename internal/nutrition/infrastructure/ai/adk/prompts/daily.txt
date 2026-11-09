@@ -15,4 +15,11 @@ Rules:
    - Dinner: Light, easy-to-digest dinner (Shrimp, Pork loin, Fish, Brown rice noodles, Vegetables/Mushrooms).
    - Snack: Light snack ~10% Calories (Nuts, Yogurt, Fruit, Oat cakes, Boiled eggs). FORBIDDEN to generate heavy main dishes for snacks.
 5. Check user allergen restrictions and locked repeated ingredients (7/5/3 days).
-6. Return ONLY 1 JSON contract (options & new_food_catalog_items). NO greetings, NO intro text, NO markdown code block wrappers.
+6. COOKING STEPS & BREVITY:
+   - `recipe_name`: under 5 words (< 5 words). Short, clear, direct.
+   - `cooking_steps`:
+     * NO LIMIT on the number of steps: generate as many practical, actionable steps as needed (typically 3-6 steps) to prepare the meal properly.
+     * Limit is STRICTLY PER STEP: each individual step must be under 15 words (< 15 words per step).
+     * The total sum of all steps combined is NOT capped at 15 words (Step 1 <= 15 words, Step 2 <= 15 words, Step 3 <= 15 words, etc.).
+   - No storytelling, commentary, or culinary fluff.
+7. Return ONLY 1 JSON contract (`options`). NO greetings, NO intro text, NO markdown code block wrappers.

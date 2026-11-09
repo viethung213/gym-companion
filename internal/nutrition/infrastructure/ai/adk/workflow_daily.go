@@ -18,7 +18,8 @@ func (a *NutritionAgent) ExecuteDailyMenuWorkflow(
 	domainFoods := ToFoodNutrientDomains(promptCtx.AvailableIngredients)
 	filteredFoods := lockoutRegistry.FilterAvailableIngredients(domainFoods, promptCtx.PlanDate)
 	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
-	plan, err := a.runInitWorkflow(ctx, promptCtx.UserID, availableDTOs)
+	promptCtx.AvailableIngredients = availableDTOs
+	plan, err := a.runInitWorkflow(ctx, promptCtx)
 	if err != nil {
 		return nil, err
 	}
