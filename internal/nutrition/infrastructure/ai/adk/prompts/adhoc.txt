@@ -5,5 +5,7 @@ Rules:
 1. Flexible & creative — not constrained by daily menu or seasonal plans.
 2. MUST generate AT LEAST 2 different meal options (options array containing 2-3 options).
 3. Ensure Calories and Macros align with the provided target TDEE.
-4. Propose supplementary ingredients if needed and declare them in new_food_catalog_items.
-5. Return ONLY 1 JSON contract (options & new_food_catalog_items). NO greetings, NO intro text, NO markdown code block wrappers.
+4. Propose supplementary ingredients if needed in supplementary_ingredients.
+5. COOKING STEPS & BREVITY:
+   - `cooking_steps`: no limit on number of steps (typically 3-6 steps as needed). Each single step must be under 15 words (< 15 words per step). The 15-word limit applies per step, NOT to the sum of all steps.
+6. Return ONLY 1 JSON contract (`options`). NO greetings, NO intro text, NO markdown code block wrappers.

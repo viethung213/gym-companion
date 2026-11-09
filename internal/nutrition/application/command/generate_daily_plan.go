@@ -87,6 +87,7 @@ func (h *GenerateDailyPlanHandler) Handle(ctx context.Context, cmd GenerateDaily
 		allocation,
 		lockouts,
 		cmd.UserRestrictions,
+		goal,
 	)
 	if genErr != nil {
 		return nil, fmt.Errorf("generate daily plan: %w", genErr)

@@ -24,8 +24,7 @@ func TestRecalibratePlanWithPantryHandler_Handle(t *testing.T) {
 	foodRepo := &mockFoodRepo{}
 	recipeCacheRepo := &mockRecipeCacheRepo{}
 
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, recipeCacheRepo, foodRepo, &mockAIService{})
+	menuGen := service.NewMenuGenerator(recipeCacheRepo, foodRepo, &mockAIService{})
 
 	handler := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, nil, menuGen)
 

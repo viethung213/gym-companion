@@ -76,18 +76,17 @@ func (m *mockAIServiceStub) GenerateNutritionInsight(_ context.Context, _ reposi
 func TestMenuGenerator_GenerateDailyPlan(t *testing.T) {
 	t.Parallel()
 
-	matrix := service.NewCombinatorialMatrix()
 	cacheRepo := &mockCacheRepo{recipes: make(map[string]*repository.CachedRecipe)}
 	foodRepo := &mockFoodItemRepo{}
 	aiStub := &mockAIServiceStub{}
 
-	generator := service.NewMenuGenerator(matrix, cacheRepo, foodRepo, aiStub)
+	generator := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
 
 	alloc, _ := vo.NewCalorieAllocation(2000, 150, 200, 66)
 	registry := vo.NewLockoutRegistry(nil)
 
 	plan, err := generator.GenerateDailyPlan(
-		context.Background(), "user-test-1", time.Now(), alloc, registry, nil,
+		context.Background(), "user-test-1", time.Now(), alloc, registry, nil, vo.GoalMuscleGain,
 	)
 
 	if err != nil {

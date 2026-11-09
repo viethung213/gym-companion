@@ -62,9 +62,10 @@ WORKDIR /app
 
 COPY --from=ai-builder /bin/fitai-ai /app/fitai-ai
 
-# Copy ADK prompts và skills (cần thiết cho coaching agent)
+# Copy ADK prompts và skills (cần thiết cho coaching và nutrition agent)
 COPY internal/coaching/infrastructure/ai/adk/prompts ./internal/coaching/infrastructure/ai/adk/prompts
 COPY internal/coaching/infrastructure/ai/adk/skills ./internal/coaching/infrastructure/ai/adk/skills
+COPY internal/nutrition/infrastructure/ai/adk/prompts ./internal/nutrition/infrastructure/ai/adk/prompts
 
 EXPOSE 8082
 

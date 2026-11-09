@@ -14,10 +14,10 @@ type FoodNutrientDTO struct {
 	ProteinPer100g    float64  `json:"protein_per_100g"`
 	CarbsPer100g      float64  `json:"carbs_per_100g"`
 	FatPer100g        float64  `json:"fat_per_100g"`
-	AllergenTags      []string `json:"allergen_tags"`
+	AllergenTags      []string `json:"allergen_tags,omitempty"`
 	ProteinSource     string   `json:"protein_source,omitempty"`
 	CarbSource        string   `json:"carb_source,omitempty"`
-	IsNutiFoodProduct bool     `json:"is_nutifood_product"`
+	IsNutiFoodProduct bool     `json:"is_nutifood_product,omitempty"`
 }
 
 //nolint:gocritic // hugeParam: fn value object mapping
@@ -71,15 +71,20 @@ func ToFoodNutrientDomains(dtos []FoodNutrientDTO) []vo.FoodNutrient {
 }
 
 type NutritionPromptContext struct {
-	UserID               string            `json:"user_id"`
-	PlanDate             time.Time         `json:"plan_date"`
-	MealType             string            `json:"meal_type"`
-	TargetMealCalories   float64           `json:"target_meal_calories"`
-	TargetProteinGrams   float64           `json:"target_protein_grams"`
-	TargetCarbGrams      float64           `json:"target_carb_grams"`
-	TargetFatGrams       float64           `json:"target_fat_grams"`
-	UserRestrictions     []string          `json:"user_restrictions"`
-	AvailableIngredients []FoodNutrientDTO `json:"available_ingredients"`
+	UserID                   string             `json:"user_id"`
+	PlanDate                 time.Time          `json:"plan_date"`
+	MealType                 string             `json:"meal_type"`
+	NutritionGoal            string             `json:"nutrition_goal,omitempty"`
+	TargetDailyCalories      float64            `json:"target_daily_calories,omitempty"`
+	TargetMealCalories       float64            `json:"target_meal_calories"`
+	TargetProteinGrams       float64            `json:"target_protein_grams,omitempty"`
+	TargetCarbGrams          float64            `json:"target_carb_grams,omitempty"`
+	TargetFatGrams           float64            `json:"target_fat_grams,omitempty"`
+	UserRestrictions         []string           `json:"user_restrictions"`
+	MandatoryUserIngredients []FoodNutrientDTO  `json:"mandatory_user_ingredients,omitempty"`
+	SupplementaryIngredients []FoodNutrientDTO  `json:"supplementary_db_candidates,omitempty"`
+	AvailableIngredients     []FoodNutrientDTO  `json:"available_ingredients"`
+	LockoutRegistry          vo.LockoutRegistry `json:"-"`
 }
 
 type SupplementaryIngredientSpec struct {
@@ -118,7 +123,56 @@ type GeneratedMealOption struct {
 
 type GeneratedMealPlan struct {
 	Options             []GeneratedMealOption `json:"options"`
-	NewFoodCatalogItems []NewFoodItemSpec     `json:"new_food_catalog_items"`
+	NewFoodCatalogItems []NewFoodItemSpec     `json:"new_food_catalog_items,omitempty"`
+}
+
+// CompactMealOptionForReview là DTO tinh gọn cho Reviewer Agent,
+// loại bỏ các UUID (protein_food_id, carb_food_id, veggie_food_id) và trường dư thừa
+// nhằm giảm token input đáng kể cho reviewer mà vẫn giữ đủ thông tin ẩm thực và dinh dưỡng.
+type CompactMealOptionForReview struct {
+	OptionIndex              int                           `json:"option_index"`
+	RecipeName               string                        `json:"recipe_name"`
+	CookingStyle             string                        `json:"cooking_style"`
+	ProteinFoodName          string                        `json:"protein_food_name"`
+	CarbFoodName             string                        `json:"carb_food_name"`
+	VeggieFoodName           string                        `json:"veggie_food_name"`
+	CookingSteps             []string                      `json:"cooking_steps"`
+	SupplementaryIngredients []SupplementaryIngredientSpec `json:"supplementary_ingredients,omitempty"`
+	TotalProteinGrams        float64                       `json:"total_protein_grams"`
+	TotalCarbGrams           float64                       `json:"total_carb_grams"`
+	TotalFatGrams            float64                       `json:"total_fat_grams"`
+}
+
+// CompactMealPlanForReview là danh sách các món ăn đã được nén cho Reviewer.
+type CompactMealPlanForReview struct {
+	Options []CompactMealOptionForReview `json:"options"`
+}
+
+// ToCompactForReview chuyển đổi GeneratedMealPlan sang định dạng nén cho Reviewer Agent.
+func (p *GeneratedMealPlan) ToCompactForReview() *CompactMealPlanForReview {
+	if p == nil {
+		return nil
+	}
+	compactOptions := make([]CompactMealOptionForReview, 0, len(p.Options))
+	for i := range p.Options {
+		opt := &p.Options[i]
+		compactOptions = append(compactOptions, CompactMealOptionForReview{
+			OptionIndex:              i + 1,
+			RecipeName:               opt.RecipeName,
+			CookingStyle:             opt.CookingStyle,
+			ProteinFoodName:          opt.ProteinFoodName,
+			CarbFoodName:             opt.CarbFoodName,
+			VeggieFoodName:           opt.VeggieFoodName,
+			CookingSteps:             opt.CookingSteps,
+			SupplementaryIngredients: opt.SupplementaryIngredients,
+			TotalProteinGrams:        opt.TotalProteinGrams,
+			TotalCarbGrams:           opt.TotalCarbGrams,
+			TotalFatGrams:            opt.TotalFatGrams,
+		})
+	}
+	return &CompactMealPlanForReview{
+		Options: compactOptions,
+	}
 }
 
 type ValidationOutcome struct {
@@ -126,7 +180,77 @@ type ValidationOutcome struct {
 	Issues []string
 }
 
+type ValidationReport struct {
+	Passed   bool     `json:"passed"`
+	Degraded bool     `json:"degraded"`
+	Issues   []string `json:"issues"`
+}
+
+type ReviewNote struct {
+	OptionIndex int    `json:"option_index,omitempty"`
+	RecipeName  string `json:"recipe_name,omitempty"`
+	Area        string `json:"area"`
+	Detail      string `json:"detail"`
+	Fix         string `json:"fix"`
+}
+
+type PreviousFeedbackItem struct {
+	Area     string `json:"area"`
+	Applied  bool   `json:"applied"`
+	Evidence string `json:"evidence"`
+}
+
+type MealPlanReview struct {
+	Approved         bool                   `json:"approved"`
+	Score            int                    `json:"score"`
+	Confidence       float64                `json:"confidence"`
+	Feedback         []ReviewNote           `json:"feedback"`
+	Notes            []string               `json:"notes"`
+	PreviousFeedback []PreviousFeedbackItem `json:"previous_feedback"`
+}
+
+func (r *MealPlanReview) unappliedAreas() []string {
+	if r == nil {
+		return nil
+	}
+	var unapplied []string
+	for _, item := range r.PreviousFeedback {
+		if !item.Applied {
+			unapplied = append(unapplied, item.Area)
+		}
+	}
+	return unapplied
+}
+
+type ReviewRequest struct {
+	OriginalTask        string                    `json:"original_task"`
+	NutritionGoal       string                    `json:"nutrition_goal,omitempty"`
+	TargetDailyCalories float64                   `json:"target_daily_calories,omitempty"`
+	TargetProteinGrams  float64                   `json:"target_protein_grams,omitempty"`
+	TargetCarbGrams     float64                   `json:"target_carb_grams,omitempty"`
+	TargetFatGrams      float64                   `json:"target_fat_grams,omitempty"`
+	UserRestrictions    []string                  `json:"user_restrictions"`
+	GeneratorOutput     *CompactMealPlanForReview `json:"generator_output"`
+	ValidationResult    ValidationReport          `json:"validation_result"`
+	ReviewRound         int                       `json:"review_round"`
+	PreviousFeedback    []ReviewNote              `json:"previous_feedback"`
+}
+
+type ReviewRoundLog struct {
+	Round       int          `json:"round"`
+	Approved    bool         `json:"approved"`
+	Score       int          `json:"score"`
+	Confidence  float64      `json:"confidence"`
+	Feedback    []ReviewNote `json:"feedback,omitempty"`
+	Notes       []string     `json:"notes,omitempty"`
+	RepairedOpt []string     `json:"repaired_options,omitempty"`
+}
+
 type PlanResult struct {
-	Plan     *GeneratedMealPlan
-	Degraded bool
+	Plan       *GeneratedMealPlan
+	Review     *MealPlanReview
+	Degraded   bool
+	Issues     []string
+	Attempts   int
+	ReviewLogs []ReviewRoundLog
 }

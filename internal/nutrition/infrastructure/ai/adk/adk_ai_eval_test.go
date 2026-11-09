@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	nutritionAdk "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/ai/adk"
+	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
 )
 
 type mockFoodRepoForAIEval struct{}
@@ -40,6 +43,7 @@ func TestADKAI_PromptAndWorkflowIntegrity(t *testing.T) {
 
 	promptFiles := []string{
 		"prompts/generator.txt",
+		"prompts/evaluator.txt",
 		"prompts/daily.txt",
 		"prompts/post_workout.txt",
 		"prompts/pantry.txt",
@@ -59,12 +63,30 @@ func TestADKAI_PromptAndWorkflowIntegrity(t *testing.T) {
 
 // TestADKAI_MultiIterationEvaluation thực hiện test lặp lại nhiều lần (N iterations)
 // để kiểm tra chất lượng phản hồi, cấu trúc JSON contract, và tính ổn định của AI Agent.
+// Test này là Live AI Evaluation: chỉ chạy khi có cờ RUN_AI_EVAL_TEST=1 để tránh tiêu tốn token
+// và phụ thuộc mạng trong các lượt test CI/unit test định kỳ.
 func TestADKAI_MultiIterationEvaluation(t *testing.T) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+	if testing.Short() || os.Getenv("RUN_AI_EVAL_TEST") == "" {
+		t.Skip("Skipping live AI Agent eval test: set RUN_AI_EVAL_TEST=1 to execute live LLM benchmark")
+		return
+	}
+
+	tryLoadEnvFromProjectRoot()
+
+	cfg := config.LoadConfig()
+	if cfg.AIProvider == "groq" && cfg.GroqAPIKey == "" {
+		t.Skip("Skipping live AI Agent eval test: GROQ_API_KEY is not set")
+		return
+	}
+	if cfg.AIProvider == "gemini" && cfg.GoogleAPIKey == "" {
+		t.Skip("Skipping live AI Agent eval test: Gemini API key is not set")
+		return
+	}
+
 	ctx := context.Background()
 	foodRepo := &mockFoodRepoForAIEval{}
 
-	agent, err := nutritionAdk.NewNutritionAgent(ctx, apiKey, foodRepo)
+	agent, err := nutritionAdk.NewNutritionAgent(ctx, foodRepo)
 	if err != nil {
 		t.Skipf("Skipping live AI Agent eval test (ADK init error or missing key): %v", err)
 		return
@@ -185,5 +207,49 @@ func TestADKAI_JSONSchemaContractVerification(t *testing.T) {
 	}
 	if len(plan.NewFoodCatalogItems) != 1 {
 		t.Fatalf("got new food catalog items len %d, want 1", len(plan.NewFoodCatalogItems))
+	}
+}
+
+func tryLoadEnvFromProjectRoot() {
+	cur, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	for i := 0; i < 5; i++ {
+		candidate := filepath.Join(cur, ".env.ai")
+		if _, err := os.Stat(candidate); err == nil {
+			loadEnvFile(candidate)
+			break
+		}
+		candidateEnv := filepath.Join(cur, ".env")
+		if _, err := os.Stat(candidateEnv); err == nil {
+			loadEnvFile(candidateEnv)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			break
+		}
+		cur = parent
+	}
+}
+
+func loadEnvFile(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			k := strings.TrimSpace(parts[0])
+			v := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+			if k != "" && os.Getenv(k) == "" {
+				os.Setenv(k, v)
+			}
+		}
 	}
 }

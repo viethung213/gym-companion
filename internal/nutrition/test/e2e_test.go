@@ -35,8 +35,7 @@ func newE2EHandler(t *testing.T) (*grpc.GRPCHandler, *testutil.Repos) {
 	ai := &testutil.MockAIService{}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, repos.RecipeCache, repos.FoodItem, ai)
+	menuGen := service.NewMenuGenerator(repos.RecipeCache, repos.FoodItem, ai)
 
 	h := grpc.NewGRPCHandler(
 		command.NewGenerateDailyPlanHandler(repos.NutritionPlan, repos.MealHistory, nil, tdeeCalc, menuGen),

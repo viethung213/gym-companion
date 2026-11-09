@@ -29,8 +29,7 @@ func TestIntegration_GenerateDailyPlan_And_LogMeal(t *testing.T) {
 	ai := &testutil.MockAIService{}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, repos.RecipeCache, repos.FoodItem, ai)
+	menuGen := service.NewMenuGenerator(repos.RecipeCache, repos.FoodItem, ai)
 
 	// Seed một FoodItem để menu generator có dữ liệu
 	food := testutil.NewApprovedFoodItem("fi-int-1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6)

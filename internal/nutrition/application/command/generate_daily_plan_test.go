@@ -143,8 +143,7 @@ func TestGenerateDailyPlanHandler_Handle(t *testing.T) {
 	recipeCacheRepo := &mockRecipeCacheRepo{}
 
 	tdeeCalc := service.NewTDEECalculator()
-	matrix := service.NewCombinatorialMatrix()
-	menuGen := service.NewMenuGenerator(matrix, recipeCacheRepo, foodRepo, &mockAIService{})
+	menuGen := service.NewMenuGenerator(recipeCacheRepo, foodRepo, &mockAIService{})
 
 	handler := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, nil, tdeeCalc, menuGen)
 

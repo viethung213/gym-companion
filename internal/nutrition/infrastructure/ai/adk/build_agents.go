@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
 	"google.golang.org/adk/v2/workflow"
+	"google.golang.org/genai"
 )
 
 //go:embed prompts/*.txt
@@ -29,14 +31,14 @@ func readPromptFile(path string) ([]byte, error) {
 	return promptFS.ReadFile("prompts/" + filename)
 }
 
-// build khởi tạo Gemini model (với cơ chế Fallback tự động), LLM generator node và tất cả workflow agents.
+// build khởi tạo LLM model (với cơ chế Fallback tự động), LLM generator node và tất cả workflow agents.
 func (a *NutritionAgent) build(ctx context.Context) error {
-	geminiModel, err := NewFallbackLLMFromEnv(ctx)
+	llmModel, err := NewFallbackLLMFromEnv(ctx)
 	if err != nil {
-		return fmt.Errorf("new fallback gemini model: %w", err)
+		return fmt.Errorf("new fallback llm model: %w", err)
 	}
 
-	if err := a.buildLLMNodes(ctx, geminiModel); err != nil {
+	if err := a.buildLLMNodes(ctx, llmModel); err != nil {
 		return err
 	}
 
@@ -45,7 +47,7 @@ func (a *NutritionAgent) build(ctx context.Context) error {
 
 // buildLLMNodes đọc prompt generator.txt và khởi tạo LLM generator node.
 // Cũng khởi tạo estimatorNode và insightNode cho các single-turn call.
-func (a *NutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM) error {
+func (a *NutritionAgent) buildLLMNodes(_ context.Context, llmModel model.LLM) error {
 	generatorInstruction, err := readPromptFile("prompts/generator.txt")
 	if err != nil {
 		return fmt.Errorf("read generator prompt: %w", err)
@@ -56,13 +58,22 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM)
 		return fmt.Errorf("build adk tools: %w", err)
 	}
 
+	nutritionCfg := config.LoadConfig()
+	maxTokens := int32(nutritionCfg.MaxOutputTokens)
+	if maxTokens <= 0 {
+		maxTokens = 8192
+	}
+
 	generatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "NutritionGeneratorAgent",
 		Description: "Chuyên gia dinh dưỡng AI: chọn thực phẩm sáng tạo, cân bằng Macro theo TDEE.",
-		Model:       geminiModel,
+		Model:       llmModel,
 		Instruction: string(generatorInstruction),
 		Tools:       nutritionTools,
 		OutputKey:   "generated_meal_plan_json",
+		GenerateContentConfig: &genai.GenerateContentConfig{
+			MaxOutputTokens: maxTokens,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("new generator agent: %w", err)
@@ -74,11 +85,12 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM)
 	}
 
 	a.generatorNode = generatorNode
+	a.generatorAgent = generatorAgent
 
 	// Single-turn: EstimateNutrient
 	estimatorAgent, err := buildSingleTurnAgent(
 		"prompts/estimate_nutrient.txt",
-		geminiModel,
+		llmModel,
 		"NutritionEstimatorAgent",
 		"Ước tính dinh dưỡng (Calo/Protein/Carb/Fat) từ tên món và khẩu phần.",
 	)
@@ -90,7 +102,7 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM)
 	// Single-turn: GenerateNutritionInsight
 	insightAgent, err := buildSingleTurnAgent(
 		"prompts/nutrition_insight.txt",
-		geminiModel,
+		llmModel,
 		"NutritionInsightAgent",
 		"Phân tích lịch sử dinh dưỡng và đề xuất hướng cải thiện cá nhân hóa.",
 	)
@@ -99,12 +111,85 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM)
 	}
 	a.insightAgent = insightAgent
 
+	// Reviewer Agent: phản biện và chấm điểm thực đơn
+	reviewerInstruction, err := readPromptFile("prompts/evaluator.txt")
+	if err != nil {
+		return fmt.Errorf("read reviewer prompt: %w", err)
+	}
+
+	maxReviewerTokens := int32(1000)
+	if maxReviewerTokens > maxTokens {
+		maxReviewerTokens = maxTokens
+	}
+
+	reviewerAgent, err := llmagent.New(llmagent.Config{
+		Name:         "NutritionReviewerAgent",
+		Description:  "Chuyên gia ẩm thực & dinh dưỡng AI: phản biện chất lượng món ăn, hương vị, tính khả thi khi nấu.",
+		Model:        llmModel,
+		Instruction:  string(reviewerInstruction),
+		OutputSchema: buildMealPlanReviewSchema(),
+		GenerateContentConfig: &genai.GenerateContentConfig{
+			MaxOutputTokens: maxReviewerTokens,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("new reviewer agent: %w", err)
+	}
+	a.reviewerAgent = reviewerAgent
+
 	return nil
+}
+
+// buildMealPlanReviewSchema định nghĩa cấu trúc JSON phản biện của Reviewer.
+// Cố tình không có field options/plan để đảm bảo Reviewer chỉ phản biện chứ không tự sửa bài.
+func buildMealPlanReviewSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"approved":   {Type: genai.TypeBoolean},
+			"score":      {Type: genai.TypeInteger},
+			"confidence": {Type: genai.TypeNumber},
+			"feedback": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"option_index": {Type: genai.TypeInteger},
+						"recipe_name":  {Type: genai.TypeString},
+						"area":         {Type: genai.TypeString},
+						"detail":       {Type: genai.TypeString},
+						"fix":          {Type: genai.TypeString},
+					},
+					Required: []string{"area", "detail", "fix"},
+				},
+			},
+			"notes": {
+				Type:  genai.TypeArray,
+				Items: &genai.Schema{Type: genai.TypeString},
+			},
+			"previous_feedback": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"area":     {Type: genai.TypeString},
+						"applied":  {Type: genai.TypeBoolean},
+						"evidence": {Type: genai.TypeString},
+					},
+					Required: []string{"area", "applied", "evidence"},
+				},
+			},
+		},
+		Required: []string{"approved", "score", "confidence"},
+	}
 }
 
 // fetchCatalogArgs là args schema cho tool fetch_food_catalog.
 type fetchCatalogArgs struct {
-	Category string `json:"category"`
+	Category   string   `json:"category"`
+	Limit      int      `json:"limit,omitempty"`
+	Page       int      `json:"page,omitempty"`
+	ExcludeIDs []string `json:"exclude_ids,omitempty"`
 }
 
 // macroGramArgs là args schema cho tool calculate_macro_gram.
@@ -126,11 +211,18 @@ type macroGramResult struct {
 func (a *NutritionAgent) buildADKTools() ([]tool.Tool, error) {
 	fetchTool, err := functiontool.New(
 		functiontool.Config{
-			Name:        "fetch_food_catalog",
-			Description: "Tải danh mục thực phẩm đang hoạt động theo nhóm (PROTEIN, CARB, VEGGIE). Để trống category để lấy tất cả.",
+			Name: "fetch_food_catalog",
+			Description: "Tải 5-8 nguyên liệu an toàn ngẫu nhiên theo nhóm (PROTEIN, CARB, VEGGIE, SNACK) " +
+				"đã tự động lọc sạch dị ứng và trùng lặp chu kỳ 7 ngày. Hỗ trợ 'page' (bắt đầu từ 1, tăng dần) " +
+				"và 'exclude_ids' (danh sách ID các món xung đột vị cần loại trừ).",
 		},
 		func(ctx agent.Context, args fetchCatalogArgs) (interface{}, error) {
-			return a.tools.FetchActiveFoodCatalog(ctx, args.Category)
+			opts := FetchCatalogOptions{
+				Limit:      args.Limit,
+				Page:       args.Page,
+				ExcludeIDs: args.ExcludeIDs,
+			}
+			return a.tools.FetchActiveFoodCatalog(ctx, ctx.SessionID(), args.Category, opts)
 		},
 	)
 	if err != nil {
