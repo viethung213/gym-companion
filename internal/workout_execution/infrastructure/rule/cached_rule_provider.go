@@ -131,8 +131,14 @@ func (p *CachedRuleProvider) GetRule(ctx context.Context, exerciseID string) (*v
 		if diaErr == nil && len(diaData) > 0 {
 			dialogueBytes = diaData
 		}
-	} else if diaData, ok := GetEmbeddedExerciseAsset("dialogues", exerciseID); ok {
-		dialogueBytes = diaData
+	} else {
+		candidateID := exerciseID
+		if normalizeExerciseSlug(candidateID, "") == "" && spec.ExerciseName() != "" {
+			candidateID = spec.ExerciseName()
+		}
+		if diaData, ok := GetEmbeddedExerciseAsset("dialogues", candidateID); ok {
+			dialogueBytes = diaData
+		}
 	}
 
 	// 5. Parse and merge both JSON files into vo.ExerciseMotionRule
@@ -226,12 +232,81 @@ func deriveObjectKey(fileURL, assetType, exerciseID string) string {
 	return fmt.Sprintf("dialogues/%s_dialogue.json", exerciseID)
 }
 
+type rawThresholdCondition struct {
+	GT      float32 `json:"gt,omitempty"`
+	GTE     float32 `json:"gte,omitempty"`
+	LT      float32 `json:"lt,omitempty"`
+	LTE     float32 `json:"lte,omitempty"`
+	Comment string  `json:"comment,omitempty"`
+}
+
+func (t rawThresholdCondition) ToDomain() vo.ThresholdCondition {
+	return vo.ThresholdCondition{
+		GT:      t.GT,
+		GTE:     t.GTE,
+		LT:      t.LT,
+		LTE:     t.LTE,
+		Comment: t.Comment,
+	}
+}
+
+type rawPhaseThresholds struct {
+	Rest       rawThresholdCondition `json:"rest,omitempty"`
+	Transition rawThresholdCondition `json:"transition,omitempty"`
+	Active     rawThresholdCondition `json:"active,omitempty"`
+	Idle       rawThresholdCondition `json:"idle,omitempty"`
+	Always     rawThresholdCondition `json:"always,omitempty"`
+}
+
+func (p rawPhaseThresholds) ToDomain() vo.PhaseThresholds {
+	return vo.PhaseThresholds{
+		Rest:       p.Rest.ToDomain(),
+		Transition: p.Transition.ToDomain(),
+		Active:     p.Active.ToDomain(),
+		Idle:       p.Idle.ToDomain(),
+		Always:     p.Always.ToDomain(),
+	}
+}
+
+type rawPhaseCalculation struct {
+	Landmarks   []string `json:"landmarks,omitempty"`
+	Joints      []int    `json:"joints,omitempty"`
+	Formula     string   `json:"formula,omitempty"`
+	Description string   `json:"description,omitempty"`
+}
+
+func (c rawPhaseCalculation) ToDomain() vo.PhaseCalculation {
+	return vo.PhaseCalculation{
+		Landmarks:   c.Landmarks,
+		Joints:      c.Joints,
+		Formula:     vo.FormulaType(c.Formula),
+		Description: c.Description,
+	}
+}
+
+type rawPhaseDetectionConfig struct {
+	Metric      string              `json:"metric"`
+	Thresholds  rawPhaseThresholds  `json:"thresholds"`
+	Calculation rawPhaseCalculation `json:"calculation"`
+}
+
+func (p *rawPhaseDetectionConfig) ToDomain() *vo.PhaseDetectionConfig {
+	if p == nil {
+		return nil
+	}
+	return &vo.PhaseDetectionConfig{
+		Metric:      p.Metric,
+		Thresholds:  p.Thresholds.ToDomain(),
+		Calculation: p.Calculation.ToDomain(),
+	}
+}
+
 // Data structures for JSON unmarshaling
 type rawRuleFile struct {
 	DisplayName          string                   `json:"display_name"`
 	RepType              string                   `json:"rep_type"`
 	Notes                string                   `json:"notes"`
-	PhaseDetection       *vo.PhaseDetectionConfig `json:"phase_detection"`
+	PhaseDetection       *rawPhaseDetectionConfig `json:"phase_detection"`
 	Rules                []rawRuleCriterion       `json:"rules"`
 	AudioCooldownSeconds map[string]float32       `json:"audio_cooldown_seconds"`
 }
@@ -462,8 +537,9 @@ func parseMotionRule(exerciseID, specName, recommendedCameraAngle string, ruleBy
 	}
 
 	// 1. Process PhaseDetection
-	phaseDetection := rawRule.PhaseDetection
-	if phaseDetection != nil {
+	var phaseDetection *vo.PhaseDetectionConfig
+	if rawRule.PhaseDetection != nil {
+		phaseDetection = rawRule.PhaseDetection.ToDomain()
 		if len(phaseDetection.Calculation.Joints) == 0 && len(phaseDetection.Calculation.Landmarks) > 0 {
 			phaseDetection.Calculation.Joints = parseLandmarkNumbers(phaseDetection.Calculation.Landmarks)
 		}

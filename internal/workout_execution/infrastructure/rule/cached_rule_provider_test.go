@@ -535,6 +535,16 @@ func timeNow() time.Time {
 
 func TestCachedRuleProvider_CanonicalUUIDFallback(t *testing.T) {
 	mockRepo := newMockMotionSpecRepo()
+	now := time.Now()
+	specs := []*aggregate.MotionSpecification{
+		aggregate.RestoreMotionSpecification("e99ba23f-3450-4897-bf20-42618dded05a", "Bicep Curl", "", "", "rules/bicep_curl_rule.json", "dialogues/bicep_curl_dialogue.json", "SIDE", true, now, now),
+		aggregate.RestoreMotionSpecification("fe1ef684-3071-4522-b0fb-338aeeb26879", "3/4 Sit-up", "", "", "rules/sit_up_rule.json", "dialogues/sit_up_dialogue.json", "SIDE", true, now, now),
+		aggregate.RestoreMotionSpecification("24e6981b-60df-42e2-9567-74559290f6b1", "Barbell Bench Press", "", "", "rules/bench_press_rule.json", "dialogues/bench_press_dialogue.json", "SIDE", true, now, now),
+		aggregate.RestoreMotionSpecification("24776ced-3998-4529-a7a1-9333fddea59f", "Weighted Squat", "", "", "rules/squat_rule.json", "dialogues/squat_dialogue.json", "SIDE", true, now, now),
+	}
+	for _, s := range specs {
+		_ = mockRepo.Save(context.Background(), s)
+	}
 	provider := NewCachedRuleProvider(mockRepo, nil)
 
 	testCases := []struct {
@@ -561,5 +571,42 @@ func TestCachedRuleProvider_CanonicalUUIDFallback(t *testing.T) {
 				t.Errorf("expected ExerciseID %s, got %s", tc.exerciseID, rule.ExerciseID)
 			}
 		})
+	}
+}
+
+func TestCachedRuleProvider_UUIDWithEmptyDialogueURLLoadsEmbedded(t *testing.T) {
+	mockRepo := newMockMotionSpecRepo()
+	now := time.Now()
+	// Motion specification with UUID exercise ID and EMPTY dialogueEngineURL
+	s := aggregate.RestoreMotionSpecification(
+		"e99ba23f-3450-4897-bf20-42618dded05a",
+		"Bicep Curl",
+		"", "",
+		"rules/bicep_curl_rule.json",
+		"", // empty dialogue URL!
+		"SIDE",
+		true, now, now,
+	)
+	_ = mockRepo.Save(context.Background(), s)
+	provider := NewCachedRuleProvider(mockRepo, nil)
+
+	rule, err := provider.GetRule(context.Background(), "e99ba23f-3450-4897-bf20-42618dded05a")
+	if err != nil {
+		t.Fatalf("expected successful GetRule, got error: %v", err)
+	}
+	if rule == nil {
+		t.Fatal("expected non-nil rule")
+	}
+
+	// Verify that audio cues are populated from embedded bicep_curl_dialogue.json
+	hasAudioCue := false
+	for _, crit := range rule.Rules {
+		if crit.AudioCue != "" {
+			hasAudioCue = true
+			break
+		}
+	}
+	if !hasAudioCue {
+		t.Error("expected at least one rule criterion to have AudioCue populated from embedded dialogue asset")
 	}
 }
