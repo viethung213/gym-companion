@@ -742,13 +742,6 @@ func (h *GRPCHandler) StreamSoloMatchTracking(
 	return runSoloMatchTrackingLoop(stream.Context(), stream, h.soloTrackingService, grpcStreamErrorFactory{})
 }
 
-// StreamWorkoutTracking handles bi-directional gRPC streaming for single-player workout sets.
-func (h *GRPCHandler) StreamWorkoutTracking(
-	_ workoutexecutionv1service.WorkoutExecutionService_StreamWorkoutTrackingServer,
-) error {
-	return status.Error(codes.Unimplemented, "StreamWorkoutTracking is not implemented yet")
-}
-
 // --- ConnectRPC Adapter ---
 
 type ConnectWorkoutExecutionHandler struct {
@@ -932,16 +925,6 @@ func (c *ConnectWorkoutExecutionHandler) StreamSoloMatchTracking(
 ) error {
 	adapter := &connectSoloStreamAdapter{ctx: ctx, stream: stream}
 	return runSoloMatchTrackingLoop(ctx, adapter, c.grpcHandler.soloTrackingService, connectStreamErrorFactory{})
-}
-
-func (c *ConnectWorkoutExecutionHandler) StreamWorkoutTracking(
-	_ context.Context,
-	_ *connect.BidiStream[
-		workoutexecutionv1message.StreamWorkoutTrackingRequest,
-		workoutexecutionv1message.StreamWorkoutTrackingResponse,
-	],
-) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("StreamWorkoutTracking is not implemented yet"))
 }
 
 func mapParticipantStatusToProto(status string) workoutexecutionv1message.ParticipantStreamStatus {

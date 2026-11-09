@@ -198,7 +198,7 @@ func TestGRPCHandler(t *testing.T) {
 	errEventCh := make(chan *port.MatchFoundEvent, 1)
 	errQueuePort := &mockQueuePort{eventCh: errEventCh}
 	errJoinHandler := command.NewJoinMatchmakingQueueHandler(errQueuePort, matchRepo)
-	errHandler := transportgrpc.NewHandler(errJoinHandler, cancelQueueHandler, getMatchHandler, getHistoryHandler, snapshotRepo)
+	errHandler := transportgrpc.NewHandler(errJoinHandler, cancelQueueHandler, getMatchHandler, getHistoryHandler, snapshotRepo, getActiveMatchHandler)
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		errEventCh <- &port.MatchFoundEvent{

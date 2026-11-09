@@ -38,19 +38,15 @@ func NewHandler(
 	getMatchHandler *query.GetSoloMatchByIDHandler,
 	getHistoryHandler *query.GetUserMatchHistoryHandler,
 	snapshotRepo repository.UserSnapshotRepository,
-	getActiveMatchHandler ...*query.GetActiveMatchHandler,
+	getActiveMatchHandler *query.GetActiveMatchHandler,
 ) *Handler {
-	var activeHandler *query.GetActiveMatchHandler
-	if len(getActiveMatchHandler) > 0 {
-		activeHandler = getActiveMatchHandler[0]
-	}
 	return &Handler{
 		joinQueueHandler:      joinQueueHandler,
 		cancelQueueHandler:    cancelQueueHandler,
 		getMatchHandler:       getMatchHandler,
 		getHistoryHandler:     getHistoryHandler,
 		snapshotRepo:          snapshotRepo,
-		getActiveMatchHandler: activeHandler,
+		getActiveMatchHandler: getActiveMatchHandler,
 	}
 }
 
