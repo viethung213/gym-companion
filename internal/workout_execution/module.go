@@ -385,6 +385,7 @@ func RegisterWebTransport(
 	}
 	wtServer, err := webtransport.New(webtransport.Config{
 		Addr:           wtAddr,
+		PublicHost:     os.Getenv("WT_PUBLIC_HOST"),
 		InternalSecret: internalSecret,
 		Validator:      validator,
 		Service:        grpcHandler.SoloTrackingService(),
