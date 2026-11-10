@@ -57,6 +57,14 @@ service SoloMatchService {
     };
   }
 
+  // Lấy trận đấu đang hoạt động của người dùng để khôi phục trạng thái khi reload
+  rpc GetActiveMatch(contracts.core.solo_match.v1.message.GetActiveMatchRequest) 
+      returns (contracts.core.solo_match.v1.message.GetActiveMatchResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/solo-matches/active"
+    };
+  }
+
   // Xem chi tiết một trận đấu
   rpc GetMatch(contracts.core.solo_match.v1.message.GetMatchRequest) 
       returns (contracts.core.solo_match.v1.message.GetMatchResponse) {

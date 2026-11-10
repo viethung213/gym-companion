@@ -283,6 +283,7 @@ enum ParticipantStreamStatus {
   PARTICIPANT_STREAM_STATUS_SPECTATING = 2;
   PARTICIPANT_STREAM_STATUS_COMPLETED = 3;
   PARTICIPANT_STREAM_STATUS_WAITING = 4;
+  PARTICIPANT_STREAM_STATUS_DISCONNECTED = 5;
 }
 
 message SkeletonLandmark {
@@ -340,7 +341,8 @@ message StreamSoloMatchTrackingResponse {
   int32 remaining_ceiling_seconds = 11;
   bool match_ended = 12;
   google.protobuf.Timestamp timestamp = 13;
+  // Server-authoritative live telemetry so thin clients never recompute biomechanics.
+  float current_angle = 14;
+  string rep_phase = 15;
+  bool person_detected = 16;
 }
-
-
-
