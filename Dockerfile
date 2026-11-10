@@ -41,6 +41,8 @@ WORKDIR /app
 COPY --from=core-builder /bin/fitai-core /app/fitai-core
 
 EXPOSE 8080
+EXPOSE 8443/udp
+EXPOSE 8443/tcp
 
 CMD ["/app/fitai-core"]
 
