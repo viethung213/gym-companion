@@ -35,6 +35,8 @@ type MotionRefereeSession struct {
 	challengeType    vo.ChallengeType
 	timeCeiling      time.Duration
 	workoutSessionID string
+	matchID          string
+	planID           string
 	cameraAngle      string
 
 	status           ParticipantStatus
@@ -633,6 +635,34 @@ func (s *MotionRefereeSession) SetWorkoutSessionID(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.workoutSessionID = id
+}
+
+// MatchID returns the match identifier if running in a solo match context.
+func (s *MotionRefereeSession) MatchID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.matchID
+}
+
+// SetMatchID sets the match identifier.
+func (s *MotionRefereeSession) SetMatchID(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.matchID = id
+}
+
+// PlanID returns the plan identifier for this session.
+func (s *MotionRefereeSession) PlanID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.planID
+}
+
+// SetPlanID sets the plan identifier.
+func (s *MotionRefereeSession) SetPlanID(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.planID = id
 }
 
 // CameraAngle returns the active camera view angle (e.g. "front", "side").

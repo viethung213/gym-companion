@@ -63,6 +63,15 @@ func (m *mockLiveSync) SubscribeMatchUpdates(ctx context.Context, matchID, userI
 func (m *mockLiveSync) DelRoom(ctx context.Context, matchID string) error {
 	return nil
 }
+func (m *mockLiveSync) SetActiveUserMatch(ctx context.Context, userID string, cfg port.ActiveMatchConfig) error {
+	return nil
+}
+func (m *mockLiveSync) GetActiveUserMatch(ctx context.Context, userID string) (*port.ActiveMatchConfig, error) {
+	return nil, nil
+}
+func (m *mockLiveSync) ClearActiveUserMatch(ctx context.Context, userID string) error {
+	return nil
+}
 
 const goodToken = "good-token"
 

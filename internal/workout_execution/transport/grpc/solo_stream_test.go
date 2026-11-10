@@ -708,4 +708,119 @@ func TestStreamSoloMatchTracking(t *testing.T) {
 			t.Errorf("expected reconnected status ACTIVE, got %v", reconnectResp.MyStatus)
 		}
 	})
+
+	t.Run("Reconnect by userID alone with empty config recovers active match pointer and cleans up after finish", func(t *testing.T) {
+		matchID := "match-user-pointer-recovery"
+		userID := "user-pointer-rec"
+		ctx := context.WithValue(context.Background(), middleware.UserIDKey, userID)
+
+		// Register opponent so room is ready
+		_ = liveSync.RegisterParticipant(context.Background(), matchID, "user-opp-ptr", "exercise_plank_01")
+		_ = liveSync.PublishMyProgress(context.Background(), matchID, port.ParticipantProgress{
+			UserID:    "user-opp-ptr",
+			Value:     5,
+			FormScore: 90.0,
+			Status:    "ACTIVE",
+		})
+
+		validLandmarks := []*workoutexecutionv1message.SkeletonLandmark{
+			{LandmarkIndex: 11, X: -1, Y: 0, Z: 0, Visibility: 0.9},
+			{LandmarkIndex: 23, X: 0, Y: 0, Z: 0, Visibility: 0.9},
+			{LandmarkIndex: 27, X: 1, Y: 0, Z: 0, Visibility: 0.9},
+		}
+
+		// 1. Initial stream: Full config sets the active match pointer
+		streamInit := &mockStreamServer{
+			ctx: ctx,
+			queue: []*workoutexecutionv1message.StreamSoloMatchTrackingRequest{
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config{
+						Config: &workoutexecutionv1message.SoloTrackingConfig{
+							MatchId:            matchID,
+							ExerciseId:         "exercise_plank_01",
+							ChallengeType:      workoutexecutionv1message.SoloChallengeType_SOLO_CHALLENGE_TYPE_DURATION,
+							TimeCeilingSeconds: 600,
+							PlanId:             "plan-ptr-01",
+						},
+					},
+				},
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Frame{
+						Frame: &workoutexecutionv1message.SoloTrackingFrame{
+							Landmarks: validLandmarks,
+							Timestamp: timestamppb.Now(),
+						},
+					},
+				},
+			},
+		}
+
+		if err := h.StreamSoloMatchTracking(streamInit); err != nil {
+			t.Fatalf("unexpected streamInit error: %v", err)
+		}
+
+		// Verify pointer exists in Redis
+		savedMeta, getErr := liveSync.GetActiveUserMatch(context.Background(), userID)
+		if getErr != nil || savedMeta == nil || savedMeta.MatchID != matchID {
+			t.Fatalf("expected active match pointer to be saved, got err: %v, meta: %+v", getErr, savedMeta)
+		}
+
+		// 2. Reconnect stream: Client sends empty config (no match_id, no plan_id)
+		streamReconnect := &mockStreamServer{
+			ctx: ctx,
+			queue: []*workoutexecutionv1message.StreamSoloMatchTrackingRequest{
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config{
+						Config: &workoutexecutionv1message.SoloTrackingConfig{},
+					},
+				},
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Submit{
+						Submit: &workoutexecutionv1message.SoloTrackingSubmit{},
+					},
+				},
+			},
+		}
+
+		if err := h.StreamSoloMatchTracking(streamReconnect); err != nil {
+			t.Fatalf("unexpected streamReconnect error: %v", err)
+		}
+
+		if len(streamReconnect.sent) == 0 {
+			t.Fatalf("expected responses sent in streamReconnect")
+		}
+
+		lastResp := streamReconnect.sent[len(streamReconnect.sent)-1]
+		if !lastResp.IsCompleted {
+			t.Errorf("expected session to be completed upon submit, got %v", lastResp.IsCompleted)
+		}
+
+		// 3. Verify that finishing the session cleared the active match pointer
+		savedAfterFinish, _ := liveSync.GetActiveUserMatch(context.Background(), userID)
+		if savedAfterFinish != nil {
+			t.Errorf("expected active match pointer to be cleared after finish, got: %+v", savedAfterFinish)
+		}
+	})
+
+	t.Run("Reconnect with empty config when no active match exists returns FailedPrecondition", func(t *testing.T) {
+		unknownUserCtx := context.WithValue(context.Background(), middleware.UserIDKey, "unknown-user-no-match")
+		streamNoMatch := &mockStreamServer{
+			ctx: unknownUserCtx,
+			queue: []*workoutexecutionv1message.StreamSoloMatchTrackingRequest{
+				{
+					Payload: &workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config{
+						Config: &workoutexecutionv1message.SoloTrackingConfig{},
+					},
+				},
+			},
+		}
+
+		err := h.StreamSoloMatchTracking(streamNoMatch)
+		if err == nil {
+			t.Fatalf("expected error when reconnecting without active match, got nil")
+		}
+		if status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("expected FailedPrecondition, got status code: %v (err: %v)", status.Code(err), err)
+		}
+	})
 }

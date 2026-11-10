@@ -125,6 +125,18 @@ func (m *mockBotLiveSyncHub) DelRoom(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockBotLiveSyncHub) SetActiveUserMatch(_ context.Context, _ string, _ port.ActiveMatchConfig) error {
+	return nil
+}
+
+func (m *mockBotLiveSyncHub) GetActiveUserMatch(_ context.Context, _ string) (*port.ActiveMatchConfig, error) {
+	return nil, nil
+}
+
+func (m *mockBotLiveSyncHub) ClearActiveUserMatch(_ context.Context, _ string) error {
+	return nil
+}
+
 func (m *mockBotLiveSyncHub) ParticipantCount(_ context.Context, _ string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -13,6 +13,15 @@ type ParticipantProgress struct {
 	DisconnectedAt int64   `json:"disconnected_at,omitempty"`
 }
 
+// ActiveMatchConfig holds the match parameters for an active user session allowing reconnect by userID.
+type ActiveMatchConfig struct {
+	MatchID            string `json:"match_id"`
+	PlanID             string `json:"plan_id"`
+	ExerciseID         string `json:"exercise_id"`
+	ChallengeType      string `json:"challenge_type"`
+	TimeCeilingSeconds int32  `json:"time_ceiling_seconds"`
+}
+
 // SoloMatchLiveSyncPort provides realtime pub/sub synchronization and room membership management between match participants.
 type SoloMatchLiveSyncPort interface {
 	// RegisterParticipant registers a user in the match room.
@@ -43,4 +52,13 @@ type SoloMatchLiveSyncPort interface {
 
 	// DelRoom explicitly purges all Redis room keys for a cancelled or ended match.
 	DelRoom(ctx context.Context, matchID string) error
+
+	// SetActiveUserMatch stores the active match config pointer for a user allowing reconnect by userID.
+	SetActiveUserMatch(ctx context.Context, userID string, cfg ActiveMatchConfig) error
+
+	// GetActiveUserMatch retrieves the active match config pointer for a user.
+	GetActiveUserMatch(ctx context.Context, userID string) (*ActiveMatchConfig, error)
+
+	// ClearActiveUserMatch removes the active match config pointer for a user.
+	ClearActiveUserMatch(ctx context.Context, userID string) error
 }
