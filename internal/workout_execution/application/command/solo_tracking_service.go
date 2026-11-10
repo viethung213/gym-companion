@@ -78,6 +78,8 @@ func (s *SoloTrackingService) SetDisconnectGracePeriodForTesting(d time.Duration
 }
 
 // InitializeSession loads exercise rules, registers live sync, and creates a WorkoutSession aggregate in DB.
+// If matchID is empty, it automatically recovers the active match from live sync for the user.
+// If matchID is provided, it persists the active match pointer in live sync for future reconnects.
 func (s *SoloTrackingService) InitializeSession(
 	ctx context.Context,
 	matchID, userID, exerciseID string,
@@ -85,7 +87,30 @@ func (s *SoloTrackingService) InitializeSession(
 	timeCeilingSeconds int32,
 	planID string,
 ) (referee *service.MotionRefereeSession, rule *vo.ExerciseMotionRule, err error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, nil, fmt.Errorf("%w: user_id is required", apperror.ErrInvalidInput)
+	}
+
+	matchID = strings.TrimSpace(matchID)
 	planID = strings.TrimSpace(planID)
+
+	// Reconnect recovery: if match_id is not provided, look up active match from live sync
+	if matchID == "" {
+		if s.liveSync == nil {
+			return nil, nil, apperror.ErrActiveMatchNotFound
+		}
+		activeMeta, getErr := s.liveSync.GetActiveUserMatch(ctx, userID)
+		if getErr != nil || activeMeta == nil || activeMeta.MatchID == "" {
+			return nil, nil, apperror.ErrActiveMatchNotFound
+		}
+		matchID = activeMeta.MatchID
+		planID = activeMeta.PlanID
+		exerciseID = activeMeta.ExerciseID
+		challengeType = vo.ChallengeType(activeMeta.ChallengeType)
+		timeCeilingSeconds = activeMeta.TimeCeilingSeconds
+	}
+
 	if planID == "" {
 		return nil, nil, fmt.Errorf("%w: plan_id is required", apperror.ErrInvalidInput)
 	}
@@ -135,6 +160,9 @@ func (s *SoloTrackingService) InitializeSession(
 		return nil, nil, fmt.Errorf("create referee session: %w", err)
 	}
 
+	referee.SetMatchID(matchID)
+	referee.SetPlanID(planID)
+
 	// Reconnect recovery: restore progress if participant was previously active in this match
 	if s.liveSync != nil {
 		if prevProg, prevErr := s.liveSync.GetMyProgress(ctx, matchID, userID); prevErr == nil && prevProg != nil {
@@ -173,8 +201,19 @@ func (s *SoloTrackingService) InitializeSession(
 	}
 
 	// Create and persist WorkoutSession aggregate in DB in IN_PROGRESS state
-	if err := s.initWorkoutSessionInDB(ctx, referee, userID, planID); err != nil {
+	if err = s.initWorkoutSessionInDB(ctx, referee, userID, planID); err != nil {
 		return nil, nil, err
+	}
+
+	// Persist active match pointer for reconnect by userID
+	if s.liveSync != nil {
+		_ = s.liveSync.SetActiveUserMatch(ctx, userID, port.ActiveMatchConfig{
+			MatchID:            matchID,
+			PlanID:             planID,
+			ExerciseID:         exerciseID,
+			ChallengeType:      string(challengeType),
+			TimeCeilingSeconds: timeCeilingSeconds,
+		})
 	}
 
 	return referee, rule, nil
@@ -431,6 +470,7 @@ func (s *SoloTrackingService) FinalizeSession(
 		if err := s.liveSync.UnregisterParticipant(ctx, matchID, userID); err != nil {
 			return fmt.Errorf("unregister participant: %w", err)
 		}
+		_ = s.liveSync.ClearActiveUserMatch(ctx, userID)
 	}
 
 	return nil

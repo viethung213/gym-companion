@@ -286,3 +286,71 @@ func TestRedisLiveSyncHub_RoomCleanupOnAllFinished(t *testing.T) {
 		t.Errorf("expected single match room to be cleaned up after DelRoom")
 	}
 }
+
+func TestRedisLiveSyncHub_ActiveUserMatch(t *testing.T) {
+	hub, mr := setupTestRedis(t)
+	ctx := context.Background()
+	userID := "user-reconnect-pointer"
+	matchID := "match-pointer-test"
+	sampleConfig := port.ActiveMatchConfig{
+		MatchID:            "match-pointer-test",
+		PlanID:             "plan-pointer",
+		ExerciseID:         "squat_01",
+		ChallengeType:      "REPS",
+		TimeCeilingSeconds: 600,
+	}
+
+	// 1. Initially should be nil
+	got, err := hub.GetActiveUserMatch(ctx, userID)
+	if err != nil {
+		t.Fatalf("unexpected error getting empty active match: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected empty active match nil, got: %+v", got)
+	}
+
+	// 2. Set active user match
+	if err := hub.SetActiveUserMatch(ctx, userID, sampleConfig); err != nil {
+		t.Fatalf("failed to set active user match: %v", err)
+	}
+
+	// 3. Verify key exists in redis and can be retrieved
+	userKey := "solo:user:" + userID + ":active_match"
+	if !mr.Exists(userKey) {
+		t.Errorf("expected redis key %s to exist", userKey)
+	}
+
+	got, err = hub.GetActiveUserMatch(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to get active user match: %v", err)
+	}
+	if got == nil || *got != sampleConfig {
+		t.Errorf("expected %+v, got %+v", sampleConfig, got)
+	}
+
+	// 4. Clear active user match explicitly
+	if err := hub.ClearActiveUserMatch(ctx, userID); err != nil {
+		t.Fatalf("failed to clear active user match: %v", err)
+	}
+	if mr.Exists(userKey) {
+		t.Errorf("expected redis key %s to be deleted after clear", userKey)
+	}
+
+	// 5. Verify DelRoom purges participant's active match pointer
+	if err := hub.RegisterParticipant(ctx, matchID, userID, "squat_01"); err != nil {
+		t.Fatalf("failed to register participant: %v", err)
+	}
+	if err := hub.SetActiveUserMatch(ctx, userID, sampleConfig); err != nil {
+		t.Fatalf("failed to set active user match before DelRoom: %v", err)
+	}
+	if !mr.Exists(userKey) {
+		t.Fatalf("expected active user key to exist before DelRoom")
+	}
+
+	if err := hub.DelRoom(ctx, matchID); err != nil {
+		t.Fatalf("failed to DelRoom: %v", err)
+	}
+	if mr.Exists(userKey) {
+		t.Errorf("expected active user match pointer %s to be purged by DelRoom", userKey)
+	}
+}

@@ -64,6 +64,18 @@ func (m *mockCancelledLiveSync) DelRoom(_ context.Context, matchID string) error
 	return nil
 }
 
+func (m *mockCancelledLiveSync) SetActiveUserMatch(_ context.Context, _ string, _ port.ActiveMatchConfig) error {
+	return nil
+}
+
+func (m *mockCancelledLiveSync) GetActiveUserMatch(_ context.Context, _ string) (*port.ActiveMatchConfig, error) {
+	return nil, nil
+}
+
+func (m *mockCancelledLiveSync) ClearActiveUserMatch(_ context.Context, _ string) error {
+	return nil
+}
+
 func (m *mockCancelledLiveSync) ParticipantCount(_ context.Context, _ string) (int, error) {
 	return 0, nil
 }

@@ -212,6 +212,9 @@ func (h *RedisLiveSyncHub) UnregisterParticipant(ctx context.Context, matchID, u
 
 	// Chỉ xóa phòng khi CẢ HAI ĐỀU ĐÃ HOÀN THÀNH / ABORTED
 	if allFinished {
+		for _, mUID := range members {
+			_ = h.client.Del(ctx, "solo:user:"+mUID+":active_match").Err()
+		}
 		if err := h.client.Del(ctx, partKey, progKey, metaKey).Err(); err != nil {
 			return fmt.Errorf("redis del match room on completion: %w", err)
 		}
@@ -364,5 +367,55 @@ func (h *RedisLiveSyncHub) DelRoom(ctx context.Context, matchID string) error {
 	partKey := "solo_match:" + matchID + ":participants"
 	progKey := "solo_match:" + matchID + ":progress"
 	metaKey := "solo_match:" + matchID + ":exercise"
+
+	members, err := h.client.SMembers(ctx, partKey).Result()
+	if err == nil && len(members) > 0 {
+		for _, mUID := range members {
+			_ = h.client.Del(ctx, "solo:user:"+mUID+":active_match").Err()
+		}
+	}
+
 	return h.client.Del(ctx, partKey, progKey, metaKey).Err()
+}
+
+// SetActiveUserMatch stores the active match config for a user with TTL.
+func (h *RedisLiveSyncHub) SetActiveUserMatch(ctx context.Context, userID string, cfg port.ActiveMatchConfig) error {
+	if userID == "" {
+		return nil
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal active match config: %w", err)
+	}
+	key := "solo:user:" + userID + ":active_match"
+	return h.client.Set(ctx, key, string(b), h.ttl).Err()
+}
+
+// GetActiveUserMatch retrieves the active match config for a user.
+func (h *RedisLiveSyncHub) GetActiveUserMatch(ctx context.Context, userID string) (*port.ActiveMatchConfig, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	key := "solo:user:" + userID + ":active_match"
+	val, err := h.client.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("redis get active user match: %w", err)
+	}
+	var cfg port.ActiveMatchConfig
+	if err := json.Unmarshal([]byte(val), &cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal active match config: %w", err)
+	}
+	return &cfg, nil
+}
+
+// ClearActiveUserMatch explicitly deletes the active match config key for a user.
+func (h *RedisLiveSyncHub) ClearActiveUserMatch(ctx context.Context, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	key := "solo:user:" + userID + ":active_match"
+	return h.client.Del(ctx, key).Err()
 }

@@ -14,4 +14,5 @@ var (
 	ErrInternal                   = errors.New("internal server error")
 	ErrMatchRoomFull              = errors.New("match room is full: maximum 2 participants allowed")
 	ErrMatchExerciseMismatch      = errors.New("exercise does not match the solo match room exercise")
+	ErrActiveMatchNotFound        = errors.New("no active solo match found for user: match_id and plan_id are required")
 )

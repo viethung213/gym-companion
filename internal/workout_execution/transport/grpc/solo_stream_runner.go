@@ -128,6 +128,19 @@ func (connectStreamErrorFactory) Internal(msg string, err error) error {
 	return connect.NewError(connect.CodeInternal, errors.New(msg))
 }
 
+func mapInitSessionError(err error, errFactory streamErrorFactory) error {
+	switch {
+	case errors.Is(err, apperror.ErrActiveMatchNotFound):
+		return errFactory.FailedPrecondition(err.Error(), nil)
+	case errors.Is(err, apperror.ErrMatchRoomFull):
+		return errFactory.PermissionDenied(err.Error(), nil)
+	case errors.Is(err, apperror.ErrMatchExerciseMismatch), errors.Is(err, apperror.ErrInvalidInput):
+		return errFactory.InvalidArgument(err.Error(), nil)
+	default:
+		return errFactory.FailedPrecondition("exercise motion rule not configured", err)
+	}
+}
+
 // runSoloMatchTrackingLoop coordinates the single source of truth streaming loop for both gRPC and ConnectRPC.
 func runSoloMatchTrackingLoop(
 	ctx context.Context,
@@ -265,217 +278,209 @@ func runSoloMatchTrackingLoop(
 		switch p := req.GetPayload().(type) {
 		case *workoutexecutionv1message.StreamSoloMatchTrackingRequest_Config:
 			cfg := p.Config
-			if cfg != nil && session == nil {
-				matchID = cfg.MatchId
-				exerciseID = cfg.ExerciseId
-				challengeType := toDomainChallengeType(cfg.ChallengeType)
-				planID = strings.TrimSpace(cfg.PlanId)
-				if planID == "" {
-					return errFactory.InvalidArgument("plan_id is required", nil)
+			if cfg == nil {
+				cfg = &workoutexecutionv1message.SoloTrackingConfig{}
+			}
+			if session == nil && soloTrackingService != nil {
+				sess, r, initErr := soloTrackingService.InitializeSession(
+					streamCtx,
+					cfg.MatchId,
+					userID,
+					cfg.ExerciseId,
+					toDomainChallengeType(cfg.ChallengeType),
+					cfg.TimeCeilingSeconds,
+					cfg.PlanId,
+				)
+				if initErr != nil {
+					return mapInitSessionError(initErr, errFactory)
 				}
-				ceilingSec := cfg.TimeCeilingSeconds
+
+				session = sess
+				rule = r
+				matchID = session.MatchID()
+				planID = session.PlanID()
+				exerciseID = session.ExerciseID()
 				cameraAngle = strings.ToLower(strings.TrimSpace(cfg.CameraAngle))
-				if soloTrackingService != nil {
-					sess, r, initErr := soloTrackingService.InitializeSession(
-						streamCtx, matchID, userID, exerciseID, challengeType, ceilingSec, planID,
+
+				// Start asynchronous opponent update listener for real-time spectating and match-end sync
+				subCtx, cancel := context.WithCancel(streamCtx)
+				subCancel = cancel
+				oppChan, unsub, subErr := soloTrackingService.SubscribeMatchUpdates(
+					subCtx, matchID, userID,
+				)
+				if subErr != nil {
+					slog.WarnContext(subCtx, "failed to subscribe match updates",
+						slog.String("match_id", matchID),
+						slog.String("user_id", userID),
+						slog.Any("err", subErr),
 					)
-					if initErr != nil {
-						if errors.Is(initErr, apperror.ErrMatchRoomFull) {
-							return errFactory.PermissionDenied(initErr.Error(), nil)
-						}
-						if errors.Is(initErr, apperror.ErrMatchExerciseMismatch) {
-							return errFactory.InvalidArgument(initErr.Error(), nil)
-						}
-						if errors.Is(initErr, apperror.ErrInvalidInput) {
-							return errFactory.InvalidArgument(initErr.Error(), nil)
-						}
-						return errFactory.FailedPrecondition("exercise motion rule not configured", initErr)
-					}
-					session = sess
-					if cameraAngle != "" {
-						session.SetCameraAngle(cameraAngle)
-					}
-					rule = r
+				}
 
-					// Start asynchronous opponent update listener for real-time spectating and match-end sync
-					subCtx, cancel := context.WithCancel(streamCtx)
-					subCancel = cancel
-					oppChan, unsub, subErr := soloTrackingService.SubscribeMatchUpdates(
-						subCtx, matchID, userID,
-					)
-					if subErr != nil {
-						slog.WarnContext(subCtx, "failed to subscribe match updates",
-							slog.String("match_id", matchID),
-							slog.String("user_id", userID),
-							slog.Any("err", subErr),
-						)
+				go func() {
+					if unsub != nil {
+						defer unsub()
 					}
+					ticker := time.NewTicker(1 * time.Second)
+					defer ticker.Stop()
 
-					go func() {
-						if unsub != nil {
-							defer unsub()
-						}
-						ticker := time.NewTicker(1 * time.Second)
-						defer ticker.Stop()
+					for {
+						select {
+						case <-subCtx.Done():
+							return
+						case prog, ok := <-oppChan:
+							if !ok {
+								oppChan = nil
+								continue
+							}
+							if session == nil {
+								continue
+							}
 
-						for {
-							select {
-							case <-subCtx.Done():
+							if prog.Status == "CANCELLED" {
+								resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+									MyConfirmedValue:        session.ConfirmedValue(),
+									MyFormScore:             session.AverageFormScore(),
+									IsValidForm:             true,
+									MyStatus:                workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED,
+									IsCompleted:             true,
+									OpponentValue:           0,
+									OpponentStatus:          workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED,
+									AudioCue:                "Trận đấu đã bị hủy",
+									RemainingCeilingSeconds: 0,
+									MatchEnded:              true,
+									Timestamp:               timestamppb.Now(),
+								}
+								_ = safeSend(resp)
+								cancelStream()
 								return
-							case prog, ok := <-oppChan:
-								if !ok {
-									oppChan = nil
-									continue
-								}
-								if session == nil {
-									continue
-								}
+							}
 
-								if prog.Status == "CANCELLED" {
+							// If session is waiting for opponent, receiving any opponent activity confirms room is ready
+							if session.IsWaiting() {
+								session.Activate()
+							}
+
+							bothDone := session.IsCompleted() &&
+								(prog.Status == "COMPLETED" || prog.Status == "SPECTATING" || prog.Status == "ABORTED")
+							if bothDone {
+								session.MarkCompleted(session.CompletionReason())
+							}
+							resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
+								MyConfirmedValue:        session.ConfirmedValue(),
+								MyFormScore:             session.AverageFormScore(),
+								IsValidForm:             true,
+								MyStatus:                mapParticipantStatusToProto(string(session.Status())),
+								IsCompleted:             session.IsCompleted(),
+								OpponentValue:           prog.Value,
+								OpponentFormScore:       prog.FormScore,
+								OpponentStatus:          mapParticipantStatusToProto(prog.Status),
+								RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
+								MatchEnded:              bothDone,
+								Timestamp:               timestamppb.Now(),
+							}
+							if err := safeSend(resp); err != nil {
+								cancelStream()
+								return
+							}
+							if bothDone {
+								cancelStream()
+								return
+							}
+						case <-ticker.C:
+							// Proactively check if match has become ready while session is still waiting for opponent
+							if session != nil && session.IsWaiting() && soloTrackingService != nil {
+								ready, checkErr := soloTrackingService.CheckMatchReady(subCtx, matchID)
+								if checkErr == nil && ready {
+									session.Activate()
 									resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
 										MyConfirmedValue:        session.ConfirmedValue(),
 										MyFormScore:             session.AverageFormScore(),
 										IsValidForm:             true,
-										MyStatus:                workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED,
-										IsCompleted:             true,
-										OpponentValue:           0,
-										OpponentStatus:          workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED,
-										AudioCue:                "Trận đấu đã bị hủy",
-										RemainingCeilingSeconds: 0,
-										MatchEnded:              true,
+										MyStatus:                mapParticipantStatusToProto(string(session.Status())),
+										IsCompleted:             false,
+										RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
+										MatchEnded:              false,
 										Timestamp:               timestamppb.Now(),
 									}
-									_ = safeSend(resp)
-									cancelStream()
-									return
+									if sendErr := safeSend(resp); sendErr != nil {
+										cancelStream()
+										return
+									}
 								}
+							}
 
-								// If session is waiting for opponent, receiving any opponent activity confirms room is ready
-								if session.IsWaiting() {
-									session.Activate()
-								}
-
-								bothDone := session.IsCompleted() &&
-									(prog.Status == "COMPLETED" || prog.Status == "SPECTATING" || prog.Status == "ABORTED")
-								if bothDone {
-									session.MarkCompleted(session.CompletionReason())
+							if session != nil && !session.IsCompleted() && session.RemainingCeilingSeconds() <= 0 {
+								if forceErr := soloTrackingService.ForceCompleteSessionOnCeiling(
+									subCtx, session, matchID, userID, exerciseID, planID,
+								); forceErr != nil {
+									slog.ErrorContext(subCtx, "failed to force-complete session on ceiling timeout",
+										slog.String("match_id", matchID),
+										slog.String("user_id", userID),
+										slog.Any("err", forceErr),
+									)
 								}
 								resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
 									MyConfirmedValue:        session.ConfirmedValue(),
 									MyFormScore:             session.AverageFormScore(),
 									IsValidForm:             true,
 									MyStatus:                mapParticipantStatusToProto(string(session.Status())),
-									IsCompleted:             session.IsCompleted(),
-									OpponentValue:           prog.Value,
-									OpponentFormScore:       prog.FormScore,
-									OpponentStatus:          mapParticipantStatusToProto(prog.Status),
-									RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
-									MatchEnded:              bothDone,
+									IsCompleted:             true,
+									RemainingCeilingSeconds: 0,
+									MatchEnded:              true,
 									Timestamp:               timestamppb.Now(),
 								}
-								if err := safeSend(resp); err != nil {
-									cancelStream()
-									return
+								if sendErr := safeSend(resp); sendErr != nil {
+									slog.WarnContext(subCtx, "failed to send ceiling timeout response",
+										slog.Any("err", sendErr),
+									)
 								}
-								if bothDone {
-									cancelStream()
-									return
-								}
-							case <-ticker.C:
-								// Proactively check if match has become ready while session is still waiting for opponent
-								if session != nil && session.IsWaiting() && soloTrackingService != nil {
-									ready, checkErr := soloTrackingService.CheckMatchReady(subCtx, matchID)
-									if checkErr == nil && ready {
-										session.Activate()
+								cancelStream()
+								return
+							}
+
+							if session != nil && session.IsCompleted() {
+								opp, oppErr := soloTrackingService.GetOpponentProgress(subCtx, matchID, userID)
+								if oppErr != nil {
+									slog.WarnContext(subCtx, "failed to poll opponent progress",
+										slog.String("match_id", matchID),
+										slog.Any("err", oppErr),
+									)
+								} else if opp != nil {
+									oppGraceExpired := opp.Status == "DISCONNECTED" && opp.DisconnectedAt > 0 && (time.Now().Unix()-opp.DisconnectedAt >= disconnectGracePeriodSeconds)
+									bothDone := opp.Status == "COMPLETED" || opp.Status == "SPECTATING" || opp.Status == "ABORTED" || oppGraceExpired
+									if bothDone {
+										session.MarkCompleted(session.CompletionReason())
+										oppStatusStr := opp.Status
+										if oppGraceExpired {
+											oppStatusStr = "ABORTED"
+										}
 										resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
 											MyConfirmedValue:        session.ConfirmedValue(),
 											MyFormScore:             session.AverageFormScore(),
 											IsValidForm:             true,
 											MyStatus:                mapParticipantStatusToProto(string(session.Status())),
-											IsCompleted:             false,
+											IsCompleted:             session.IsCompleted(),
+											OpponentValue:           opp.Value,
+											OpponentFormScore:       opp.FormScore,
+											OpponentStatus:          mapParticipantStatusToProto(oppStatusStr),
 											RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
-											MatchEnded:              false,
+											MatchEnded:              true,
 											Timestamp:               timestamppb.Now(),
 										}
 										if sendErr := safeSend(resp); sendErr != nil {
-											cancelStream()
-											return
+											slog.WarnContext(subCtx, "failed to send match ended response",
+												slog.Any("err", sendErr),
+											)
 										}
-									}
-								}
-
-								if session != nil && !session.IsCompleted() && session.RemainingCeilingSeconds() <= 0 {
-									if forceErr := soloTrackingService.ForceCompleteSessionOnCeiling(
-										subCtx, session, matchID, userID, exerciseID, planID,
-									); forceErr != nil {
-										slog.ErrorContext(subCtx, "failed to force-complete session on ceiling timeout",
-											slog.String("match_id", matchID),
-											slog.String("user_id", userID),
-											slog.Any("err", forceErr),
-										)
-									}
-									resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
-										MyConfirmedValue:        session.ConfirmedValue(),
-										MyFormScore:             session.AverageFormScore(),
-										IsValidForm:             true,
-										MyStatus:                mapParticipantStatusToProto(string(session.Status())),
-										IsCompleted:             true,
-										RemainingCeilingSeconds: 0,
-										MatchEnded:              true,
-										Timestamp:               timestamppb.Now(),
-									}
-									if sendErr := safeSend(resp); sendErr != nil {
-										slog.WarnContext(subCtx, "failed to send ceiling timeout response",
-											slog.Any("err", sendErr),
-										)
-									}
-									cancelStream()
-									return
-								}
-
-								if session != nil && session.IsCompleted() {
-									opp, oppErr := soloTrackingService.GetOpponentProgress(subCtx, matchID, userID)
-									if oppErr != nil {
-										slog.WarnContext(subCtx, "failed to poll opponent progress",
-											slog.String("match_id", matchID),
-											slog.Any("err", oppErr),
-										)
-									} else if opp != nil {
-										oppGraceExpired := opp.Status == "DISCONNECTED" && opp.DisconnectedAt > 0 && (time.Now().Unix()-opp.DisconnectedAt >= disconnectGracePeriodSeconds)
-										bothDone := opp.Status == "COMPLETED" || opp.Status == "SPECTATING" || opp.Status == "ABORTED" || oppGraceExpired
-										if bothDone {
-											session.MarkCompleted(session.CompletionReason())
-											oppStatusStr := opp.Status
-											if oppGraceExpired {
-												oppStatusStr = "ABORTED"
-											}
-											resp := &workoutexecutionv1message.StreamSoloMatchTrackingResponse{
-												MyConfirmedValue:        session.ConfirmedValue(),
-												MyFormScore:             session.AverageFormScore(),
-												IsValidForm:             true,
-												MyStatus:                mapParticipantStatusToProto(string(session.Status())),
-												IsCompleted:             session.IsCompleted(),
-												OpponentValue:           opp.Value,
-												OpponentFormScore:       opp.FormScore,
-												OpponentStatus:          mapParticipantStatusToProto(oppStatusStr),
-												RemainingCeilingSeconds: session.RemainingCeilingSeconds(),
-												MatchEnded:              true,
-												Timestamp:               timestamppb.Now(),
-											}
-											if sendErr := safeSend(resp); sendErr != nil {
-												slog.WarnContext(subCtx, "failed to send match ended response",
-													slog.Any("err", sendErr),
-												)
-											}
-											cancelStream()
-											return
-										}
+										cancelStream()
+										return
 									}
 								}
 							}
 						}
-					}()
-				}
+					}
+				}()
+
 				lastTimestamp = time.Now()
 
 				// Send immediate initial status response so client receives acknowledgement and current room status

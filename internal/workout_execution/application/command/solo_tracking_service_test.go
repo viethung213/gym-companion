@@ -30,12 +30,13 @@ func (m *mockRuleProvider) GetRule(ctx context.Context, exerciseID string) (*vo.
 }
 
 type mockLiveSyncPort struct {
-	myProgress   port.ParticipantProgress
-	opponentProg *port.ParticipantProgress
-	participants map[string]bool
-	exerciseID   string
-	regErr       error
-	isReady      bool
+	myProgress    port.ParticipantProgress
+	opponentProg  *port.ParticipantProgress
+	participants  map[string]bool
+	exerciseID    string
+	regErr        error
+	isReady       bool
+	activeMatches map[string]port.ActiveMatchConfig
 }
 
 func (m *mockLiveSyncPort) RegisterParticipant(ctx context.Context, matchID, userID, exerciseID string) error {
@@ -75,6 +76,32 @@ func (m *mockLiveSyncPort) IsMatchReady(ctx context.Context, matchID string) (bo
 
 func (m *mockLiveSyncPort) DelRoom(ctx context.Context, matchID string) error {
 	m.participants = nil
+	return nil
+}
+
+func (m *mockLiveSyncPort) SetActiveUserMatch(ctx context.Context, userID string, cfg port.ActiveMatchConfig) error {
+	if m.activeMatches == nil {
+		m.activeMatches = make(map[string]port.ActiveMatchConfig)
+	}
+	m.activeMatches[userID] = cfg
+	return nil
+}
+
+func (m *mockLiveSyncPort) GetActiveUserMatch(ctx context.Context, userID string) (*port.ActiveMatchConfig, error) {
+	if m.activeMatches == nil {
+		return nil, nil
+	}
+	cfg, ok := m.activeMatches[userID]
+	if !ok {
+		return nil, nil
+	}
+	return &cfg, nil
+}
+
+func (m *mockLiveSyncPort) ClearActiveUserMatch(ctx context.Context, userID string) error {
+	if m.activeMatches != nil {
+		delete(m.activeMatches, userID)
+	}
 	return nil
 }
 

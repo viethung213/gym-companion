@@ -71,7 +71,7 @@ run-core:
 	@-docker network create fitai-network 2>/dev/null
 	@-cp -n .env.core.example .env.core 2>/dev/null
 	@echo "Starting Core Fitness Service Container in background..."
-	docker run -d --name fitai-core --network fitai-network --network-alias core --network-alias app --env-file .env.core -p 8080:8080 -p 9090:9090 fitai-core:latest
+	docker run -d --name fitai-core --network fitai-network --network-alias core --network-alias app --env-file .env.core -p 8080:8080 -p 9090:9090 -p 8443:8443/udp fitai-core:latest
 
 # Dừng riêng Core Fitness Service Container
 stop-core:
