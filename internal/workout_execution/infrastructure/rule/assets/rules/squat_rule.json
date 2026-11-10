@@ -1,0 +1,114 @@
+{
+  "display_name": "Squat",
+  "rep_type": "counted",
+  "notes": "Bài tập đếm rep thân dưới. Yêu cầu hạ đùi song song sàn, giữ thẳng cột sống, đầu gối mở theo hướng mũi chân.",
+  "phase_detection": {
+    "metric": "knee_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 160,
+        "comment": "Đứng thẳng chuẩn bị (đỉnh rep)"
+      },
+      "transition": {
+        "gt": 100,
+        "lte": 160,
+        "comment": "Đang hạ người xuống hoặc đứng lên"
+      },
+      "active": {
+        "lte": 100,
+        "comment": "Đáy Squat (đùi song song mặt sàn)"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Hip (P11, P12)",
+        "Knee (P13, P14)",
+        "Ankle (P15, P16)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)",
+      "description": "Góc gập khớp gối tạo bởi đùi (Hip-Knee) và cẳng chân (Ankle-Knee)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "torso_lean",
+      "description": "Góc đổ thân người về phía trước quá mức (Good-Morning Squat)",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 42.0,
+          "comment": "≤42°: độ nghiêng lưng an toàn"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 42.0,
+          "max": 52.0,
+          "comment": "42-52°: lưng bắt đầu gập sâu về trước"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 52.0,
+          "max": null,
+          "comment": ">52°: gập lưng quá mức, nguy cơ chấn thương thắt lưng"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Hip (P11, P12)"
+        ],
+        "formula": "torso_lean = atan2(|X_shoulder - X_hip|, |Y_shoulder - Y_hip|) * (180 / π)",
+        "description": "Góc nghiêng của lưng so với trục thẳng đứng"
+      }
+    },
+    {
+      "metric": "knee_over_toe",
+      "description": "Đầu gối đẩy quá xa về phía trước so với cổ chân",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.38,
+          "comment": "Đầu gối ở vị trí an toàn so với cổ chân"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.38,
+          "max": 0.50,
+          "comment": "Đầu gối bắt đầu nhô xa quá cổ chân"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.50,
+          "max": null,
+          "comment": "Trọng tâm dồn quá nhiều vào khớp gối"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Knee (P13, P14)",
+          "Ankle (P15, P16)"
+        ],
+        "formula": "knee_over_toe = |X_knee - X_ankle| / torso_length",
+        "description": "Độ lệch ngang của đầu gối so với cổ chân chuẩn hóa theo chiều dài lưng"
+      }
+    }
+  ],
+  "audio_cooldown_seconds": {
+    "warning": 3.0,
+    "danger": 1.5
+  }
+}

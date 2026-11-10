@@ -1,0 +1,106 @@
+{
+  "display_name": "Barbell Deadlift",
+  "rep_type": "counted",
+  "notes": "Bài tập kéo tạ đòn (Hip Hinge). Bản lề chuyển động ở khớp hông, không ngồi xổm như Squat.",
+  "phase_detection": {
+    "metric": "hip_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 155,
+        "comment": "Đứng thẳng khóa hông hoàn toàn (Lockout)"
+      },
+      "transition": {
+        "gt": 112,
+        "lte": 155,
+        "comment": "Đang gập hông hạ tạ hoặc kéo tạ lên"
+      },
+      "active": {
+        "lte": 112,
+        "comment": "Điểm đáy gập hông (Hip Hinge Bottom)"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Hip (P11, P12)",
+        "Knee (P13, P14)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)",
+      "description": "Góc bản lề khớp hông tạo bởi thân người (Shoulder-Hip) và đùi (Knee-Hip)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "excessive_knee_flexion",
+      "description": "Gập gối quá sâu biến Deadlift thành Squat",
+      "evaluation_type": "lower_bound",
+      "apply_in_phases": ["active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 90.0,
+          "max": 180.0,
+          "comment": "Góc gối ≥90°: đúng kỹ thuật Hip Hinge"
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 75.0,
+          "max": 90.0,
+          "comment": "Hạ mông hơi thấp như đang Squat"
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.0,
+          "max": 75.0,
+          "comment": "Ngồi xổm hoàn toàn khi Deadlift"
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Hip (P11, P12)",
+          "Knee (P13, P14)",
+          "Ankle (P15, P16)"
+        ],
+        "formula": "knee_angle = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+      }
+    },
+    {
+      "metric": "bar_drift",
+      "description": "Thanh đòn/cổ tay rời quá xa trục cẳng chân",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.52
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.52,
+          "max": 0.65
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.65,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Wrist (P9, P10)",
+          "Ankle (P15, P16)"
+        ],
+        "formula": "bar_drift = |X_wrist - X_ankle| / torso_length"
+      }
+    }
+  ]
+}

@@ -6,8 +6,13 @@ import "time"
 type FormulaType string
 
 const (
-	FormulaAngle3D  FormulaType = "ANGLE_3D"
-	FormulaDistance FormulaType = "DISTANCE"
+	FormulaAngle3D               FormulaType = "ANGLE_3D"
+	FormulaDistance              FormulaType = "DISTANCE"
+	FormulaHorizontalOffsetRatio FormulaType = "HORIZONTAL_OFFSET_RATIO"
+	FormulaVerticalAngle         FormulaType = "VERTICAL_ANGLE"
+	FormulaHorizontalAngle       FormulaType = "HORIZONTAL_ANGLE"
+	FormulaBilateralWidthRatio   FormulaType = "BILATERAL_WIDTH_RATIO"
+	FormulaVerticalDiffRatio     FormulaType = "VERTICAL_DIFF_RATIO"
 )
 
 // ValidAngleRange specifies minimum and maximum valid angles in degrees.
@@ -27,15 +32,16 @@ type RuleCriterion struct {
 	AudioCue        string
 	PenaltyPerError float32
 	ApplyForView    string
+	ApplyInPhases   []string
 }
 
 // ThresholdCondition defines comparison operators (gt, gte, lt, lte) for a phase boundary.
 type ThresholdCondition struct {
-	GT      float32 `json:"gt,omitempty"`
-	GTE     float32 `json:"gte,omitempty"`
-	LT      float32 `json:"lt,omitempty"`
-	LTE     float32 `json:"lte,omitempty"`
-	Comment string  `json:"comment,omitempty"`
+	GT      float32
+	GTE     float32
+	LT      float32
+	LTE     float32
+	Comment string
 }
 
 // Matches checks whether a given angle satisfies the threshold condition.
@@ -57,26 +63,26 @@ func (c ThresholdCondition) Matches(val float32) bool {
 
 // PhaseThresholds defines the thresholds for rest, transition, and active phases (or idle/always for timed exercises).
 type PhaseThresholds struct {
-	Rest       ThresholdCondition `json:"rest,omitempty"`
-	Transition ThresholdCondition `json:"transition,omitempty"`
-	Active     ThresholdCondition `json:"active,omitempty"`
-	Idle       ThresholdCondition `json:"idle,omitempty"`
-	Always     ThresholdCondition `json:"always,omitempty"`
+	Rest       ThresholdCondition
+	Transition ThresholdCondition
+	Active     ThresholdCondition
+	Idle       ThresholdCondition
+	Always     ThresholdCondition
 }
 
 // PhaseCalculation specifies the landmarks and formula used to calculate the phase angle.
 type PhaseCalculation struct {
-	Landmarks   []string    `json:"landmarks,omitempty"`
-	Joints      []int       `json:"joints,omitempty"`
-	Formula     FormulaType `json:"formula,omitempty"`
-	Description string      `json:"description,omitempty"`
+	Landmarks   []string
+	Joints      []int
+	Formula     FormulaType
+	Description string
 }
 
 // PhaseDetectionConfig encapsulates the declarative configuration for rep lifecycle tracking.
 type PhaseDetectionConfig struct {
-	Metric      string           `json:"metric"`
-	Thresholds  PhaseThresholds  `json:"thresholds"`
-	Calculation PhaseCalculation `json:"calculation"`
+	Metric      string
+	Thresholds  PhaseThresholds
+	Calculation PhaseCalculation
 }
 
 // ExerciseMotionRule encapsulates the declarative specification for evaluating exercise form.

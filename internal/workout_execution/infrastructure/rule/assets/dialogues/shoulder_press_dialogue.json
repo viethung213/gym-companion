@@ -1,0 +1,39 @@
+{
+  "exercise": "shoulder_press",
+  "display_name": "Shoulder Press",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Shoulder Press",
+  "voice_feedbacks": {
+    "wrist_symmetry": {
+      "metric_name": "wrist_symmetry",
+      "description": "Hai tay đẩy lệch nhau",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Đẩy hai tay lên cao đều nhau, tránh bên cao bên thấp!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "spine_sway_angle": {
+      "metric_name": "spine_sway_angle",
+      "description": "Ưỡn ngửa lưng dưới khi đẩy vai",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Gồng chặt bụng, không ưỡn ngửa lưng dưới khi đẩy tạ qua đầu!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

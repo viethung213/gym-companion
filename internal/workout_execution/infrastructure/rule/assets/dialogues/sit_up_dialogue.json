@@ -1,0 +1,23 @@
+{
+  "exercise": "sit_up",
+  "display_name": "Sit-up",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Sit-up",
+  "voice_feedbacks": {
+    "ankle_lift": {
+      "metric_name": "ankle_lift",
+      "description": "Nhấc chân khỏi sàn khi gập bụng",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ chặt hai bàn chân chạm sàn, dùng cơ bụng để cuộn người lên!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

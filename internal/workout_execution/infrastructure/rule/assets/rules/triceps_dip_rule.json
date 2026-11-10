@@ -1,0 +1,101 @@
+{
+  "display_name": "Triceps Dip",
+  "rep_type": "counted",
+  "notes": "Bài tập chống đẩy cơ tam đầu (tay sau). Hạ người cho đến khi khuỷu tay vuông góc ≤98° rồi đẩy thẳng lên >158°, giữ lưng đi sát mép ghế.",
+  "phase_detection": {
+    "metric": "elbow_angle",
+    "thresholds": {
+      "rest": {
+        "gt": 156,
+        "comment": "Tay chống thẳng ở vị trí cao"
+      },
+      "transition": {
+        "gt": 142,
+        "lte": 156,
+        "comment": "Đang hạ người xuống hoặc đẩy lên"
+      },
+      "active": {
+        "lte": 142,
+        "comment": "Đáy Triceps Dip (khuỷu tay gập)"
+      }
+    },
+    "calculation": {
+      "landmarks": [
+        "Shoulder (P5, P6)",
+        "Elbow (P7, P8)",
+        "Wrist (P9, P10)"
+      ],
+      "formula": "θ = arccos((U · W) / (||U|| * ||W||)) * (180 / π)"
+    }
+  },
+  "rules": [
+    {
+      "metric": "hips_too_far",
+      "description": "Đẩy hông rời quá xa điểm tựa tay gây quá tải khớp vai trước",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 0.42
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 0.42,
+          "max": 0.58
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 0.58,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Wrist (P9, P10)",
+          "Hip (P11, P12)"
+        ],
+        "formula": "hips_too_far = |X_hip - X_wrist| / torso_length"
+      }
+    },
+    {
+      "metric": "torso_lean",
+      "description": "Đổ người về phía trước quá mức khi tập tay sau",
+      "evaluation_type": "upper_bound",
+      "apply_in_phases": ["transition", "active"],
+      "apply_for_view": "side",
+      "ranges": [
+        {
+          "severity": 0,
+          "status": "Correct",
+          "min": 0.0,
+          "max": 28.0
+        },
+        {
+          "severity": 1,
+          "status": "Warning",
+          "min": 28.0,
+          "max": 40.0
+        },
+        {
+          "severity": 2,
+          "status": "Danger",
+          "min": 40.0,
+          "max": null
+        }
+      ],
+      "calculation": {
+        "landmarks": [
+          "Shoulder (P5, P6)",
+          "Hip (P11, P12)"
+        ],
+        "formula": "torso_lean = atan2(|X_shoulder - X_hip|, |Y_shoulder - Y_hip|) * (180 / π)"
+      }
+    }
+  ]
+}

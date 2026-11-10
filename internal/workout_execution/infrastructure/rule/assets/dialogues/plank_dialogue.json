@@ -1,0 +1,71 @@
+{
+  "exercise": "plank",
+  "display_name": "Plank",
+  "description": "Kịch bản nhắc lỗi giọng nói cho bài tập Plank",
+  "voice_feedbacks": {
+    "signed_hip_y_diff": {
+      "metric_name": "signed_hip_y_diff",
+      "description": "Hông võng thấp hoặc đẩy quá cao",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ hông thẳng hàng với vai và gót chân, không võng lưng hay chổng mông!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "arm_to_torso_angle": {
+      "metric_name": "arm_to_torso_angle",
+      "description": "Khuỷu tay đặt lệch khỏi trục vai",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Đặt khuỷu tay nằm ngay thẳng dưới vai tạo góc vuông 90 độ!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "elbow_angle": {
+      "metric_name": "elbow_angle",
+      "description": "Góc gập khuỷu tay chưa chuẩn",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Giữ cẳng tay áp sát mặt sàn vuông góc với bắp tay!",
+              "url": ""
+            }
+          }
+        }
+      }
+    },
+    "hand_width_ratio": {
+      "metric_name": "hand_width_ratio",
+      "description": "Khoảng cách hai khuỷu tay chưa rộng bằng vai",
+      "severities": {
+        "warning": {
+          "severity_level": 1,
+          "status": "Warning",
+          "styles": {
+            "normal": {
+              "text": "Đặt hai khuỷu tay mở rộng đúng bằng chiều rộng hai vai!",
+              "url": ""
+            }
+          }
+        }
+      }
+    }
+  }
+}
