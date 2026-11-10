@@ -89,6 +89,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	}
 	exerciseProvider := exerciseclient.NewExerciseClient(deps.ExerciseServer)
 
+	botTimeout := 15 * time.Second
+	if envTimeout := os.Getenv("SOLO_BOT_FALLBACK_TIMEOUT"); envTimeout != "" {
+		if d, err := time.ParseDuration(envTimeout); err == nil && d > 0 {
+			botTimeout = d
+		}
+	}
+
 	// Matchmaker Queue Port (Pure Redis In-Memory)
 	queuePort := matchmaker.NewRedisMatchmakerAdapter(
 		redisClient,
@@ -97,7 +104,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		exerciseProvider,
 		eventRecorder,
 		250*time.Millisecond,
-		5*time.Minute,
+		botTimeout,
 	)
 
 	// Application Command & Query Handlers

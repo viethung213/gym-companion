@@ -94,6 +94,11 @@ func NewGRPCHandler(
 	}
 }
 
+// SoloTrackingService returns the underlying SoloTrackingService instance.
+func (h *GRPCHandler) SoloTrackingService() *command.SoloTrackingService {
+	return h.soloTrackingService
+}
+
 func extractUserID(ctx context.Context) (string, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err == nil && actor.UserID != "" {
@@ -937,6 +942,8 @@ func mapParticipantStatusToProto(status string) workoutexecutionv1message.Partic
 		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_COMPLETED
 	case "WAITING":
 		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_WAITING
+	case "DISCONNECTED":
+		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_DISCONNECTED
 	default:
 		return workoutexecutionv1message.ParticipantStreamStatus_PARTICIPANT_STREAM_STATUS_UNSPECIFIED
 	}
