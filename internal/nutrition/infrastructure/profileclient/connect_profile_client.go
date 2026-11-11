@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	profilemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
@@ -44,7 +45,8 @@ func NewConnectProfileClient(gatewayURL, internalSecret string, httpClient *http
 			Timeout: 10 * time.Second,
 		}
 	}
-	client := profilev1serviceconnect.NewProfileServiceClient(httpClient, gatewayURL)
+	transport := connecthttp.NewTransport(httpClient, gatewayURL)
+	client := profilev1serviceconnect.NewProfileServiceClient(connect.NewClient(transport))
 	return &ConnectProfileClient{
 		client:         client,
 		internalSecret: internalSecret,
@@ -65,15 +67,16 @@ func (c *ConnectProfileClient) GetBiologicalMetrics(
 		return nil, fmt.Errorf("generate internal token: %w", err)
 	}
 
-	req := connect.NewRequest(&profilemsg.GetProfileRequest{UserId: userID})
-	req.Header().Set(middleware.HeaderInternalToken, tokenStr)
+	req := &profilemsg.GetProfileRequest{UserId: userID}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
 	res, err := c.client.GetProfile(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gateway get profile for nutrition user %s: %w", userID, err)
 	}
 
-	data := res.Msg
+	data := res
 	activity := "MODERATELY_ACTIVE"
 	switch strings.ToUpper(data.GetExperienceLevel()) {
 	case "BEGINNER":

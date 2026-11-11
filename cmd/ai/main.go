@@ -13,7 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/coaching"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
@@ -150,7 +151,7 @@ func run() error {
 	log.Printf("🚀 Starting AI Service (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
 
-	connectInterceptors := connect.WithInterceptors(
+	connectServer := connect.NewServer(
 		middleware.NewConnectRecoveryInterceptor(),
 		middleware.NewConnectLoggingInterceptor(),
 		middleware.NewConnectErrorMappingInterceptor(),
@@ -159,10 +160,12 @@ func run() error {
 
 	// Mount AI ConnectRPC Service Handlers
 	prefixes := []string{
-		coaching.RegisterConnectHandler(mux, coachGRPCHandler, connectInterceptors),
-		nutrition.RegisterConnectHandler(mux, nutritionGRPCHandler, connectInterceptors),
-		notification.RegisterConnectHandler(mux, notificationGRPCHandler, connectInterceptors),
+		coaching.RegisterConnectHandler(connectServer, coachGRPCHandler),
+		nutrition.RegisterConnectHandler(connectServer, nutritionGRPCHandler),
+		notification.RegisterConnectHandler(connectServer, notificationGRPCHandler),
 	}
+
+	connecthttp.Mount(mux, connectServer)
 
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {

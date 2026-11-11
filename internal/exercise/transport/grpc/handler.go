@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
@@ -799,330 +798,330 @@ func NewConnectExerciseHandler(server *ExerciseServer) exercisev1serviceconnect.
 
 func (c *ConnectExerciseHandler) SearchExercises(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.SearchExercisesRequest],
-) (*connect.Response[exercisemsg.SearchExercisesResponse], error) {
-	res, err := c.server.SearchExercises(ctx, req.Msg)
+	req *exercisemsg.SearchExercisesRequest,
+) (*exercisemsg.SearchExercisesResponse, error) {
+	res, err := c.server.SearchExercises(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetCatalogMetadata(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetCatalogMetadataRequest],
-) (*connect.Response[exercisemsg.GetCatalogMetadataResponse], error) {
-	res, err := c.server.GetCatalogMetadata(ctx, req.Msg)
+	req *exercisemsg.GetCatalogMetadataRequest,
+) (*exercisemsg.GetCatalogMetadataResponse, error) {
+	res, err := c.server.GetCatalogMetadata(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetExerciseRequest],
-) (*connect.Response[exercisemsg.GetExerciseResponse], error) {
-	res, err := c.server.GetExercise(ctx, req.Msg)
+	req *exercisemsg.GetExerciseRequest,
+) (*exercisemsg.GetExerciseResponse, error) {
+	res, err := c.server.GetExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetRandomExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetRandomExerciseRequest],
-) (*connect.Response[exercisemsg.GetRandomExerciseResponse], error) {
-	res, err := c.server.GetRandomExercise(ctx, req.Msg)
+	req *exercisemsg.GetRandomExerciseRequest,
+) (*exercisemsg.GetRandomExerciseResponse, error) {
+	res, err := c.server.GetRandomExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) CreateExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.CreateExerciseRequest],
-) (*connect.Response[exercisemsg.CreateExerciseResponse], error) {
-	res, err := c.server.CreateExercise(ctx, req.Msg)
+	req *exercisemsg.CreateExerciseRequest,
+) (*exercisemsg.CreateExerciseResponse, error) {
+	res, err := c.server.CreateExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) UpdateExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.UpdateExerciseRequest],
-) (*connect.Response[exercisemsg.UpdateExerciseResponse], error) {
-	res, err := c.server.UpdateExercise(ctx, req.Msg)
+	req *exercisemsg.UpdateExerciseRequest,
+) (*exercisemsg.UpdateExerciseResponse, error) {
+	res, err := c.server.UpdateExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) SubmitExerciseForApproval(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.SubmitExerciseForApprovalRequest],
-) (*connect.Response[exercisemsg.SubmitExerciseForApprovalResponse], error) {
-	res, err := c.server.SubmitExerciseForApproval(ctx, req.Msg)
+	req *exercisemsg.SubmitExerciseForApprovalRequest,
+) (*exercisemsg.SubmitExerciseForApprovalResponse, error) {
+	res, err := c.server.SubmitExerciseForApproval(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) ApproveExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.ApproveExerciseRequest],
-) (*connect.Response[exercisemsg.ApproveExerciseResponse], error) {
-	res, err := c.server.ApproveExercise(ctx, req.Msg)
+	req *exercisemsg.ApproveExerciseRequest,
+) (*exercisemsg.ApproveExerciseResponse, error) {
+	res, err := c.server.ApproveExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) DeleteExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.DeleteExerciseRequest],
-) (*connect.Response[exercisemsg.DeleteExerciseResponse], error) {
-	res, err := c.server.DeleteExercise(ctx, req.Msg)
+	req *exercisemsg.DeleteExerciseRequest,
+) (*exercisemsg.DeleteExerciseResponse, error) {
+	res, err := c.server.DeleteExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) RestoreExercise(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.RestoreExerciseRequest],
-) (*connect.Response[exercisemsg.RestoreExerciseResponse], error) {
-	res, err := c.server.RestoreExercise(ctx, req.Msg)
+	req *exercisemsg.RestoreExerciseRequest,
+) (*exercisemsg.RestoreExerciseResponse, error) {
+	res, err := c.server.RestoreExercise(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) CreateBodyPart(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.CreateBodyPartRequest],
-) (*connect.Response[exercisemsg.CreateBodyPartResponse], error) {
-	res, err := c.server.CreateBodyPart(ctx, req.Msg)
+	req *exercisemsg.CreateBodyPartRequest,
+) (*exercisemsg.CreateBodyPartResponse, error) {
+	res, err := c.server.CreateBodyPart(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetBodyPart(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetBodyPartRequest],
-) (*connect.Response[exercisemsg.GetBodyPartResponse], error) {
-	res, err := c.server.GetBodyPart(ctx, req.Msg)
+	req *exercisemsg.GetBodyPartRequest,
+) (*exercisemsg.GetBodyPartResponse, error) {
+	res, err := c.server.GetBodyPart(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) ListBodyParts(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.ListBodyPartsRequest],
-) (*connect.Response[exercisemsg.ListBodyPartsResponse], error) {
-	res, err := c.server.ListBodyParts(ctx, req.Msg)
+	req *exercisemsg.ListBodyPartsRequest,
+) (*exercisemsg.ListBodyPartsResponse, error) {
+	res, err := c.server.ListBodyParts(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) UpdateBodyPart(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.UpdateBodyPartRequest],
-) (*connect.Response[exercisemsg.UpdateBodyPartResponse], error) {
-	res, err := c.server.UpdateBodyPart(ctx, req.Msg)
+	req *exercisemsg.UpdateBodyPartRequest,
+) (*exercisemsg.UpdateBodyPartResponse, error) {
+	res, err := c.server.UpdateBodyPart(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) DeleteBodyPart(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.DeleteBodyPartRequest],
-) (*connect.Response[exercisemsg.DeleteBodyPartResponse], error) {
-	res, err := c.server.DeleteBodyPart(ctx, req.Msg)
+	req *exercisemsg.DeleteBodyPartRequest,
+) (*exercisemsg.DeleteBodyPartResponse, error) {
+	res, err := c.server.DeleteBodyPart(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) CreateEquipment(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.CreateEquipmentRequest],
-) (*connect.Response[exercisemsg.CreateEquipmentResponse], error) {
-	res, err := c.server.CreateEquipment(ctx, req.Msg)
+	req *exercisemsg.CreateEquipmentRequest,
+) (*exercisemsg.CreateEquipmentResponse, error) {
+	res, err := c.server.CreateEquipment(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetEquipment(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetEquipmentRequest],
-) (*connect.Response[exercisemsg.GetEquipmentResponse], error) {
-	res, err := c.server.GetEquipment(ctx, req.Msg)
+	req *exercisemsg.GetEquipmentRequest,
+) (*exercisemsg.GetEquipmentResponse, error) {
+	res, err := c.server.GetEquipment(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) ListEquipments(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.ListEquipmentsRequest],
-) (*connect.Response[exercisemsg.ListEquipmentsResponse], error) {
-	res, err := c.server.ListEquipments(ctx, req.Msg)
+	req *exercisemsg.ListEquipmentsRequest,
+) (*exercisemsg.ListEquipmentsResponse, error) {
+	res, err := c.server.ListEquipments(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) UpdateEquipment(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.UpdateEquipmentRequest],
-) (*connect.Response[exercisemsg.UpdateEquipmentResponse], error) {
-	res, err := c.server.UpdateEquipment(ctx, req.Msg)
+	req *exercisemsg.UpdateEquipmentRequest,
+) (*exercisemsg.UpdateEquipmentResponse, error) {
+	res, err := c.server.UpdateEquipment(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) DeleteEquipment(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.DeleteEquipmentRequest],
-) (*connect.Response[exercisemsg.DeleteEquipmentResponse], error) {
-	res, err := c.server.DeleteEquipment(ctx, req.Msg)
+	req *exercisemsg.DeleteEquipmentRequest,
+) (*exercisemsg.DeleteEquipmentResponse, error) {
+	res, err := c.server.DeleteEquipment(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) CreateMuscle(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.CreateMuscleRequest],
-) (*connect.Response[exercisemsg.CreateMuscleResponse], error) {
-	res, err := c.server.CreateMuscle(ctx, req.Msg)
+	req *exercisemsg.CreateMuscleRequest,
+) (*exercisemsg.CreateMuscleResponse, error) {
+	res, err := c.server.CreateMuscle(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetMuscle(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetMuscleRequest],
-) (*connect.Response[exercisemsg.GetMuscleResponse], error) {
-	res, err := c.server.GetMuscle(ctx, req.Msg)
+	req *exercisemsg.GetMuscleRequest,
+) (*exercisemsg.GetMuscleResponse, error) {
+	res, err := c.server.GetMuscle(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) ListMuscles(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.ListMusclesRequest],
-) (*connect.Response[exercisemsg.ListMusclesResponse], error) {
-	res, err := c.server.ListMuscles(ctx, req.Msg)
+	req *exercisemsg.ListMusclesRequest,
+) (*exercisemsg.ListMusclesResponse, error) {
+	res, err := c.server.ListMuscles(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) UpdateMuscle(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.UpdateMuscleRequest],
-) (*connect.Response[exercisemsg.UpdateMuscleResponse], error) {
-	res, err := c.server.UpdateMuscle(ctx, req.Msg)
+	req *exercisemsg.UpdateMuscleRequest,
+) (*exercisemsg.UpdateMuscleResponse, error) {
+	res, err := c.server.UpdateMuscle(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) DeleteMuscle(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.DeleteMuscleRequest],
-) (*connect.Response[exercisemsg.DeleteMuscleResponse], error) {
-	res, err := c.server.DeleteMuscle(ctx, req.Msg)
+	req *exercisemsg.DeleteMuscleRequest,
+) (*exercisemsg.DeleteMuscleResponse, error) {
+	res, err := c.server.DeleteMuscle(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) CreateTag(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.CreateTagRequest],
-) (*connect.Response[exercisemsg.CreateTagResponse], error) {
-	res, err := c.server.CreateTag(ctx, req.Msg)
+	req *exercisemsg.CreateTagRequest,
+) (*exercisemsg.CreateTagResponse, error) {
+	res, err := c.server.CreateTag(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) GetTag(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.GetTagRequest],
-) (*connect.Response[exercisemsg.GetTagResponse], error) {
-	res, err := c.server.GetTag(ctx, req.Msg)
+	req *exercisemsg.GetTagRequest,
+) (*exercisemsg.GetTagResponse, error) {
+	res, err := c.server.GetTag(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) ListTags(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.ListTagsRequest],
-) (*connect.Response[exercisemsg.ListTagsResponse], error) {
-	res, err := c.server.ListTags(ctx, req.Msg)
+	req *exercisemsg.ListTagsRequest,
+) (*exercisemsg.ListTagsResponse, error) {
+	res, err := c.server.ListTags(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) UpdateTag(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.UpdateTagRequest],
-) (*connect.Response[exercisemsg.UpdateTagResponse], error) {
-	res, err := c.server.UpdateTag(ctx, req.Msg)
+	req *exercisemsg.UpdateTagRequest,
+) (*exercisemsg.UpdateTagResponse, error) {
+	res, err := c.server.UpdateTag(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectExerciseHandler) DeleteTag(
 	ctx context.Context,
-	req *connect.Request[exercisemsg.DeleteTagRequest],
-) (*connect.Response[exercisemsg.DeleteTagResponse], error) {
-	res, err := c.server.DeleteTag(ctx, req.Msg)
+	req *exercisemsg.DeleteTagRequest,
+) (*exercisemsg.DeleteTagResponse, error) {
+	res, err := c.server.DeleteTag(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }

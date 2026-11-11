@@ -5,13 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/service/socialv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
@@ -195,8 +194,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	return grpcHandler, shutdown, nil
 }
 
-func RegisterConnectHandler(mux *http.ServeMux, handler *socialGRPC.GRPCHandler, opts ...connect.HandlerOption) string {
-	path, connectHandler := socialv1serviceconnect.NewSocialServiceHandler(handler, opts...)
-	mux.Handle(path, connectHandler)
-	return path
+// RegisterConnectHandler registers the ConnectRPC handler for the Social module on a connect.Server.
+func RegisterConnectHandler(server *connect.Server, handler *socialGRPC.GRPCHandler) string {
+	socialv1serviceconnect.RegisterSocialServiceHandler(server, handler)
+	return "/" + socialv1serviceconnect.SocialServiceName + "/"
 }

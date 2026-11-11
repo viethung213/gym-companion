@@ -7,7 +7,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
@@ -422,11 +421,11 @@ func TestGRPCHandler_Endpoints(t *testing.T) {
 
 		// ConnectRPC adapter coverage
 		connectHandler := grpc.NewConnectProfileHandler(handler)
-		cRes, err := connectHandler.UpdateIdentity(ctx, connect.NewRequest(&profilev1message.UpdateIdentityRequest{
+		cRes, err := connectHandler.UpdateIdentity(ctx, &profilev1message.UpdateIdentityRequest{
 			FullName: &name,
-		}))
+		})
 		require.NoError(t, err)
-		assert.Equal(t, "grpc-user-1", cRes.Msg.GetUserId())
-		assert.Equal(t, name, cRes.Msg.GetFullName())
+		assert.Equal(t, "grpc-user-1", cRes.GetUserId())
+		assert.Equal(t, name, cRes.GetFullName())
 	})
 }

@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
@@ -28,7 +29,8 @@ func NewConnectExerciseCatalogReader(gatewayURL, internalSecret string, httpClie
 	if httpClient == nil {
 		httpClient = newDefaultHTTPClient()
 	}
-	client := exercisev1serviceconnect.NewExerciseServiceClient(httpClient, gatewayURL)
+	transport := connecthttp.NewTransport(httpClient, gatewayURL)
+	client := exercisev1serviceconnect.NewExerciseServiceClient(connect.NewClient(transport))
 	return &ConnectExerciseCatalogReader{
 		client:         client,
 		internalSecret: internalSecret,
@@ -69,15 +71,16 @@ func (c *ConnectExerciseCatalogReader) SearchByFilter(ctx context.Context, filte
 		reqMsg.Limit = 100
 	}
 
-	req := connect.NewRequest(reqMsg)
-	req.Header().Set(middleware.HeaderInternalToken, tokenStr)
+	req := reqMsg
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
 	res, err := c.client.SearchExercises(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gateway search exercises: %w", err)
 	}
 
-	items := res.Msg.GetExercises()
+	items := res.GetExercises()
 	exercises := make([]port.Exercise, 0, len(items))
 
 	for _, item := range items {
@@ -118,8 +121,9 @@ func (c *ConnectExerciseCatalogReader) GetByID(ctx context.Context, exerciseID s
 		return port.Exercise{}, fmt.Errorf("generate internal token: %w", err)
 	}
 
-	req := connect.NewRequest(&exercisemsg.GetExerciseRequest{Id: exerciseID})
-	req.Header().Set(middleware.HeaderInternalToken, tokenStr)
+	req := &exercisemsg.GetExerciseRequest{Id: exerciseID}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
 	res, err := c.client.GetExercise(ctx, req)
 	if err != nil {
@@ -129,11 +133,11 @@ func (c *ConnectExerciseCatalogReader) GetByID(ctx context.Context, exerciseID s
 		return port.Exercise{}, fmt.Errorf("gateway get exercise by id %s: %w", exerciseID, err)
 	}
 
-	if res.Msg.GetExercise() == nil {
+	if res.GetExercise() == nil {
 		return port.Exercise{}, fmt.Errorf("%w: %s", port.ErrExerciseNotFound, exerciseID)
 	}
 
-	return mapExerciseInfoToPort(res.Msg.GetExercise()), nil
+	return mapExerciseInfoToPort(res.GetExercise()), nil
 }
 
 func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {

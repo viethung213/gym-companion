@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	profilev1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service"
@@ -446,99 +445,99 @@ func NewConnectProfileHandler(grpcHandler *GRPCHandler) profilev1serviceconnect.
 
 func (c *ConnectProfileHandler) SaveHealthProfile(
 	ctx context.Context,
-	req *connect.Request[profilev1message.SaveHealthProfileRequest],
-) (*connect.Response[profilev1message.SaveHealthProfileResponse], error) {
-	res, err := c.grpcHandler.SaveHealthProfile(ctx, req.Msg)
+	req *profilev1message.SaveHealthProfileRequest,
+) (*profilev1message.SaveHealthProfileResponse, error) {
+	res, err := c.grpcHandler.SaveHealthProfile(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) GetProfile(
 	ctx context.Context,
-	req *connect.Request[profilev1message.GetProfileRequest],
-) (*connect.Response[profilev1message.GetProfileResponse], error) {
-	res, err := c.grpcHandler.GetProfile(ctx, req.Msg)
+	req *profilev1message.GetProfileRequest,
+) (*profilev1message.GetProfileResponse, error) {
+	res, err := c.grpcHandler.GetProfile(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) UpdateProfile(
 	ctx context.Context,
-	req *connect.Request[profilev1message.UpdateProfileRequest],
-) (*connect.Response[profilev1message.UpdateProfileResponse], error) {
-	res, err := c.grpcHandler.UpdateProfile(ctx, req.Msg)
+	req *profilev1message.UpdateProfileRequest,
+) (*profilev1message.UpdateProfileResponse, error) {
+	res, err := c.grpcHandler.UpdateProfile(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) UpdateIdentity(
 	ctx context.Context,
-	req *connect.Request[profilev1message.UpdateIdentityRequest],
-) (*connect.Response[profilev1message.UpdateIdentityResponse], error) {
-	res, err := c.grpcHandler.UpdateIdentity(ctx, req.Msg)
+	req *profilev1message.UpdateIdentityRequest,
+) (*profilev1message.UpdateIdentityResponse, error) {
+	res, err := c.grpcHandler.UpdateIdentity(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) LogPeriodicMetrics(
 	ctx context.Context,
-	req *connect.Request[profilev1message.LogPeriodicMetricsRequest],
-) (*connect.Response[profilev1message.LogPeriodicMetricsResponse], error) {
-	res, err := c.grpcHandler.LogPeriodicMetrics(ctx, req.Msg)
+	req *profilev1message.LogPeriodicMetricsRequest,
+) (*profilev1message.LogPeriodicMetricsResponse, error) {
+	res, err := c.grpcHandler.LogPeriodicMetrics(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) GetBodyMetricsHistory(
 	ctx context.Context,
-	req *connect.Request[profilev1message.GetBodyMetricsHistoryRequest],
-) (*connect.Response[profilev1message.GetBodyMetricsHistoryResponse], error) {
-	res, err := c.grpcHandler.GetBodyMetricsHistory(ctx, req.Msg)
+	req *profilev1message.GetBodyMetricsHistoryRequest,
+) (*profilev1message.GetBodyMetricsHistoryResponse, error) {
+	res, err := c.grpcHandler.GetBodyMetricsHistory(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) ReportInjury(
 	ctx context.Context,
-	req *connect.Request[profilev1message.ReportInjuryRequest],
-) (*connect.Response[profilev1message.ReportInjuryResponse], error) {
-	res, err := c.grpcHandler.ReportInjury(ctx, req.Msg)
+	req *profilev1message.ReportInjuryRequest,
+) (*profilev1message.ReportInjuryResponse, error) {
+	res, err := c.grpcHandler.ReportInjury(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) RecoverInjury(
 	ctx context.Context,
-	req *connect.Request[profilev1message.RecoverInjuryRequest],
-) (*connect.Response[profilev1message.RecoverInjuryResponse], error) {
-	res, err := c.grpcHandler.RecoverInjury(ctx, req.Msg)
+	req *profilev1message.RecoverInjuryRequest,
+) (*profilev1message.RecoverInjuryResponse, error) {
+	res, err := c.grpcHandler.RecoverInjury(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectProfileHandler) GetInjuryHistory(
 	ctx context.Context,
-	req *connect.Request[profilev1message.GetInjuryHistoryRequest],
-) (*connect.Response[profilev1message.GetInjuryHistoryResponse], error) {
-	res, err := c.grpcHandler.GetInjuryHistory(ctx, req.Msg)
+	req *profilev1message.GetInjuryHistoryRequest,
+) (*profilev1message.GetInjuryHistoryResponse, error) {
+	res, err := c.grpcHandler.GetInjuryHistory(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }

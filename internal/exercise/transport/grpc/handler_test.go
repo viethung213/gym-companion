@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
@@ -374,12 +373,12 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 
 	// Test Connect Handler wrapper
 	connectHdlr := NewConnectExerciseHandler(srv)
-	connectResp, err := connectHdlr.GetRandomExercise(ctx, connect.NewRequest(req))
+	connectResp, err := connectHdlr.GetRandomExercise(ctx, req)
 	if err != nil {
 		t.Fatalf("ConnectExerciseHandler.GetRandomExercise failed: %v", err)
 	}
-	if connectResp.Msg.GetExercise().GetId() != "ex-123" {
-		t.Errorf("got connect id %q, want %q", connectResp.Msg.GetExercise().GetId(), "ex-123")
+	if connectResp.GetExercise().GetId() != "ex-123" {
+		t.Errorf("got connect id %q, want %q", connectResp.GetExercise().GetId(), "ex-123")
 	}
 
 	// Test Error case
@@ -455,12 +454,12 @@ func TestSearchExercises_TotalCountAndStatus(t *testing.T) {
 
 	// ConnectRPC wrapper
 	connectHdlr := NewConnectExerciseHandler(srv)
-	cResp, err := connectHdlr.SearchExercises(ctx, connect.NewRequest(req))
+	cResp, err := connectHdlr.SearchExercises(ctx, req)
 	if err != nil {
 		t.Fatalf("ConnectExerciseHandler.SearchExercises failed: %v", err)
 	}
-	if cResp.Msg.GetTotalCount() != 1 {
-		t.Errorf("got connect TotalCount %d, want 1", cResp.Msg.GetTotalCount())
+	if cResp.GetTotalCount() != 1 {
+		t.Errorf("got connect TotalCount %d, want 1", cResp.GetTotalCount())
 	}
 }
 
@@ -517,11 +516,11 @@ func TestRestoreExercise_RPC(t *testing.T) {
 
 	// ConnectRPC wrapper
 	connectHdlr := NewConnectExerciseHandler(srv)
-	cResp, err := connectHdlr.RestoreExercise(adminCtx, connect.NewRequest(req))
+	cResp, err := connectHdlr.RestoreExercise(adminCtx, req)
 	if err != nil {
 		t.Fatalf("Connect.RestoreExercise failed: %v", err)
 	}
-	if cResp.Msg.GetExercise().GetStatus() != exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE {
-		t.Errorf("got connect status %v, want ACTIVE", cResp.Msg.GetExercise().GetStatus())
+	if cResp.GetExercise().GetStatus() != exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE {
+		t.Errorf("got connect status %v, want ACTIVE", cResp.GetExercise().GetStatus())
 	}
 }

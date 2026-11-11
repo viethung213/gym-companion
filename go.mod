@@ -3,7 +3,7 @@ module github.com/viethung213/gym-companion
 go 1.26.5
 
 require (
-	connectrpc.com/connect v1.18.1
+	connectrpc.com/connect/v2 v2.0.2
 	firebase.google.com/go/v4 v4.21.0
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/glebarez/sqlite v1.11.0

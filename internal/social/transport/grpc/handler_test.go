@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	socialv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
@@ -240,64 +239,64 @@ func TestGRPCHandler_FollowAndPost(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// 1. Follow User
-	followReq := connect.NewRequest(&socialv1message.FollowUserRequest{
+	followReq := &socialv1message.FollowUserRequest{
 		FollowingId: "user-2",
-	})
+	}
 	followRes, err := h.FollowUser(authCtx, followReq)
 	if err != nil {
 		t.Fatalf("FollowUser failed: %v", err)
 	}
-	if !followRes.Msg.GetSuccess() {
+	if !followRes.GetSuccess() {
 		t.Errorf("expected follow success")
 	}
 
 	// 2. Create Post
-	postReq := connect.NewRequest(&socialv1message.CreatePostRequest{
+	postReq := &socialv1message.CreatePostRequest{
 		Caption:    "Hello gym buddies!",
 		Visibility: "PUBLIC",
-	})
+	}
 	postRes, err := h.CreatePost(authCtx, postReq)
 	if err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
-	if postRes.Msg.GetItem().GetCaption() != "Hello gym buddies!" {
+	if postRes.GetItem().GetCaption() != "Hello gym buddies!" {
 		t.Errorf("unexpected post caption")
 	}
 
 	// 3. React to post
-	reactReq := connect.NewRequest(&socialv1message.ReactTargetRequest{
-		FeedItemId:   postRes.Msg.GetItem().GetId(),
+	reactReq := &socialv1message.ReactTargetRequest{
+		FeedItemId:   postRes.GetItem().GetId(),
 		ReactionType: socialv1message.ReactionType_REACTION_TYPE_FIRE,
-	})
+	}
 	reactRes, err := h.ReactTarget(authCtx, reactReq)
 	if err != nil {
 		t.Fatalf("ReactTarget failed: %v", err)
 	}
-	if reactRes.Msg.GetCurrentReaction() != "FIRE" {
-		t.Errorf("expected FIRE reaction, got %s", reactRes.Msg.GetCurrentReaction())
+	if reactRes.GetCurrentReaction() != "FIRE" {
+		t.Errorf("expected FIRE reaction, got %s", reactRes.GetCurrentReaction())
 	}
 
 	// 4. Get Social Summary
-	summaryReq := connect.NewRequest(&socialv1message.GetSocialSummaryRequest{
+	summaryReq := &socialv1message.GetSocialSummaryRequest{
 		UserId: "user-1",
-	})
+	}
 	summaryRes, err := h.GetSocialSummary(authCtx, summaryReq)
 	if err != nil {
 		t.Fatalf("GetSocialSummary failed: %v", err)
 	}
-	if summaryRes.Msg.GetPostCount() != 1 {
-		t.Errorf("expected 1 post, got %d", summaryRes.Msg.GetPostCount())
+	if summaryRes.GetPostCount() != 1 {
+		t.Errorf("expected 1 post, got %d", summaryRes.GetPostCount())
 	}
 
 	// 5. Delete Feed Item
-	deleteReq := connect.NewRequest(&socialv1message.DeleteFeedItemRequest{
-		FeedItemId: postRes.Msg.GetItem().GetId(),
-	})
+	deleteReq := &socialv1message.DeleteFeedItemRequest{
+		FeedItemId: postRes.GetItem().GetId(),
+	}
 	delRes, err := h.DeleteFeedItem(authCtx, deleteReq)
 	if err != nil {
 		t.Fatalf("DeleteFeedItem failed: %v", err)
 	}
-	if !delRes.Msg.GetSuccess() {
+	if !delRes.GetSuccess() {
 		t.Errorf("expected delete success")
 	}
 }
@@ -307,7 +306,7 @@ func TestGRPCHandler_UnauthenticatedRejection(t *testing.T) {
 	unauthCtx := context.Background()
 
 	// Calling FollowUser without auth should fail
-	_, err := h.FollowUser(unauthCtx, connect.NewRequest(&socialv1message.FollowUserRequest{FollowingId: "user-2"}))
+	_, err := h.FollowUser(unauthCtx, &socialv1message.FollowUserRequest{FollowingId: "user-2"})
 	if err == nil {
 		t.Errorf("expected unauthenticated error")
 	}
@@ -318,47 +317,47 @@ func TestGRPCHandler_MeEndpoints(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// 1. GetSocialSummary without userId (calls /me/summary)
-	summaryRes, err := h.GetSocialSummary(authCtx, connect.NewRequest(&socialv1message.GetSocialSummaryRequest{}))
+	summaryRes, err := h.GetSocialSummary(authCtx, &socialv1message.GetSocialSummaryRequest{})
 	if err != nil {
 		t.Fatalf("GetSocialSummary without userId failed: %v", err)
 	}
-	if got, want := summaryRes.Msg.GetUserId(), "user-1"; got != want {
+	if got, want := summaryRes.GetUserId(), "user-1"; got != want {
 		t.Errorf("expected userId %s, got %s", want, got)
 	}
-	if got, want := summaryRes.Msg.GetFullName(), "Test User"; got != want {
+	if got, want := summaryRes.GetFullName(), "Test User"; got != want {
 		t.Errorf("expected fullName %s, got %s", want, got)
 	}
-	if summaryRes.Msg.GetAvatarUrl() == "" {
+	if summaryRes.GetAvatarUrl() == "" {
 		t.Errorf("expected non-empty avatarUrl")
 	}
-	if got, want := summaryRes.Msg.GetRole(), "user"; got != want {
+	if got, want := summaryRes.GetRole(), "user"; got != want {
 		t.Errorf("expected role %s, got %s", want, got)
 	}
 
 	// 2. GetFollowers without userId (calls /me/followers)
-	followersRes, err := h.GetFollowers(authCtx, connect.NewRequest(&socialv1message.GetFollowersRequest{}))
+	followersRes, err := h.GetFollowers(authCtx, &socialv1message.GetFollowersRequest{})
 	if err != nil {
 		t.Fatalf("GetFollowers without userId failed: %v", err)
 	}
-	if followersRes.Msg == nil {
+	if followersRes == nil {
 		t.Errorf("expected followers response")
 	}
 
 	// 3. GetFollowing without userId (calls /me/following)
-	followingRes, err := h.GetFollowing(authCtx, connect.NewRequest(&socialv1message.GetFollowingRequest{}))
+	followingRes, err := h.GetFollowing(authCtx, &socialv1message.GetFollowingRequest{})
 	if err != nil {
 		t.Fatalf("GetFollowing without userId failed: %v", err)
 	}
-	if followingRes.Msg == nil {
+	if followingRes == nil {
 		t.Errorf("expected following response")
 	}
 
 	// 4. GetUserProfileFeed without userId (calls /me/feed)
-	feedRes, err := h.GetUserProfileFeed(authCtx, connect.NewRequest(&socialv1message.GetUserProfileFeedRequest{}))
+	feedRes, err := h.GetUserProfileFeed(authCtx, &socialv1message.GetUserProfileFeedRequest{})
 	if err != nil {
 		t.Fatalf("GetUserProfileFeed without userId failed: %v", err)
 	}
-	if feedRes.Msg == nil {
+	if feedRes == nil {
 		t.Errorf("expected profile feed response")
 	}
 }
@@ -368,40 +367,40 @@ func TestGRPCHandler_ListReactions(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// 1. Create Post first
-	postRes, err := h.CreatePost(authCtx, connect.NewRequest(&socialv1message.CreatePostRequest{
+	postRes, err := h.CreatePost(authCtx, &socialv1message.CreatePostRequest{
 		Caption:    "Post with reactions",
 		Visibility: "PUBLIC",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
-	postID := postRes.Msg.GetItem().GetId()
+	postID := postRes.GetItem().GetId()
 
 	// 2. React target
-	_, err = h.ReactTarget(authCtx, connect.NewRequest(&socialv1message.ReactTargetRequest{
+	_, err = h.ReactTarget(authCtx, &socialv1message.ReactTargetRequest{
 		FeedItemId:   postID,
 		ReactionType: socialv1message.ReactionType_REACTION_TYPE_FIRE,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("ReactTarget failed: %v", err)
 	}
 
 	// 3. List reactions
-	res, err := h.ListReactions(context.Background(), connect.NewRequest(&socialv1message.ListReactionsRequest{
+	res, err := h.ListReactions(context.Background(), &socialv1message.ListReactionsRequest{
 		FeedItemId: postID,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("ListReactions failed: %v", err)
 	}
 
-	if len(res.Msg.GetReactions()) != 1 {
-		t.Fatalf("expected 1 reaction, got %d", len(res.Msg.GetReactions()))
+	if len(res.GetReactions()) != 1 {
+		t.Fatalf("expected 1 reaction, got %d", len(res.GetReactions()))
 	}
-	if res.Msg.GetReactions()[0].GetUserId() != "user-1" {
-		t.Errorf("expected user-1, got %s", res.Msg.GetReactions()[0].GetUserId())
+	if res.GetReactions()[0].GetUserId() != "user-1" {
+		t.Errorf("expected user-1, got %s", res.GetReactions()[0].GetUserId())
 	}
-	if res.Msg.GetReactions()[0].GetReactionType() != socialv1message.ReactionType_REACTION_TYPE_FIRE {
-		t.Errorf("expected FIRE, got %v", res.Msg.GetReactions()[0].GetReactionType())
+	if res.GetReactions()[0].GetReactionType() != socialv1message.ReactionType_REACTION_TYPE_FIRE {
+		t.Errorf("expected FIRE, got %v", res.GetReactions()[0].GetReactionType())
 	}
 }
 
@@ -410,21 +409,21 @@ func TestGRPCHandler_UnfollowUser(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// Follow first
-	_, err := h.FollowUser(authCtx, connect.NewRequest(&socialv1message.FollowUserRequest{
+	_, err := h.FollowUser(authCtx, &socialv1message.FollowUserRequest{
 		FollowingId: "user-2",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("FollowUser failed: %v", err)
 	}
 
 	// Unfollow
-	res, err := h.UnfollowUser(authCtx, connect.NewRequest(&socialv1message.UnfollowUserRequest{
+	res, err := h.UnfollowUser(authCtx, &socialv1message.UnfollowUserRequest{
 		FollowingId: "user-2",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("UnfollowUser failed: %v", err)
 	}
-	if !res.Msg.GetSuccess() {
+	if !res.GetSuccess() {
 		t.Errorf("expected unfollow success true")
 	}
 }
@@ -434,47 +433,47 @@ func TestGRPCHandler_Comments(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// 1. Create Post
-	postRes, err := h.CreatePost(authCtx, connect.NewRequest(&socialv1message.CreatePostRequest{
+	postRes, err := h.CreatePost(authCtx, &socialv1message.CreatePostRequest{
 		Caption: "Comment test post",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
-	postID := postRes.Msg.GetItem().GetId()
+	postID := postRes.GetItem().GetId()
 
 	// 2. Add comment
-	commentRes, err := h.AddComment(authCtx, connect.NewRequest(&socialv1message.AddCommentRequest{
+	commentRes, err := h.AddComment(authCtx, &socialv1message.AddCommentRequest{
 		FeedItemId: postID,
 		Content:    "Nice lift!",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("AddComment failed: %v", err)
 	}
-	if commentRes.Msg.GetComment().GetContent() != "Nice lift!" {
-		t.Errorf("expected content 'Nice lift!', got '%s'", commentRes.Msg.GetComment().GetContent())
+	if commentRes.GetComment().GetContent() != "Nice lift!" {
+		t.Errorf("expected content 'Nice lift!', got '%s'", commentRes.GetComment().GetContent())
 	}
-	commentID := commentRes.Msg.GetComment().GetId()
+	commentID := commentRes.GetComment().GetId()
 
 	// 3. List comments
-	listRes, err := h.ListComments(authCtx, connect.NewRequest(&socialv1message.ListCommentsRequest{
+	listRes, err := h.ListComments(authCtx, &socialv1message.ListCommentsRequest{
 		FeedItemId: postID,
 		PageSize:   10,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("ListComments failed: %v", err)
 	}
-	if len(listRes.Msg.GetComments()) != 1 {
-		t.Fatalf("expected 1 comment, got %d", len(listRes.Msg.GetComments()))
+	if len(listRes.GetComments()) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(listRes.GetComments()))
 	}
 
 	// 4. Delete comment
-	delRes, err := h.DeleteComment(authCtx, connect.NewRequest(&socialv1message.DeleteCommentRequest{
+	delRes, err := h.DeleteComment(authCtx, &socialv1message.DeleteCommentRequest{
 		CommentId: commentID,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("DeleteComment failed: %v", err)
 	}
-	if !delRes.Msg.GetSuccess() {
+	if !delRes.GetSuccess() {
 		t.Errorf("expected delete comment success true")
 	}
 }
@@ -483,13 +482,13 @@ func TestGRPCHandler_ActivityFeed(t *testing.T) {
 	h := setupTestHandler()
 	authCtx := contextWithUser("user-1")
 
-	feedRes, err := h.GetActivityFeed(authCtx, connect.NewRequest(&socialv1message.GetActivityFeedRequest{
+	feedRes, err := h.GetActivityFeed(authCtx, &socialv1message.GetActivityFeedRequest{
 		PageSize: 10,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetActivityFeed failed: %v", err)
 	}
-	if feedRes.Msg == nil {
+	if feedRes == nil {
 		t.Errorf("expected non-nil response")
 	}
 }
@@ -499,22 +498,22 @@ func TestGRPCHandler_DeleteFeedItem(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// 1. Create Post
-	postRes, err := h.CreatePost(authCtx, connect.NewRequest(&socialv1message.CreatePostRequest{
+	postRes, err := h.CreatePost(authCtx, &socialv1message.CreatePostRequest{
 		Caption: "Post to be deleted",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
-	postID := postRes.Msg.GetItem().GetId()
+	postID := postRes.GetItem().GetId()
 
 	// 2. Delete Feed Item
-	delRes, err := h.DeleteFeedItem(authCtx, connect.NewRequest(&socialv1message.DeleteFeedItemRequest{
+	delRes, err := h.DeleteFeedItem(authCtx, &socialv1message.DeleteFeedItemRequest{
 		FeedItemId: postID,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("DeleteFeedItem failed: %v", err)
 	}
-	if !delRes.Msg.GetSuccess() {
+	if !delRes.GetSuccess() {
 		t.Errorf("expected success true")
 	}
 }
@@ -524,22 +523,22 @@ func TestGRPCHandler_GetFollowing(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// Follow user-2
-	_, err := h.FollowUser(authCtx, connect.NewRequest(&socialv1message.FollowUserRequest{
+	_, err := h.FollowUser(authCtx, &socialv1message.FollowUserRequest{
 		FollowingId: "user-2",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("FollowUser failed: %v", err)
 	}
 
 	// Get following with userId specified
-	res, err := h.GetFollowing(authCtx, connect.NewRequest(&socialv1message.GetFollowingRequest{
+	res, err := h.GetFollowing(authCtx, &socialv1message.GetFollowingRequest{
 		UserId:   "user-1",
 		PageSize: 10,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetFollowing failed: %v", err)
 	}
-	if res.Msg == nil {
+	if res == nil {
 		t.Errorf("expected non-nil response")
 	}
 }
@@ -549,42 +548,42 @@ func TestGRPCHandler_UnauthenticatedCases(t *testing.T) {
 	noAuthCtx := context.Background()
 
 	// FollowUser unauthenticated
-	if _, err := h.FollowUser(noAuthCtx, connect.NewRequest(&socialv1message.FollowUserRequest{})); err == nil {
+	if _, err := h.FollowUser(noAuthCtx, &socialv1message.FollowUserRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for FollowUser")
 	}
 
 	// UnfollowUser unauthenticated
-	if _, err := h.UnfollowUser(noAuthCtx, connect.NewRequest(&socialv1message.UnfollowUserRequest{})); err == nil {
+	if _, err := h.UnfollowUser(noAuthCtx, &socialv1message.UnfollowUserRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for UnfollowUser")
 	}
 
 	// CreatePost unauthenticated
-	if _, err := h.CreatePost(noAuthCtx, connect.NewRequest(&socialv1message.CreatePostRequest{})); err == nil {
+	if _, err := h.CreatePost(noAuthCtx, &socialv1message.CreatePostRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for CreatePost")
 	}
 
 	// DeleteFeedItem unauthenticated
-	if _, err := h.DeleteFeedItem(noAuthCtx, connect.NewRequest(&socialv1message.DeleteFeedItemRequest{})); err == nil {
+	if _, err := h.DeleteFeedItem(noAuthCtx, &socialv1message.DeleteFeedItemRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for DeleteFeedItem")
 	}
 
 	// AddComment unauthenticated
-	if _, err := h.AddComment(noAuthCtx, connect.NewRequest(&socialv1message.AddCommentRequest{})); err == nil {
+	if _, err := h.AddComment(noAuthCtx, &socialv1message.AddCommentRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for AddComment")
 	}
 
 	// DeleteComment unauthenticated
-	if _, err := h.DeleteComment(noAuthCtx, connect.NewRequest(&socialv1message.DeleteCommentRequest{})); err == nil {
+	if _, err := h.DeleteComment(noAuthCtx, &socialv1message.DeleteCommentRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for DeleteComment")
 	}
 
 	// ReactTarget unauthenticated
-	if _, err := h.ReactTarget(noAuthCtx, connect.NewRequest(&socialv1message.ReactTargetRequest{})); err == nil {
+	if _, err := h.ReactTarget(noAuthCtx, &socialv1message.ReactTargetRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for ReactTarget")
 	}
 
 	// GetActivityFeed unauthenticated
-	if _, err := h.GetActivityFeed(noAuthCtx, connect.NewRequest(&socialv1message.GetActivityFeedRequest{})); err == nil {
+	if _, err := h.GetActivityFeed(noAuthCtx, &socialv1message.GetActivityFeedRequest{}); err == nil {
 		t.Errorf("expected unauthenticated error for GetActivityFeed")
 	}
 }
@@ -593,18 +592,18 @@ func TestGRPCHandler_SearchUsers(t *testing.T) {
 	h := setupTestHandler()
 	authCtx := contextWithUser("user-1")
 
-	res, err := h.SearchUsers(authCtx, connect.NewRequest(&socialv1message.SearchUsersRequest{
+	res, err := h.SearchUsers(authCtx, &socialv1message.SearchUsersRequest{
 		Query:    "Searched",
 		PageSize: 10,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("SearchUsers failed: %v", err)
 	}
-	if len(res.Msg.GetUsers()) != 1 {
-		t.Fatalf("expected 1 user, got %d", len(res.Msg.GetUsers()))
+	if len(res.GetUsers()) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(res.GetUsers()))
 	}
-	if res.Msg.GetUsers()[0].GetUserId() != "u-searched-1" {
-		t.Errorf("expected user id u-searched-1, got %s", res.Msg.GetUsers()[0].GetUserId())
+	if res.GetUsers()[0].GetUserId() != "u-searched-1" {
+		t.Errorf("expected user id u-searched-1, got %s", res.GetUsers()[0].GetUserId())
 	}
 }
 
@@ -613,26 +612,26 @@ func TestGRPCHandler_SearchPosts(t *testing.T) {
 	authCtx := contextWithUser("user-1")
 
 	// 1. Create a post
-	_, err := h.CreatePost(authCtx, connect.NewRequest(&socialv1message.CreatePostRequest{
+	_, err := h.CreatePost(authCtx, &socialv1message.CreatePostRequest{
 		Caption:    "Testing squat search capability",
 		Visibility: "PUBLIC",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
 
 	// 2. Search for squat
-	res, err := h.SearchPosts(authCtx, connect.NewRequest(&socialv1message.SearchPostsRequest{
+	res, err := h.SearchPosts(authCtx, &socialv1message.SearchPostsRequest{
 		Query:    "squat",
 		PageSize: 10,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("SearchPosts failed: %v", err)
 	}
-	if len(res.Msg.GetItems()) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(res.Msg.GetItems()))
+	if len(res.GetItems()) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(res.GetItems()))
 	}
-	if res.Msg.GetItems()[0].GetCaption() != "Testing squat search capability" {
-		t.Errorf("caption mismatch: %s", res.Msg.GetItems()[0].GetCaption())
+	if res.GetItems()[0].GetCaption() != "Testing squat search capability" {
+		t.Errorf("caption mismatch: %s", res.GetItems()[0].GetCaption())
 	}
 }

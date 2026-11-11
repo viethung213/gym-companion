@@ -5,13 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
@@ -242,9 +241,8 @@ func (a prCoordinatorAdapter) Handle(ctx context.Context, cmd command.ProcessPer
 	return a.coordinator.IngestPersonalRecord(ctx, cmd)
 }
 
-// RegisterConnectHandler mounts the Gamification service on the provided HTTP multiplexer.
-func RegisterConnectHandler(mux *http.ServeMux, handler *gamificationGRPC.Handler, opts ...connect.HandlerOption) string {
-	path, connectHandler := gamificationv1serviceconnect.NewGamificationServiceHandler(handler, opts...)
-	mux.Handle(path, connectHandler)
-	return path
+// RegisterConnectHandler registers the Gamification service on the connect.Server.
+func RegisterConnectHandler(server *connect.Server, handler *gamificationGRPC.Handler) string {
+	gamificationv1serviceconnect.RegisterGamificationServiceHandler(server, handler)
+	return "/" + gamificationv1serviceconnect.GamificationServiceName + "/"
 }

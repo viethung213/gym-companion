@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
@@ -513,88 +512,88 @@ func NewConnectCoachingHandler(server *Server) coachingv1serviceconnect.Coaching
 
 func (c *ConnectCoachingHandler) InitiateRoadmap(
 	ctx context.Context,
-	req *connect.Request[pbmsg.InitiateRoadmapRequest],
-) (*connect.Response[pbmsg.InitiateRoadmapResponse], error) {
-	res, err := c.server.InitiateRoadmap(ctx, req.Msg)
+	req *pbmsg.InitiateRoadmapRequest,
+) (*pbmsg.InitiateRoadmapResponse, error) {
+	res, err := c.server.InitiateRoadmap(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) ListRoadmaps(
 	ctx context.Context,
-	req *connect.Request[pbmsg.ListRoadmapsRequest],
-) (*connect.Response[pbmsg.ListRoadmapsResponse], error) {
-	res, err := c.server.ListRoadmaps(ctx, req.Msg)
+	req *pbmsg.ListRoadmapsRequest,
+) (*pbmsg.ListRoadmapsResponse, error) {
+	res, err := c.server.ListRoadmaps(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) GetRoadmap(
 	ctx context.Context,
-	req *connect.Request[pbmsg.GetRoadmapRequest],
-) (*connect.Response[pbmsg.GetRoadmapResponse], error) {
-	res, err := c.server.GetRoadmap(ctx, req.Msg)
+	req *pbmsg.GetRoadmapRequest,
+) (*pbmsg.GetRoadmapResponse, error) {
+	res, err := c.server.GetRoadmap(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) GetActiveRoadmap(
 	ctx context.Context,
-	req *connect.Request[pbmsg.GetActiveRoadmapRequest],
-) (*connect.Response[pbmsg.GetActiveRoadmapResponse], error) {
-	res, err := c.server.GetActiveRoadmap(ctx, req.Msg)
+	req *pbmsg.GetActiveRoadmapRequest,
+) (*pbmsg.GetActiveRoadmapResponse, error) {
+	res, err := c.server.GetActiveRoadmap(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) GetSessionPlan(
 	ctx context.Context,
-	req *connect.Request[pbmsg.GetSessionPlanRequest],
-) (*connect.Response[pbmsg.GetSessionPlanResponse], error) {
-	res, err := c.server.GetSessionPlan(ctx, req.Msg)
+	req *pbmsg.GetSessionPlanRequest,
+) (*pbmsg.GetSessionPlanResponse, error) {
+	res, err := c.server.GetSessionPlan(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) RegenerateSchedule(
 	ctx context.Context,
-	req *connect.Request[pbmsg.RegenerateScheduleRequest],
-) (*connect.Response[pbmsg.RegenerateScheduleResponse], error) {
-	res, err := c.server.RegenerateSchedule(ctx, req.Msg)
+	req *pbmsg.RegenerateScheduleRequest,
+) (*pbmsg.RegenerateScheduleResponse, error) {
+	res, err := c.server.RegenerateSchedule(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) CreateAdhocSessionPlan(
 	ctx context.Context,
-	req *connect.Request[pbmsg.CreateAdhocSessionPlanRequest],
-) (*connect.Response[pbmsg.CreateAdhocSessionPlanResponse], error) {
-	res, err := c.server.CreateAdhocSessionPlan(ctx, req.Msg)
+	req *pbmsg.CreateAdhocSessionPlanRequest,
+) (*pbmsg.CreateAdhocSessionPlanResponse, error) {
+	res, err := c.server.CreateAdhocSessionPlan(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectCoachingHandler) SuggestAdHocSession(
 	ctx context.Context,
-	req *connect.Request[pbmsg.SuggestAdHocSessionRequest],
-) (*connect.Response[pbmsg.SuggestAdHocSessionResponse], error) {
-	res, err := c.server.SuggestAdHocSession(ctx, req.Msg)
+	req *pbmsg.SuggestAdHocSessionRequest,
+) (*pbmsg.SuggestAdHocSessionResponse, error) {
+	res, err := c.server.SuggestAdHocSession(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }

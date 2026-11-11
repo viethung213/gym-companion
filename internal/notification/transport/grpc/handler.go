@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	notificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/message"
 	notificationv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service/notificationv1serviceconnect"
@@ -220,66 +219,66 @@ func NewConnectNotificationHandler(grpcHandler *GRPCHandler) notificationv1servi
 
 func (c *ConnectNotificationHandler) SendPushNotification(
 	ctx context.Context,
-	req *connect.Request[notificationv1message.SendPushNotificationRequest],
-) (*connect.Response[notificationv1message.SendPushNotificationResponse], error) {
-	res, err := c.grpcHandler.SendPushNotification(ctx, req.Msg)
+	req *notificationv1message.SendPushNotificationRequest,
+) (*notificationv1message.SendPushNotificationResponse, error) {
+	res, err := c.grpcHandler.SendPushNotification(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectNotificationHandler) RegisterDeviceToken(
 	ctx context.Context,
-	req *connect.Request[notificationv1message.RegisterDeviceTokenRequest],
-) (*connect.Response[notificationv1message.RegisterDeviceTokenResponse], error) {
-	res, err := c.grpcHandler.RegisterDeviceToken(ctx, req.Msg)
+	req *notificationv1message.RegisterDeviceTokenRequest,
+) (*notificationv1message.RegisterDeviceTokenResponse, error) {
+	res, err := c.grpcHandler.RegisterDeviceToken(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectNotificationHandler) GetNotificationSettings(
 	ctx context.Context,
-	req *connect.Request[notificationv1message.GetNotificationSettingsRequest],
-) (*connect.Response[notificationv1message.GetNotificationSettingsResponse], error) {
-	res, err := c.grpcHandler.GetNotificationSettings(ctx, req.Msg)
+	req *notificationv1message.GetNotificationSettingsRequest,
+) (*notificationv1message.GetNotificationSettingsResponse, error) {
+	res, err := c.grpcHandler.GetNotificationSettings(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectNotificationHandler) UpdateNotificationSettings(
 	ctx context.Context,
-	req *connect.Request[notificationv1message.UpdateNotificationSettingsRequest],
-) (*connect.Response[notificationv1message.UpdateNotificationSettingsResponse], error) {
-	res, err := c.grpcHandler.UpdateNotificationSettings(ctx, req.Msg)
+	req *notificationv1message.UpdateNotificationSettingsRequest,
+) (*notificationv1message.UpdateNotificationSettingsResponse, error) {
+	res, err := c.grpcHandler.UpdateNotificationSettings(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectNotificationHandler) ListNotifications(
 	ctx context.Context,
-	req *connect.Request[notificationv1message.ListNotificationsRequest],
-) (*connect.Response[notificationv1message.ListNotificationsResponse], error) {
-	res, err := c.grpcHandler.ListNotifications(ctx, req.Msg)
+	req *notificationv1message.ListNotificationsRequest,
+) (*notificationv1message.ListNotificationsResponse, error) {
+	res, err := c.grpcHandler.ListNotifications(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectNotificationHandler) MarkNotificationAsRead(
 	ctx context.Context,
-	req *connect.Request[notificationv1message.MarkNotificationAsReadRequest],
-) (*connect.Response[notificationv1message.MarkNotificationAsReadResponse], error) {
-	res, err := c.grpcHandler.MarkNotificationAsRead(ctx, req.Msg)
+	req *notificationv1message.MarkNotificationAsReadRequest,
+) (*notificationv1message.MarkNotificationAsReadResponse, error) {
+	res, err := c.grpcHandler.MarkNotificationAsRead(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }

@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	solomatchv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/service/solomatchv1serviceconnect"
 )
@@ -20,52 +19,52 @@ func NewConnectSoloMatchHandler(grpcHandler *Handler) *ConnectSoloMatchHandler {
 
 func (c *ConnectSoloMatchHandler) JoinQueue(
 	ctx context.Context,
-	req *connect.Request[solomatchv1message.JoinQueueRequest],
-	stream *connect.ServerStream[solomatchv1message.JoinQueueResponse],
+	req *solomatchv1message.JoinQueueRequest,
+	stream solomatchv1serviceconnect.SoloMatchServiceJoinQueueServerStream,
 ) error {
-	return c.grpcHandler.handleJoinQueue(ctx, req.Msg, stream.Send)
+	return c.grpcHandler.handleJoinQueue(ctx, req, stream.Send)
 }
 
 func (c *ConnectSoloMatchHandler) CancelQueue(
 	ctx context.Context,
-	req *connect.Request[solomatchv1message.CancelQueueRequest],
-) (*connect.Response[solomatchv1message.CancelQueueResponse], error) {
-	res, err := c.grpcHandler.CancelQueue(ctx, req.Msg)
+	req *solomatchv1message.CancelQueueRequest,
+) (*solomatchv1message.CancelQueueResponse, error) {
+	res, err := c.grpcHandler.CancelQueue(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectSoloMatchHandler) GetActiveMatch(
 	ctx context.Context,
-	req *connect.Request[solomatchv1message.GetActiveMatchRequest],
-) (*connect.Response[solomatchv1message.GetActiveMatchResponse], error) {
-	res, err := c.grpcHandler.GetActiveMatch(ctx, req.Msg)
+	req *solomatchv1message.GetActiveMatchRequest,
+) (*solomatchv1message.GetActiveMatchResponse, error) {
+	res, err := c.grpcHandler.GetActiveMatch(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectSoloMatchHandler) GetMatch(
 	ctx context.Context,
-	req *connect.Request[solomatchv1message.GetMatchRequest],
-) (*connect.Response[solomatchv1message.GetMatchResponse], error) {
-	res, err := c.grpcHandler.GetMatch(ctx, req.Msg)
+	req *solomatchv1message.GetMatchRequest,
+) (*solomatchv1message.GetMatchResponse, error) {
+	res, err := c.grpcHandler.GetMatch(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectSoloMatchHandler) GetMatchHistory(
 	ctx context.Context,
-	req *connect.Request[solomatchv1message.GetMatchHistoryRequest],
-) (*connect.Response[solomatchv1message.GetMatchHistoryResponse], error) {
-	res, err := c.grpcHandler.GetMatchHistory(ctx, req.Msg)
+	req *solomatchv1message.GetMatchHistoryRequest,
+) (*solomatchv1message.GetMatchHistoryResponse, error) {
+	res, err := c.grpcHandler.GetMatchHistory(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }

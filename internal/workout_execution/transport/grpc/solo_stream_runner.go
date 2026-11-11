@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	workoutexecutionv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
+	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
@@ -28,13 +29,10 @@ type soloMatchStreamServer interface {
 	Recv() (*workoutexecutionv1message.StreamSoloMatchTrackingRequest, error)
 }
 
-// connectSoloStreamAdapter adapts a ConnectRPC BidiStream to soloMatchStreamServer.
+// connectSoloStreamAdapter adapts a ConnectRPC ServerStream to soloMatchStreamServer.
 type connectSoloStreamAdapter struct {
 	ctx    context.Context
-	stream *connect.BidiStream[
-		workoutexecutionv1message.StreamSoloMatchTrackingRequest,
-		workoutexecutionv1message.StreamSoloMatchTrackingResponse,
-	]
+	stream workoutexecutionv1serviceconnect.WorkoutExecutionServiceStreamSoloMatchTrackingServerStream
 }
 
 func (a *connectSoloStreamAdapter) Context() context.Context {
@@ -97,35 +95,35 @@ func (grpcStreamErrorFactory) Internal(msg string, err error) error {
 type connectStreamErrorFactory struct{}
 
 func (connectStreamErrorFactory) Unauthenticated(err error) error {
-	return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated stream: %w", err))
+	return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated stream: %w", err).Error())
 }
 
 func (connectStreamErrorFactory) InvalidArgument(msg string, err error) error {
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s: %w", msg, err))
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s: %w", msg, err).Error())
 	}
-	return connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
+	return connect.NewError(connect.CodeInvalidArgument, msg)
 }
 
 func (connectStreamErrorFactory) PermissionDenied(msg string, err error) error {
 	if err != nil {
-		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%s: %w", msg, err))
+		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%s: %w", msg, err).Error())
 	}
-	return connect.NewError(connect.CodePermissionDenied, errors.New(msg))
+	return connect.NewError(connect.CodePermissionDenied, msg)
 }
 
 func (connectStreamErrorFactory) FailedPrecondition(msg string, err error) error {
 	if err != nil {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s: %w", msg, err))
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s: %w", msg, err).Error())
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, errors.New(msg))
+	return connect.NewError(connect.CodeFailedPrecondition, msg)
 }
 
 func (connectStreamErrorFactory) Internal(msg string, err error) error {
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", msg, err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", msg, err).Error())
 	}
-	return connect.NewError(connect.CodeInternal, errors.New(msg))
+	return connect.NewError(connect.CodeInternal, msg)
 }
 
 func mapInitSessionError(err error, errFactory streamErrorFactory) error {

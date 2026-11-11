@@ -3,9 +3,9 @@ package notification_test
 import (
 	"context"
 	"database/sql"
-	"net/http"
 	"testing"
 
+	"connectrpc.com/connect/v2"
 	_ "github.com/glebarez/sqlite"
 	"github.com/viethung213/gym-companion/internal/notification"
 )
@@ -90,8 +90,8 @@ func TestInitializeModule(t *testing.T) {
 			t.Fatal("got nil cleanup, want non-nil")
 		}
 
-		mux := http.NewServeMux()
-		notification.RegisterConnectHandler(mux, grpcHandler)
+		server := connect.NewServer()
+		notification.RegisterConnectHandler(server, grpcHandler)
 
 		cleanup()
 	})

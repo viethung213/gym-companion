@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
 	"github.com/viethung213/gym-companion/internal/auth/application/query"
@@ -251,14 +250,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	return grpcHandler, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handler for the Auth module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handler for the Auth module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcHandler *authGRPC.GRPCHandler,
-	opts ...connect.HandlerOption,
 ) string {
 	connectHandler := authGRPC.NewConnectAuthHandler(grpcHandler)
-	path, handler := authv1serviceconnect.NewAuthServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	authv1serviceconnect.RegisterAuthServiceHandler(server, connectHandler)
+	return "/" + authv1serviceconnect.AuthServiceName + "/"
 }

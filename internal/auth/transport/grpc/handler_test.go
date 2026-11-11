@@ -5,7 +5,6 @@ package grpc
 import (
 	"testing"
 
-	"connectrpc.com/connect"
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
 )
 
@@ -29,9 +28,9 @@ func TestConnectAuthHandler_StructVerification(t *testing.T) {
 	c := &ConnectAuthHandler{grpcHandler: grpcHandler}
 
 	t.Run("nil request payload handling", func(t *testing.T) {
-		req := connect.NewRequest(&authv1message.RefreshTokenRequest{
+		req := &authv1message.RefreshTokenRequest{
 			RefreshToken: "",
-		})
+		}
 		if req == nil {
 			t.Fatal("expected non-nil request")
 		}

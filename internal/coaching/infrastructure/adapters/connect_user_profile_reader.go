@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	profilemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
@@ -30,7 +31,8 @@ func NewConnectUserProfileReader(gatewayURL, internalSecret string, httpClient *
 	if httpClient == nil {
 		httpClient = newDefaultHTTPClient()
 	}
-	client := profilev1serviceconnect.NewProfileServiceClient(httpClient, gatewayURL)
+	transport := connecthttp.NewTransport(httpClient, gatewayURL)
+	client := profilev1serviceconnect.NewProfileServiceClient(connect.NewClient(transport))
 	return &ConnectUserProfileReader{
 		client:         client,
 		internalSecret: internalSecret,
@@ -48,15 +50,16 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 		return port.Profile{}, fmt.Errorf("generate internal token: %w", err)
 	}
 
-	req := connect.NewRequest(&profilemsg.GetProfileRequest{UserId: userID})
-	req.Header().Set(middleware.HeaderInternalToken, tokenStr)
+	req := &profilemsg.GetProfileRequest{UserId: userID}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
 	res, err := c.client.GetProfile(ctx, req)
 	if err != nil {
 		return port.Profile{}, fmt.Errorf("gateway get profile for coaching user %s: %w", userID, err)
 	}
 
-	data := res.Msg
+	data := res
 
 	profile := port.Profile{
 		UserID:   data.GetUserId(),

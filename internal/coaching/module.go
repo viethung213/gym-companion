@@ -5,11 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
@@ -275,17 +274,15 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	return coachingServer, coachAgent, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handler for Coaching module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handler for Coaching module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
-	server *coachingGrpc.Server,
-	opts ...connect.HandlerOption,
+	server *connect.Server,
+	coachingServer *coachingGrpc.Server,
 ) string {
-	if server == nil {
+	if coachingServer == nil {
 		return ""
 	}
-	connectHandler := coachingGrpc.NewConnectCoachingHandler(server)
-	path, handler := coachingv1serviceconnect.NewCoachingServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	connectHandler := coachingGrpc.NewConnectCoachingHandler(coachingServer)
+	coachingv1serviceconnect.RegisterCoachingServiceHandler(server, connectHandler)
+	return "/" + coachingv1serviceconnect.CoachingServiceName + "/"
 }
