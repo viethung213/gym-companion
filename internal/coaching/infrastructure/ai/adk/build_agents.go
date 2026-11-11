@@ -82,9 +82,6 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 
 	coachingCfg := config.LoadConfig()
 	maxGeneratorTokens := int32(coachingCfg.MaxOutputTokens)
-	if maxGeneratorTokens <= 0 {
-		maxGeneratorTokens = 8192
-	}
 	maxReviewerTokens := int32(4096)
 	if maxReviewerTokens > maxGeneratorTokens {
 		maxReviewerTokens = maxGeneratorTokens

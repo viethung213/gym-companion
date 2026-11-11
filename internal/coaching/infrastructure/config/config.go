@@ -76,7 +76,7 @@ func LoadConfig() Config {
 		activeKey = apiKey
 	}
 
-	maxOutputTokens := 3000
+	maxOutputTokens := 16384
 	if val := os.Getenv("AI_MAX_OUTPUT_TOKENS"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
 			maxOutputTokens = parsed
