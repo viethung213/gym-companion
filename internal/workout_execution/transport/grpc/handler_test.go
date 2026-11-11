@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	workoutexecutionv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
@@ -362,16 +361,16 @@ func TestGRPCHandler(t *testing.T) {
 		sessionRepo.session = sessionConnect
 
 		connectHandler := grpc.NewConnectWorkoutExecutionHandler(grpcHandler)
-		connectReq := connect.NewRequest(&workoutexecutionv1message.ShareWorkoutSessionRequest{
+		connectReq := &workoutexecutionv1message.ShareWorkoutSessionRequest{
 			SessionId: "sess-connect",
 			Caption:   "Connect share test",
-		})
+		}
 		connectRes, err := connectHandler.ShareWorkoutSession(ctxUser, connectReq)
 		if err != nil {
 			t.Fatalf("Connect ShareWorkoutSession err = %v, want nil", err)
 		}
-		if connectRes.Msg.GetSessionId() != "sess-connect" || !connectRes.Msg.GetIsShared() {
-			t.Errorf("unexpected connect response: %+v", connectRes.Msg)
+		if connectRes.GetSessionId() != "sess-connect" || !connectRes.GetIsShared() {
+			t.Errorf("unexpected connect response: %+v", connectRes)
 		}
 	})
 

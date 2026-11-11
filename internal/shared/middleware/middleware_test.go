@@ -3,10 +3,9 @@ package middleware
 import (
 	"context"
 	"errors"
-	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -15,15 +14,12 @@ func TestConnectRecoveryInterceptor(t *testing.T) {
 	t.Parallel()
 	interceptor := NewConnectRecoveryInterceptor()
 
-	// 1. Unary recovery
-	unaryPanicHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		panic("unary database crash")
+	// 1. Recovery on panic
+	handler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		panic("database crash")
 	})
 
-	resp, err := unaryPanicHandler(context.Background(), nil)
-	if resp != nil {
-		t.Errorf("expected nil response, got %v", resp)
-	}
+	err := handler(context.Background(), connect.Spec{Procedure: "/test/Panic"}, nil)
 	if err == nil {
 		t.Fatal("expected error from recovered panic, got nil")
 	}
@@ -32,21 +28,12 @@ func TestConnectRecoveryInterceptor(t *testing.T) {
 		t.Errorf("expected connect.CodeInternal, got %v", err)
 	}
 
-	// 2. Unary normal execution
-	unarySuccessHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		return connect.NewResponse(&struct{}{}), nil
-	})
-	resp, err = unarySuccessHandler(context.Background(), nil)
-	if err != nil || resp == nil {
-		t.Fatalf("expected success, got resp=%v, err=%v", resp, err)
-	}
-
-	// 3. Streaming client wrap passthrough
-	dummyClient := interceptor.WrapStreamingClient(func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
+	// 2. Normal execution
+	successHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
 		return nil
 	})
-	if dummyClient(context.Background(), connect.Spec{}) != nil {
-		t.Error("expected nil streaming client")
+	if err := successHandler(context.Background(), connect.Spec{Procedure: "/test/OK"}, nil); err != nil {
+		t.Fatalf("expected success, got err=%v", err)
 	}
 }
 
@@ -54,40 +41,20 @@ func TestConnectLoggingInterceptor(t *testing.T) {
 	t.Parallel()
 	interceptor := NewConnectLoggingInterceptor()
 
-	// 1. Unary logging success and error
-	unaryHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		return connect.NewResponse(&struct{}{}), nil
+	// 1. Logging success
+	handler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return nil
 	})
-	resp, err := unaryHandler(context.Background(), nil)
-	if err != nil || resp == nil {
-		t.Fatalf("expected success response, got resp=%v, err=%v", resp, err)
+	if err := handler(context.Background(), connect.Spec{Procedure: "/test/Logging"}, nil); err != nil {
+		t.Fatalf("expected success, got err=%v", err)
 	}
 
-	unaryErrHandler := interceptor.WrapUnary(func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bad argument"))
+	// 2. Logging error
+	errHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return connect.NewError(connect.CodeInvalidArgument, "bad argument")
 	})
-	_, err = unaryErrHandler(context.Background(), nil)
-	if err == nil {
+	if err := errHandler(context.Background(), connect.Spec{Procedure: "/test/LoggingErr"}, nil); err == nil {
 		t.Fatal("expected error, got nil")
-	}
-
-	// 2. Streaming handler logging
-	conn := &mockStreamingHandlerConn{
-		spec: connect.Spec{Procedure: "/test/LoggingStream"},
-	}
-	streamHandler := interceptor.WrapStreamingHandler(func(_ context.Context, _ connect.StreamingHandlerConn) error {
-		return nil
-	})
-	if err := streamHandler(context.Background(), conn); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-
-	// 3. Streaming client wrap passthrough
-	dummyClient := interceptor.WrapStreamingClient(func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
-		return nil
-	})
-	if dummyClient(context.Background(), connect.Spec{}) != nil {
-		t.Error("expected nil streaming client")
 	}
 }
 
@@ -101,30 +68,35 @@ func TestRequireAuthenticatedAndAdmin(t *testing.T) {
 	}
 
 	// 2. Authenticated non-admin
-	userCtx := context.WithValue(context.Background(), UserIDKey, "user-123")
-	userCtx = context.WithValue(userCtx, UserRoleKey, "Member")
+	userCtx := context.WithValue(context.Background(), UserIDKey, "u123")
+	userCtx = context.WithValue(userCtx, UserRoleKey, "member")
 	actor, err := RequireAuthenticated(userCtx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if actor.UserID != "user-123" || actor.Role != "Member" {
+	if actor.UserID != "u123" || actor.Role != "member" {
 		t.Errorf("unexpected actor: %+v", actor)
 	}
-
-	_, err = RequireAdmin(userCtx)
-	if !errors.Is(err, ErrForbidden) {
-		t.Errorf("expected ErrForbidden for non-admin, got %v", err)
+	if actor.IsAdmin() {
+		t.Error("expected non-admin")
 	}
 
-	// 3. Admin user
-	adminCtx := context.WithValue(context.Background(), UserIDKey, "admin-1")
-	adminCtx = context.WithValue(adminCtx, UserRoleKey, "Admin")
-	adminActor, err := RequireAdmin(adminCtx)
+	if _, err := RequireAdmin(userCtx); !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden for member, got %v", err)
+	}
+
+	// 3. Authenticated admin
+	adminCtx := context.WithValue(context.Background(), UserIDKey, "admin1")
+	adminCtx = context.WithValue(adminCtx, UserRoleKey, "admin")
+	adminActor, err := RequireAuthenticated(adminCtx)
 	if err != nil {
-		t.Fatalf("unexpected error for admin: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if !adminActor.IsAdmin() {
-		t.Errorf("expected actor to be admin")
+		t.Error("expected admin")
+	}
+	if _, err := RequireAdmin(adminCtx); err != nil {
+		t.Errorf("expected nil error for admin, got %v", err)
 	}
 }
 
@@ -137,12 +109,12 @@ func TestToConnectError(t *testing.T) {
 	}
 
 	// 2. Already *connect.Error returns as-is
-	origCErr := connect.NewError(connect.CodeNotFound, errors.New("not found"))
-	if err := ToConnectError(origCErr); err != origCErr {
-		t.Errorf("expected identical connect error, got %v", err)
+	origErr := connect.NewError(connect.CodeNotFound, "user missing")
+	if mapped := ToConnectError(origErr); mapped != origErr {
+		t.Errorf("expected same instance of *connect.Error, got %v", mapped)
 	}
 
-	// 3. gRPC status mapping
+	// 3. Mapping of all gRPC status codes
 	testCases := []struct {
 		grpcCode codes.Code
 		wantCode connect.Code
@@ -203,18 +175,17 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 
 	interceptor := NewConnectErrorMappingInterceptor()
 
-	noopHandler := interceptor.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return nil, nil
+	noopHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return nil
 	})
-	resp, err := noopHandler(context.Background(), nil)
-	if err != nil || resp != nil {
-		t.Errorf("expected nil resp and nil err, got resp=%v, err=%v", resp, err)
+	if err := noopHandler(context.Background(), connect.Spec{Procedure: "/test/Noop"}, nil); err != nil {
+		t.Errorf("expected nil err, got err=%v", err)
 	}
 
-	errorHandler := interceptor.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return nil, status.Error(codes.Unauthenticated, "invalid password")
+	errorHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return status.Error(codes.Unauthenticated, "invalid password")
 	})
-	_, err = errorHandler(context.Background(), nil)
+	err := errorHandler(context.Background(), connect.Spec{Procedure: "/test/AuthErr"}, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -224,66 +195,5 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 	}
 	if cErr.Code() != connect.CodeUnauthenticated {
 		t.Errorf("expected connect.CodeUnauthenticated, got %s", cErr.Code())
-	}
-
-	// Streaming client wrap passthrough
-	dummyClient := interceptor.WrapStreamingClient(func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
-		return nil
-	})
-	if dummyClient(context.Background(), connect.Spec{}) != nil {
-		t.Error("expected nil streaming client")
-	}
-}
-
-type mockStreamingHandlerConn struct {
-	spec        connect.Spec
-	peer        connect.Peer
-	reqHeader   http.Header
-	respHeader  http.Header
-	respTrailer http.Header
-}
-
-func (m *mockStreamingHandlerConn) Spec() connect.Spec           { return m.spec }
-func (m *mockStreamingHandlerConn) Peer() connect.Peer           { return m.peer }
-func (m *mockStreamingHandlerConn) Receive(any) error            { return nil }
-func (m *mockStreamingHandlerConn) RequestHeader() http.Header   { return m.reqHeader }
-func (m *mockStreamingHandlerConn) ResponseHeader() http.Header  { return m.respHeader }
-func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header { return m.respTrailer }
-func (m *mockStreamingHandlerConn) Send(any) error               { return nil }
-
-func TestConnectStreamingRecoveryAndErrorMapping(t *testing.T) {
-	t.Parallel()
-
-	// 1. Recovery
-	recInterceptor := NewConnectRecoveryInterceptor()
-	panicConn := &mockStreamingHandlerConn{
-		spec: connect.Spec{Procedure: "/test/PanicStream"},
-	}
-	panicHandler := recInterceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
-		panic("stream explosion")
-	})
-	err := panicHandler(context.Background(), panicConn)
-	if err == nil {
-		t.Fatal("expected error from recovered panic, got nil")
-	}
-	var cErr *connect.Error
-	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeInternal {
-		t.Fatalf("expected CodeInternal for panic, got %v", err)
-	}
-
-	// 2. Error Mapping
-	errInterceptor := NewConnectErrorMappingInterceptor()
-	grpcErrConn := &mockStreamingHandlerConn{
-		spec: connect.Spec{Procedure: "/test/ErrStream"},
-	}
-	grpcErrHandler := errInterceptor.WrapStreamingHandler(func(ctx context.Context, _ connect.StreamingHandlerConn) error {
-		return status.Error(codes.NotFound, "stream resource missing")
-	})
-	err = grpcErrHandler(context.Background(), grpcErrConn)
-	if err == nil {
-		t.Fatal("expected mapped error, got nil")
-	}
-	if !errors.As(err, &cErr) || cErr.Code() != connect.CodeNotFound {
-		t.Fatalf("expected CodeNotFound, got %v", err)
 	}
 }

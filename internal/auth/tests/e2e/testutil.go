@@ -13,7 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -96,27 +97,28 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 		t.Fatalf("Failed to initialize Auth module: %v", err)
 	}
 
-	testAuthInterceptor := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if userID := req.Header().Get("X-User-Id"); userID != "" {
-				ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
+	testAuthInterceptor := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if info, ok := connect.CallInfoForServerContext(ctx); ok {
+				if userID := info.RequestHeader().Get("X-User-Id"); userID != "" {
+					ctx = context.WithValue(ctx, middleware.UserIDKey, userID)
+				}
+				if role := info.RequestHeader().Get("X-User-Role"); role != "" {
+					ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
+				}
 			}
-			if role := req.Header().Get("X-User-Role"); role != "" {
-				ctx = context.WithValue(ctx, middleware.UserRoleKey, role)
-			}
-			return next(ctx, req)
+			return next(ctx, spec, stream)
 		}
-	})
+	}
+
+	connectServer := connect.NewServer(
+		middleware.NewConnectErrorMappingInterceptor(),
+		testAuthInterceptor,
+	)
+	auth.RegisterConnectHandler(connectServer, grpcHandler)
 
 	mux := http.NewServeMux()
-	auth.RegisterConnectHandler(
-		mux,
-		grpcHandler,
-		connect.WithInterceptors(
-			middleware.NewConnectErrorMappingInterceptor(),
-			testAuthInterceptor,
-		),
-	)
+	connecthttp.Mount(mux, connectServer)
 	httpServer := &http.Server{Handler: mux}
 
 	// Run HTTP server in background

@@ -11,7 +11,7 @@ rpc SearchExercises(SearchExercisesRequest) returns (SearchExercisesResponse) {
   };
 }
 ```
-Tuy nhiên, toàn bộ backend microservices của hệ thống Gym Companion được triển khai dựa trên **ConnectRPC** (`connectrpc.com/connect`).
+Tuy nhiên, toàn bộ backend microservices của hệ thống Gym Companion được triển khai dựa trên **ConnectRPC** (`connectrpc.com/connect/v2`).
 
 ### Quyết định:
 Hệ thống chính thức chuẩn hóa theo **Hướng 1 (Pure ConnectRPC / gRPC-Web)**:

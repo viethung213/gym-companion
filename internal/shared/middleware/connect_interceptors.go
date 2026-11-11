@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,7 +23,7 @@ func ToConnectError(err error) error {
 	}
 	st, ok := status.FromError(err)
 	if !ok {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	var code connect.Code
 	switch st.Code() {
@@ -64,167 +64,77 @@ func ToConnectError(err error) error {
 	default:
 		code = connect.CodeUnknown
 	}
-	return connect.NewError(code, errors.New(st.Message()))
+	return connect.NewError(code, st.Message())
 }
 
 // =========================================================================
 // 1. Error Mapping Interceptor
 // =========================================================================
 
-type connectErrorMappingInterceptor struct{}
-
-var _ connect.Interceptor = (*connectErrorMappingInterceptor)(nil)
-
-// NewConnectErrorMappingInterceptor returns a Connect interceptor that translates
+// NewConnectErrorMappingInterceptor returns a Connect server interceptor that translates
 // standard gRPC status errors (from google.golang.org/grpc/status) into *connect.Error
 // for both Unary and Streaming RPCs.
-func NewConnectErrorMappingInterceptor() connect.Interceptor {
-	return &connectErrorMappingInterceptor{}
-}
-
-func (i *connectErrorMappingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		resp, err := next(ctx, req)
-		if err == nil {
-			return resp, nil
+func NewConnectErrorMappingInterceptor() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			err := next(ctx, spec, stream)
+			if err == nil {
+				return nil
+			}
+			return ToConnectError(err)
 		}
-		return resp, ToConnectError(err)
 	}
-}
-
-func (i *connectErrorMappingInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		err := next(ctx, conn)
-		if err == nil {
-			return nil
-		}
-		return ToConnectError(err)
-	}
-}
-
-func (i *connectErrorMappingInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
 }
 
 // =========================================================================
 // 2. Logging Interceptor
 // =========================================================================
 
-type connectLoggingInterceptor struct{}
-
-var _ connect.Interceptor = (*connectLoggingInterceptor)(nil)
-
-// NewConnectLoggingInterceptor returns a Connect interceptor that logs RPC duration,
+// NewConnectLoggingInterceptor returns a Connect server interceptor that logs RPC duration,
 // procedure, and status codes for both Unary and Streaming RPCs.
-func NewConnectLoggingInterceptor() connect.Interceptor {
-	return &connectLoggingInterceptor{}
-}
+func NewConnectLoggingInterceptor() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			start := time.Now()
+			procedure := spec.Procedure
+			err := next(ctx, spec, stream)
+			duration := time.Since(start)
 
-func (i *connectLoggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		start := time.Now()
-		resp, err := next(ctx, req)
-		duration := time.Since(start)
-
-		procedure := "unknown"
-		if req != nil {
-			procedure = req.Spec().Procedure
-		}
-		if err != nil {
-			connectErr := connect.NewError(connect.CodeInternal, err)
-			var cErr *connect.Error
-			if errors.As(err, &cErr) {
-				connectErr = cErr
+			if err != nil {
+				connectErr := ToConnectError(err)
+				var cErr *connect.Error
+				if errors.As(connectErr, &cErr) {
+					log.Printf("Connect RPC | Procedure: %s | Duration: %v | Code: %s | Message: %s",
+						procedure, duration, cErr.Code(), cErr.Message())
+				} else {
+					log.Printf("Connect RPC | Procedure: %s | Duration: %v | Error: %v",
+						procedure, duration, err)
+				}
+			} else {
+				log.Printf("Connect RPC | Procedure: %s | Duration: %v | Code: OK", procedure, duration)
 			}
-			log.Printf("Connect Unary | Procedure: %s | Duration: %v | Code: %s | Message: %s",
-				procedure, duration, connectErr.Code(), connectErr.Message())
-		} else {
-			log.Printf("Connect Unary | Procedure: %s | Duration: %v | Code: OK", procedure, duration)
+			return err
 		}
-		return resp, err
 	}
-}
-
-func (i *connectLoggingInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		start := time.Now()
-		procedure := conn.Spec().Procedure
-		log.Printf("Connect Stream Start | Procedure: %s", procedure)
-
-		err := next(ctx, conn)
-		duration := time.Since(start)
-
-		if err != nil {
-			connectErr := connect.NewError(connect.CodeInternal, err)
-			var cErr *connect.Error
-			if errors.As(err, &cErr) {
-				connectErr = cErr
-			}
-			log.Printf("Connect Stream End | Procedure: %s | Duration: %v | Code: %s | Message: %s",
-				procedure, duration, connectErr.Code(), connectErr.Message())
-		} else {
-			log.Printf("Connect Stream End | Procedure: %s | Duration: %v | Code: OK", procedure, duration)
-		}
-		return err
-	}
-}
-
-func (i *connectLoggingInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
 }
 
 // =========================================================================
 // 3. Recovery Interceptor
 // =========================================================================
 
-type connectRecoveryInterceptor struct{}
-
-var _ connect.Interceptor = (*connectRecoveryInterceptor)(nil)
-
-// NewConnectRecoveryInterceptor returns a Connect interceptor that recovers from
+// NewConnectRecoveryInterceptor returns a Connect server interceptor that recovers from
 // panics and returns an internal error for both Unary and Streaming RPCs.
-func NewConnectRecoveryInterceptor() connect.Interceptor {
-	return &connectRecoveryInterceptor{}
-}
-
-func (i *connectRecoveryInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (resp connect.AnyResponse, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("panic recovered in Connect Unary RPC handler: %v\nstacktrace: %s",
-					r, string(debug.Stack()))
-				err = connect.NewError(connect.CodeInternal, errors.New("internal server error"))
-			}
-		}()
-		return next(ctx, req)
+func NewConnectRecoveryInterceptor() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("panic recovered in Connect RPC handler (%s): %v\nstacktrace: %s",
+						spec.Procedure, r, string(debug.Stack()))
+					err = connect.NewError(connect.CodeInternal, "internal server error")
+				}
+			}()
+			return next(ctx, spec, stream)
+		}
 	}
-}
-
-func (i *connectRecoveryInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) (err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("panic recovered in Connect Streaming RPC handler (%s): %v\nstacktrace: %s",
-					conn.Spec().Procedure, r, string(debug.Stack()))
-				err = connect.NewError(connect.CodeInternal, errors.New("internal server error"))
-			}
-		}()
-		return next(ctx, conn)
-	}
-}
-
-func (i *connectRecoveryInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
 }

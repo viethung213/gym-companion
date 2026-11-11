@@ -3,10 +3,10 @@ package solomatch_test
 import (
 	"context"
 	"database/sql"
-	"net/http"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	"github.com/alicebob/miniredis/v2"
 	_ "github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
@@ -122,9 +122,9 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 		t.Fatal("expected non-nil Handler")
 	}
 
-	// Mount on HTTP mux
-	mux := http.NewServeMux()
-	solomatch.RegisterConnectHandler(mux, handler)
+	// Mount on connect.Server
+	connServer := connect.NewServer()
+	solomatch.RegisterConnectHandler(connServer, handler)
 
 	// Test shutdown
 	doneCh := make(chan struct{})

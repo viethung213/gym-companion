@@ -5,11 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
@@ -167,16 +166,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 	return mod.GRPCHandler, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handler for the Nutrition module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handler for the Nutrition module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcHandler *nutritionGRPC.GRPCHandler,
-	opts ...connect.HandlerOption,
 ) string {
 	connectHandler := nutritionGRPC.NewConnectNutritionHandler(grpcHandler)
-	path, handler := nutritionv1serviceconnect.NewNutritionServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	nutritionv1serviceconnect.RegisterNutritionServiceHandler(server, connectHandler)
+	return "/" + nutritionv1serviceconnect.NutritionServiceName + "/"
 }
 
 func (m *Module) StartWorkers(ctx context.Context) {

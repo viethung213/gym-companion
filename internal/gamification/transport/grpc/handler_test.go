@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/aggregate"
@@ -135,7 +135,7 @@ func TestGRPCHandler_GetMyXp_Unauthenticated(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	_, err := handler.GetMyXp(ctx, connect.NewRequest(&gamificationv1message.GetMyXpRequest{}))
+	_, err := handler.GetMyXp(ctx, &gamificationv1message.GetMyXpRequest{})
 	assert.Error(t, err)
 	connectErr, ok := err.(*connect.Error)
 	assert.True(t, ok)
@@ -160,12 +160,12 @@ func TestGRPCHandler_GetMyXp_Success(t *testing.T) {
 	)
 
 	ctx := context.WithValue(context.Background(), middleware.UserIDKey, "user-1")
-	resp, err := handler.GetMyXp(ctx, connect.NewRequest(&gamificationv1message.GetMyXpRequest{}))
+	resp, err := handler.GetMyXp(ctx, &gamificationv1message.GetMyXpRequest{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "user-1", resp.Msg.XpSummary.UserId)
-	assert.Equal(t, int64(100), resp.Msg.XpSummary.Xp)
-	assert.Equal(t, int32(2), resp.Msg.XpSummary.Level)
+	assert.Equal(t, "user-1", resp.XpSummary.UserId)
+	assert.Equal(t, int64(100), resp.XpSummary.Xp)
+	assert.Equal(t, int32(2), resp.XpSummary.Level)
 }
 
 func TestGRPCHandler_GetStreak_Success(t *testing.T) {
@@ -187,11 +187,11 @@ func TestGRPCHandler_GetStreak_Success(t *testing.T) {
 	)
 
 	ctx := context.WithValue(context.Background(), middleware.UserIDKey, "user-1")
-	resp, err := handler.GetStreak(ctx, connect.NewRequest(&gamificationv1message.GetStreakRequest{}))
+	resp, err := handler.GetStreak(ctx, &gamificationv1message.GetStreakRequest{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, int32(5), resp.Msg.StreakSummary.CurrentStreak)
-	assert.True(t, resp.Msg.StreakSummary.IsActiveToday)
+	assert.Equal(t, int32(5), resp.StreakSummary.CurrentStreak)
+	assert.True(t, resp.StreakSummary.IsActiveToday)
 }
 
 func TestGRPCHandler_GetGlobalLeaderboard_Success(t *testing.T) {
@@ -224,12 +224,12 @@ func TestGRPCHandler_GetGlobalLeaderboard_Success(t *testing.T) {
 	)
 
 	ctx := context.WithValue(context.Background(), middleware.UserIDKey, "user-1")
-	resp, err := handler.GetGlobalLeaderboard(ctx, connect.NewRequest(&gamificationv1message.GetGlobalLeaderboardRequest{Limit: 50}))
+	resp, err := handler.GetGlobalLeaderboard(ctx, &gamificationv1message.GetGlobalLeaderboardRequest{Limit: 50})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Len(t, resp.Msg.TopEntries, 1)
-	assert.Equal(t, int32(1), resp.Msg.TopEntries[0].Rank)
-	assert.Equal(t, int32(1), resp.Msg.MyStanding.Rank)
+	assert.Len(t, resp.TopEntries, 1)
+	assert.Equal(t, int32(1), resp.TopEntries[0].Rank)
+	assert.Equal(t, int32(1), resp.MyStanding.Rank)
 }
 
 func TestGRPCHandler_GetMyBadges_Success(t *testing.T) {
@@ -250,13 +250,13 @@ func TestGRPCHandler_GetMyBadges_Success(t *testing.T) {
 	)
 
 	ctx := context.WithValue(context.Background(), middleware.UserIDKey, "user-1")
-	resp, err := handler.GetMyBadges(ctx, connect.NewRequest(&gamificationv1message.GetMyBadgesRequest{}))
+	resp, err := handler.GetMyBadges(ctx, &gamificationv1message.GetMyBadgesRequest{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, int32(1), resp.Msg.TotalUnlocked)
-	assert.Greater(t, resp.Msg.TotalAvailable, int32(1))
+	assert.Equal(t, int32(1), resp.TotalUnlocked)
+	assert.Greater(t, resp.TotalAvailable, int32(1))
 	var foundStreak7 bool
-	for _, b := range resp.Msg.Badges {
+	for _, b := range resp.Badges {
 		if b.BadgeCode == "STREAK_7" {
 			foundStreak7 = true
 			assert.True(t, b.IsUnlocked)
@@ -330,25 +330,25 @@ func TestGRPCHandler_GetWallet_SelfAndAdmin(t *testing.T) {
 	// Case 1: Normal user queries own wallet
 	userCtx := context.WithValue(context.Background(), middleware.UserIDKey, "user-1")
 	userCtx = context.WithValue(userCtx, middleware.UserRoleKey, "user")
-	resp, err := handler.GetWallet(userCtx, connect.NewRequest(&gamificationv1message.GetWalletRequest{}))
+	resp, err := handler.GetWallet(userCtx, &gamificationv1message.GetWalletRequest{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "user-1", resp.Msg.UserId)
-	assert.Equal(t, int64(5), resp.Msg.Balance)
+	assert.Equal(t, "user-1", resp.UserId)
+	assert.Equal(t, int64(5), resp.Balance)
 
 	// Case 2: Normal user queries someone else's wallet -> 403 Forbidden
-	_, err = handler.GetWallet(userCtx, connect.NewRequest(&gamificationv1message.GetWalletRequest{UserId: "victim-user"}))
+	_, err = handler.GetWallet(userCtx, &gamificationv1message.GetWalletRequest{UserId: "victim-user"})
 	assert.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 
 	// Case 3: Admin queries target user's wallet -> 200 OK
 	adminCtx := context.WithValue(context.Background(), middleware.UserIDKey, "admin-1")
 	adminCtx = context.WithValue(adminCtx, middleware.UserRoleKey, "admin")
-	adminResp, err := handler.GetWallet(adminCtx, connect.NewRequest(&gamificationv1message.GetWalletRequest{UserId: "target-user"}))
+	adminResp, err := handler.GetWallet(adminCtx, &gamificationv1message.GetWalletRequest{UserId: "target-user"})
 	assert.NoError(t, err)
 	assert.NotNil(t, adminResp)
-	assert.Equal(t, "target-user", adminResp.Msg.UserId)
-	assert.Equal(t, int64(5), adminResp.Msg.Balance)
+	assert.Equal(t, "target-user", adminResp.UserId)
+	assert.Equal(t, int64(5), adminResp.Balance)
 }
 
 func TestGRPCHandler_ListTransactions_SelfAndAdmin(t *testing.T) {
@@ -390,18 +390,18 @@ func TestGRPCHandler_ListTransactions_SelfAndAdmin(t *testing.T) {
 	// Case 1: Normal user queries someone else's transactions -> 403 Forbidden
 	userCtx := context.WithValue(context.Background(), middleware.UserIDKey, "user-1")
 	userCtx = context.WithValue(userCtx, middleware.UserRoleKey, "user")
-	_, err := handler.ListTransactions(userCtx, connect.NewRequest(&gamificationv1message.ListTransactionsRequest{UserId: "target-user"}))
+	_, err := handler.ListTransactions(userCtx, &gamificationv1message.ListTransactionsRequest{UserId: "target-user"})
 	assert.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 
 	// Case 2: Admin queries target user's transactions -> 200 OK
 	adminCtx := context.WithValue(context.Background(), middleware.UserIDKey, "admin-1")
 	adminCtx = context.WithValue(adminCtx, middleware.UserRoleKey, "admin")
-	resp, err := handler.ListTransactions(adminCtx, connect.NewRequest(&gamificationv1message.ListTransactionsRequest{UserId: "target-user", Limit: 10}))
+	resp, err := handler.ListTransactions(adminCtx, &gamificationv1message.ListTransactionsRequest{UserId: "target-user", Limit: 10})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Len(t, resp.Msg.Entries, 1)
-	assert.Equal(t, "entry-1", resp.Msg.Entries[0].Id)
-	assert.Equal(t, int64(50), resp.Msg.Entries[0].Amount)
-	assert.Equal(t, "next-cur", resp.Msg.NextCursor)
+	assert.Len(t, resp.Entries, 1)
+	assert.Equal(t, "entry-1", resp.Entries[0].Id)
+	assert.Equal(t, int64(50), resp.Entries[0].Amount)
+	assert.Equal(t, "next-cur", resp.NextCursor)
 }

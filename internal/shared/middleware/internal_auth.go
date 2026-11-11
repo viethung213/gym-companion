@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 )
@@ -19,99 +19,54 @@ const (
 	RequestIDKey ContextKey = "requestID"
 )
 
-type connectInternalAuthInterceptor struct {
-	secret string
-}
-
 // NewConnectInternalAuthInterceptor strictly validates X-Internal-Token on downstream microservices.
-func NewConnectInternalAuthInterceptor(secret string) connect.Interceptor {
-	return &connectInternalAuthInterceptor{secret: secret}
-}
-
-func (i *connectInternalAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		reqID := req.Header().Get(HeaderRequestID)
-		if reqID != "" {
-			ctx = context.WithValue(ctx, RequestIDKey, reqID)
-		}
-
-		// Public procedures defined in proto contracts (e.g. GetJWKS) do not require internal token
-		if req.Spec().Procedure == authv1serviceconnect.AuthServiceGetJWKSProcedure {
-			return next(ctx, req)
-		}
-
-		tokenStr := req.Header().Get(HeaderInternalToken)
-		if tokenStr == "" {
-			return nil, connect.NewError(
-				connect.CodeUnauthenticated,
-				fmt.Errorf("%w: missing internal token header", ErrUnauthorized),
-			)
-		}
-
-		claims, err := internaltoken.Validate(tokenStr, i.secret)
-		if err != nil {
-			if errors.Is(err, internaltoken.ErrExpiredToken) {
-				return nil, connect.NewError(
-					connect.CodeUnauthenticated,
-					fmt.Errorf("internal token expired: %w", err),
-				)
+func NewConnectInternalAuthInterceptor(secret string) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			info, _ := connect.CallInfoForServerContext(ctx)
+			var reqID, tokenStr string
+			if info != nil {
+				reqID = info.RequestHeader().Get(HeaderRequestID)
+				tokenStr = info.RequestHeader().Get(HeaderInternalToken)
 			}
-			return nil, connect.NewError(
-				connect.CodeUnauthenticated,
-				fmt.Errorf("invalid internal token: %w", err),
-			)
-		}
+			if reqID != "" {
+				ctx = context.WithValue(ctx, RequestIDKey, reqID)
+			}
 
-		// Inject verified user and role into context
-		ctx = context.WithValue(ctx, UserIDKey, claims.UserID)
-		ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
-		if claims.RequestID != "" {
-			ctx = context.WithValue(ctx, RequestIDKey, claims.RequestID)
-		}
+			// Public procedures defined in proto contracts (e.g. GetJWKS) do not require internal token
+			if spec.Procedure == authv1serviceconnect.AuthServiceGetJWKSProcedure {
+				return next(ctx, spec, stream)
+			}
 
-		return next(ctx, req)
-	}
-}
-
-func (i *connectInternalAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *connectInternalAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		tokenStr := conn.RequestHeader().Get(HeaderInternalToken)
-		reqID := conn.RequestHeader().Get(HeaderRequestID)
-		if reqID != "" {
-			ctx = context.WithValue(ctx, RequestIDKey, reqID)
-		}
-
-		if tokenStr == "" {
-			return connect.NewError(
-				connect.CodeUnauthenticated,
-				fmt.Errorf("%w: missing internal token header", ErrUnauthorized),
-			)
-		}
-
-		claims, err := internaltoken.Validate(tokenStr, i.secret)
-		if err != nil {
-			if errors.Is(err, internaltoken.ErrExpiredToken) {
+			if tokenStr == "" {
 				return connect.NewError(
 					connect.CodeUnauthenticated,
-					fmt.Errorf("internal token expired: %w", err),
+					fmt.Errorf("%w: missing internal token header", ErrUnauthorized).Error(),
 				)
 			}
-			return connect.NewError(
-				connect.CodeUnauthenticated,
-				fmt.Errorf("invalid internal token: %w", err),
-			)
-		}
 
-		ctx = context.WithValue(ctx, UserIDKey, claims.UserID)
-		ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
-		if claims.RequestID != "" {
-			ctx = context.WithValue(ctx, RequestIDKey, claims.RequestID)
-		}
+			claims, err := internaltoken.Validate(tokenStr, secret)
+			if err != nil {
+				if errors.Is(err, internaltoken.ErrExpiredToken) {
+					return connect.NewError(
+						connect.CodeUnauthenticated,
+						fmt.Errorf("internal token expired: %w", err).Error(),
+					)
+				}
+				return connect.NewError(
+					connect.CodeUnauthenticated,
+					fmt.Errorf("invalid internal token: %w", err).Error(),
+				)
+			}
 
-		return next(ctx, conn)
+			// Inject verified user and role into context
+			ctx = context.WithValue(ctx, UserIDKey, claims.UserID)
+			ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
+			if claims.RequestID != "" {
+				ctx = context.WithValue(ctx, RequestIDKey, claims.RequestID)
+			}
+
+			return next(ctx, spec, stream)
+		}
 	}
 }

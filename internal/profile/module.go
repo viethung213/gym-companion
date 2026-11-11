@@ -5,12 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
@@ -121,14 +120,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 	return grpcHandler, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handler for the Profile module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handler for the Profile module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcHandler *profileGRPC.GRPCHandler,
-	opts ...connect.HandlerOption,
 ) string {
 	connectHandler := profileGRPC.NewConnectProfileHandler(grpcHandler)
-	path, handler := profilev1serviceconnect.NewProfileServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	profilev1serviceconnect.RegisterProfileServiceHandler(server, connectHandler)
+	return "/" + profilev1serviceconnect.ProfileServiceName + "/"
 }

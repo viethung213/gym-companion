@@ -13,7 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/exercise"
@@ -199,7 +200,7 @@ func run() error {
 	log.Printf("🚀 Starting Core Service (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
 	mux := http.NewServeMux()
 
-	connectInterceptors := connect.WithInterceptors(
+	connectServer := connect.NewServer(
 		middleware.NewConnectRecoveryInterceptor(),
 		middleware.NewConnectLoggingInterceptor(),
 		middleware.NewConnectErrorMappingInterceptor(),
@@ -208,14 +209,16 @@ func run() error {
 
 	// Mount Core ConnectRPC Service Handlers
 	prefixes := []string{
-		auth.RegisterConnectHandler(mux, authGRPCHandler, connectInterceptors),
-		exercise.RegisterConnectHandler(mux, exerciseServer, connectInterceptors),
-		profile.RegisterConnectHandler(mux, profileGRPCHandler, connectInterceptors),
-		social.RegisterConnectHandler(mux, socialGRPCHandler, connectInterceptors),
-		solomatch.RegisterConnectHandler(mux, soloMatchGRPCHandler, connectInterceptors),
-		gamification.RegisterConnectHandler(mux, gamificationGRPCHandler, connectInterceptors),
+		auth.RegisterConnectHandler(connectServer, authGRPCHandler),
+		exercise.RegisterConnectHandler(connectServer, exerciseServer),
+		profile.RegisterConnectHandler(connectServer, profileGRPCHandler),
+		social.RegisterConnectHandler(connectServer, socialGRPCHandler),
+		solomatch.RegisterConnectHandler(connectServer, soloMatchGRPCHandler),
+		gamification.RegisterConnectHandler(connectServer, gamificationGRPCHandler),
 	}
-	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(mux, workoutServer, connectInterceptors)...)
+	prefixes = append(prefixes, workoutexecution.RegisterConnectHandler(connectServer, workoutServer)...)
+
+	connecthttp.Mount(mux, connectServer)
 
 	// Register WebTransport HTTP/3 and WebSocket fallback handlers
 	wtPort := os.Getenv("WT_PORT")

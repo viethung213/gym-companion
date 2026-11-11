@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service/notificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
@@ -172,14 +171,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	return grpcHandler, cleanup, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handler for the Notification module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handler for the Notification module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcHandler *notificationGRPC.GRPCHandler,
-	opts ...connect.HandlerOption,
 ) string {
 	connectHandler := notificationGRPC.NewConnectNotificationHandler(grpcHandler)
-	path, handler := notificationv1serviceconnect.NewNotificationServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	notificationv1serviceconnect.RegisterNotificationServiceHandler(server, connectHandler)
+	return "/" + notificationv1serviceconnect.NotificationServiceName + "/"
 }

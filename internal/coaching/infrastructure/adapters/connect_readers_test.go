@@ -2,13 +2,13 @@ package adapters_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -25,65 +25,67 @@ import (
 // mockProfileHandler implements profilev1serviceconnect.ProfileServiceHandler
 type mockProfileHandler struct {
 	profilev1serviceconnect.UnimplementedProfileServiceHandler
-	getProfileFn func(ctx context.Context, req *connect.Request[profilemsg.GetProfileRequest]) (*connect.Response[profilemsg.GetProfileResponse], error)
+	getProfileFn func(ctx context.Context, req *profilemsg.GetProfileRequest) (*profilemsg.GetProfileResponse, error)
 }
 
-func (m *mockProfileHandler) GetProfile(ctx context.Context, req *connect.Request[profilemsg.GetProfileRequest]) (*connect.Response[profilemsg.GetProfileResponse], error) {
+func (m *mockProfileHandler) GetProfile(ctx context.Context, req *profilemsg.GetProfileRequest) (*profilemsg.GetProfileResponse, error) {
 	if m.getProfileFn != nil {
 		return m.getProfileFn(ctx, req)
 	}
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 }
 
 // mockExerciseHandler implements exercisev1serviceconnect.ExerciseServiceHandler
 type mockExerciseHandler struct {
 	exercisev1serviceconnect.UnimplementedExerciseServiceHandler
-	searchFn  func(ctx context.Context, req *connect.Request[exercisemsg.SearchExercisesRequest]) (*connect.Response[exercisemsg.SearchExercisesResponse], error)
-	getByIDFn func(ctx context.Context, req *connect.Request[exercisemsg.GetExerciseRequest]) (*connect.Response[exercisemsg.GetExerciseResponse], error)
+	searchFn  func(ctx context.Context, req *exercisemsg.SearchExercisesRequest) (*exercisemsg.SearchExercisesResponse, error)
+	getByIDFn func(ctx context.Context, req *exercisemsg.GetExerciseRequest) (*exercisemsg.GetExerciseResponse, error)
 }
 
-func (m *mockExerciseHandler) SearchExercises(ctx context.Context, req *connect.Request[exercisemsg.SearchExercisesRequest]) (*connect.Response[exercisemsg.SearchExercisesResponse], error) {
+func (m *mockExerciseHandler) SearchExercises(ctx context.Context, req *exercisemsg.SearchExercisesRequest) (*exercisemsg.SearchExercisesResponse, error) {
 	if m.searchFn != nil {
 		return m.searchFn(ctx, req)
 	}
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 }
 
-func (m *mockExerciseHandler) GetExercise(ctx context.Context, req *connect.Request[exercisemsg.GetExerciseRequest]) (*connect.Response[exercisemsg.GetExerciseResponse], error) {
+func (m *mockExerciseHandler) GetExercise(ctx context.Context, req *exercisemsg.GetExerciseRequest) (*exercisemsg.GetExerciseResponse, error) {
 	if m.getByIDFn != nil {
 		return m.getByIDFn(ctx, req)
 	}
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 }
 
 // mockWorkoutHandler implements workoutexecutionv1serviceconnect.AdminWorkoutExecutionServiceHandler
 type mockWorkoutHandler struct {
 	workoutexecutionv1serviceconnect.UnimplementedAdminWorkoutExecutionServiceHandler
-	historyFn func(ctx context.Context, req *connect.Request[workoutexecutionmsg.AdminGetWorkoutHistoryRequest]) (*connect.Response[workoutexecutionmsg.AdminGetWorkoutHistoryResponse], error)
-	prFn      func(ctx context.Context, req *connect.Request[workoutexecutionmsg.AdminGetPersonalRecordsRequest]) (*connect.Response[workoutexecutionmsg.AdminGetPersonalRecordsResponse], error)
+	historyFn func(ctx context.Context, req *workoutexecutionmsg.AdminGetWorkoutHistoryRequest) (*workoutexecutionmsg.AdminGetWorkoutHistoryResponse, error)
+	prFn      func(ctx context.Context, req *workoutexecutionmsg.AdminGetPersonalRecordsRequest) (*workoutexecutionmsg.AdminGetPersonalRecordsResponse, error)
 }
 
-func (m *mockWorkoutHandler) AdminGetWorkoutHistory(ctx context.Context, req *connect.Request[workoutexecutionmsg.AdminGetWorkoutHistoryRequest]) (*connect.Response[workoutexecutionmsg.AdminGetWorkoutHistoryResponse], error) {
+func (m *mockWorkoutHandler) AdminGetWorkoutHistory(ctx context.Context, req *workoutexecutionmsg.AdminGetWorkoutHistoryRequest) (*workoutexecutionmsg.AdminGetWorkoutHistoryResponse, error) {
 	if m.historyFn != nil {
 		return m.historyFn(ctx, req)
 	}
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 }
 
-func (m *mockWorkoutHandler) AdminGetPersonalRecords(ctx context.Context, req *connect.Request[workoutexecutionmsg.AdminGetPersonalRecordsRequest]) (*connect.Response[workoutexecutionmsg.AdminGetPersonalRecordsResponse], error) {
+func (m *mockWorkoutHandler) AdminGetPersonalRecords(ctx context.Context, req *workoutexecutionmsg.AdminGetPersonalRecordsRequest) (*workoutexecutionmsg.AdminGetPersonalRecordsResponse, error) {
 	if m.prFn != nil {
 		return m.prFn(ctx, req)
 	}
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 }
 
 func TestConnectUserProfileReader_Success(t *testing.T) {
 	mockHandler := &mockProfileHandler{
-		getProfileFn: func(_ context.Context, req *connect.Request[profilemsg.GetProfileRequest]) (*connect.Response[profilemsg.GetProfileResponse], error) {
-			assert.Equal(t, "user-123", req.Msg.GetUserId())
-			assert.NotEmpty(t, req.Header().Get("X-Internal-Token"))
+		getProfileFn: func(ctx context.Context, req *profilemsg.GetProfileRequest) (*profilemsg.GetProfileResponse, error) {
+			assert.Equal(t, "user-123", req.GetUserId())
+			if info, ok := connect.CallInfoForServerContext(ctx); ok {
+				assert.NotEmpty(t, info.RequestHeader().Get("X-Internal-Token"))
+			}
 
-			return connect.NewResponse(&profilemsg.GetProfileResponse{
+			return &profilemsg.GetProfileResponse{
 				UserId:                "user-123",
 				WeightKg:              80.5,
 				HeightCm:              178.0,
@@ -111,13 +113,14 @@ func TestConnectUserProfileReader_Success(t *testing.T) {
 					},
 				},
 				UpdatedAt: time.Now().Format(time.RFC3339),
-			}), nil
+			}, nil
 		},
 	}
 
 	mux := http.NewServeMux()
-	path, handler := profilev1serviceconnect.NewProfileServiceHandler(mockHandler)
-	mux.Handle(path, handler)
+	connServer := connect.NewServer()
+	profilev1serviceconnect.RegisterProfileServiceHandler(connServer, mockHandler)
+	connecthttp.Mount(mux, connServer)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -139,14 +142,15 @@ func TestConnectUserProfileReader_Success(t *testing.T) {
 
 func TestConnectUserProfileReader_NotFound_Error(t *testing.T) {
 	mockHandler := &mockProfileHandler{
-		getProfileFn: func(_ context.Context, _ *connect.Request[profilemsg.GetProfileRequest]) (*connect.Response[profilemsg.GetProfileResponse], error) {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("profile not found"))
+		getProfileFn: func(_ context.Context, _ *profilemsg.GetProfileRequest) (*profilemsg.GetProfileResponse, error) {
+			return nil, connect.NewError(connect.CodeNotFound, "profile not found")
 		},
 	}
 
 	mux := http.NewServeMux()
-	path, handler := profilev1serviceconnect.NewProfileServiceHandler(mockHandler)
-	mux.Handle(path, handler)
+	connServer := connect.NewServer()
+	profilev1serviceconnect.RegisterProfileServiceHandler(connServer, mockHandler)
+	connecthttp.Mount(mux, connServer)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -164,11 +168,11 @@ func TestConnectUserProfileReader_EmptyUserID(t *testing.T) {
 
 func TestConnectExerciseCatalogReader_SearchByFilter(t *testing.T) {
 	mockHandler := &mockExerciseHandler{
-		searchFn: func(_ context.Context, req *connect.Request[exercisemsg.SearchExercisesRequest]) (*connect.Response[exercisemsg.SearchExercisesResponse], error) {
-			assert.Equal(t, "chest", req.Msg.GetTargetMuscleId())
-			assert.Equal(t, exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE, req.Msg.GetStatus())
+		searchFn: func(_ context.Context, req *exercisemsg.SearchExercisesRequest) (*exercisemsg.SearchExercisesResponse, error) {
+			assert.Equal(t, "chest", req.GetTargetMuscleId())
+			assert.Equal(t, exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE, req.GetStatus())
 
-			return connect.NewResponse(&exercisemsg.SearchExercisesResponse{
+			return &exercisemsg.SearchExercisesResponse{
 				Exercises: []*exercisemsg.ExerciseInfo{
 					{
 						Id:             "bench-press",
@@ -193,13 +197,14 @@ func TestConnectExerciseCatalogReader_SearchByFilter(t *testing.T) {
 					},
 				},
 				TotalCount: 3,
-			}), nil
+			}, nil
 		},
 	}
 
 	mux := http.NewServeMux()
-	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(mockHandler)
-	mux.Handle(path, handler)
+	connServer := connect.NewServer()
+	exercisev1serviceconnect.RegisterExerciseServiceHandler(connServer, mockHandler)
+	connecthttp.Mount(mux, connServer)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -224,24 +229,25 @@ func TestConnectExerciseCatalogReader_SearchByFilter(t *testing.T) {
 
 func TestConnectExerciseCatalogReader_GetByID_SuccessAndNotFound(t *testing.T) {
 	mockHandler := &mockExerciseHandler{
-		getByIDFn: func(_ context.Context, req *connect.Request[exercisemsg.GetExerciseRequest]) (*connect.Response[exercisemsg.GetExerciseResponse], error) {
-			if req.Msg.GetId() == "bench-press" {
-				return connect.NewResponse(&exercisemsg.GetExerciseResponse{
+		getByIDFn: func(_ context.Context, req *exercisemsg.GetExerciseRequest) (*exercisemsg.GetExerciseResponse, error) {
+			if req.GetId() == "bench-press" {
+				return &exercisemsg.GetExerciseResponse{
 					Exercise: &exercisemsg.ExerciseInfo{
 						Id:             "bench-press",
 						Name:           "Bench Press",
 						TargetMuscleId: "chest",
 						EquipmentId:    "barbell",
 					},
-				}), nil
+				}, nil
 			}
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("exercise not found"))
+			return nil, connect.NewError(connect.CodeNotFound, "exercise not found")
 		},
 	}
 
 	mux := http.NewServeMux()
-	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(mockHandler)
-	mux.Handle(path, handler)
+	connServer := connect.NewServer()
+	exercisev1serviceconnect.RegisterExerciseServiceHandler(connServer, mockHandler)
+	connecthttp.Mount(mux, connServer)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -266,10 +272,10 @@ func TestConnectWorkoutSessionReader_GetRecentSessions(t *testing.T) {
 	formScore := float32(88.5)
 
 	mockHandler := &mockWorkoutHandler{
-		historyFn: func(_ context.Context, req *connect.Request[workoutexecutionmsg.AdminGetWorkoutHistoryRequest]) (*connect.Response[workoutexecutionmsg.AdminGetWorkoutHistoryResponse], error) {
-			assert.Equal(t, "user-456", req.Msg.GetUserId())
+		historyFn: func(_ context.Context, req *workoutexecutionmsg.AdminGetWorkoutHistoryRequest) (*workoutexecutionmsg.AdminGetWorkoutHistoryResponse, error) {
+			assert.Equal(t, "user-456", req.GetUserId())
 
-			return connect.NewResponse(&workoutexecutionmsg.AdminGetWorkoutHistoryResponse{
+			return &workoutexecutionmsg.AdminGetWorkoutHistoryResponse{
 				Sessions: []*workoutexecutionmsg.WorkoutSessionSummary{
 					{
 						SessionId:        "sess-1",
@@ -283,13 +289,14 @@ func TestConnectWorkoutSessionReader_GetRecentSessions(t *testing.T) {
 						TotalSets: 4,
 					},
 				},
-			}), nil
+			}, nil
 		},
 	}
 
 	mux := http.NewServeMux()
-	path, handler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(mockHandler)
-	mux.Handle(path, handler)
+	connServer := connect.NewServer()
+	workoutexecutionv1serviceconnect.RegisterAdminWorkoutExecutionServiceHandler(connServer, mockHandler)
+	connecthttp.Mount(mux, connServer)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -312,10 +319,10 @@ func TestConnectWorkoutSessionReader_GetSetLogs(t *testing.T) {
 	now := time.Now()
 
 	mockHandler := &mockWorkoutHandler{
-		prFn: func(_ context.Context, req *connect.Request[workoutexecutionmsg.AdminGetPersonalRecordsRequest]) (*connect.Response[workoutexecutionmsg.AdminGetPersonalRecordsResponse], error) {
-			assert.Equal(t, "user-456", req.Msg.GetUserId())
-			if len(req.Msg.GetExerciseIds()) > 0 && req.Msg.GetExerciseIds()[0] == "bench-press" {
-				return connect.NewResponse(&workoutexecutionmsg.AdminGetPersonalRecordsResponse{
+		prFn: func(_ context.Context, req *workoutexecutionmsg.AdminGetPersonalRecordsRequest) (*workoutexecutionmsg.AdminGetPersonalRecordsResponse, error) {
+			assert.Equal(t, "user-456", req.GetUserId())
+			if len(req.GetExerciseIds()) > 0 && req.GetExerciseIds()[0] == "bench-press" {
+				return &workoutexecutionmsg.AdminGetPersonalRecordsResponse{
 					Records: []*workoutexecutionmsg.PersonalRecord{
 						{
 							ExerciseId: "bench-press",
@@ -324,17 +331,18 @@ func TestConnectWorkoutSessionReader_GetSetLogs(t *testing.T) {
 							AchievedAt: timestamppb.New(now),
 						},
 					},
-				}), nil
+				}, nil
 			}
-			return connect.NewResponse(&workoutexecutionmsg.AdminGetPersonalRecordsResponse{
+			return &workoutexecutionmsg.AdminGetPersonalRecordsResponse{
 				Records: []*workoutexecutionmsg.PersonalRecord{},
-			}), nil
+			}, nil
 		},
 	}
 
 	mux := http.NewServeMux()
-	path, handler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(mockHandler)
-	mux.Handle(path, handler)
+	connServer := connect.NewServer()
+	workoutexecutionv1serviceconnect.RegisterAdminWorkoutExecutionServiceHandler(connServer, mockHandler)
+	connecthttp.Mount(mux, connServer)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -391,19 +399,20 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 
 	// 1. UserProfileReader edge cases (DOB age calculation, empty defaults)
 	profileHandler := &mockProfileHandler{
-		getProfileFn: func(_ context.Context, _ *connect.Request[profilemsg.GetProfileRequest]) (*connect.Response[profilemsg.GetProfileResponse], error) {
-			return connect.NewResponse(&profilemsg.GetProfileResponse{
+		getProfileFn: func(_ context.Context, _ *profilemsg.GetProfileRequest) (*profilemsg.GetProfileResponse, error) {
+			return &profilemsg.GetProfileResponse{
 				UserId:      "u-defaults",
 				WeightKg:    0,
 				HeightCm:    0,
 				DateOfBirth: "2000-01-01",
 				Age:         0,
-			}), nil
+			}, nil
 		},
 	}
 	pMux := http.NewServeMux()
-	pPath, pHandler := profilev1serviceconnect.NewProfileServiceHandler(profileHandler)
-	pMux.Handle(pPath, pHandler)
+	pServerConn := connect.NewServer()
+	profilev1serviceconnect.RegisterProfileServiceHandler(pServerConn, profileHandler)
+	connecthttp.Mount(pMux, pServerConn)
 	pServer := httptest.NewServer(pMux)
 	defer pServer.Close()
 
@@ -420,8 +429,8 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 
 	// 2. ExerciseCatalogReader edge cases (body part fallback, equipment filter)
 	exerciseHandler := &mockExerciseHandler{
-		searchFn: func(_ context.Context, req *connect.Request[exercisemsg.SearchExercisesRequest]) (*connect.Response[exercisemsg.SearchExercisesResponse], error) {
-			return connect.NewResponse(&exercisemsg.SearchExercisesResponse{
+		searchFn: func(_ context.Context, req *exercisemsg.SearchExercisesRequest) (*exercisemsg.SearchExercisesResponse, error) {
+			return &exercisemsg.SearchExercisesResponse{
 				Exercises: []*exercisemsg.ExerciseInfo{
 					{
 						Id:          "lat-pull",
@@ -436,12 +445,13 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 						EquipmentId: "pull-up-bar",
 					},
 				},
-			}), nil
+			}, nil
 		},
 	}
 	eMux := http.NewServeMux()
-	ePath, eHandler := exercisev1serviceconnect.NewExerciseServiceHandler(exerciseHandler)
-	eMux.Handle(ePath, eHandler)
+	eServerConn := connect.NewServer()
+	exercisev1serviceconnect.RegisterExerciseServiceHandler(eServerConn, exerciseHandler)
+	connecthttp.Mount(eMux, eServerConn)
 	eServer := httptest.NewServer(eMux)
 	defer eServer.Close()
 
@@ -459,16 +469,17 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 
 	// 3. WorkoutSessionReader CodeNotFound returns empty slices
 	workoutHandler := &mockWorkoutHandler{
-		historyFn: func(_ context.Context, _ *connect.Request[workoutexecutionmsg.AdminGetWorkoutHistoryRequest]) (*connect.Response[workoutexecutionmsg.AdminGetWorkoutHistoryResponse], error) {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("not found"))
+		historyFn: func(_ context.Context, _ *workoutexecutionmsg.AdminGetWorkoutHistoryRequest) (*workoutexecutionmsg.AdminGetWorkoutHistoryResponse, error) {
+			return nil, connect.NewError(connect.CodeNotFound, "not found")
 		},
-		prFn: func(_ context.Context, _ *connect.Request[workoutexecutionmsg.AdminGetPersonalRecordsRequest]) (*connect.Response[workoutexecutionmsg.AdminGetPersonalRecordsResponse], error) {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("not found"))
+		prFn: func(_ context.Context, _ *workoutexecutionmsg.AdminGetPersonalRecordsRequest) (*workoutexecutionmsg.AdminGetPersonalRecordsResponse, error) {
+			return nil, connect.NewError(connect.CodeNotFound, "not found")
 		},
 	}
 	wMux := http.NewServeMux()
-	wPath, wHandler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(workoutHandler)
-	wMux.Handle(wPath, wHandler)
+	wServerConn := connect.NewServer()
+	workoutexecutionv1serviceconnect.RegisterAdminWorkoutExecutionServiceHandler(wServerConn, workoutHandler)
+	connecthttp.Mount(wMux, wServerConn)
 	wServer := httptest.NewServer(wMux)
 	defer wServer.Close()
 

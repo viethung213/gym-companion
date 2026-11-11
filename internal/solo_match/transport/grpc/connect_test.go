@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	solomatchv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
@@ -48,21 +47,21 @@ func TestConnectSoloMatchHandler(t *testing.T) {
 	ctx := context.WithValue(context.Background(), middleware.UserIDKey, "user_test_1")
 
 	// 1. CancelQueue test
-	cancelReq := connect.NewRequest(&solomatchv1message.CancelQueueRequest{
+	cancelReq := &solomatchv1message.CancelQueueRequest{
 		TicketId: "ticket_123",
-	})
+	}
 	cancelRes, err := connectHandler.CancelQueue(ctx, cancelReq)
 	if err != nil {
 		t.Fatalf("unexpected cancel queue err: %v", err)
 	}
-	if !cancelRes.Msg.Success {
+	if !cancelRes.Success {
 		t.Errorf("expected success true")
 	}
 
 	// 2. GetMatch test (not found)
-	getMatchReq := connect.NewRequest(&solomatchv1message.GetMatchRequest{
+	getMatchReq := &solomatchv1message.GetMatchRequest{
 		MatchId: "non_existent",
-	})
+	}
 	_, err = connectHandler.GetMatch(ctx, getMatchReq)
 	if err == nil {
 		t.Fatalf("expected error for non existent match")
@@ -88,44 +87,44 @@ func TestConnectSoloMatchHandler(t *testing.T) {
 	snap, _ := entity.NewUserSnapshot("user_test_1", "Alice", "", now)
 	mockSnapshotRepo.snapshots["user_test_1"] = snap
 
-	getMatchRes, err := connectHandler.GetMatch(ctx, connect.NewRequest(&solomatchv1message.GetMatchRequest{
+	getMatchRes, err := connectHandler.GetMatch(ctx, &solomatchv1message.GetMatchRequest{
 		MatchId: "match_found",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected get match err: %v", err)
 	}
-	if getMatchRes.Msg.Match.MatchId != "match_found" {
-		t.Errorf("got match id %s, want match_found", getMatchRes.Msg.Match.MatchId)
+	if getMatchRes.Match.MatchId != "match_found" {
+		t.Errorf("got match id %s, want match_found", getMatchRes.Match.MatchId)
 	}
 
 	// 4. GetMatchHistory test
-	historyRes, err := connectHandler.GetMatchHistory(ctx, connect.NewRequest(&solomatchv1message.GetMatchHistoryRequest{
+	historyRes, err := connectHandler.GetMatchHistory(ctx, &solomatchv1message.GetMatchHistoryRequest{
 		PageSize: 10,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected get history err: %v", err)
 	}
-	if len(historyRes.Msg.Matches) != 1 {
-		t.Errorf("got %d matches, want 1", len(historyRes.Msg.Matches))
+	if len(historyRes.Matches) != 1 {
+		t.Errorf("got %d matches, want 1", len(historyRes.Matches))
 	}
 
 	// 5. GetActiveMatch test
 	mockMatchRepo.activeMatch = match
-	activeRes, err := connectHandler.GetActiveMatch(ctx, connect.NewRequest(&solomatchv1message.GetActiveMatchRequest{}))
+	activeRes, err := connectHandler.GetActiveMatch(ctx, &solomatchv1message.GetActiveMatchRequest{})
 	if err != nil {
 		t.Fatalf("unexpected get active match err: %v", err)
 	}
-	if activeRes.Msg.Match == nil || activeRes.Msg.Match.MatchId != "match_found" {
-		t.Errorf("got active match %+v, want match_found", activeRes.Msg.Match)
+	if activeRes.Match == nil || activeRes.Match.MatchId != "match_found" {
+		t.Errorf("got active match %+v, want match_found", activeRes.Match)
 	}
 
 	// 6. GetActiveMatch when no active match
 	mockMatchRepo.activeMatch = nil
-	noActiveRes, err := connectHandler.GetActiveMatch(ctx, connect.NewRequest(&solomatchv1message.GetActiveMatchRequest{}))
+	noActiveRes, err := connectHandler.GetActiveMatch(ctx, &solomatchv1message.GetActiveMatchRequest{})
 	if err != nil {
 		t.Fatalf("unexpected get active match err: %v", err)
 	}
-	if noActiveRes.Msg.Match != nil {
-		t.Errorf("expected nil active match, got %+v", noActiveRes.Msg.Match)
+	if noActiveRes.Match != nil {
+		t.Errorf("expected nil active match, got %+v", noActiveRes.Match)
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/viethung213/gym-companion/internal/auth/application/apperror"
 	"github.com/viethung213/gym-companion/internal/auth/application/command"
@@ -803,209 +802,209 @@ func NewConnectAuthHandler(grpcHandler *GRPCHandler) authv1serviceconnect.AuthSe
 
 func (c *ConnectAuthHandler) RefreshToken(
 	ctx context.Context,
-	req *connect.Request[authv1message.RefreshTokenRequest],
-) (*connect.Response[authv1message.RefreshTokenResponse], error) {
-	res, err := c.grpcHandler.RefreshToken(ctx, req.Msg)
+	req *authv1message.RefreshTokenRequest,
+) (*authv1message.RefreshTokenResponse, error) {
+	res, err := c.grpcHandler.RefreshToken(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) Logout(
 	ctx context.Context,
-	req *connect.Request[authv1message.LogoutRequest],
-) (*connect.Response[authv1message.LogoutResponse], error) {
-	res, err := c.grpcHandler.Logout(ctx, req.Msg)
+	req *authv1message.LogoutRequest,
+) (*authv1message.LogoutResponse, error) {
+	res, err := c.grpcHandler.Logout(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) GetOAuthLoginURL(
 	ctx context.Context,
-	req *connect.Request[authv1message.GetOAuthLoginURLRequest],
-) (*connect.Response[authv1message.GetOAuthLoginURLResponse], error) {
-	res, err := c.grpcHandler.GetOAuthLoginURL(ctx, req.Msg)
+	req *authv1message.GetOAuthLoginURLRequest,
+) (*authv1message.GetOAuthLoginURLResponse, error) {
+	res, err := c.grpcHandler.GetOAuthLoginURL(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) RotateKeys(
 	ctx context.Context,
-	req *connect.Request[authv1message.RotateKeysRequest],
-) (*connect.Response[authv1message.RotateKeysResponse], error) {
-	res, err := c.grpcHandler.RotateKeys(ctx, req.Msg)
+	req *authv1message.RotateKeysRequest,
+) (*authv1message.RotateKeysResponse, error) {
+	res, err := c.grpcHandler.RotateKeys(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) GetJWKS(
 	ctx context.Context,
-	req *connect.Request[authv1message.GetJWKSRequest],
-) (*connect.Response[authv1message.GetJWKSResponse], error) {
-	res, err := c.grpcHandler.GetJWKS(ctx, req.Msg)
+	req *authv1message.GetJWKSRequest,
+) (*authv1message.GetJWKSResponse, error) {
+	res, err := c.grpcHandler.GetJWKS(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) LoginWithOAuth(
 	ctx context.Context,
-	req *connect.Request[authv1message.LoginWithOAuthRequest],
-) (*connect.Response[authv1message.LoginWithOAuthResponse], error) {
-	res, err := c.grpcHandler.LoginWithOAuth(ctx, req.Msg)
+	req *authv1message.LoginWithOAuthRequest,
+) (*authv1message.LoginWithOAuthResponse, error) {
+	res, err := c.grpcHandler.LoginWithOAuth(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) Register(
 	ctx context.Context,
-	req *connect.Request[authv1message.RegisterRequest],
-) (*connect.Response[authv1message.RegisterResponse], error) {
-	res, err := c.grpcHandler.Register(ctx, req.Msg)
+	req *authv1message.RegisterRequest,
+) (*authv1message.RegisterResponse, error) {
+	res, err := c.grpcHandler.Register(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) Login(
 	ctx context.Context,
-	req *connect.Request[authv1message.LoginRequest],
-) (*connect.Response[authv1message.LoginResponse], error) {
-	res, err := c.grpcHandler.Login(ctx, req.Msg)
+	req *authv1message.LoginRequest,
+) (*authv1message.LoginResponse, error) {
+	res, err := c.grpcHandler.Login(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) SendOTP(
 	ctx context.Context,
-	req *connect.Request[authv1message.SendOTPRequest],
-) (*connect.Response[authv1message.SendOTPResponse], error) {
-	res, err := c.grpcHandler.SendOTP(ctx, req.Msg)
+	req *authv1message.SendOTPRequest,
+) (*authv1message.SendOTPResponse, error) {
+	res, err := c.grpcHandler.SendOTP(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) VerifyOTP(
 	ctx context.Context,
-	req *connect.Request[authv1message.VerifyOTPRequest],
-) (*connect.Response[authv1message.VerifyOTPResponse], error) {
-	res, err := c.grpcHandler.VerifyOTP(ctx, req.Msg)
+	req *authv1message.VerifyOTPRequest,
+) (*authv1message.VerifyOTPResponse, error) {
+	res, err := c.grpcHandler.VerifyOTP(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) ChangePassword(
 	ctx context.Context,
-	req *connect.Request[authv1message.ChangePasswordRequest],
-) (*connect.Response[authv1message.ChangePasswordResponse], error) {
-	res, err := c.grpcHandler.ChangePassword(ctx, req.Msg)
+	req *authv1message.ChangePasswordRequest,
+) (*authv1message.ChangePasswordResponse, error) {
+	res, err := c.grpcHandler.ChangePassword(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) ResetPassword(
 	ctx context.Context,
-	req *connect.Request[authv1message.ResetPasswordRequest],
-) (*connect.Response[authv1message.ResetPasswordResponse], error) {
-	res, err := c.grpcHandler.ResetPassword(ctx, req.Msg)
+	req *authv1message.ResetPasswordRequest,
+) (*authv1message.ResetPasswordResponse, error) {
+	res, err := c.grpcHandler.ResetPassword(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) RegisterBrand(
 	ctx context.Context,
-	req *connect.Request[authv1message.RegisterBrandRequest],
-) (*connect.Response[authv1message.RegisterBrandResponse], error) {
-	res, err := c.grpcHandler.RegisterBrand(ctx, req.Msg)
+	req *authv1message.RegisterBrandRequest,
+) (*authv1message.RegisterBrandResponse, error) {
+	res, err := c.grpcHandler.RegisterBrand(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) ApproveBrand(
 	ctx context.Context,
-	req *connect.Request[authv1message.ApproveBrandRequest],
-) (*connect.Response[authv1message.ApproveBrandResponse], error) {
-	res, err := c.grpcHandler.ApproveBrand(ctx, req.Msg)
+	req *authv1message.ApproveBrandRequest,
+) (*authv1message.ApproveBrandResponse, error) {
+	res, err := c.grpcHandler.ApproveBrand(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) RejectBrand(
 	ctx context.Context,
-	req *connect.Request[authv1message.RejectBrandRequest],
-) (*connect.Response[authv1message.RejectBrandResponse], error) {
-	res, err := c.grpcHandler.RejectBrand(ctx, req.Msg)
+	req *authv1message.RejectBrandRequest,
+) (*authv1message.RejectBrandResponse, error) {
+	res, err := c.grpcHandler.RejectBrand(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) ListBrandRequests(
 	ctx context.Context,
-	req *connect.Request[authv1message.ListBrandRequestsRequest],
-) (*connect.Response[authv1message.ListBrandRequestsResponse], error) {
-	res, err := c.grpcHandler.ListBrandRequests(ctx, req.Msg)
+	req *authv1message.ListBrandRequestsRequest,
+) (*authv1message.ListBrandRequestsResponse, error) {
+	res, err := c.grpcHandler.ListBrandRequests(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) ListUsers(
 	ctx context.Context,
-	req *connect.Request[authv1message.ListUsersRequest],
-) (*connect.Response[authv1message.ListUsersResponse], error) {
-	res, err := c.grpcHandler.ListUsers(ctx, req.Msg)
+	req *authv1message.ListUsersRequest,
+) (*authv1message.ListUsersResponse, error) {
+	res, err := c.grpcHandler.ListUsers(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) LockUser(
 	ctx context.Context,
-	req *connect.Request[authv1message.LockUserRequest],
-) (*connect.Response[authv1message.LockUserResponse], error) {
-	res, err := c.grpcHandler.LockUser(ctx, req.Msg)
+	req *authv1message.LockUserRequest,
+) (*authv1message.LockUserResponse, error) {
+	res, err := c.grpcHandler.LockUser(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 func (c *ConnectAuthHandler) UnlockUser(
 	ctx context.Context,
-	req *connect.Request[authv1message.UnlockUserRequest],
-) (*connect.Response[authv1message.UnlockUserResponse], error) {
-	res, err := c.grpcHandler.UnlockUser(ctx, req.Msg)
+	req *authv1message.UnlockUserRequest,
+) (*authv1message.UnlockUserResponse, error) {
+	res, err := c.grpcHandler.UnlockUser(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	socialv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/service/socialv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
@@ -76,55 +76,55 @@ func NewGRPCHandler(
 
 func (h *GRPCHandler) FollowUser(
 	ctx context.Context,
-	req *connect.Request[socialv1message.FollowUserRequest],
-) (*connect.Response[socialv1message.FollowUserResponse], error) {
+	req *socialv1message.FollowUserRequest,
+) (*socialv1message.FollowUserResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	err = h.followUserHandler.Handle(ctx, command.FollowUserCommand{
 		FollowerID:  actor.UserID,
-		FollowingID: req.Msg.GetFollowingId(),
+		FollowingID: req.GetFollowingId(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
-	return connect.NewResponse(&socialv1message.FollowUserResponse{
+	return &socialv1message.FollowUserResponse{
 		Success: true,
 		Message: "Followed successfully",
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) UnfollowUser(
 	ctx context.Context,
-	req *connect.Request[socialv1message.UnfollowUserRequest],
-) (*connect.Response[socialv1message.UnfollowUserResponse], error) {
+	req *socialv1message.UnfollowUserRequest,
+) (*socialv1message.UnfollowUserResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	err = h.unfollowUserHandler.Handle(ctx, command.UnfollowUserCommand{
 		FollowerID:  actor.UserID,
-		FollowingID: req.Msg.GetFollowingId(),
+		FollowingID: req.GetFollowingId(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
-	return connect.NewResponse(&socialv1message.UnfollowUserResponse{
+	return &socialv1message.UnfollowUserResponse{
 		Success: true,
 		Message: "Unfollowed successfully",
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) GetFollowers(
 	ctx context.Context,
-	req *connect.Request[socialv1message.GetFollowersRequest],
-) (*connect.Response[socialv1message.GetFollowersResponse], error) {
-	targetUserID := req.Msg.GetUserId()
+	req *socialv1message.GetFollowersRequest,
+) (*socialv1message.GetFollowersResponse, error) {
+	targetUserID := req.GetUserId()
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
@@ -133,17 +133,17 @@ func (h *GRPCHandler) GetFollowers(
 		targetUserID = currentUserID
 	}
 	if targetUserID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user_id required or authentication required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "user_id required or authentication required")
 	}
 
 	res, err := h.getFollowersHandler.Handle(ctx, query.GetFollowersQuery{
 		UserID:        targetUserID,
 		CurrentUserID: currentUserID,
-		PageSize:      int(req.Msg.GetPageSize()),
-		Cursor:        req.Msg.GetCursor(),
+		PageSize:      int(req.GetPageSize()),
+		Cursor:        req.GetCursor(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbFollowers := make([]*socialv1message.UserSocialSummary, len(res.Followers))
@@ -156,18 +156,18 @@ func (h *GRPCHandler) GetFollowers(
 		}
 	}
 
-	return connect.NewResponse(&socialv1message.GetFollowersResponse{
+	return &socialv1message.GetFollowersResponse{
 		Followers:  pbFollowers,
 		NextCursor: res.NextCursor,
 		TotalCount: res.TotalCount,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) GetFollowing(
 	ctx context.Context,
-	req *connect.Request[socialv1message.GetFollowingRequest],
-) (*connect.Response[socialv1message.GetFollowingResponse], error) {
-	targetUserID := req.Msg.GetUserId()
+	req *socialv1message.GetFollowingRequest,
+) (*socialv1message.GetFollowingResponse, error) {
+	targetUserID := req.GetUserId()
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
@@ -176,17 +176,17 @@ func (h *GRPCHandler) GetFollowing(
 		targetUserID = currentUserID
 	}
 	if targetUserID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user_id required or authentication required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "user_id required or authentication required")
 	}
 
 	res, err := h.getFollowingHandler.Handle(ctx, query.GetFollowingQuery{
 		UserID:        targetUserID,
 		CurrentUserID: currentUserID,
-		PageSize:      int(req.Msg.GetPageSize()),
-		Cursor:        req.Msg.GetCursor(),
+		PageSize:      int(req.GetPageSize()),
+		Cursor:        req.GetCursor(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbFollowing := make([]*socialv1message.UserSocialSummary, len(res.Following))
@@ -199,18 +199,18 @@ func (h *GRPCHandler) GetFollowing(
 		}
 	}
 
-	return connect.NewResponse(&socialv1message.GetFollowingResponse{
+	return &socialv1message.GetFollowingResponse{
 		Following:  pbFollowing,
 		NextCursor: res.NextCursor,
 		TotalCount: res.TotalCount,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) GetSocialSummary(
 	ctx context.Context,
-	req *connect.Request[socialv1message.GetSocialSummaryRequest],
-) (*connect.Response[socialv1message.GetSocialSummaryResponse], error) {
-	targetUserID := req.Msg.GetUserId()
+	req *socialv1message.GetSocialSummaryRequest,
+) (*socialv1message.GetSocialSummaryResponse, error) {
+	targetUserID := req.GetUserId()
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
@@ -219,7 +219,7 @@ func (h *GRPCHandler) GetSocialSummary(
 		targetUserID = currentUserID
 	}
 	if targetUserID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user_id required or authentication required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "user_id required or authentication required")
 	}
 
 	res, err := h.getSocialSummaryHandler.Handle(ctx, query.GetSocialSummaryQuery{
@@ -227,10 +227,10 @@ func (h *GRPCHandler) GetSocialSummary(
 		CurrentUserID: currentUserID,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
-	return connect.NewResponse(&socialv1message.GetSocialSummaryResponse{
+	return &socialv1message.GetSocialSummaryResponse{
 		UserId:         res.UserID,
 		FullName:       res.FullName,
 		AvatarUrl:      res.AvatarURL,
@@ -239,13 +239,13 @@ func (h *GRPCHandler) GetSocialSummary(
 		FollowingCount: res.FollowingCount,
 		PostCount:      res.PostCount,
 		IsFollowing:    res.IsFollowing,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) SearchUsers(
 	ctx context.Context,
-	req *connect.Request[socialv1message.SearchUsersRequest],
-) (*connect.Response[socialv1message.SearchUsersResponse], error) {
+	req *socialv1message.SearchUsersRequest,
+) (*socialv1message.SearchUsersResponse, error) {
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
@@ -253,13 +253,13 @@ func (h *GRPCHandler) SearchUsers(
 
 	res, err := h.searchUsersHandler.Handle(ctx, query.SearchUsersQuery{
 		CurrentUserID: currentUserID,
-		Query:         req.Msg.GetQuery(),
-		Role:          req.Msg.GetRole(),
-		PageSize:      int(req.Msg.GetPageSize()),
-		Cursor:        req.Msg.GetCursor(),
+		Query:         req.GetQuery(),
+		Role:          req.GetRole(),
+		PageSize:      int(req.GetPageSize()),
+		Cursor:        req.GetCursor(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbUsers := make([]*socialv1message.DiscoverUserItem, len(res.Users))
@@ -274,34 +274,34 @@ func (h *GRPCHandler) SearchUsers(
 		}
 	}
 
-	return connect.NewResponse(&socialv1message.SearchUsersResponse{
+	return &socialv1message.SearchUsersResponse{
 		Users:      pbUsers,
 		NextCursor: res.NextCursor,
 		TotalCount: res.TotalCount,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) CreatePost(
 	ctx context.Context,
-	req *connect.Request[socialv1message.CreatePostRequest],
-) (*connect.Response[socialv1message.CreatePostResponse], error) {
+	req *socialv1message.CreatePostRequest,
+) (*socialv1message.CreatePostResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	res, err := h.createPostHandler.Handle(ctx, command.CreatePostCommand{
 		UserID:     actor.UserID,
-		Caption:    req.Msg.GetCaption(),
-		MediaURLs:  req.Msg.GetMediaUrls(),
-		Visibility: req.Msg.GetVisibility(),
+		Caption:    req.GetCaption(),
+		MediaURLs:  req.GetMediaUrls(),
+		Visibility: req.GetVisibility(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	item := res.Item
-	return connect.NewResponse(&socialv1message.CreatePostResponse{
+	return &socialv1message.CreatePostResponse{
 		Item: &socialv1message.FeedItem{
 			Id:            item.ID(),
 			UserId:        item.UserID(),
@@ -315,27 +315,27 @@ func (h *GRPCHandler) CreatePost(
 			CreatedAt:     timestamppb.New(item.CreatedAt()),
 			UpdatedAt:     timestamppb.New(item.UpdatedAt()),
 		},
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) DeleteFeedItem(
 	ctx context.Context,
-	req *connect.Request[socialv1message.DeleteFeedItemRequest],
-) (*connect.Response[socialv1message.DeleteFeedItemResponse], error) {
+	req *socialv1message.DeleteFeedItemRequest,
+) (*socialv1message.DeleteFeedItemResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	err = h.deleteFeedItemHandler.Handle(ctx, command.DeleteFeedItemCommand{
-		FeedItemID: req.Msg.GetFeedItemId(),
+		FeedItemID: req.GetFeedItemId(),
 		UserID:     actor.UserID,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
-	return connect.NewResponse(&socialv1message.DeleteFeedItemResponse{Success: true}), nil
+	return &socialv1message.DeleteFeedItemResponse{Success: true}, nil
 }
 
 func mapFeedItemDTOToProto(item *query.FeedItemDTO) *socialv1message.FeedItem {
@@ -376,20 +376,20 @@ func mapFeedItemDTOToProto(item *query.FeedItemDTO) *socialv1message.FeedItem {
 
 func (h *GRPCHandler) GetActivityFeed(
 	ctx context.Context,
-	req *connect.Request[socialv1message.GetActivityFeedRequest],
-) (*connect.Response[socialv1message.GetActivityFeedResponse], error) {
+	req *socialv1message.GetActivityFeedRequest,
+) (*socialv1message.GetActivityFeedResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	res, err := h.getActivityFeedHandler.Handle(ctx, query.GetActivityFeedQuery{
 		CurrentUserID: actor.UserID,
-		PageSize:      int(req.Msg.GetPageSize()),
-		Cursor:        req.Msg.GetCursor(),
+		PageSize:      int(req.GetPageSize()),
+		Cursor:        req.GetCursor(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbItems := make([]*socialv1message.FeedItem, 0, len(res.Items))
@@ -397,37 +397,37 @@ func (h *GRPCHandler) GetActivityFeed(
 		pbItems = append(pbItems, mapFeedItemDTOToProto(item))
 	}
 
-	return connect.NewResponse(&socialv1message.GetActivityFeedResponse{
+	return &socialv1message.GetActivityFeedResponse{
 		Items:      pbItems,
 		NextCursor: res.NextCursor,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) GetUserProfileFeed(
 	ctx context.Context,
-	req *connect.Request[socialv1message.GetUserProfileFeedRequest],
-) (*connect.Response[socialv1message.GetUserProfileFeedResponse], error) {
+	req *socialv1message.GetUserProfileFeedRequest,
+) (*socialv1message.GetUserProfileFeedResponse, error) {
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
 	}
 
-	targetUserID := req.Msg.GetUserId()
+	targetUserID := req.GetUserId()
 	if targetUserID == "" {
 		targetUserID = currentUserID
 	}
 	if targetUserID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user_id required or authentication required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "user_id required or authentication required")
 	}
 
 	res, err := h.getUserProfileFeedHandler.Handle(ctx, query.GetUserProfileFeedQuery{
 		TargetUserID:  targetUserID,
 		CurrentUserID: currentUserID,
-		PageSize:      int(req.Msg.GetPageSize()),
-		Cursor:        req.Msg.GetCursor(),
+		PageSize:      int(req.GetPageSize()),
+		Cursor:        req.GetCursor(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbItems := make([]*socialv1message.FeedItem, 0, len(res.Items))
@@ -435,23 +435,23 @@ func (h *GRPCHandler) GetUserProfileFeed(
 		pbItems = append(pbItems, mapFeedItemDTOToProto(item))
 	}
 
-	return connect.NewResponse(&socialv1message.GetUserProfileFeedResponse{
+	return &socialv1message.GetUserProfileFeedResponse{
 		Items:      pbItems,
 		NextCursor: res.NextCursor,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) SearchPosts(
 	ctx context.Context,
-	req *connect.Request[socialv1message.SearchPostsRequest],
-) (*connect.Response[socialv1message.SearchPostsResponse], error) {
+	req *socialv1message.SearchPostsRequest,
+) (*socialv1message.SearchPostsResponse, error) {
 	currentUserID := ""
 	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
 		currentUserID = actor.UserID
 	}
 
 	itemTypeStr := ""
-	switch req.Msg.GetItemType() {
+	switch req.GetItemType() {
 	case socialv1message.FeedItemType_FEED_ITEM_TYPE_POST:
 		itemTypeStr = "POST"
 	case socialv1message.FeedItemType_FEED_ITEM_TYPE_WORKOUT_ACTIVITY:
@@ -459,25 +459,25 @@ func (h *GRPCHandler) SearchPosts(
 	}
 
 	authorID := ""
-	if req.Msg.UserId != nil {
-		authorID = req.Msg.GetUserId()
+	if req.UserId != nil {
+		authorID = req.GetUserId()
 	}
 
 	res, err := h.searchPostsHandler.Handle(ctx, query.SearchPostsQuery{
 		ViewerID: currentUserID,
 		AuthorID: authorID,
-		Query:    req.Msg.GetQuery(),
+		Query:    req.GetQuery(),
 		ItemType: itemTypeStr,
-		PageSize: int(req.Msg.GetPageSize()),
-		Cursor:   req.Msg.GetCursor(),
+		PageSize: int(req.GetPageSize()),
+		Cursor:   req.GetCursor(),
 	})
 	if err != nil {
 		if errors.Is(err, derror.ErrEmptySearchQuery) ||
 			errors.Is(err, derror.ErrSearchQueryTooShort) ||
 			errors.Is(err, derror.ErrInvalidUserID) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	items := make([]*socialv1message.FeedItem, 0, len(res.Items))
@@ -485,23 +485,23 @@ func (h *GRPCHandler) SearchPosts(
 		items = append(items, mapFeedItemDTOToProto(it))
 	}
 
-	return connect.NewResponse(&socialv1message.SearchPostsResponse{
+	return &socialv1message.SearchPostsResponse{
 		Items:      items,
 		NextCursor: res.NextCursor,
 		TotalCount: res.TotalCount,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) ReactTarget(
 	ctx context.Context,
-	req *connect.Request[socialv1message.ReactTargetRequest],
-) (*connect.Response[socialv1message.ReactTargetResponse], error) {
+	req *socialv1message.ReactTargetRequest,
+) (*socialv1message.ReactTargetResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
-	reactionTypeStr := req.Msg.GetReactionType().String()
+	reactionTypeStr := req.GetReactionType().String()
 	// Strip "REACTION_TYPE_" prefix if present
 	if len(reactionTypeStr) > 14 && reactionTypeStr[:14] == "REACTION_TYPE_" {
 		reactionTypeStr = reactionTypeStr[14:]
@@ -509,32 +509,32 @@ func (h *GRPCHandler) ReactTarget(
 
 	res, err := h.reactTargetHandler.Handle(ctx, command.ReactTargetCommand{
 		UserID:       actor.UserID,
-		FeedItemID:   req.Msg.GetFeedItemId(),
+		FeedItemID:   req.GetFeedItemId(),
 		ReactionType: reactionTypeStr,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
-	return connect.NewResponse(&socialv1message.ReactTargetResponse{
+	return &socialv1message.ReactTargetResponse{
 		Success:         true,
 		CurrentReaction: res.CurrentReaction,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) ListReactions(
 	ctx context.Context,
-	req *connect.Request[socialv1message.ListReactionsRequest],
-) (*connect.Response[socialv1message.ListReactionsResponse], error) {
-	if req.Msg.GetFeedItemId() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("feed_item_id required"))
+	req *socialv1message.ListReactionsRequest,
+) (*socialv1message.ListReactionsResponse, error) {
+	if req.GetFeedItemId() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "feed_item_id required")
 	}
 
 	res, err := h.listReactionsHandler.Handle(ctx, query.ListReactionsQuery{
-		FeedItemID: req.Msg.GetFeedItemId(),
+		FeedItemID: req.GetFeedItemId(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbReactions := make([]*socialv1message.ReactionItem, 0, len(res.Reactions))
@@ -560,38 +560,38 @@ func (h *GRPCHandler) ListReactions(
 		})
 	}
 
-	return connect.NewResponse(&socialv1message.ListReactionsResponse{
+	return &socialv1message.ListReactionsResponse{
 		Reactions:  pbReactions,
 		TotalCount: res.TotalCount,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) AddComment(
 	ctx context.Context,
-	req *connect.Request[socialv1message.AddCommentRequest],
-) (*connect.Response[socialv1message.AddCommentResponse], error) {
+	req *socialv1message.AddCommentRequest,
+) (*socialv1message.AddCommentResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	var parentID *string
-	if req.Msg.ParentId != nil && *req.Msg.ParentId != "" {
-		parentID = req.Msg.ParentId
+	if req.ParentId != nil && *req.ParentId != "" {
+		parentID = req.ParentId
 	}
 
 	res, err := h.addCommentHandler.Handle(ctx, command.AddCommentCommand{
 		UserID:     actor.UserID,
-		FeedItemID: req.Msg.GetFeedItemId(),
-		Content:    req.Msg.GetContent(),
+		FeedItemID: req.GetFeedItemId(),
+		Content:    req.GetContent(),
 		ParentID:   parentID,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	c := res.Comment
-	return connect.NewResponse(&socialv1message.AddCommentResponse{
+	return &socialv1message.AddCommentResponse{
 		Comment: &socialv1message.CommentItem{
 			Id:         c.ID(),
 			UserId:     c.UserID(),
@@ -600,20 +600,20 @@ func (h *GRPCHandler) AddComment(
 			Content:    c.Content(),
 			CreatedAt:  timestamppb.New(c.CreatedAt()),
 		},
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) ListComments(
 	ctx context.Context,
-	req *connect.Request[socialv1message.ListCommentsRequest],
-) (*connect.Response[socialv1message.ListCommentsResponse], error) {
+	req *socialv1message.ListCommentsRequest,
+) (*socialv1message.ListCommentsResponse, error) {
 	res, err := h.listCommentsHandler.Handle(ctx, query.ListCommentsQuery{
-		FeedItemID: req.Msg.GetFeedItemId(),
-		PageSize:   int(req.Msg.GetPageSize()),
-		Cursor:     req.Msg.GetCursor(),
+		FeedItemID: req.GetFeedItemId(),
+		PageSize:   int(req.GetPageSize()),
+		Cursor:     req.GetCursor(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	pbComments := make([]*socialv1message.CommentItem, 0, len(res.Comments))
@@ -630,29 +630,29 @@ func (h *GRPCHandler) ListComments(
 		})
 	}
 
-	return connect.NewResponse(&socialv1message.ListCommentsResponse{
+	return &socialv1message.ListCommentsResponse{
 		Comments:   pbComments,
 		NextCursor: res.NextCursor,
 		TotalCount: res.TotalCount,
-	}), nil
+	}, nil
 }
 
 func (h *GRPCHandler) DeleteComment(
 	ctx context.Context,
-	req *connect.Request[socialv1message.DeleteCommentRequest],
-) (*connect.Response[socialv1message.DeleteCommentResponse], error) {
+	req *socialv1message.DeleteCommentRequest,
+) (*socialv1message.DeleteCommentResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
 	}
 
 	err = h.deleteCommentHandler.Handle(ctx, command.DeleteCommentCommand{
-		CommentID: req.Msg.GetCommentId(),
+		CommentID: req.GetCommentId(),
 		UserID:    actor.UserID,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
-	return connect.NewResponse(&socialv1message.DeleteCommentResponse{Success: true}), nil
+	return &socialv1message.DeleteCommentResponse{Success: true}, nil
 }

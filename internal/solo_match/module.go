@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/service/solomatchv1serviceconnect"
@@ -263,14 +262,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	return grpcHandler, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handlers for the Solo Match module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handlers for the Solo Match module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcHandler *grpc.Handler,
-	opts ...connect.HandlerOption,
 ) string {
 	connectHandler := grpc.NewConnectSoloMatchHandler(grpcHandler)
-	path, handler := solomatchv1serviceconnect.NewSoloMatchServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	solomatchv1serviceconnect.RegisterSoloMatchServiceHandler(server, connectHandler)
+	return "/" + solomatchv1serviceconnect.SoloMatchServiceName + "/"
 }

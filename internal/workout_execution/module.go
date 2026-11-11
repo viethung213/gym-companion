@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -352,19 +352,18 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	return grpcHandler, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handlers for the Workout Execution module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handlers for the Workout Execution module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcHandler *workoutGRPC.GRPCHandler,
-	opts ...connect.HandlerOption,
 ) []string {
 	connectHandler := workoutGRPC.NewConnectWorkoutExecutionHandler(grpcHandler)
-	path, handler := workoutexecutionv1serviceconnect.NewWorkoutExecutionServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-
-	adminPath, adminHandler := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceHandler(connectHandler, opts...)
-	mux.Handle(adminPath, adminHandler)
-	return []string{path, adminPath}
+	workoutexecutionv1serviceconnect.RegisterWorkoutExecutionServiceHandler(server, connectHandler)
+	workoutexecutionv1serviceconnect.RegisterAdminWorkoutExecutionServiceHandler(server, connectHandler)
+	return []string{
+		"/" + workoutexecutionv1serviceconnect.WorkoutExecutionServiceName + "/",
+		"/" + workoutexecutionv1serviceconnect.AdminWorkoutExecutionServiceName + "/",
+	}
 }
 
 // RegisterWebTransport mounts the WebTransport config endpoint & WebSocket fallback on mux,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	notificationv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/message"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -130,7 +129,7 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Fatalf("expected unauthenticated error, got nil")
 		}
 
-		_, err = connectHandler.RegisterDeviceToken(ctx, connect.NewRequest(req))
+		_, err = connectHandler.RegisterDeviceToken(ctx, req)
 		if err == nil {
 			t.Fatalf("expected Connect unauthenticated error, got nil")
 		}
@@ -150,11 +149,11 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got success = false, want true")
 		}
 
-		connRes, err := connectHandler.RegisterDeviceToken(authCtx, connect.NewRequest(req))
+		connRes, err := connectHandler.RegisterDeviceToken(authCtx, req)
 		if err != nil {
 			t.Fatalf("Connect RegisterDeviceToken error: %v", err)
 		}
-		if !connRes.Msg.GetSuccess() {
+		if !connRes.GetSuccess() {
 			t.Errorf("got Connect success = false, want true")
 		}
 
@@ -179,11 +178,11 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got empty NotificationId")
 		}
 
-		connRes, err := connectHandler.SendPushNotification(ctx, connect.NewRequest(req))
+		connRes, err := connectHandler.SendPushNotification(ctx, req)
 		if err != nil {
 			t.Fatalf("Connect SendPushNotification error: %v", err)
 		}
-		if connRes.Msg.GetNotificationId() == "" {
+		if connRes.GetNotificationId() == "" {
 			t.Errorf("got empty Connect NotificationId")
 		}
 	})
@@ -215,11 +214,11 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got Update success = false, want true")
 		}
 
-		connGetRes, err := connectHandler.GetNotificationSettings(ctx, connect.NewRequest(getReq))
+		connGetRes, err := connectHandler.GetNotificationSettings(ctx, getReq)
 		if err != nil {
 			t.Fatalf("Connect GetNotificationSettings error: %v", err)
 		}
-		if connGetRes.Msg.GetEnablePush() {
+		if connGetRes.GetEnablePush() {
 			t.Errorf("after update, got EnablePush = true, want false")
 		}
 	})
@@ -252,12 +251,12 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got Mark success = false, want true")
 		}
 
-		connListRes, err := connectHandler.ListNotifications(ctx, connect.NewRequest(listReq))
+		connListRes, err := connectHandler.ListNotifications(ctx, listReq)
 		if err != nil {
 			t.Fatalf("Connect ListNotifications error: %v", err)
 		}
-		if connListRes.Msg.GetTotalCount() < 1 {
-			t.Errorf("got Connect TotalCount = %d, want >= 1", connListRes.Msg.GetTotalCount())
+		if connListRes.GetTotalCount() < 1 {
+			t.Errorf("got Connect TotalCount = %d, want >= 1", connListRes.GetTotalCount())
 		}
 	})
 }

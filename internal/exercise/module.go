@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/config"
@@ -214,14 +213,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	return grpcHandler, shutdown, nil
 }
 
-// RegisterConnectHandler mounts the ConnectRPC handler for the Exercise module on an http.ServeMux.
+// RegisterConnectHandler registers the ConnectRPC handler for the Exercise module on a connect.Server.
 func RegisterConnectHandler(
-	mux *http.ServeMux,
+	server *connect.Server,
 	grpcServer *exerciseGRPC.ExerciseServer,
-	opts ...connect.HandlerOption,
 ) string {
 	connectHandler := exerciseGRPC.NewConnectExerciseHandler(grpcServer)
-	path, handler := exercisev1serviceconnect.NewExerciseServiceHandler(connectHandler, opts...)
-	mux.Handle(path, handler)
-	return path
+	exercisev1serviceconnect.RegisterExerciseServiceHandler(server, connectHandler)
+	return "/" + exercisev1serviceconnect.ExerciseServiceName + "/"
 }

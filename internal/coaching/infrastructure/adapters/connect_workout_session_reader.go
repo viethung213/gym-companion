@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	workoutexecutionmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
@@ -28,7 +29,10 @@ func NewConnectWorkoutSessionReader(gatewayURL, internalSecret string, httpClien
 	if httpClient == nil {
 		httpClient = newDefaultHTTPClient()
 	}
-	client := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceClient(httpClient, gatewayURL)
+	transport := connecthttp.NewTransport(httpClient, gatewayURL)
+	client := workoutexecutionv1serviceconnect.NewAdminWorkoutExecutionServiceClient(
+		connect.NewClient(transport),
+	)
 	return &ConnectWorkoutSessionReader{
 		client:         client,
 		internalSecret: internalSecret,
@@ -46,12 +50,13 @@ func (c *ConnectWorkoutSessionReader) GetRecentSessions(ctx context.Context, use
 		return nil, fmt.Errorf("generate internal token: %w", err)
 	}
 
-	req := connect.NewRequest(&workoutexecutionmsg.AdminGetWorkoutHistoryRequest{
+	req := &workoutexecutionmsg.AdminGetWorkoutHistoryRequest{
 		UserId: userID,
 		Limit:  50,
 		Offset: 0,
-	})
-	req.Header().Set(middleware.HeaderInternalToken, tokenStr)
+	}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
 	res, err := c.client.AdminGetWorkoutHistory(ctx, req)
 	if err != nil {
@@ -61,7 +66,7 @@ func (c *ConnectWorkoutSessionReader) GetRecentSessions(ctx context.Context, use
 		return nil, fmt.Errorf("gateway get workout history for coaching user %s: %w", userID, err)
 	}
 
-	rawSessions := res.Msg.GetSessions()
+	rawSessions := res.GetSessions()
 	sessions := make([]port.WorkoutSession, 0, len(rawSessions))
 
 	for _, sess := range rawSessions {
@@ -107,11 +112,12 @@ func (c *ConnectWorkoutSessionReader) GetSetLogs(ctx context.Context, userID, ex
 		return nil, fmt.Errorf("generate internal token: %w", err)
 	}
 
-	req := connect.NewRequest(&workoutexecutionmsg.AdminGetPersonalRecordsRequest{
+	req := &workoutexecutionmsg.AdminGetPersonalRecordsRequest{
 		UserId:      userID,
 		ExerciseIds: []string{exerciseID},
-	})
-	req.Header().Set(middleware.HeaderInternalToken, tokenStr)
+	}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
 	res, err := c.client.AdminGetPersonalRecords(ctx, req)
 	if err != nil {
@@ -121,7 +127,7 @@ func (c *ConnectWorkoutSessionReader) GetSetLogs(ctx context.Context, userID, ex
 		return nil, fmt.Errorf("gateway get personal records for coaching user %s: %w", userID, err)
 	}
 
-	records := res.Msg.GetRecords()
+	records := res.GetRecords()
 	if len(records) == 0 {
 		return []port.SetLog{}, nil
 	}
