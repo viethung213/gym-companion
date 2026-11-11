@@ -64,6 +64,7 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, llmModel model.LLM) er
 		maxTokens = 8192
 	}
 
+	zero := int32(0)
 	generatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "NutritionGeneratorAgent",
 		Description: "Chuyên gia dinh dưỡng AI: chọn thực phẩm sáng tạo, cân bằng Macro theo TDEE.",
@@ -73,6 +74,9 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, llmModel model.LLM) er
 		OutputKey:   "generated_meal_plan_json",
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxTokens,
+			ThinkingConfig: &genai.ThinkingConfig{
+				ThinkingBudget: &zero,
+			},
 		},
 	})
 	if err != nil {

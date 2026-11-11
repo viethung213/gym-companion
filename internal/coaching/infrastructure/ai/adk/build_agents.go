@@ -90,6 +90,7 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		maxReviewerTokens = maxGeneratorTokens
 	}
 
+	zero := int32(0)
 	generatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "CoachGeneratorAgent",
 		Description: "Fitness expert generator agent using exercise and history tools.",
@@ -100,6 +101,9 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		OutputKey:   "generated_plan_text",
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxGeneratorTokens,
+			ThinkingConfig: &genai.ThinkingConfig{
+				ThinkingBudget: &zero,
+			},
 		},
 		BeforeModelCallbacks: beforeModelCallbacks("CoachGeneratorAgent", validateInputSafety),
 		AfterModelCallbacks:  afterModelCallbacks("CoachGeneratorAgent"),
@@ -129,6 +133,9 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		OutputSchema: buildPlanReviewSchema(),
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxReviewerTokens,
+			ThinkingConfig: &genai.ThinkingConfig{
+				ThinkingBudget: &zero,
+			},
 		},
 		BeforeModelCallbacks: beforeModelCallbacks("CoachReviewerAgent"),
 		AfterModelCallbacks:  afterModelCallbacks("CoachReviewerAgent"),
