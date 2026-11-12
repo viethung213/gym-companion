@@ -13,11 +13,14 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/service/socialv1serviceconnect"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
+	"github.com/viethung213/gym-companion/internal/social/application/port"
 	"github.com/viethung213/gym-companion/internal/social/application/query"
 	socialEvent "github.com/viethung213/gym-companion/internal/social/infrastructure/event"
 	socialKafka "github.com/viethung213/gym-companion/internal/social/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/social/infrastructure/persistence"
+	socialRedis "github.com/viethung213/gym-companion/internal/social/infrastructure/redis"
 	"github.com/viethung213/gym-companion/internal/social/infrastructure/worker"
 	socialConsumer "github.com/viethung213/gym-companion/internal/social/transport/consumer"
 	socialGRPC "github.com/viethung213/gym-companion/internal/social/transport/grpc"
@@ -67,8 +70,28 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(userSnapshotRepo, txManager)
 	updateUserRoleHandler := command.NewUpdateUserRoleHandler(userSnapshotRepo, txManager)
 
+	// Redis Adapters (Bloom filter & Trending pool cache)
+	var bloomFilter port.FeedBloomFilter
+	var trendingCache port.TrendingPoolCache
+	redisClient, rErr := sharedRedis.GetRegistry().GetClient()
+	if rErr != nil {
+		log.Printf("Warning: failed to get redis client for social feed caching: %v", rErr)
+	} else if redisClient != nil {
+		bloomFilter = socialRedis.NewBloomFeedFilter(redisClient)
+		trendingCache = socialRedis.NewTrendingPoolCache(redisClient)
+	}
+
 	// Query Handlers - using local social.users snapshot
-	getActivityFeedHandler := query.NewGetActivityFeedHandler(followRepo, feedItemRepo, interactionRepo, userSnapshotRepo)
+	var feedOpts []query.GetActivityFeedOption
+	if bloomFilter != nil {
+		feedOpts = append(feedOpts, query.WithFeedBloomFilter(bloomFilter))
+	}
+	if trendingCache != nil {
+		feedOpts = append(feedOpts, query.WithTrendingPoolCache(trendingCache))
+	}
+	getActivityFeedHandler := query.NewGetActivityFeedHandler(
+		followRepo, feedItemRepo, interactionRepo, userSnapshotRepo, feedOpts...,
+	)
 	getUserProfileFeedHandler := query.NewGetUserProfileFeedHandler(feedItemRepo, userSnapshotRepo)
 	getSocialSummaryHandler := query.NewGetSocialSummaryHandler(followRepo, feedItemRepo, userSnapshotRepo)
 	getFollowersHandler := query.NewGetFollowersHandler(followRepo, userSnapshotRepo)
@@ -149,6 +172,15 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 		go func() {
 			defer wg.Done()
 			outboxWorker.Start(workerCtx)
+		}()
+	}
+
+	if trendingCache != nil {
+		trendingWorker := worker.NewTrendingPoolWorker(feedItemRepo, trendingCache, 5*time.Minute)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			trendingWorker.Start(workerCtx)
 		}()
 	}
 

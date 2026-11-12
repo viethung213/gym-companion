@@ -286,6 +286,9 @@ func run() error {
 		if seedErr := seeder.SeedAIMotionSpecifications(seedCtx, workoutDB, exerciseDB); seedErr != nil {
 			log.Printf("⚠️ Background seeding AI motion specifications error: %v", seedErr)
 		}
+		if seedErr := seeder.SeedBotSocialActivities(seedCtx, db, socialGRPCHandler); seedErr != nil {
+			log.Printf("⚠️ Background seeding bot social activities error: %v", seedErr)
+		}
 	}()
 
 	// Auto-register with API Gateway via Service Discovery

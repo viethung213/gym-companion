@@ -109,3 +109,34 @@ Thay vì chia tách bảng tin thành nhiều nguồn dữ liệu rời rạc, h
   - Kiểm tra quyền trực tiếp tại tầng truy vấn cơ sở dữ liệu để bảo vệ dữ liệu và bảo đảm phân trang chính xác.
 - **Phân trang dạng Cursor**:
   - Hỗ trợ cuộn trang liên tục dựa trên cursor thời gian `created_at` giảm dần kết hợp định dạng ISO8601 UTC.
+
+---
+
+### 2.8. Đa Dạng Hóa Bảng Tin & Bể Trending (Activity Feed Diversity & Trending Pool)
+- **Vấn đề giải quyết**: Khắc phục hiện tượng Cold Start (người dùng mới chưa theo dõi ai hoặc theo dõi ít người) và hiện tượng bảng tin đơn điệu, lặp đi lặp lại nội dung đã xem.
+- **Tỷ lệ pha trộn 80/20 (Blending Ratio)**:
+  - Bảng tin ưu tiên 80% dung lượng trang (`limit`) cho bài viết từ mạng lưới người đang theo dõi (`Following`).
+  - Dành 20% dung lượng trang còn lại để lồng ghép các bài viết nổi bật từ **Bể Trending** của cộng đồng.
+  - Trường hợp danh sách bạn bè không đủ 80%, toàn bộ vị trí còn trống sẽ tự động được lấp đầy bằng bài viết từ Bể Trending.
+- **Bể Trending 500 bài trong 48 giờ (Trending Pool)**:
+  - Bể chứa tối đa 500 bài viết công khai (`PUBLIC`) có tương tác cao nhất trong vòng 48 giờ qua.
+  - Điểm nóng được tính theo công thức: $\text{Score} = (\text{reactions} \times 2) + (\text{comments} \times 5)$.
+- **Khử trùng lặp nội dung bằng Bloom Filter (Deduplication)**:
+  - Sử dụng cấu trúc dữ liệu xác suất **Redis Bloom Filter** để ghi nhớ những bài viết người dùng đã đọc trong 7 ngày qua.
+  - Mỗi khi người dùng xem một trang feed, danh sách ID bài viết được nạp vào Bloom Filter của người dùng (`BF.MADD`).
+  - Trong các lượt tải trang kế tiếp, những bài đã tồn tại trong Bloom Filter sẽ bị loại trừ (`BF.MEXISTS`), ngăn chặn việc người dùng nhìn thấy bài viết cũ nhiều lần.
+  - Key Bloom Filter tự động hết hạn (TTL 7 ngày) để tránh rò rỉ bộ nhớ.
+- **Neo con trỏ thời gian (Cursor Stability)**:
+  - `nextCursor` của trang feed luôn bám sát theo mốc thời gian của bài viết Following cuối cùng được hiển thị, ngăn chặn triệt để lỗi trôi thời gian do bài viết Trending gây ra.
+- **Van xả an toàn (Safety Valve Emergency Recycle)**:
+  - Khi người dùng đã xem hết 100% nội dung (cả bạn bè lẫn Trending đều bị Bloom Filter chặn), hệ thống kích hoạt van xả an toàn: tự động lấy các bài viết công khai mới nhất mà không áp bộ lọc Bloom.
+  - Đảm bảo người dùng không bao giờ rơi vào trạng thái "màn hình trắng trơn" (Empty Screen) khi lướt mạng xã hội.
+
+---
+
+### 2.9. Dữ Liệu Mẫu Cho Bot Mạng Xã Hội (Bot Social Seeding)
+- **Mục tiêu**: Tự động sinh dữ liệu mạng xã hội phong phú cho các tài khoản Bot hệ thống nhằm phục vụ demo, báo cáo và nạp đầy Bể Trending 500 bài.
+- **Quy tắc thực thi**:
+  - Thực thi ngầm (Background goroutine) bất đồng bộ lúc khởi động server, không làm chậm quá trình khởi động hoặc chặn kết nối người dùng.
+  - Thực thi hoàn toàn thông qua tầng API chuẩn (`SocialAPI`) với danh tính được gắn vào Context, tuyệt đối không chèn trực tiếp bằng SQL thô vào DB.
+  - Đảm bảo tính lũy đẳng (Idempotent): Tự động kiểm tra số lượng bài viết hiện có của các bot, nếu đã có $\ge 200$ bài thì tự động bỏ qua để tránh trùng lặp dữ liệu khi restart server.

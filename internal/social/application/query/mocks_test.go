@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/social/domain/entity"
@@ -139,13 +140,63 @@ func (m *queryMockFeedItemRepo) Create(ctx context.Context, item *aggregate.Feed
 func (m *queryMockFeedItemRepo) GetByID(ctx context.Context, id string) (*aggregate.FeedItem, error) {
 	return nil, nil
 }
+func (m *queryMockFeedItemRepo) GetByIDs(ctx context.Context, ids []string) ([]*aggregate.FeedItem, error) {
+	var res []*aggregate.FeedItem
+	idMap := make(map[string]bool)
+	for _, id := range ids {
+		idMap[id] = true
+	}
+	for _, it := range m.items {
+		if idMap[it.ID()] {
+			res = append(res, it)
+		}
+	}
+	return res, nil
+}
 func (m *queryMockFeedItemRepo) Delete(ctx context.Context, id, userID string) error { return nil }
 func (m *queryMockFeedItemRepo) GetByUserID(ctx context.Context, userID string, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
 	return m.items, "", nil
 }
 func (m *queryMockFeedItemRepo) GetByAuthorIDs(ctx context.Context, authorIDs []string, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
+	authorMap := make(map[string]bool, len(authorIDs))
+	for _, a := range authorIDs {
+		authorMap[a] = true
+	}
+	var cursorTime time.Time
+	if cursor != "" {
+		cursorTime, _ = time.Parse("2006-01-02T15:04:05.000000Z07:00", cursor)
+	}
+
+	var res []*aggregate.FeedItem
+	for _, it := range m.items {
+		if authorMap[it.UserID()] {
+			if !cursorTime.IsZero() && !it.CreatedAt().Before(cursorTime) {
+				continue
+			}
+			res = append(res, it)
+			if limit > 0 && len(res) == limit {
+				break
+			}
+		}
+	}
+
+	nextCursor := ""
+	if limit > 0 && len(res) == limit {
+		nextCursor = res[len(res)-1].CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
+	}
+	return res, nextCursor, nil
+}
+func (m *queryMockFeedItemRepo) GetTrendingCandidateIDs(ctx context.Context, limit, hours int) ([]string, error) {
+	ids := make([]string, 0, len(m.items))
+	for _, it := range m.items {
+		ids = append(ids, it.ID())
+	}
+	return ids, nil
+}
+func (m *queryMockFeedItemRepo) GetPublicFeedItems(ctx context.Context, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
 	return m.items, "", nil
 }
+
 func (m *queryMockFeedItemRepo) CountByUserID(ctx context.Context, userID string) (int32, error) {
 	return int32(len(m.items)), nil
 }

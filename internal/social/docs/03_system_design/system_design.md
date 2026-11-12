@@ -16,14 +16,15 @@ internal/social/
 │   ├── value_object/ (vo/)      # ReactionType, Visibility, ItemType, WorkoutMetrics, TargetType
 │   ├── event/                   # PostCreated, PostReacted, PostCommented, UserFollowed, UserUnfollowed
 │   ├── repository/              # Ports: FeedItemRepository, FollowRepository, InteractionRepository, UserSnapshotRepository
+│   ├── service/                 # Domain Services: FeedDiversityService (Pha trộn 80/20 & neo cursor)
 │   └── derror/                  # Domain Errors chuẩn hóa (ErrFeedItemNotFound, ErrSelfFollow, ...)
 │
 ├── application/                 # APPLICATION LAYER (Điều phối luồng nghiệp vụ)
 │   ├── command/                 # Use Cases ghi: CreatePost, DeleteFeedItem, IngestWorkoutActivity, ReactTarget, FollowUser, ...
-│   ├── query/                   # Use Cases đọc: GetActivityFeed, GetUserProfileFeed, GetSocialSummary, ListComments, ListReactions, ...
-│   └── port/                    # Ports phụ: OutboxRepository, OutboxLogRepository, TransactionManager, EventPublisher
+│   ├── query/                   # Use Cases đọc: GetActivityFeed, GetUserProfileFeed, GetSocialSummary, ListComments, ListReactions, SearchPosts
+│   └── port/                    # Ports: FeedBloomFilter, TrendingPoolCache, OutboxRepository, OutboxLogRepository, TransactionManager, EventPublisher
 │
-├── infrastructure/              # ADAPTERS NGOÀI (Cơ sở dữ liệu, Event Bus, Background Workers)
+├── infrastructure/              # ADAPTERS NGOÀI (Cơ sở dữ liệu, Redis, Event Bus, Background Workers)
 │   ├── persistence/             # GORM Repositories, Database Models & Mappers
 │   │   ├── gorm_feed_item_repository.go
 │   │   ├── gorm_follow_repository.go
@@ -34,9 +35,14 @@ internal/social/
 │   │   ├── models.go                       # GORM Models (social.* schema)
 │   │   ├── mapper.go                       # Chuyển đổi Domain <-> Persistence
 │   │   └── tx_manager.go                   # Quản lý Database Transaction
+│   ├── redis/                   # Redis Adapters (Bloom Filter & Trending Pool Cache)
+│   │   ├── redis_bloom_feed_filter.go
+│   │   └── redis_trending_pool_cache.go
 │   ├── event/                   # Outbox Writer (Đóng gói CloudEvents 1.0)
 │   ├── kafka/                   # Kafka Publisher
-│   └── worker/                  # Outbox Background Worker (CDC Poller)
+│   └── worker/                  # Background Workers (Outbox Poller, Trending Pool Worker)
+│       ├── outbox_worker.go
+│       └── trending_pool_worker.go
 │
 ├── transport/                   # DRIVING ADAPTERS (Giao diện bên ngoài)
 │   ├── grpc/                    # gRPC Service Handler (Implements SocialServiceServer)
@@ -259,3 +265,82 @@ LIMIT :limit;
    - Trích xuất `viewer_id` nếu có token Bearer hợp lệ.
    - Chuẩn hóa enum Protobuf sang Domain VO trước khi truyền vào Application layer.
    - Gọi `searchPostsHandler.Handle(...)` và chuyển đổi sang `SearchPostsResponse`.
+
+---
+
+## 6. Thiết Kế Bảng Tin Đa Tầng & Bể Trending (Multi-Tier Feed Architecture)
+
+### 6.1. Sơ Đồ Kiến Trúc Pipeline 4 Tầng
+
+```
+[Client GET /api/v1/feed]
+         │
+         ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Tầng 1: Lấy bài viết Following từ PostgreSQL (limit=10)      │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Tầng 2: Lấy bài viết Trending từ Redis ZSet (limit=20%)      │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Tầng 3: Lọc trùng lặp qua Redis Bloom Filter (BF.MEXISTS)    │
+│ - Ghi nhớ bài viết đã đọc trong 7 ngày qua (BF.MADD)         │
+│ - Loại bỏ bài trùng khỏi danh sách hiển thị                  │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+            ┌─────────────────────────────────────┐
+            │ Còn bài viết sau khi lọc Bloom?     │
+            └──────┬───────────────────────┬──────┘
+              Có   │                   Không│
+                   ▼                        ▼
+┌──────────────────────────────────┐ ┌──────────────────────────────────┐
+│ Pha trộn 80/20 & neo cursor chuẩn │ │ Tầng 4: Van xả an toàn           │
+│ (nextCursor = Following cuối)    │ │ Fallback bài Public mới nhất     │
+└──────────────────┬───────────────┘ │ (Không áp Bloom Filter)          │
+                   │                 └──────────────────┬───────────────┘
+                   ▼                                    │
+┌───────────────────────────────────────────────────────┴──────────────┐
+│ Trả về FeedItems + nextCursor cho Client                             │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### 6.2. Cấu Trúc Dữ Liệu Xác Suất: Redis Bloom Filter
+- **Mục đích**: Ghi nhớ lịch sử các bài viết người dùng đã đọc để không bao giờ hiển thị lại trong vòng 7 ngày mà chỉ tiêu tốn dung lượng RAM cực nhỏ (~1-2KB cho mỗi 1.000 bài).
+- **Key format**: `feed:seen:{userID}` (ví dụ: `feed:seen:usr-123`).
+- **Lệnh thực thi**:
+  - `BF.MEXISTS feed:seen:{userID} item1 item2 ...`: Kiểm tra batch các bài viết đã xem với chi phí $O(k)$ cực nhanh.
+  - `BF.MADD feed:seen:{userID} item1 item2 ...`: Ghi nhận batch các bài viết trả về cho client.
+  - `EXPIRE feed:seen:{userID} 604800`: Thiết lập TTL 7 ngày (604.800 giây) tự động thu hồi key khi người dùng không hoạt động.
+- **Cơ chế Graceful Degradation**:
+  - Nếu Redis gặp sự cố hoặc module Bloom chưa sẵn sàng, adapter trả về kết quả rỗng mà không làm gián đoạn request người dùng (Fail-open an toàn).
+
+### 6.3. Bể Trending 500 Bài (Trending Pool Cache & Worker)
+- **Key format**: `feed:trending:pool` (Redis Sorted Set - ZSet).
+- **Điểm nóng (Hotness Score)**:
+  $$\text{Score} = (\text{ReactionCount} \times 2) + (\text{CommentCount} \times 5)$$
+- **Background Worker (`trending_pool_worker.go`)**:
+  - Chạy định kỳ mỗi 5 phút một lần.
+  - Quét cơ sở dữ liệu PostgreSQL lấy tối đa 500 bài viết công khai (`PUBLIC`) có tương tác cao nhất được đăng trong vòng 48 giờ qua.
+  - Ghi đè vào Redis ZSet thông qua transaction pipeline (`DEL` + `ZADD`).
+
+### 6.4. Thuật Toán Neo Cursor & Van Xả An Toàn (Safety Valve)
+- **Lỗi Cursor Time Skew trước đây**:
+  - Khi pha trộn bài Trending (có thể được đăng từ 20–30 giờ trước) với bài Following (đăng cách đây vài phút), nếu lấy cursor theo mốc thời gian của bài cuối cùng trong mảng kết hợp, trang tiếp theo sẽ bỏ qua toàn bộ bài viết mới của bạn bè trong khoảng thời gian giữa hai bài.
+- **Giải pháp Neo Cursor**:
+  - `nextCursor` luôn được gán bằng mốc thời gian của **bài viết Following cuối cùng được tiêu thụ** (`followingItems[consumedFollowing-1]`). Nếu trang đó không tiêu thụ bài Following nào thì mới dùng mốc thời gian bài Trending.
+- **Van Xả An Toàn (Tầng 4)**:
+  - Khi người dùng lướt quá nhiều và đã "đọc sạch" toàn bộ kho bài viết, tập hợp bài chưa đọc sau lọc Bloom sẽ bị rỗng (`len == 0`).
+  - Hệ thống tự động fallback: Query trực tiếp 10 bài viết `PUBLIC` mới nhất từ PostgreSQL mà **không lọc qua Bloom Filter**, bảo đảm trải nghiệm người dùng luôn liên tục.
+
+### 6.5. Cố Định Phiên Bản Redis Stack Server
+- Cả `infra/redis/Dockerfile` và `infra/redis/docker-compose.yml` được ghim phiên bản cố định `redis/redis-stack-server:7.2.0-v20` (thay vì `:latest`) để tránh các lỗi phân rã tương thích của các lệnh Bloom Filter (`BF.MADD`, `BF.MEXISTS`).
+
+### 6.6. Bot Social Seeder (`internal/shared/seeder/social_seeder.go`)
+- **Nguyên tắc**: Tự động sinh đồ thị follow, bài viết và tương tác cho 10 bot hệ thống thông qua `SocialAPI` (gọi các phương thức gRPC chuẩn với `middleware.WithActor`).
+- **Non-blocking**: Khởi chạy trong goroutine nền tại `cmd/core/main.go`, timeout 2 phút, không làm nghẽn tiến trình khởi động server.
+- **Idempotent**: Tự động kiểm tra số lượng bài viết của bot hiện có trên DB; nếu $\ge 200$ thì tự động bỏ qua.

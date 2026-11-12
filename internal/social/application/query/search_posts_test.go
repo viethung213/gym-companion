@@ -25,6 +25,15 @@ func (m *searchTestMockFeedRepo) Create(ctx context.Context, item *aggregate.Fee
 func (m *searchTestMockFeedRepo) GetByID(ctx context.Context, id string) (*aggregate.FeedItem, error) {
 	return nil, nil
 }
+func (m *searchTestMockFeedRepo) GetByIDs(ctx context.Context, ids []string) ([]*aggregate.FeedItem, error) {
+	return nil, nil
+}
+func (m *searchTestMockFeedRepo) GetTrendingCandidateIDs(ctx context.Context, limit int, hours int) ([]string, error) {
+	return nil, nil
+}
+func (m *searchTestMockFeedRepo) GetPublicFeedItems(ctx context.Context, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
+	return nil, "", nil
+}
 func (m *searchTestMockFeedRepo) Delete(ctx context.Context, id, userID string) error { return nil }
 func (m *searchTestMockFeedRepo) GetByUserID(ctx context.Context, userID string, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
 	return nil, "", nil

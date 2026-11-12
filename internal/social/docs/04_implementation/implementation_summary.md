@@ -24,6 +24,8 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
   - `event/events.go`: Khai báo các sự kiện nghiệp vụ (`PostCreatedEvent`, `PostReactedEvent`, `PostCommentedEvent`, `UserFollowedEvent`, `UserUnfollowedEvent`).
 - [x] **Repository Ports (Interfaces)**:
   - Khai báo các giao diện trừu tượng cho tầng Persistence: `FeedItemRepository`, `FollowRepository`, `InteractionRepository` (quản lý Reaction & Comment), `UserSnapshotRepository`.
+- [x] **Domain Services**:
+  - `service/feed_diversity_service.go` & `service/feed_diversity_service_test.go`: Domain Service độc lập chịu trách nhiệm tính toán tỷ lệ pha trộn 80/20, lọc trùng lặp và neo con trỏ thời gian chuẩn xác (`BlendFeeds`).
 
 ---
 
@@ -40,7 +42,7 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
   - `command/sync_user_snapshot.go` & `command/sync_user_snapshot_test.go`: Cập nhật bản sao người dùng từ Profile/Auth.
   - `command/mocks_test.go`: Mock repository và transaction manager dùng chung cho các test suite command.
 - [x] **Query Handlers & Unit Tests Độc Lập (Tách 1:1)**:
-  - `query/get_activity_feed.go` & `query/get_activity_feed_test.go`: Lấy bảng tin Newfeed bạn bè và cá nhân bằng SQL tối ưu.
+  - `query/get_activity_feed.go` & `query/get_activity_feed_test.go`: Lấy bảng tin Newfeed đa tầng (Following 80%, Trending Pool 20%, Redis Bloom Filter khử trùng, Safety Valve xả an toàn, neo cursor tránh lệch mốc thời gian).
   - `query/get_user_profile_feed.go` & `query/get_user_profile_feed_test.go`: Lấy dòng hoạt động trang cá nhân tác giả (Cursor Pagination).
   - `query/get_social_summary.go` & `query/get_social_summary_test.go`: Tổng hợp số liệu thống kê cá nhân (PostCount, Followers, Following).
   - `query/get_followers.go` & `query/get_followers_test.go`: Truy vấn danh sách người theo dõi kèm Snapshot.
@@ -51,6 +53,8 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
   - `query/mocks_test.go`: Mock repository dùng chung cho các test suite query.
 - [x] **Application Ports**:
   - Tách rời riêng biệt:
+    - `port/feed_bloom_filter.go` (`FeedBloomFilter`: `ContainsSeen`, `RecordSeen`).
+    - `port/trending_pool_cache.go` (`TrendingPoolCache`: `GetTrendingFeedItemIDs`, `SaveTrendingPool`).
     - `port/outbox_repository.go` (`OutboxRecord`, `Save`, `ClaimBatch`, `MarkPublished`).
     - `port/outbox_log_repository.go` (`OutboxLogRecord`, `IsProcessed`, `Save`, `SaveLog`).
     - `port/tx.go` (`TransactionManager`).
@@ -70,6 +74,10 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
 - [x] **Event & Outbox Engine**:
   - `event/outbox_writer.go`: Chuyển đổi Domain Events thành CloudEvents 1.0 JSON hợp lệ và lưu vào `social.outbox` trong cùng transaction.
   - `worker/outbox_worker.go`: Background worker quét bảng outbox và đẩy lên Kafka với chu kỳ định thời.
+- [x] **Redis Caching & Bloom Filter Layer**:
+  - `redis/redis_bloom_feed_filter.go` & `_test.go`: Adapter Redis Bloom Filter với các lệnh `BF.MEXISTS`, `BF.MADD` và cơ chế TTL 7 ngày tự động thu hồi key.
+  - `redis/redis_trending_pool_cache.go` & `_test.go`: Adapter Redis Sorted Set lưu trữ và truy vấn danh sách 500 bài viết Trending.
+  - `worker/trending_pool_worker.go` & `_test.go`: Background worker định kỳ 5 phút tính điểm tương tác và cập nhật Bể Trending 500 bài.
 
 ---
 
@@ -93,6 +101,15 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
   - `proto/contracts/supporting/social/v1/message/social_messages.proto`: Khai báo thông điệp.
   - `proto/contracts/supporting/social/v1/service/social_service.proto`: Khai báo RPC service & gRPC-Gateway HTTP annotations.
   - Chạy `buf generate` tạo mã nguồn Go stubs và OpenAPI Swagger specs sạch sẽ.
+
+---
+
+### 1.6. Background Seeder & DevOps
+- [x] **Bot Social Seeder**:
+  - `internal/shared/seeder/social_seeder.go` & `_test.go`: Tự động sinh mạng lưới bạn bè, bài viết và tương tác cho 10 bot hệ thống qua `SocialAPI`, chạy ngầm không block server, bảo đảm tính lũy đẳng (Idempotent).
+  - Tích hợp tại `cmd/core/main.go`.
+- [x] **Redis Version Pinning**:
+  - Cố định tag `redis/redis-stack-server:7.2.0-v20` trong `infra/redis/Dockerfile` và `infra/redis/docker-compose.yml`.
 
 ---
 
