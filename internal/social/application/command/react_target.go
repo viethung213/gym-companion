@@ -15,6 +15,11 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/domain/vo"
 )
 
+const (
+	defaultReactionDebounceHoldDuration = 5 * time.Second
+	defaultReactionDebounceTimeoutTTL   = 60 * time.Second
+)
+
 type ReactTargetCommand struct {
 	UserID       string
 	FeedItemID   string
@@ -44,6 +49,17 @@ type ReactTargetHandler struct {
 	userSnapshotRepo repository.UserSnapshotRepository
 	eventRecorder    port.EventRecorder
 	txManager        port.TransactionManager
+	debounceBuffer   port.ReactionDebounceBuffer
+}
+
+// ReactTargetOption defines functional configuration for ReactTargetHandler.
+type ReactTargetOption func(*ReactTargetHandler)
+
+// WithReactTargetDebounceBuffer enables asynchronous debounce buffering via Redis ZSET.
+func WithReactTargetDebounceBuffer(buffer port.ReactionDebounceBuffer) ReactTargetOption {
+	return func(h *ReactTargetHandler) {
+		h.debounceBuffer = buffer
+	}
 }
 
 func NewReactTargetHandler(
@@ -52,14 +68,19 @@ func NewReactTargetHandler(
 	userSnapshotRepo repository.UserSnapshotRepository,
 	eventRecorder port.EventRecorder,
 	txManager port.TransactionManager,
+	opts ...ReactTargetOption,
 ) *ReactTargetHandler {
-	return &ReactTargetHandler{
+	h := &ReactTargetHandler{
 		interactionRepo:  interactionRepo,
 		feedItemRepo:     feedItemRepo,
 		userSnapshotRepo: userSnapshotRepo,
 		eventRecorder:    eventRecorder,
 		txManager:        txManager,
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *ReactTargetHandler) Handle(ctx context.Context, cmd ReactTargetCommand) (*ReactTargetResult, error) {
@@ -68,33 +89,72 @@ func (h *ReactTargetHandler) Handle(ctx context.Context, cmd ReactTargetCommand)
 	}
 
 	rt, _ := vo.NewReactionType(cmd.ReactionType)
+
+	// 1. Kiểm tra bài viết tồn tại (Fail-fast)
+	feedItem, feedErr := h.feedItemRepo.GetByID(ctx, cmd.FeedItemID)
+	if feedErr != nil {
+		return nil, fmt.Errorf("get target feed item: %w", feedErr)
+	}
+	if feedItem == nil {
+		return nil, derror.ErrPostNotFound
+	}
+
+	// 2. Kiểm tra người dùng tồn tại
+	var actorName, actorAvatarURL string
+	if h.userSnapshotRepo != nil {
+		user, userErr := h.userSnapshotRepo.GetByID(ctx, cmd.UserID)
+		if userErr != nil {
+			return nil, fmt.Errorf("get user snapshot: %w", userErr)
+		}
+		if user == nil {
+			return nil, derror.ErrUnauthorized
+		}
+		actorName = user.FullName()
+		actorAvatarURL = user.AvatarURL()
+	}
+
+	// 3. Fast-path: Nếu có Debounce Buffer (Redis ZSET 5s hold + 60s TTL)
+	if h.debounceBuffer != nil {
+		currentReaction, hasPending, pErr := h.debounceBuffer.GetPendingReaction(ctx, cmd.UserID, cmd.FeedItemID)
+		if pErr != nil {
+			// Redis reading error: log and fall back to DB check
+			hasPending = false
+		}
+
+		if !hasPending {
+			existing, getErr := h.interactionRepo.GetReaction(ctx, cmd.UserID, cmd.FeedItemID)
+			if getErr != nil {
+				return nil, fmt.Errorf("check existing reaction: %w", getErr)
+			}
+			if existing != nil {
+				currentReaction = string(existing.ReactionType())
+			}
+		}
+
+		var targetReaction string
+		if currentReaction == string(rt) {
+			targetReaction = "" // Toggle OFF
+		} else {
+			targetReaction = string(rt) // Set new reaction
+		}
+
+		if bufErr := h.debounceBuffer.BufferReaction(
+			ctx,
+			cmd.UserID,
+			cmd.FeedItemID,
+			targetReaction,
+			defaultReactionDebounceHoldDuration,
+			defaultReactionDebounceTimeoutTTL,
+		); bufErr != nil {
+			return nil, fmt.Errorf("buffer reaction: %w", bufErr)
+		}
+
+		return &ReactTargetResult{CurrentReaction: targetReaction}, nil
+	}
+
+	// 4. Synchronous Fallback (Khi debounce buffer không được kích hoạt)
 	var currentReaction string
-
 	err := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		// 1. Kiểm tra bài viết tồn tại (Fail-fast)
-		feedItem, feedErr := h.feedItemRepo.GetByID(txCtx, cmd.FeedItemID)
-		if feedErr != nil {
-			return fmt.Errorf("get target feed item: %w", feedErr)
-		}
-		if feedItem == nil {
-			return derror.ErrPostNotFound
-		}
-
-		// 2. Kiểm tra người dùng tồn tại và lấy thông tin hiển thị
-		var actorName, actorAvatarURL string
-		if h.userSnapshotRepo != nil {
-			user, userErr := h.userSnapshotRepo.GetByID(txCtx, cmd.UserID)
-			if userErr != nil {
-				return fmt.Errorf("get user snapshot: %w", userErr)
-			}
-			if user == nil {
-				return derror.ErrUnauthorized
-			}
-			actorName = user.FullName()
-			actorAvatarURL = user.AvatarURL()
-		}
-
-		// 3. Kiểm tra reaction đã có của user
 		existing, getErr := h.interactionRepo.GetReaction(txCtx, cmd.UserID, cmd.FeedItemID)
 		if getErr != nil {
 			return fmt.Errorf("check existing reaction: %w", getErr)

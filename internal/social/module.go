@@ -52,9 +52,36 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	eventRecorder := socialEvent.NewOutboxWriter(outboxRepo)
 	userSnapshotRepo := persistence.NewGormUserSnapshotRepository(gormDB)
 
-	// Command Handlers
-	followUserHandler := command.NewFollowUserHandler(followRepo, userSnapshotRepo, eventRecorder, txManager)
-	unfollowUserHandler := command.NewUnfollowUserHandler(followRepo, userSnapshotRepo, txManager)
+	// Redis Adapters (Bloom filter, Trending pool cache & Debounce buffers)
+	var bloomFilter port.FeedBloomFilter
+	var trendingCache port.TrendingPoolCache
+	var reactionDebounceBuffer port.ReactionDebounceBuffer
+	var followDebounceBuffer port.FollowDebounceBuffer
+
+	redisClient, rErr := sharedRedis.GetRegistry().GetClient()
+	if rErr != nil {
+		log.Printf("Warning: failed to get redis client for social caching/debounce: %v", rErr)
+	} else if redisClient != nil {
+		bloomFilter = socialRedis.NewBloomFeedFilter(redisClient)
+		trendingCache = socialRedis.NewTrendingPoolCache(redisClient)
+		reactionDebounceBuffer = socialRedis.NewReactionDebounceBuffer(redisClient)
+		followDebounceBuffer = socialRedis.NewFollowDebounceBuffer(redisClient)
+	}
+
+	// Command Handlers (with optional debounce buffer)
+	var followOpts []command.FollowUserOption
+	var unfollowOpts []command.UnfollowUserOption
+	var reactOpts []command.ReactTargetOption
+	if followDebounceBuffer != nil {
+		followOpts = append(followOpts, command.WithFollowDebounceBuffer(followDebounceBuffer))
+		unfollowOpts = append(unfollowOpts, command.WithUnfollowDebounceBuffer(followDebounceBuffer))
+	}
+	if reactionDebounceBuffer != nil {
+		reactOpts = append(reactOpts, command.WithReactTargetDebounceBuffer(reactionDebounceBuffer))
+	}
+
+	followUserHandler := command.NewFollowUserHandler(followRepo, userSnapshotRepo, eventRecorder, txManager, followOpts...)
+	unfollowUserHandler := command.NewUnfollowUserHandler(followRepo, userSnapshotRepo, txManager, unfollowOpts...)
 	createPostHandler := command.NewCreatePostHandler(
 		feedItemRepo,
 		eventRecorder,
@@ -63,23 +90,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 		command.WithCreatePostUserSnapshotRepo(userSnapshotRepo),
 	)
 	deleteFeedItemHandler := command.NewDeleteFeedItemHandler(feedItemRepo, txManager)
-	reactTargetHandler := command.NewReactTargetHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventRecorder, txManager)
+	reactTargetHandler := command.NewReactTargetHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventRecorder, txManager, reactOpts...)
 	addCommentHandler := command.NewAddCommentHandler(interactionRepo, feedItemRepo, userSnapshotRepo, eventRecorder, txManager)
 	deleteCommentHandler := command.NewDeleteCommentHandler(interactionRepo, feedItemRepo, txManager)
 	ingestWorkoutActivityHandler := command.NewIngestWorkoutActivityHandler(feedItemRepo, txManager)
 	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(userSnapshotRepo, txManager)
 	updateUserRoleHandler := command.NewUpdateUserRoleHandler(userSnapshotRepo, txManager)
-
-	// Redis Adapters (Bloom filter & Trending pool cache)
-	var bloomFilter port.FeedBloomFilter
-	var trendingCache port.TrendingPoolCache
-	redisClient, rErr := sharedRedis.GetRegistry().GetClient()
-	if rErr != nil {
-		log.Printf("Warning: failed to get redis client for social feed caching: %v", rErr)
-	} else if redisClient != nil {
-		bloomFilter = socialRedis.NewBloomFeedFilter(redisClient)
-		trendingCache = socialRedis.NewTrendingPoolCache(redisClient)
-	}
 
 	// Query Handlers - using local social.users snapshot
 	var feedOpts []query.GetActivityFeedOption
@@ -181,6 +197,28 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 		go func() {
 			defer wg.Done()
 			trendingWorker.Start(workerCtx)
+		}()
+	}
+
+	if reactionDebounceBuffer != nil {
+		reactionWorker := worker.NewReactionDebounceWorker(
+			reactionDebounceBuffer, interactionRepo, feedItemRepo, userSnapshotRepo, eventRecorder, txManager, 500*time.Millisecond,
+		)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			reactionWorker.Start(workerCtx)
+		}()
+	}
+
+	if followDebounceBuffer != nil {
+		followWorker := worker.NewFollowDebounceWorker(
+			followDebounceBuffer, followRepo, userSnapshotRepo, eventRecorder, txManager, 500*time.Millisecond,
+		)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			followWorker.Start(workerCtx)
 		}()
 	}
 

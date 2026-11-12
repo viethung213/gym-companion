@@ -4,10 +4,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/application/port"
 	"github.com/viethung213/gym-companion/internal/social/domain/derror"
 	"github.com/viethung213/gym-companion/internal/social/domain/repository"
+)
+
+const (
+	defaultUnfollowDebounceHoldDuration = 5 * time.Second
+	defaultUnfollowDebounceTimeoutTTL   = 60 * time.Second
 )
 
 type UnfollowUserCommand struct {
@@ -29,18 +35,34 @@ type UnfollowUserHandler struct {
 	followRepo       repository.FollowRepository
 	userSnapshotRepo repository.UserSnapshotRepository
 	txManager        port.TransactionManager
+	debounceBuffer   port.FollowDebounceBuffer
+}
+
+// UnfollowUserOption defines functional configuration for UnfollowUserHandler.
+type UnfollowUserOption func(*UnfollowUserHandler)
+
+// WithUnfollowDebounceBuffer enables asynchronous debounce buffering via Redis ZSET.
+func WithUnfollowDebounceBuffer(buffer port.FollowDebounceBuffer) UnfollowUserOption {
+	return func(h *UnfollowUserHandler) {
+		h.debounceBuffer = buffer
+	}
 }
 
 func NewUnfollowUserHandler(
 	followRepo repository.FollowRepository,
 	userSnapshotRepo repository.UserSnapshotRepository,
 	txManager port.TransactionManager,
+	opts ...UnfollowUserOption,
 ) *UnfollowUserHandler {
-	return &UnfollowUserHandler{
+	h := &UnfollowUserHandler{
 		followRepo:       followRepo,
 		userSnapshotRepo: userSnapshotRepo,
 		txManager:        txManager,
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *UnfollowUserHandler) Handle(ctx context.Context, cmd UnfollowUserCommand) error {
@@ -48,6 +70,41 @@ func (h *UnfollowUserHandler) Handle(ctx context.Context, cmd UnfollowUserComman
 		return err
 	}
 
+	// 1. Fast-path: Nếu có Debounce Buffer (Redis ZSET 5s hold + 60s TTL)
+	if h.debounceBuffer != nil {
+		isFollowing, hasPending, pErr := h.debounceBuffer.GetPendingFollow(ctx, cmd.FollowerID, cmd.FollowingID)
+		if pErr != nil {
+			hasPending = false
+		}
+
+		if !hasPending {
+			var checkErr error
+			isFollowing, checkErr = h.followRepo.IsFollowing(ctx, cmd.FollowerID, cmd.FollowingID)
+			if checkErr != nil {
+				return fmt.Errorf("check is following: %w", checkErr)
+			}
+		}
+
+		// Đã không follow rồi thì idempotent return ngay
+		if !isFollowing {
+			return nil
+		}
+
+		if bufErr := h.debounceBuffer.BufferFollow(
+			ctx,
+			cmd.FollowerID,
+			cmd.FollowingID,
+			false,
+			defaultUnfollowDebounceHoldDuration,
+			defaultUnfollowDebounceTimeoutTTL,
+		); bufErr != nil {
+			return fmt.Errorf("buffer unfollow: %w", bufErr)
+		}
+
+		return nil
+	}
+
+	// 2. Synchronous Fallback (Khi debounce buffer không được kích hoạt)
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		isFollowing, err := h.followRepo.IsFollowing(txCtx, cmd.FollowerID, cmd.FollowingID)
 		if err != nil {
