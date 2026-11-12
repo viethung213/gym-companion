@@ -63,6 +63,28 @@ func TestRepositories_FollowAndFeed(t *testing.T) {
 		t.Fatalf("GetByAuthorIDs failed: items=%d, err=%v", len(items), err)
 	}
 
+	// GetByIDs
+	byIDs, err := repos.FeedItemRepo.GetByIDs(ctx, []string{"p-1"})
+	if err != nil || len(byIDs) != 1 || byIDs[0].ID() != "p-1" {
+		t.Fatalf("GetByIDs failed: len=%d, err=%v", len(byIDs), err)
+	}
+	emptyByIDs, _ := repos.FeedItemRepo.GetByIDs(ctx, nil)
+	if len(emptyByIDs) != 0 {
+		t.Fatalf("expected empty result for nil ids")
+	}
+
+	// GetTrendingCandidateIDs
+	trendIDs, err := repos.FeedItemRepo.GetTrendingCandidateIDs(ctx, 10, 48)
+	if err != nil || len(trendIDs) != 1 || trendIDs[0] != "p-1" {
+		t.Fatalf("GetTrendingCandidateIDs failed: ids=%v, err=%v", trendIDs, err)
+	}
+
+	// GetPublicFeedItems
+	pubItems, _, err := repos.FeedItemRepo.GetPublicFeedItems(ctx, 10, "")
+	if err != nil || len(pubItems) != 1 || pubItems[0].ID() != "p-1" {
+		t.Fatalf("GetPublicFeedItems failed: len=%d, err=%v", len(pubItems), err)
+	}
+
 	// 3. Unfollow
 	if err := repos.FollowRepo.Unfollow(ctx, "user-1", "user-2"); err != nil {
 		t.Fatalf("Unfollow failed: %v", err)

@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS social.feed_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_social_feed_items_user_created ON social.feed_items (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_social_feed_items_visibility_created ON social.feed_items (visibility, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_social_feed_items_caption_trgm ON social.feed_items USING gin (caption gin_trgm_ops);
 
 -- 4. REACTIONS

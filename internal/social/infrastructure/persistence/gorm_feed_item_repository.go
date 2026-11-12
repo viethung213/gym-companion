@@ -42,6 +42,26 @@ func (r *GormFeedItemRepository) GetByID(ctx context.Context, id string) (*aggre
 	return ToDomainFeedItem(&m)
 }
 
+func (r *GormFeedItemRepository) GetByIDs(ctx context.Context, ids []string) ([]*aggregate.FeedItem, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var models []FeedItemModel
+	if err := GetDB(ctx, r.db).Where("id IN ?", ids).Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("find feed items by ids: %w", err)
+	}
+
+	res := make([]*aggregate.FeedItem, 0, len(models))
+	for i := range models {
+		domainItem, err := ToDomainFeedItem(&models[i])
+		if err == nil {
+			res = append(res, domainItem)
+		}
+	}
+	return res, nil
+}
+
 func (r *GormFeedItemRepository) Delete(ctx context.Context, id, userID string) error {
 	err := GetDB(ctx, r.db).Where("id = ? AND user_id = ?", id, userID).Delete(&FeedItemModel{}).Error
 	if err != nil {
@@ -99,6 +119,61 @@ func (r *GormFeedItemRepository) GetByAuthorIDs(ctx context.Context, authorIDs [
 	}
 
 	var res []*aggregate.FeedItem
+	for i := range models {
+		domainItem, err := ToDomainFeedItem(&models[i])
+		if err == nil {
+			res = append(res, domainItem)
+		}
+	}
+
+	nextCursor := ""
+	if len(models) == limit {
+		nextCursor = models[len(models)-1].CreatedAt.Format("2006-01-02T15:04:05.000000Z07:00")
+	}
+
+	return res, nextCursor, nil
+}
+
+func (r *GormFeedItemRepository) GetTrendingCandidateIDs(ctx context.Context, limit, hours int) ([]string, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	if hours <= 0 {
+		hours = 48
+	}
+
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+	var ids []string
+	err := GetDB(ctx, r.db).Model(&FeedItemModel{}).
+		Where("visibility = ? AND created_at >= ?", "PUBLIC", since).
+		Order("(reaction_count * 2 + comment_count * 5) DESC, created_at DESC").
+		Limit(limit).
+		Pluck("id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("find trending candidate ids: %w", err)
+	}
+
+	return ids, nil
+}
+
+func (r *GormFeedItemRepository) GetPublicFeedItems(ctx context.Context, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	query := GetDB(ctx, r.db).Where("visibility = ?", "PUBLIC")
+	if cursor != "" {
+		if t, err := time.Parse("2006-01-02T15:04:05.000000Z07:00", cursor); err == nil {
+			query = query.Where("created_at < ?", t)
+		}
+	}
+
+	var models []FeedItemModel
+	if err := query.Order("created_at DESC").Limit(limit).Find(&models).Error; err != nil {
+		return nil, "", fmt.Errorf("find public feed items: %w", err)
+	}
+
+	res := make([]*aggregate.FeedItem, 0, len(models))
 	for i := range models {
 		domainItem, err := ToDomainFeedItem(&models[i])
 		if err == nil {

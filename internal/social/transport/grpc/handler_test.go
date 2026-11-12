@@ -78,6 +78,32 @@ func (r *testFeedItemRepo) Create(ctx context.Context, item *aggregate.FeedItem)
 func (r *testFeedItemRepo) GetByID(ctx context.Context, id string) (*aggregate.FeedItem, error) {
 	return r.items[id], nil
 }
+
+func (r *testFeedItemRepo) GetByIDs(ctx context.Context, ids []string) ([]*aggregate.FeedItem, error) {
+	var list []*aggregate.FeedItem
+	for _, id := range ids {
+		if it, ok := r.items[id]; ok {
+			list = append(list, it)
+		}
+	}
+	return list, nil
+}
+
+func (r *testFeedItemRepo) GetTrendingCandidateIDs(ctx context.Context, limit, hours int) ([]string, error) {
+	ids := make([]string, 0, len(r.items))
+	for id := range r.items {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (r *testFeedItemRepo) GetPublicFeedItems(ctx context.Context, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
+	list := make([]*aggregate.FeedItem, 0, len(r.items))
+	for _, it := range r.items {
+		list = append(list, it)
+	}
+	return list, "", nil
+}
 func (r *testFeedItemRepo) Delete(ctx context.Context, id, userID string) error {
 	delete(r.items, id)
 	return nil

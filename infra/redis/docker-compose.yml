@@ -2,9 +2,11 @@ version: '3.8'
 
 services:
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:7.2.0-v20
     container_name: fitai-redis-test
-    command: redis-server --appendonly yes
+    environment:
+      - REDIS_ARGS=--appendonly yes
+
     ports:
       - "6379:6379"
     volumes:

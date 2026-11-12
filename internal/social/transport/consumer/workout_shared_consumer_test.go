@@ -29,6 +29,32 @@ func (m *mockFeedRepoForConsumer) GetByID(ctx context.Context, id string) (*aggr
 	return m.items[id], nil
 }
 
+func (m *mockFeedRepoForConsumer) GetByIDs(ctx context.Context, ids []string) ([]*aggregate.FeedItem, error) {
+	var res []*aggregate.FeedItem
+	for _, id := range ids {
+		if it, ok := m.items[id]; ok {
+			res = append(res, it)
+		}
+	}
+	return res, nil
+}
+
+func (m *mockFeedRepoForConsumer) GetTrendingCandidateIDs(ctx context.Context, limit, hours int) ([]string, error) {
+	ids := make([]string, 0, len(m.items))
+	for id := range m.items {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (m *mockFeedRepoForConsumer) GetPublicFeedItems(ctx context.Context, limit int, cursor string) ([]*aggregate.FeedItem, string, error) {
+	res := make([]*aggregate.FeedItem, 0, len(m.items))
+	for _, it := range m.items {
+		res = append(res, it)
+	}
+	return res, "", nil
+}
+
 func (m *mockFeedRepoForConsumer) Delete(ctx context.Context, id, userID string) error {
 	delete(m.items, id)
 	return nil
