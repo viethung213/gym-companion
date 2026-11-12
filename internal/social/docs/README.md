@@ -22,6 +22,8 @@ internal/social/docs/
 - Quy tắc chia sẻ buổi tập tôn trọng quyền riêng tư (Privacy-first).
 - Hệ thống tương tác (Reactions đa dạng cảm xúc, Bình luận đa cấp, Theo dõi người dùng).
 - Bản sao danh tính cục bộ (User Snapshot) phục vụ hiển thị siêu tốc.
+- Thuật toán đa dạng hóa bảng tin 80/20, Bể Trending 500 bài và Van xả an toàn.
+- Dữ liệu mẫu mạng xã hội cho bot hệ thống (Bot Social Seeding).
 
 ## 2. [Phân Tích Hệ Thống (System Analysis)](./02_system_analysis/system_analysis.md)
 - Sơ đồ Actor & Use Case Diagrams.
@@ -34,8 +36,9 @@ internal/social/docs/
 - Thiết kế cơ sở dữ liệu PostgreSQL (Schema Isolation `social.*`), cơ chế Single-Table Feed Item và Index tối ưu.
 - Mô hình Transactional Outbox & Outbox Log với khóa `FOR UPDATE SKIP LOCKED`.
 - Chuẩn hóa API Contract-First qua Protobuf / gRPC / REST Gateway.
+- Thiết kế Bảng tin Đa tầng: Redis Bloom Filter (BF.MADD/BF.MEXISTS), Redis ZSet Trending Pool Cache & Worker, thuật toán neo Cursor.
 
 ## 4. [Hiện Thực Hóa & Báo Cáo Hoàn Thành (Implementation Summary)](./04_implementation/implementation_summary.md)
-- Bảng đối chiếu mã nguồn thực tế đã xây dựng.
+- Bảng đối chiếu mã nguồn thực tế đã xây dựng (bao gồm cả Redis Bloom, Trending Cache, Worker và Bot Seeder).
 - Kết quả kiểm thử tự động (Unit Test, Integration Test, Concurrency Test).
 - Hướng dẫn vận hành, kiểm thử và mở rộng.
