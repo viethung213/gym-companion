@@ -32,8 +32,8 @@ func (r *SessionRepository) Save(ctx context.Context, token string, userID strin
 	dbSess := &SessionModel{
 		Token:     hashToken(token),
 		UserID:    userID,
-		CreatedAt: time.Now(),
-		ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: expiresAt.UTC(),
 	}
 	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "token"}},

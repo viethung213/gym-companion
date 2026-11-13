@@ -150,10 +150,10 @@ func NewPostgresNutritionPlanRepository(db *gorm.DB) *PostgresNutritionPlanRepos
 
 func (r *PostgresNutritionPlanRepository) FindByUserIDAndDate(ctx context.Context, userID string, date time.Time) (*aggregate.NutritionPlan, error) {
 	var gormPlan GormNutritionPlan
-	dateStr := date.Format("2006-01-02")
-	utcDateStr := date.UTC().Format("2006-01-02")
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location()).UTC()
+	endOfDay := startOfDay.Add(24 * time.Hour)
 	db := GetDB(ctx, r.db)
-	if err := db.First(&gormPlan, "user_id = ? AND (DATE(plan_date) = ? OR DATE(plan_date) = ?)", userID, dateStr, utcDateStr).Error; err != nil {
+	if err := db.First(&gormPlan, "user_id = ? AND plan_date >= ? AND plan_date < ?", userID, startOfDay, endOfDay).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}

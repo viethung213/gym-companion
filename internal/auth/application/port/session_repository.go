@@ -15,7 +15,7 @@ type SessionRecord struct {
 
 // IsExpired checks if the session is past its expiration time.
 func (s *SessionRecord) IsExpired() bool {
-	return time.Now().After(s.ExpiresAt)
+	return time.Now().UTC().After(s.ExpiresAt.UTC())
 }
 
 // SessionRepository defines the persistence port for session management.

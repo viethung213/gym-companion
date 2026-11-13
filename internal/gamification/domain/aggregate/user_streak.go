@@ -102,7 +102,7 @@ func (s *UserStreak) RecordActivity(
 		s.currentStreak = 1
 		s.longestStreak = 1
 		s.lastActivityDate = activityDate
-		s.updatedAt = recordedAt
+		s.updatedAt = recordedAt.UTC()
 
 		return []event.Event{
 			&event.StreakAdvanced{
@@ -135,7 +135,7 @@ func (s *UserStreak) RecordActivity(
 			s.longestStreak = s.currentStreak
 		}
 		s.lastActivityDate = activityDate
-		s.updatedAt = recordedAt
+		s.updatedAt = recordedAt.UTC()
 
 		events := []event.Event{
 			&event.StreakAdvanced{
@@ -163,7 +163,7 @@ func (s *UserStreak) RecordActivity(
 	oldStreak := s.currentStreak
 	s.currentStreak = 1
 	s.lastActivityDate = activityDate
-	s.updatedAt = recordedAt
+	s.updatedAt = recordedAt.UTC()
 
 	return []event.Event{
 		&event.StreakReset{
