@@ -145,6 +145,8 @@ func (s *ExerciseServer) SearchExercises(
 			MeasurementType:    toDomainMeasurementTypeString(req.GetMeasurementType()),
 			Status:             toDomainStatus(req.GetStatus()),
 			IncludeAllStatuses: req.GetIncludeAllStatuses(),
+			HasMotionSpec:      req.HasMotionSpec,
+			HasVoiceSpec:       req.HasVoiceSpec,
 		},
 	})
 	if err != nil {

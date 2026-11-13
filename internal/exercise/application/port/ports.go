@@ -20,6 +20,8 @@ type SearchFilters struct {
 	MeasurementType    string
 	Status             domain.Status
 	IncludeAllStatuses bool
+	HasMotionSpec      *bool
+	HasVoiceSpec       *bool
 }
 
 type Metadata struct {

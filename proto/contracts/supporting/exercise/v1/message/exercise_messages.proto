@@ -140,6 +140,8 @@ message SearchExercisesRequest {
   ExerciseMeasurementType measurement_type = 11;
   ExerciseStatus status = 12;
   bool include_all_statuses = 13;
+  optional bool has_motion_spec = 14;
+  optional bool has_voice_spec = 15;
 }
 
 message SearchExercisesResponse {
