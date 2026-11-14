@@ -24,6 +24,19 @@ func (m *mockUserSnapshotRepo) Upsert(ctx context.Context, snap *entity.UserSnap
 	return nil
 }
 
+func (m *mockUserSnapshotRepo) UpdateXP(ctx context.Context, userID string, xp int64, syncedAt time.Time) error {
+	if m.err != nil {
+		return m.err
+	}
+	snap, ok := m.snapshots[userID]
+	if !ok || snap == nil {
+		snap, _ = entity.NewUserSnapshot(userID, "", "", syncedAt)
+		m.snapshots[userID] = snap
+	}
+	snap.UpdateXP(xp, syncedAt)
+	return nil
+}
+
 func (m *mockUserSnapshotRepo) FindByUserID(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
 	return m.snapshots[userID], nil
 }

@@ -142,6 +142,7 @@ type UserSnapshotModel struct {
 	UserID      string    `gorm:"primaryKey;column:user_id"`
 	DisplayName string    `gorm:"column:display_name;not null"`
 	AvatarURL   string    `gorm:"column:avatar_url;default:''"`
+	XP          int64     `gorm:"column:xp;not null;default:0"`
 	SyncedAt    time.Time `gorm:"column:synced_at;not null"`
 }
 
@@ -150,7 +151,14 @@ func (UserSnapshotModel) TableName() string {
 }
 
 func (u *UserSnapshotModel) ToDomain() (*entity.UserSnapshot, error) {
-	return entity.NewUserSnapshot(u.UserID, u.DisplayName, u.AvatarURL, u.SyncedAt)
+	snap, err := entity.NewUserSnapshot(u.UserID, u.DisplayName, u.AvatarURL, u.SyncedAt)
+	if err != nil {
+		return nil, err
+	}
+	if u.XP > 0 {
+		snap.UpdateXP(u.XP, u.SyncedAt)
+	}
+	return snap, nil
 }
 
 func FromDomainUserSnapshot(s *entity.UserSnapshot) *UserSnapshotModel {
@@ -158,6 +166,7 @@ func FromDomainUserSnapshot(s *entity.UserSnapshot) *UserSnapshotModel {
 		UserID:      s.UserID(),
 		DisplayName: s.DisplayName(),
 		AvatarURL:   s.AvatarURL(),
+		XP:          s.XP(),
 		SyncedAt:    s.SyncedAt(),
 	}
 }

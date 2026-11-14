@@ -52,6 +52,10 @@ func (s *historySnapshotRepoMock) Upsert(ctx context.Context, snap *entity.UserS
 	return nil
 }
 
+func (s *historySnapshotRepoMock) UpdateXP(ctx context.Context, userID string, xp int64, syncedAt time.Time) error {
+	return nil
+}
+
 func (s *historySnapshotRepoMock) FindByUserID(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
 	return s.snapshots[userID], nil
 }
