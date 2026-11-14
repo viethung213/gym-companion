@@ -48,6 +48,7 @@ func TestSoloMatchModuleLifecycle(t *testing.T) {
 			user_id TEXT PRIMARY KEY,
 			display_name TEXT NOT NULL,
 			avatar_url TEXT,
+			xp INTEGER NOT NULL DEFAULT 0,
 			synced_at TIMESTAMP NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS solo_match.solo_matches (

@@ -61,4 +61,16 @@ func TestUserSnapshot(t *testing.T) {
 			t.Errorf("Updated SyncedAt got %v, want %v", u.SyncedAt(), later)
 		}
 	})
+
+	t.Run("updates xp and clamps negative values to zero", func(t *testing.T) {
+		u, _ := entity.NewUserSnapshot("user_xp", "Minjun", "", now)
+		u.UpdateXP(1250, now.Add(time.Minute))
+		if u.XP() != 1250 {
+			t.Errorf("XP got %d, want 1250", u.XP())
+		}
+		u.UpdateXP(-50, now.Add(2*time.Minute))
+		if u.XP() != 0 {
+			t.Errorf("negative XP should clamp to 0, got %d", u.XP())
+		}
+	})
 }

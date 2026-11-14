@@ -180,6 +180,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		soloMatchRoomReadyConsumer := consumer.NewSoloMatchRoomReadyConsumer(matchRepo, outboxLogRepo)
 		userRegisteredConsumer := consumer.NewUserRegisteredConsumer(syncSnapshotHandler, outboxLogRepo)
 		userIdentityUpdatedConsumer := consumer.NewUserIdentityUpdatedConsumer(syncSnapshotHandler, outboxLogRepo)
+		xpEarnedConsumer := consumer.NewXpEarnedConsumer(syncSnapshotHandler, outboxLogRepo)
 
 		// Consumer 3A: Workout Execution Events
 		workoutReader, rErr := deps.KafkaRegistry.GetReader("solo_match_workout_consumer", "workout_execution.events", kafkaBrokers)
@@ -232,6 +233,23 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 			}()
 		} else if pErr != nil {
 			slog.Warn("Failed to obtain profile events reader", slog.Any("error", pErr))
+		}
+
+		// Consumer 3D: Gamification Events (XP Earned)
+		gamificationReader, gErr := deps.KafkaRegistry.GetReader("solo_match_gamification_consumer", "gamification.events", kafkaBrokers)
+		if gErr == nil && gamificationReader != nil {
+			gamificationWorker := worker.NewKafkaConsumerWorker(
+				"Gamification Events Consumer",
+				gamificationReader,
+				xpEarnedConsumer,
+			)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				gamificationWorker.Start(workerCtx)
+			}()
+		} else if gErr != nil {
+			slog.Warn("Failed to obtain gamification events reader", slog.Any("error", gErr))
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/entity"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/repository"
@@ -33,6 +34,36 @@ func (r *GORMUserSnapshotRepository) Upsert(ctx context.Context, snapshot *entit
 	}).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("upsert user snapshot %s: %w", snapshot.UserID(), err)
+	}
+
+	return nil
+}
+
+func (r *GORMUserSnapshotRepository) UpdateXP(ctx context.Context, userID string, xp int64, syncedAt time.Time) error {
+	db := GetDB(ctx, r.db)
+	if xp < 0 {
+		xp = 0
+	}
+	if syncedAt.IsZero() {
+		syncedAt = time.Now().UTC()
+	}
+
+	model := &UserSnapshotModel{
+		UserID:      userID,
+		DisplayName: "Gym Athlete",
+		AvatarURL:   "",
+		XP:          xp,
+		SyncedAt:    syncedAt,
+	}
+
+	err := db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"xp", "synced_at",
+		}),
+	}).Create(model).Error
+	if err != nil {
+		return fmt.Errorf("update user snapshot xp %s: %w", userID, err)
 	}
 
 	return nil

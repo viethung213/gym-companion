@@ -11,6 +11,7 @@ type UserSnapshot struct {
 	userID      string
 	displayName string
 	avatarURL   string
+	xp          int64
 	syncedAt    time.Time
 }
 
@@ -47,6 +48,10 @@ func (u *UserSnapshot) AvatarURL() string {
 	return u.avatarURL
 }
 
+func (u *UserSnapshot) XP() int64 {
+	return u.xp
+}
+
 func (u *UserSnapshot) SyncedAt() time.Time {
 	return u.syncedAt
 }
@@ -57,6 +62,17 @@ func (u *UserSnapshot) Update(displayName, avatarURL string, syncedAt time.Time)
 		u.displayName = trimmedName
 	}
 	u.avatarURL = strings.TrimSpace(avatarURL)
+	if syncedAt.IsZero() {
+		syncedAt = time.Now().UTC()
+	}
+	u.syncedAt = syncedAt
+}
+
+func (u *UserSnapshot) UpdateXP(xp int64, syncedAt time.Time) {
+	if xp < 0 {
+		xp = 0
+	}
+	u.xp = xp
 	if syncedAt.IsZero() {
 		syncedAt = time.Now().UTC()
 	}
