@@ -111,7 +111,7 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, ids []string) erro
 		Where("id IN ?", ids).
 		Updates(map[string]interface{}{
 			"published":    true,
-			"published_at": time.Now(),
+			"published_at": time.Now().UTC(),
 			"status":       "PUBLISHED",
 		}).
 		Error
@@ -138,7 +138,7 @@ func (r *OutboxRepository) ClaimBatch(
 	}
 
 	var records []*port.OutboxRecord
-	now := time.Now()
+	now := time.Now().UTC()
 	lockedUntil := now.Add(lockDuration)
 
 	err := GetDB(ctx, r.db).Transaction(func(tx *gorm.DB) error {

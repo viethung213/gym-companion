@@ -30,7 +30,7 @@ func NewOTP(
 	cooldown time.Duration,
 	maxAttempts int,
 ) *OTP {
-	now := time.Now()
+	now := time.Now().UTC()
 	if maxAttempts <= 0 {
 		maxAttempts = 5
 	}
@@ -83,7 +83,7 @@ func (o *OTP) Verify(plainCode string, compareHash func(plain, hash string) bool
 		return derror.ErrOTPAlreadyUsed
 	}
 
-	if now.After(o.expiresAt) {
+	if now.UTC().After(o.expiresAt.UTC()) {
 		return derror.ErrOTPExpired
 	}
 
@@ -111,7 +111,9 @@ func (o *OTP) Invalidate(now time.Time) error {
 
 // CanResend checks if the cooldown period has elapsed.
 func (o *OTP) CanResend(now time.Time) bool {
-	return now.After(o.resendAvailableAt) || now.Equal(o.resendAvailableAt)
+	nowUTC := now.UTC()
+	resendUTC := o.resendAvailableAt.UTC()
+	return nowUTC.After(resendUTC) || nowUTC.Equal(resendUTC)
 }
 
 // Getters

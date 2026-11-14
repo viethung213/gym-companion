@@ -187,9 +187,16 @@ func (r *RoadmapRepository) FindPendingSessionsByDate(ctx context.Context, targe
 	db := r.getDB(ctx)
 
 	var sRecs []sessionPlanRecord
-	dateStr := targetDate.Format("2006-01-02")
+	startOfDay := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, targetDate.Location()).UTC()
+	endOfDay := startOfDay.Add(24 * time.Hour)
 
-	if err := db.Where("DATE(scheduled_date) = ? AND status = ?", dateStr, string(roadmap.SessionPlanStatusPending)).Find(&sRecs).Error; err != nil {
+	err := db.Where(
+		"scheduled_date >= ? AND scheduled_date < ? AND status = ?",
+		startOfDay,
+		endOfDay,
+		string(roadmap.SessionPlanStatusPending),
+	).Find(&sRecs).Error
+	if err != nil {
 		return nil, fmt.Errorf("find pending sessions by date: %w", err)
 	}
 

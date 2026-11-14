@@ -93,6 +93,15 @@ func (r *Registry) GetPool(module string) (*sql.DB, error) {
 		}
 	}
 
+	// Enforce UTC timezone to ensure consistency between application and database
+	if !strings.Contains(strings.ToLower(dbURL), "timezone=") {
+		if strings.Contains(dbURL, "?") {
+			dbURL += "&timezone=UTC"
+		} else {
+			dbURL += "?timezone=UTC"
+		}
+	}
+
 	// 2. Open Connection
 	conn, err := sql.Open("postgres", dbURL)
 	if err != nil {

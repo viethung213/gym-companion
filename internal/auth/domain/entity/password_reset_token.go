@@ -17,7 +17,7 @@ type PasswordResetToken struct {
 
 // NewPasswordResetToken creates a new PasswordResetToken instance.
 func NewPasswordResetToken(token string, userID string, ttl time.Duration) *PasswordResetToken {
-	now := time.Now()
+	now := time.Now().UTC()
 	return &PasswordResetToken{
 		token:     token,
 		userID:    userID,
@@ -49,7 +49,7 @@ func (t *PasswordResetToken) Use(now time.Time) error {
 	if t.isUsed {
 		return derror.ErrResetTokenAlreadyUsed
 	}
-	if now.After(t.expiresAt) {
+	if now.UTC().After(t.expiresAt.UTC()) {
 		return derror.ErrResetTokenExpired
 	}
 	t.isUsed = true

@@ -29,10 +29,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// realClock returns time.Now() for production use.
+// realClock returns time.Now().UTC() for production use.
 type realClock struct{}
 
-func (realClock) Now() time.Time { return time.Now() }
+func (realClock) Now() time.Time { return time.Now().UTC() }
 
 // ModuleDeps contains dependencies for coaching module initialization.
 type ModuleDeps struct {
