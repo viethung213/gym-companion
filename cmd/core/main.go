@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/auth"
 	"github.com/viethung213/gym-companion/internal/exercise"
@@ -27,6 +28,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"github.com/viethung213/gym-companion/internal/shared/seeder"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	"github.com/viethung213/gym-companion/internal/social"
 	solomatch "github.com/viethung213/gym-companion/internal/solo_match"
 	workoutexecution "github.com/viethung213/gym-companion/internal/workout_execution"
@@ -36,15 +38,29 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatalf("fatal error: %v", err) //nolint:forbidigo // Only allowed once in main
+		slog.Error("fatal core service error", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
 	loadEnvFiles(".env.core", ".env")
 
+	telemetry.InitLogger("fitai-core")
+
+	shutdownTracer, err := telemetry.InitTracer(context.Background(), "fitai-core")
+	if err != nil {
+		slog.Warn("Failed to initialize OpenTelemetry tracer for core", "error", err)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownTracer(shutdownCtx)
+		}()
+	}
+
 	dir, _ := os.Getwd()
-	log.Printf("📂 [Core Service] Working Directory: %s", dir)
+	slog.Info("Starting Core Service", "working_dir", dir)
 
 	appPort := os.Getenv("APP_PORT")
 	if appPort == "" {
@@ -65,14 +81,14 @@ func run() error {
 
 	redisClient, rErr := redisRegistry.GetClient()
 	if rErr != nil {
-		log.Printf("Warning: Redis connection failed: %v. Modules requiring Redis may operate in degraded mode.", rErr)
+		slog.Warn("Redis connection failed. Modules requiring Redis may operate in degraded mode.", "error", rErr)
 	}
 
 	db, err := dbRegistry.GetPool("auth")
 	if err != nil {
 		return fmt.Errorf("initialize auth database pool: %w", err)
 	}
-	log.Println("Initialized isolated Auth Database Pool successfully.")
+	slog.Info("Initialized isolated Auth Database Pool successfully")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -86,14 +102,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("initialize exercise database pool: %w", err)
 	}
-	log.Println("Initialized isolated Exercise Database Pool successfully.")
+	slog.Info("Initialized isolated Exercise Database Pool successfully")
 
 	workoutDB, err := dbRegistry.GetPool("workout_execution")
 	if err != nil {
-		log.Println("Warning: workout_execution database pool not found, falling back to auth pool.")
+		slog.Warn("workout_execution database pool not found, falling back to auth pool")
 		workoutDB = db
 	} else {
-		log.Println("Initialized isolated Workout Execution Database Pool successfully.")
+		slog.Info("Initialized isolated Workout Execution Database Pool successfully")
 	}
 
 	internalSecret := os.Getenv("INTERNAL_SECRET")
@@ -135,7 +151,7 @@ func run() error {
 	// Initialize Profile Module
 	profileDB, err := dbRegistry.GetPool("profile")
 	if err != nil {
-		log.Println("Warning: profile database pool not found, falling back to auth pool.")
+		slog.Warn("profile database pool not found, falling back to auth pool")
 		profileDB = db
 	}
 	profileGRPCHandler, shutdownProfile, err := profile.Initialize(ctx, profile.ModuleDeps{
@@ -150,7 +166,7 @@ func run() error {
 	// Initialize Social Module
 	socialDB, err := dbRegistry.GetPool("social")
 	if err != nil {
-		log.Println("Warning: social database pool not found, falling back to auth pool.")
+		slog.Warn("social database pool not found, falling back to auth pool")
 		socialDB = db
 	}
 	socialGRPCHandler, shutdownSocial, err := social.Initialize(ctx, social.ModuleDeps{
@@ -165,10 +181,10 @@ func run() error {
 	// Initialize Solo Match Module
 	soloMatchDB, err := dbRegistry.GetPool("solo_match")
 	if err != nil {
-		log.Println("Warning: solo_match database pool not found, falling back to auth pool.")
+		slog.Warn("solo_match database pool not found, falling back to auth pool")
 		soloMatchDB = db
 	} else {
-		log.Println("Initialized isolated Solo Match Database Pool successfully.")
+		slog.Info("Initialized isolated Solo Match Database Pool successfully")
 	}
 	soloMatchGRPCHandler, shutdownSoloMatch, err := solomatch.Initialize(ctx, solomatch.ModuleDeps{
 		DB:             soloMatchDB,
@@ -184,7 +200,7 @@ func run() error {
 	// Initialize Gamification Module
 	gamificationDB, err := dbRegistry.GetPool("gamification")
 	if err != nil {
-		log.Println("Warning: gamification database pool not found, falling back to auth pool.")
+		slog.Warn("gamification database pool not found, falling back to auth pool")
 		gamificationDB = db
 	}
 	gamificationGRPCHandler, shutdownGamification, err := gamification.Initialize(ctx, gamification.ModuleDeps{
@@ -197,10 +213,11 @@ func run() error {
 	defer shutdownGamification()
 
 	// Start HTTP Server with ConnectRPC, h2c, and CORS
-	log.Printf("🚀 Starting Core Service (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
+	slog.Info("Starting Core Service", "port", appPort, "protocol", "ConnectRPC + gRPC over h2c")
 	mux := http.NewServeMux()
 
 	connectServer := connect.NewServer(
+		middleware.NewConnectTracingInterceptor("core"),
 		middleware.NewConnectRecoveryInterceptor(),
 		middleware.NewConnectLoggingInterceptor(),
 		middleware.NewConnectErrorMappingInterceptor(),
@@ -239,17 +256,18 @@ func run() error {
 	}
 	shutdownWT, wtEndpoints, err := workoutexecution.RegisterWebTransport(mux, workoutServer, wtValidator, ":"+wtPort, internalSecret)
 	if err != nil {
-		log.Printf("Warning: failed to start WebTransport server: %v", err)
+		slog.Warn("Failed to start WebTransport server", "error", err)
 	} else {
 		defer shutdownWT()
 		prefixes = append(prefixes, wtEndpoints...)
 	}
 
-	// Health endpoint
+	// Health and Metrics endpoints
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK (Core Service)"))
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Wrap multiplexer with CORS middleware
 	corsHandler := cors.New(cors.Options{
@@ -269,25 +287,27 @@ func run() error {
 	h2cHandler := h2c.NewHandler(corsHandler, &http2.Server{})
 
 	server := &http.Server{
-		Addr:    ":" + appPort,
-		Handler: h2cHandler,
+		Addr:              ":" + appPort,
+		Handler:           h2cHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Run background seeder tasks for Core
 	go func() {
 		seedCtx := ctx
-		log.Println("🌱 Triggering background seeding for System Bots and Exercise catalog...")
+		slog.Info("Triggering background seeding for System Bots and Exercise catalog")
 		if seedErr := seeder.SeedSystemBots(seedCtx, db, authGRPCHandler); seedErr != nil {
-			log.Printf("⚠️ Background seeding system bots error: %v", seedErr)
+			slog.Warn("Background seeding system bots error", "error", seedErr)
 		}
 		if seedErr := seeder.SeedExercises(seedCtx, exerciseDB, exerciseServer); seedErr != nil {
-			log.Printf("⚠️ Background seeding exercise catalog error: %v", seedErr)
+			slog.Warn("Background seeding exercise catalog error", "error", seedErr)
 		}
 		if seedErr := seeder.SeedAIMotionSpecifications(seedCtx, workoutDB, exerciseDB); seedErr != nil {
-			log.Printf("⚠️ Background seeding AI motion specifications error: %v", seedErr)
+			slog.Warn("Background seeding AI motion specifications error", "error", seedErr)
 		}
 		if seedErr := seeder.SeedBotSocialActivities(seedCtx, db, socialGRPCHandler); seedErr != nil {
-			log.Printf("⚠️ Background seeding bot social activities error: %v", seedErr)
+			slog.Warn("Background seeding bot social activities error", "error", seedErr)
 		}
 	}()
 
@@ -334,7 +354,7 @@ func run() error {
 	case err := <-errChan:
 		return err
 	case sig := <-sigChan:
-		log.Printf("🛑 [Core Service] Received signal %v, initiating graceful shutdown...", sig)
+		slog.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -343,7 +363,7 @@ func run() error {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown: %w", err)
 	}
-	log.Println("👋 [Core Service] Graceful shutdown complete")
+	slog.Info("Core Service graceful shutdown complete")
 	return nil
 }
 

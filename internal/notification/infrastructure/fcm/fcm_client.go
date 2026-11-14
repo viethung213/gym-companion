@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	firebase "firebase.google.com/go/v4"
@@ -60,7 +60,7 @@ func NewClient(cfg *config.Config) *Client {
 	ctx := context.Background()
 
 	if cfg == nil {
-		log.Println("⚠️ Warning: config is nil. FCM Push SDK disabled.")
+		slog.Warn("Config is nil. FCM Push SDK disabled.")
 		return &Client{messagingClient: nil}
 	}
 
@@ -68,7 +68,7 @@ func NewClient(cfg *config.Config) *Client {
 	if saJSON, err := buildServiceAccountJSON(cfg); err == nil {
 		opts = append(opts, option.WithCredentialsJSON(saJSON))
 	} else if cfg.FCMClientEmail != "" || cfg.FCMPrivateKey != "" {
-		log.Printf("⚠️ Warning: failed to construct FCM service account JSON: %v", err)
+		slog.Warn("Failed to construct FCM service account JSON", slog.Any("error", err))
 	}
 
 	var fbCfg *firebase.Config
@@ -77,23 +77,23 @@ func NewClient(cfg *config.Config) *Client {
 	}
 
 	if len(opts) == 0 && cfg.FCMProjectID == "" {
-		log.Println("⚠️ Warning: FCM credentials and FCMProjectID are empty. FCM Push SDK disabled.")
+		slog.Warn("FCM credentials and FCMProjectID are empty. FCM Push SDK disabled.")
 		return &Client{messagingClient: nil}
 	}
 
 	app, err := firebase.NewApp(ctx, fbCfg, opts...)
 	if err != nil {
-		log.Printf("❌ Warning: failed to initialize Firebase App: %v", err)
+		slog.Warn("Failed to initialize Firebase App", slog.Any("error", err))
 		return &Client{messagingClient: nil}
 	}
 
 	msgClient, err := app.Messaging(ctx)
 	if err != nil {
-		log.Printf("❌ Warning: failed to initialize Firebase Messaging client: %v", err)
+		slog.Warn("Failed to initialize Firebase Messaging client", slog.Any("error", err))
 		return &Client{messagingClient: nil}
 	}
 
-	log.Printf("✅ FCM Firebase Real App & Messaging Client initialized successfully (Project: %s)", cfg.FCMProjectID)
+	slog.Info("FCM Firebase Real App & Messaging Client initialized successfully", slog.String("project_id", cfg.FCMProjectID))
 	return &Client{
 		messagingClient: msgClient,
 	}
@@ -105,8 +105,10 @@ func (c *Client) SendPush(ctx context.Context, tokens []string, title, body stri
 	}
 
 	if c.messagingClient == nil {
-		log.Printf("[FCM PUSH SDK DISABLED] Target Tokens (%d): %v | Title: '%s' | Body: '%s'",
-			len(tokens), tokens, title, body)
+		slog.InfoContext(ctx, "FCM Push SDK disabled (dry run)",
+			slog.Int("token_count", len(tokens)),
+			slog.String("title", title),
+			slog.String("body", body))
 
 		return &port.PushResponse{
 			SuccessCount:  0,

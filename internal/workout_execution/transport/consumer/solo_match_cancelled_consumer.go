@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -61,7 +61,7 @@ func (c *SoloMatchCancelledConsumer) HandleMessage(ctx context.Context, rawPaylo
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[WorkoutExecution] Warning checking outbox_log idempotency for %s: %v", env.ID, err)
+			slog.WarnContext(ctx, "Warning checking outbox_log idempotency", slog.String("event_id", env.ID), slog.String("error", err.Error()))
 		} else if processed {
 			return nil
 		}
@@ -76,7 +76,10 @@ func (c *SoloMatchCancelledConsumer) HandleMessage(ctx context.Context, rawPaylo
 		return nil
 	}
 
-	log.Printf("[WorkoutExecution] Received SoloMatchCancelled for match %s (reason: %s). Purging room and canceling bot...", data.MatchID, data.Reason)
+	slog.InfoContext(ctx, "Received SoloMatchCancelled, purging room and canceling bot",
+		slog.String("match_id", data.MatchID),
+		slog.String("reason", data.Reason),
+	)
 
 	// 1. Broadcast thông báo CANCELLED vào phòng Redis để client đang kết nối gRPC stream nhận được
 	if c.liveSync != nil {
@@ -85,7 +88,7 @@ func (c *SoloMatchCancelledConsumer) HandleMessage(ctx context.Context, rawPaylo
 			Status: "CANCELLED",
 		}
 		if pubErr := c.liveSync.PublishMyProgress(ctx, data.MatchID, cancelProg); pubErr != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to broadcast cancel progress for match %s: %v", data.MatchID, pubErr)
+			slog.WarnContext(ctx, "Failed to broadcast cancel progress for match", slog.String("match_id", data.MatchID), slog.String("error", pubErr.Error()))
 		}
 	}
 
@@ -98,7 +101,7 @@ func (c *SoloMatchCancelledConsumer) HandleMessage(ctx context.Context, rawPaylo
 	if c.liveSync != nil {
 		time.Sleep(100 * time.Millisecond)
 		if delErr := c.liveSync.DelRoom(ctx, data.MatchID); delErr != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to del Redis room for cancelled match %s: %v", data.MatchID, delErr)
+			slog.WarnContext(ctx, "Failed to del Redis room for cancelled match", slog.String("match_id", data.MatchID), slog.String("error", delErr.Error()))
 		}
 	}
 
@@ -112,7 +115,7 @@ func (c *SoloMatchCancelledConsumer) HandleMessage(ctx context.Context, rawPaylo
 			Status:       "PROCESSED",
 		}
 		if saveErr := c.outboxLogRepo.SaveLog(ctx, logRecord); saveErr != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to save outbox log for event %s: %v", env.ID, saveErr)
+			slog.WarnContext(ctx, "Failed to save outbox log for event", slog.String("event_id", env.ID), slog.String("error", saveErr.Error()))
 		}
 	}
 

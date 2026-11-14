@@ -1,7 +1,7 @@
 package sms
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -18,16 +18,16 @@ func NewSMSProvider(cfg *config.Config) port.SMSProvider {
 	providerType := strings.ToLower(strings.TrimSpace(cfg.SMSProvider))
 	switch providerType {
 	case "twilio":
-		log.Printf("📱 Initializing Twilio SMS Provider (From: %s)", cfg.TwilioFromNumber)
+		slog.Info("Initializing Twilio SMS Provider", slog.String("from", cfg.TwilioFromNumber))
 		return NewTwilioProvider(cfg)
 	case "infobip":
-		log.Printf("📱 Initializing Infobip SMS Provider (BaseURL: %s, From: %s)", cfg.InfobipBaseURL, cfg.InfobipFrom)
+		slog.Info("Initializing Infobip SMS Provider", slog.String("base_url", cfg.InfobipBaseURL), slog.String("from", cfg.InfobipFrom))
 		return NewInfobipProvider(cfg)
 	case "mock":
-		log.Println("📱 Initializing Mock SMS Provider (local/dev)")
+		slog.Info("Initializing Mock SMS Provider (local/dev)")
 		return NewMockSMSProvider()
 	default:
-		log.Printf("⚠️ Unknown SMS_PROVIDER '%s', defaulting to Mock SMS Provider", providerType)
+		slog.Warn("Unknown SMS_PROVIDER, defaulting to Mock SMS Provider", slog.String("provider", providerType))
 		return NewMockSMSProvider()
 	}
 }

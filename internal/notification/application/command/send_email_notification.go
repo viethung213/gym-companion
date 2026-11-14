@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -62,7 +62,7 @@ func (h *SendEmailNotificationHandler) Handle(ctx context.Context, cmd SendEmail
 
 		if setting != nil {
 			if !setting.EnableEmail() {
-				log.Printf("[Email Suppressed] User %s has disabled email notifications in settings", cmd.UserID)
+				slog.InfoContext(ctx, "User has disabled email notifications in settings", slog.String("user_id", cmd.UserID))
 				return &SendEmailNotificationResponse{
 					Status:  "EMAIL_DISABLED_BY_USER",
 					Message: "User has disabled email notifications in settings",
@@ -70,8 +70,10 @@ func (h *SendEmailNotificationHandler) Handle(ctx context.Context, cmd SendEmail
 			}
 
 			if setting.IsInQuietHours(time.Now()) {
-				log.Printf("[Email Suppressed] User %s is currently in quiet hours (%s - %s)",
-					cmd.UserID, setting.QuietHoursStart(), setting.QuietHoursEnd())
+				slog.InfoContext(ctx, "User is currently in quiet hours, email suppressed",
+					slog.String("user_id", cmd.UserID),
+					slog.String("quiet_start", setting.QuietHoursStart()),
+					slog.String("quiet_end", setting.QuietHoursEnd()))
 				return &SendEmailNotificationResponse{
 					Status:  "QUIET_HOURS_ACTIVE",
 					Message: "Email suppressed during user quiet hours",

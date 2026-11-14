@@ -3,7 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
@@ -82,7 +82,7 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 
 			return h.eventRecorder.RecordEvents(txCtx, []any{cancelledEv})
 		}); txErr != nil {
-			log.Printf("[SoloMatch Timeout] Failed to cancel expired match %s: %v", match.ID(), txErr)
+			slog.ErrorContext(ctx, "Failed to cancel expired match", slog.String("match_id", match.ID()), slog.Any("error", txErr))
 		}
 	}
 
@@ -95,7 +95,7 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 
 	expiredMatches, eErr := h.matchRepo.FindExpiredInProgressMatches(ctx, startedBefore, limit)
 	if eErr != nil {
-		log.Printf("[SoloMatch Timeout] Find expired in-progress matches error: %v", eErr)
+		slog.ErrorContext(ctx, "Find expired in-progress matches error", slog.Any("error", eErr))
 	} else {
 		for _, match := range expiredMatches {
 			if tErr := match.TimeoutInProgress(now); tErr != nil {
@@ -177,7 +177,7 @@ func (h *HandleMatchTimeoutHandler) Handle(ctx context.Context, cmd HandleMatchT
 
 				return h.eventRecorder.RecordEvents(txCtx, eventsToPublish)
 			}); txErr != nil {
-				log.Printf("[SoloMatch Timeout] Failed to timeout expired in-progress match %s: %v", match.ID(), txErr)
+				slog.ErrorContext(ctx, "Failed to timeout expired in-progress match", slog.String("match_id", match.ID()), slog.Any("error", txErr))
 			}
 		}
 	}

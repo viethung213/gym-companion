@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	segmentio "github.com/segmentio/kafka-go"
@@ -393,16 +393,16 @@ func NewWorkoutExecutionConsumer(
 
 // Start begins the blocking read loop. It stops when ctx is cancelled.
 func (c *WorkoutExecutionConsumer) Start(ctx context.Context) {
-	log.Println("[Coaching] Starting WorkoutExecutionConsumer on topic workout_execution.events...")
+	slog.InfoContext(ctx, "Starting WorkoutExecutionConsumer on topic workout_execution.events", slog.String("topic", "workout_execution.events"))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Coaching] Stopping WorkoutExecutionConsumer due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping WorkoutExecutionConsumer due to context cancellation")
 			return
 		default:
 			if c.reader == nil {
-				log.Println("[Coaching] WorkoutExecutionConsumer reader is nil; stopping loop.")
+				slog.InfoContext(ctx, "WorkoutExecutionConsumer reader is nil; stopping loop")
 				return
 			}
 
@@ -412,13 +412,13 @@ func (c *WorkoutExecutionConsumer) Start(ctx context.Context) {
 					return
 				}
 
-				log.Printf("[Coaching] Error reading workout_execution.events: %v", err)
+				slog.ErrorContext(ctx, "Error reading workout_execution.events", slog.Any("error", err))
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
 			if processErr := c.processWithRetry(ctx, &msg); processErr != nil {
-				log.Printf("[Coaching] Exhausted retries processing workout execution event: %v", processErr)
+				slog.ErrorContext(ctx, "Exhausted retries processing workout execution event", slog.Any("error", processErr))
 			}
 		}
 	}
@@ -436,7 +436,7 @@ func (c *WorkoutExecutionConsumer) processWithRetry(ctx context.Context, msg *se
 			return nil
 		}
 
-		log.Printf("[Coaching] Workout event attempt %d/%d failed: %v", attempt, maxRetries, lastErr)
+		slog.WarnContext(ctx, "Workout event attempt failed", slog.Int("attempt", attempt), slog.Int("max_retries", maxRetries), slog.Any("error", lastErr))
 		time.Sleep(time.Duration(attempt*100) * time.Millisecond)
 	}
 
@@ -463,7 +463,7 @@ func (c *WorkoutExecutionConsumer) HandleMessage(ctx context.Context, rawValue [
 	}
 
 	if !fresh {
-		log.Printf("[Coaching] Duplicate event skipped: id=%s type=%s", env.ID, env.Type)
+		slog.DebugContext(ctx, "Duplicate event skipped", slog.String("event_id", env.ID), slog.String("event_type", env.Type))
 		return nil
 	}
 
@@ -485,7 +485,7 @@ func (c *WorkoutExecutionConsumer) HandleMessage(ctx context.Context, rawValue [
 		return c.handleSoloAborted(ctx, env.Data)
 
 	default:
-		log.Printf("[Coaching] Ignoring unknown event type: %s", env.Type)
+		slog.DebugContext(ctx, "Ignoring unknown event type", slog.String("event_type", env.Type))
 		return nil
 	}
 }
@@ -498,7 +498,7 @@ func (c *WorkoutExecutionConsumer) handleCompleted(ctx context.Context, data []b
 	}
 
 	if p.PlanID == "" {
-		log.Printf("[Coaching] WorkoutSessionCompleted missing plan_id; session=%s ignored", p.SessionID)
+		slog.WarnContext(ctx, "WorkoutSessionCompleted missing plan_id; session ignored", slog.String("session_id", p.SessionID))
 		return nil
 	}
 
@@ -511,7 +511,7 @@ func (c *WorkoutExecutionConsumer) handleCompleted(ctx context.Context, data []b
 	})
 
 	if errors.Is(err, roadmap.ErrSessionNotFound) {
-		log.Printf("[Coaching] WorkoutSessionCompleted references unknown plan_id=%s; ignoring", p.PlanID)
+		slog.WarnContext(ctx, "WorkoutSessionCompleted references unknown plan_id; ignoring", slog.String("plan_id", p.PlanID))
 		return nil
 	}
 
@@ -535,7 +535,7 @@ func (c *WorkoutExecutionConsumer) handleAborted(ctx context.Context, data []byt
 	})
 
 	if errors.Is(err, roadmap.ErrSessionNotFound) {
-		log.Printf("[Coaching] WorkoutSessionAborted references unknown plan_id=%s; ignoring", p.PlanID)
+		slog.WarnContext(ctx, "WorkoutSessionAborted references unknown plan_id; ignoring", slog.String("plan_id", p.PlanID))
 		return nil
 	}
 
@@ -550,7 +550,7 @@ func (c *WorkoutExecutionConsumer) handleSoloCompleted(ctx context.Context, data
 	}
 
 	if p.PlanID == "" {
-		log.Printf("[Coaching] SoloTrackingCompleted missing plan_id; match=%s ignored", p.MatchID)
+		slog.WarnContext(ctx, "SoloTrackingCompleted missing plan_id; match ignored", slog.String("match_id", p.MatchID))
 		return nil
 	}
 
@@ -563,7 +563,7 @@ func (c *WorkoutExecutionConsumer) handleSoloCompleted(ctx context.Context, data
 	})
 
 	if errors.Is(err, roadmap.ErrSessionNotFound) {
-		log.Printf("[Coaching] SoloTrackingCompleted references unknown plan_id=%s; ignoring", p.PlanID)
+		slog.WarnContext(ctx, "SoloTrackingCompleted references unknown plan_id; ignoring", slog.String("plan_id", p.PlanID))
 		return nil
 	}
 
@@ -587,7 +587,7 @@ func (c *WorkoutExecutionConsumer) handleSoloAborted(ctx context.Context, data [
 	})
 
 	if errors.Is(err, roadmap.ErrSessionNotFound) {
-		log.Printf("[Coaching] SoloTrackingAborted references unknown plan_id=%s; ignoring", p.PlanID)
+		slog.WarnContext(ctx, "SoloTrackingAborted references unknown plan_id; ignoring", slog.String("plan_id", p.PlanID))
 		return nil
 	}
 

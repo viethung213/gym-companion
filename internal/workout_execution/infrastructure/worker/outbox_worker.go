@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -37,22 +37,22 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("[WorkoutExecution] Starting Outbox worker (polling: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting WorkoutExecution Outbox worker", slog.Duration("polling_interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[WorkoutExecution] Stopping Outbox worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping WorkoutExecution Outbox worker due to context cancellation")
 			return
 		case <-ticker.C:
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[WorkoutExecution] PANIC RECOVERED in Outbox worker tick: %v", r)
+						slog.ErrorContext(ctx, "PANIC RECOVERED in WorkoutExecution Outbox worker tick", slog.Any("panic", r))
 					}
 				}()
 				if err := w.processOutbox(ctx); err != nil {
-					log.Printf("[WorkoutExecution] Outbox worker processing error: %v", err)
+					slog.ErrorContext(ctx, "WorkoutExecution Outbox worker processing error", slog.String("error", err.Error()))
 				}
 			}()
 		}

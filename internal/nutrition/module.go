@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -23,8 +23,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/worker"
 	nutritionConsumer "github.com/viethung213/gym-companion/internal/nutrition/transport/consumer"
 	nutritionGRPC "github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -59,7 +59,7 @@ func NewModule(ctx context.Context, db *gorm.DB, kafkaRegistry *sharedKafka.Regi
 	outboxWriter := nutritionEvent.NewOutboxWriter(outboxRepo)
 	aiAgent, err := nutritionAdk.NewNutritionAgent(ctx, foodRepo)
 	if err != nil {
-		log.Printf("[Nutrition Module] ADK agent init failed (fallback): %v", err)
+		slog.Warn("ADK agent init failed (fallback)", slog.String("module", "nutrition"), slog.String("error", err.Error()))
 		aiAgent = nil
 	}
 
@@ -134,7 +134,7 @@ func NewModule(ctx context.Context, db *gorm.DB, kafkaRegistry *sharedKafka.Regi
 func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandler, func(), error) {
 	var gormDB *gorm.DB
 	if deps.DB != nil {
-		gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: deps.DB}), &gorm.Config{})
+		gdb, err := database.OpenGorm(deps.DB, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("nutrition module gorm open: %w", err)
 		}
@@ -160,7 +160,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 		if mod.KafkaPub != nil {
 			_ = mod.KafkaPub.Close()
 		}
-		log.Println("[Nutrition Module] Shutdown completed cleanly")
+		slog.Info("Shutdown completed cleanly", slog.String("module", "nutrition"))
 	}
 
 	return mod.GRPCHandler, shutdown, nil

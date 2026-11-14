@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -56,7 +56,7 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 
 	totalRecords := len(records)
 	if totalRecords == 0 {
-		log.Println("🥗 No food item seed records found. Skipping.")
+		slog.InfoContext(ctx, "No food item seed records found. Skipping")
 		return nil
 	}
 
@@ -65,7 +65,9 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 		var currentCount int
 		err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM nutrition.food_items`).Scan(&currentCount)
 		if err == nil && currentCount >= totalRecords {
-			log.Printf("🥗 Food catalog already fully seeded (%d items present). Skipping food seeder.", currentCount)
+			slog.InfoContext(ctx, "Food catalog already fully seeded, skipping food seeder",
+				slog.Int("current_count", currentCount),
+			)
 			return nil
 		}
 
@@ -81,7 +83,10 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 		}
 	}
 
-	log.Printf("🥗 Starting Food catalog seeding (%d total items, %d already existing)...", totalRecords, len(existingNames))
+	slog.InfoContext(ctx, "Starting Food catalog seeding",
+		slog.Int("total_records", totalRecords),
+		slog.Int("already_existing", len(existingNames)),
+	)
 
 	adminCtx := context.WithValue(ctx, middleware.UserIDKey, "system-seeder-admin")
 	adminCtx = context.WithValue(adminCtx, middleware.UserRoleKey, "Admin")
@@ -115,7 +120,10 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 
 		createResp, err := foodService.CreateFoodItem(adminCtx, req)
 		if err != nil {
-			log.Printf("  ⚠️ Failed to create food item %q: %v", record.Name, err)
+			slog.WarnContext(adminCtx, "Failed to create food item",
+				slog.String("name", record.Name),
+				slog.String("error", err.Error()),
+			)
 			continue
 		}
 
@@ -124,7 +132,11 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 				FoodItemId: createResp.GetFoodItemId(),
 			})
 			if err != nil {
-				log.Printf("  ⚠️ Failed to approve food item %q (ID %s): %v", record.Name, createResp.GetFoodItemId(), err)
+				slog.WarnContext(adminCtx, "Failed to approve food item",
+					slog.String("name", record.Name),
+					slog.String("food_item_id", createResp.GetFoodItemId()),
+					slog.String("error", err.Error()),
+				)
 			}
 		}
 
@@ -136,10 +148,17 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 		}
 
 		if (i+1)%50 == 0 || i+1 == totalRecords {
-			log.Printf("  🥗 Seeded %d/%d food items (newly inserted: %d)...", i+1, totalRecords, createdCount)
+			slog.InfoContext(ctx, "Seeding food items progress",
+				slog.Int("progress", i+1),
+				slog.Int("total", totalRecords),
+				slog.Int("newly_inserted", createdCount),
+			)
 		}
 	}
 
-	log.Printf("🎉 Completed Food catalog seeding: %d new items created (Total catalog: %d).", createdCount, len(existingNames))
+	slog.InfoContext(ctx, "Completed Food catalog seeding",
+		slog.Int("new_items_created", createdCount),
+		slog.Int("total_catalog", len(existingNames)),
+	)
 	return nil
 }

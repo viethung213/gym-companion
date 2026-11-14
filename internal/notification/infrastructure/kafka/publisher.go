@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -36,7 +36,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, records []*port.OutboxReco
 		return fmt.Errorf("write kafka messages: %w", err)
 	}
 
-	log.Printf("[Notification Kafka Publisher] Published %d messages to Kafka", len(msgs))
+	slog.InfoContext(ctx, "Published messages to Kafka", slog.Int("count", len(msgs)))
 	return nil
 }
 

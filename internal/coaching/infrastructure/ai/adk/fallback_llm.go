@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
@@ -74,7 +74,7 @@ func NewGroqFallbackLLM(ctx context.Context, modelNames []string, apiKey, baseUR
 	for _, name := range modelNames {
 		m, err := openaimodel.NewModel(ctx, name, clientCfg)
 		if err != nil {
-			log.Printf("[FallbackLLM] Warning: Failed to initialize Groq model %s: %v", name, err)
+			slog.WarnContext(ctx, "Failed to initialize Groq model", slog.String("model", name), slog.Any("error", err))
 			continue
 		}
 		models = append(models, m)
@@ -102,7 +102,7 @@ func NewFallbackLLM(ctx context.Context, modelNames []string, apiKey string) (mo
 	for _, name := range modelNames {
 		m, err := gemini.NewModel(ctx, name, clientCfg)
 		if err != nil {
-			log.Printf("[FallbackLLM] Warning: Failed to initialize model %s: %v", name, err)
+			slog.WarnContext(ctx, "Failed to initialize model", slog.String("model", name), slog.Any("error", err))
 			continue
 		}
 		models = append(models, m)
@@ -159,8 +159,10 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 
 			if isQuotaOrRateLimitErr(lastErr) && idx < len(f.models)-1 {
 				nextModel := f.models[idx+1]
-				log.Printf("[FallbackLLM] Model %s hit quota/rate limit error (%v). Auto-falling back to %s...",
-					m.Name(), lastErr, nextModel.Name())
+				slog.WarnContext(ctx, "Model hit quota/rate limit error, auto-falling back",
+					slog.String("current_model", m.Name()),
+					slog.String("next_model", nextModel.Name()),
+					slog.Any("error", lastErr))
 				continue
 			}
 

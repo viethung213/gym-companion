@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -134,7 +134,10 @@ func (hf *HostFilter) Wrap(next http.Handler) http.Handler {
 		}
 
 		if !hf.IsAllowed(incomingHost) {
-			log.Printf("[Gateway Security] Rejected unauthorized Host/Authority: %q from %s", incomingHost, r.RemoteAddr)
+			slog.WarnContext(r.Context(), "Rejected unauthorized Host/Authority",
+				"host", incomingHost,
+				"remote_addr", r.RemoteAddr,
+			)
 			gwerror.Forbidden(w, r, "Direct IP access or unauthorized domain name rejected")
 			return
 		}

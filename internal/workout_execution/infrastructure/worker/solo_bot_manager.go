@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -77,7 +77,7 @@ func (m *SoloBotManager) StartBot(
 			Status:    "WAITING",
 		}
 		if pubErr := m.liveSync.PublishMyProgress(ctx, matchID, botWaiting); pubErr != nil {
-			log.Printf("[SoloBotManager] Warning: failed to publish bot waiting progress: %v", pubErr)
+			slog.WarnContext(ctx, "Failed to publish bot waiting progress", slog.String("module", "SoloBotManager"), slog.String("error", pubErr.Error()))
 		}
 	}
 
@@ -117,7 +117,7 @@ func (m *SoloBotManager) CancelBot(matchID string) {
 	m.mu.Unlock()
 
 	if exists && cancel != nil {
-		log.Printf("[SoloBotManager] CancelBot invoked for match %s", matchID)
+		slog.Info("CancelBot invoked for match", slog.String("match_id", matchID), slog.String("module", "SoloBotManager"))
 		cancel()
 	}
 }
@@ -138,7 +138,7 @@ func (m *SoloBotManager) StopAll() {
 		cancel()
 	}
 	m.botWg.Wait()
-	log.Println("[SoloBotManager] All virtual bot runners stopped cleanly.")
+	slog.Info("All virtual bot runners stopped cleanly", slog.String("module", "SoloBotManager"))
 }
 
 // SetRunnerDelaysForTesting allows test suites to customize bot timing for fast execution.
@@ -171,13 +171,13 @@ func (m *SoloBotManager) runVirtualBot(
 		cleanCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if unregErr := m.liveSync.UnregisterParticipant(cleanCtx, matchID, botUserID); unregErr != nil {
-			log.Printf("[SoloBotManager] Virtual bot failed to unregister participant %s for match %s: %v", botUserID, matchID, unregErr)
+			slog.WarnContext(cleanCtx, "Virtual bot failed to unregister participant", slog.String("bot_user_id", botUserID), slog.String("match_id", matchID), slog.String("error", unregErr.Error()))
 		}
 	}()
 
 	oppUpdates, unsub, err := m.liveSync.SubscribeMatchUpdates(ctx, matchID, botUserID)
 	if err != nil {
-		log.Printf("[SoloBotManager] Virtual bot failed to subscribe match updates for %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Virtual bot failed to subscribe match updates", slog.String("match_id", matchID), slog.String("error", err.Error()))
 		return
 	}
 	defer unsub()
@@ -190,15 +190,15 @@ func (m *SoloBotManager) runVirtualBot(
 	for !isActivated {
 		select {
 		case <-ctx.Done():
-			log.Printf("[SoloBotManager] Virtual bot stopped while waiting for opponent in match %s: %v", matchID, ctx.Err())
+			slog.InfoContext(ctx, "Virtual bot stopped while waiting for opponent in match", slog.String("match_id", matchID), slog.Any("error", ctx.Err()))
 			return
 		case oppProgress, ok := <-oppUpdates:
 			if !ok {
-				log.Printf("[SoloBotManager] LiveSync closed while waiting in match %s, virtual bot exiting", matchID)
+				slog.InfoContext(ctx, "LiveSync closed while waiting in match, virtual bot exiting", slog.String("match_id", matchID))
 				return
 			}
 			if oppProgress.Status == "ABORTED" {
-				log.Printf("[SoloBotManager] Human opponent aborted while bot waiting in match %s, completing", matchID)
+				slog.InfoContext(ctx, "Human opponent aborted while bot waiting in match, completing", slog.String("match_id", matchID))
 				m.emitBotCompleted(context.Background(), matchID, botUserID, exerciseID, chType, botScore)
 				return
 			}
@@ -208,7 +208,7 @@ func (m *SoloBotManager) runVirtualBot(
 		case <-pollTicker.C:
 			ready, readyErr := m.liveSync.IsMatchReady(ctx, matchID)
 			if readyErr != nil {
-				log.Printf("[SoloBotManager] Virtual bot failed to check match readiness for %s: %v", matchID, readyErr)
+				slog.WarnContext(ctx, "Virtual bot failed to check match readiness", slog.String("match_id", matchID), slog.String("error", readyErr.Error()))
 			} else if ready {
 				isActivated = true
 			}
@@ -223,7 +223,7 @@ func (m *SoloBotManager) runVirtualBot(
 		Status:    "ACTIVE",
 	}
 	if pubErr := m.liveSync.PublishMyProgress(ctx, matchID, activeProgress); pubErr != nil {
-		log.Printf("[SoloBotManager] Virtual bot failed to publish ACTIVE status: %v", pubErr)
+		slog.WarnContext(ctx, "Virtual bot failed to publish ACTIVE status", slog.String("error", pubErr.Error()))
 	}
 
 	// Giai đoạn 3: Bắt đầu thi đấu và đếm số realtime theo nhịp độ
@@ -241,21 +241,21 @@ func (m *SoloBotManager) runVirtualBot(
 	for currentVal < botScore {
 		select {
 		case <-ctx.Done():
-			log.Printf("[SoloBotManager] Virtual bot stopped streaming due to context cancellation in match %s: %v", matchID, ctx.Err())
+			slog.InfoContext(ctx, "Virtual bot stopped streaming due to context cancellation in match", slog.String("match_id", matchID), slog.Any("error", ctx.Err()))
 			return
 		case oppProgress, ok := <-oppUpdates:
 			if !ok {
-				log.Printf("[SoloBotManager] LiveSync channel closed for match %s, virtual bot completing early", matchID)
+				slog.InfoContext(ctx, "LiveSync channel closed for match, virtual bot completing early", slog.String("match_id", matchID))
 				earlyTerminated = true
 				break
 			}
 			if oppProgress.Status == "ABORTED" {
-				log.Printf("[SoloBotManager] Human opponent aborted in match %s, virtual bot completing early", matchID)
+				slog.InfoContext(ctx, "Human opponent aborted in match, virtual bot completing early", slog.String("match_id", matchID))
 				earlyTerminated = true
 				break
 			}
 			if oppProgress.Status == "DISCONNECTED" {
-				log.Printf("[SoloBotManager] Human opponent disconnected in match %s (grace period active), virtual bot continues exercising", matchID)
+				slog.InfoContext(ctx, "Human opponent disconnected in match (grace period active), virtual bot continues exercising", slog.String("match_id", matchID))
 			}
 		case <-stepTicker.C:
 			currentVal++
@@ -270,7 +270,7 @@ func (m *SoloBotManager) runVirtualBot(
 				Status:    status,
 			}
 			if pubErr := m.liveSync.PublishMyProgress(ctx, matchID, progress); pubErr != nil {
-				log.Printf("[SoloBotManager] Virtual bot failed to publish progress step %d: %v", currentVal, pubErr)
+				slog.WarnContext(ctx, "Virtual bot failed to publish progress step", slog.Int("step", int(currentVal)), slog.String("error", pubErr.Error()))
 			}
 		}
 
@@ -290,7 +290,7 @@ func (m *SoloBotManager) runVirtualBot(
 		Status:    "COMPLETED",
 	}
 	if pubErr := m.liveSync.PublishMyProgress(completeCtx, matchID, finalProgress); pubErr != nil {
-		log.Printf("[SoloBotManager] Virtual bot failed to publish final COMPLETED status for match %s: %v", matchID, pubErr)
+		slog.WarnContext(completeCtx, "Virtual bot failed to publish final COMPLETED status", slog.String("match_id", matchID), slog.String("error", pubErr.Error()))
 	}
 
 	m.emitBotCompleted(completeCtx, matchID, botUserID, exerciseID, chType, botScore)
@@ -327,9 +327,9 @@ func (m *SoloBotManager) emitBotCompleted(
 		CompletedAt:          time.Now().UTC(),
 	}
 	if err := m.eventRecorder.RecordEvents(ctx, []any{botEvt}); err != nil {
-		log.Printf("[SoloBotManager] Virtual bot failed to write SoloTrackingCompleted to outbox: %v", err)
+		slog.ErrorContext(ctx, "Virtual bot failed to write SoloTrackingCompleted to outbox", slog.String("error", err.Error()))
 	} else {
-		log.Printf("[SoloBotManager] Virtual bot successfully emitted SoloTrackingCompleted (score=%d) for match %s", score, matchID)
+		slog.InfoContext(ctx, "Virtual bot successfully emitted SoloTrackingCompleted", slog.Int("score", int(score)), slog.String("match_id", matchID))
 	}
 }
 
@@ -337,7 +337,7 @@ func (m *SoloBotManager) resolveBotScore(ctx context.Context, userID, exerciseID
 	if m.prRepo != nil && userID != "" && exerciseID != "" {
 		pr, err := m.prRepo.FindByUserIDAndExerciseID(ctx, userID, exerciseID)
 		if err != nil {
-			log.Printf("[SoloBotManager] Warning: failed to fetch PR for user %s on exercise %s: %v", userID, exerciseID, err)
+			slog.WarnContext(ctx, "Failed to fetch PR for user on exercise", slog.String("user_id", userID), slog.String("exercise_id", exerciseID), slog.String("error", err.Error()))
 		} else if pr != nil && pr.Reps() > 0 {
 			return int32(pr.Reps())
 		}

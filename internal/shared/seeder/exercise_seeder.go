@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -95,7 +95,7 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 
 	totalRecords := len(records)
 	if totalRecords == 0 {
-		log.Println("🏋️ No exercise seed records found. Skipping.")
+		slog.InfoContext(ctx, "No exercise seed records found. Skipping")
 		return nil
 	}
 
@@ -105,7 +105,9 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 		var currentCount int
 		err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM exercise.exercises`).Scan(&currentCount)
 		if err == nil && currentCount >= totalRecords {
-			log.Printf("🏋️ Exercise catalog already fully seeded (%d exercises present). Skipping exercise seeder.", currentCount)
+			slog.InfoContext(ctx, "Exercise catalog already fully seeded, skipping exercise seeder",
+				slog.Int("current_count", currentCount),
+			)
 			return nil
 		}
 
@@ -122,7 +124,10 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 		}
 	}
 
-	log.Printf("🏋️ Starting Exercise catalog seeding (%d total entries, %d already existing)...", totalRecords, len(existingNames))
+	slog.InfoContext(ctx, "Starting Exercise catalog seeding",
+		slog.Int("total_records", totalRecords),
+		slog.Int("already_existing", len(existingNames)),
+	)
 
 	createdCount := 0
 	for i := range records {
@@ -198,7 +203,10 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 
 		_, err := exerciseService.CreateExercise(adminCtx, req)
 		if err != nil {
-			log.Printf("  ⚠️ Failed to seed exercise %q: %v", record.Name, err)
+			slog.WarnContext(adminCtx, "Failed to seed exercise",
+				slog.String("name", record.Name),
+				slog.String("error", err.Error()),
+			)
 			continue
 		}
 
@@ -212,11 +220,18 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 
 		// Log tiến độ định kỳ mỗi 200 bài
 		if (i+1)%200 == 0 || i+1 == totalRecords {
-			log.Printf("  🏋️ Seeded %d/%d exercises (newly inserted: %d)...", i+1, totalRecords, createdCount)
+			slog.InfoContext(ctx, "Seeding exercises progress",
+				slog.Int("progress", i+1),
+				slog.Int("total", totalRecords),
+				slog.Int("newly_inserted", createdCount),
+			)
 		}
 	}
 
-	log.Printf("🎉 Completed Exercise catalog seeding: %d new exercises created (Total catalog: %d).", createdCount, len(existingNames))
+	slog.InfoContext(ctx, "Completed Exercise catalog seeding",
+		slog.Int("new_exercises_created", createdCount),
+		slog.Int("total_catalog", len(existingNames)),
+	)
 	return nil
 }
 

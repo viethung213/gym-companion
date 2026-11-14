@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 )
 
 type ProviderConfig struct {
@@ -34,7 +35,7 @@ func NewOAuthProvider(google, facebook ProviderConfig, stateSecret string) *OAut
 	return &OAuthProvider{
 		googleConfig:   google,
 		facebookConfig: facebook,
-		httpClient:     &http.Client{Timeout: 10 * time.Second},
+		httpClient:     telemetry.NewHTTPClient(10 * time.Second),
 		stateSecret:    stateSecret,
 	}
 }

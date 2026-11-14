@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -123,7 +123,7 @@ func (h *ExternalEventHandler) Handle(
 
 	var payload externalEventData
 	if err := json.Unmarshal(env.Data, &payload); err != nil {
-		log.Printf("[External Event Handler] Unmarshal CloudEvent data failed for '%s': %v", env.Type, err)
+		slog.ErrorContext(ctx, "Unmarshal CloudEvent data failed", slog.String("event_type", env.Type), slog.Any("error", err))
 		return err
 	}
 
@@ -134,9 +134,9 @@ func (h *ExternalEventHandler) Handle(
 	if h.outboxLogRepo != nil && env.ID != "" {
 		fresh, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, payload.UserID, msgValue, "PROCESSING", "")
 		if logErr != nil {
-			log.Printf("[External Event Handler] LogProcessed error for event '%s': %v", env.ID, logErr)
+			slog.ErrorContext(ctx, "LogProcessed error for event", slog.String("event_id", env.ID), slog.Any("error", logErr))
 		} else if !fresh {
-			log.Printf("[External Event Handler] Duplicate event '%s' (ID: %s) already recorded in outbox_log, skipping...", env.Type, env.ID)
+			slog.DebugContext(ctx, "Duplicate event already recorded in outbox_log, skipping", slog.String("event_type", env.Type), slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -176,7 +176,7 @@ func (h *ExternalEventHandler) Handle(
 		dataMap["workoutName"] = payload.WorkoutName
 	}
 
-	log.Printf("[External Event Handler] Targeted Event '%s' matched for user '%s', dispatching push...", env.Type, payload.UserID)
+	slog.InfoContext(ctx, "Targeted Event matched for user, dispatching push", slog.String("event_type", env.Type), slog.String("user_id", payload.UserID))
 	var sendErr error
 	if h.sendPushHandler != nil {
 		_, sendErr = h.sendPushHandler.Handle(ctx, command.SendPushNotificationCommand{
@@ -188,7 +188,7 @@ func (h *ExternalEventHandler) Handle(
 	}
 
 	if sendErr != nil {
-		log.Printf("[External Event Handler] Error sending push notification for event '%s': %v", env.ID, sendErr)
+		slog.ErrorContext(ctx, "Error sending push notification for event", slog.String("event_id", env.ID), slog.Any("error", sendErr))
 		if h.outboxLogRepo != nil && env.ID != "" {
 			_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
 				EventID:      env.ID,

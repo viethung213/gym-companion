@@ -1,7 +1,7 @@
 package email
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -20,13 +20,13 @@ func NewEmailProvider(cfg *config.Config) port.EmailProvider {
 	providerType := strings.ToLower(strings.TrimSpace(cfg.EmailProvider))
 	switch providerType {
 	case "smtp":
-		log.Printf("📧 Initializing SMTP Email Provider (Host: %s:%s, From: %s)", cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFromEmail)
+		slog.Info("Initializing SMTP Email Provider", slog.String("host", cfg.SMTPHost), slog.String("port", cfg.SMTPPort), slog.String("from", cfg.SMTPFromEmail))
 		return NewGmailProvider(cfg)
 	case "mock":
-		log.Println("📧 Initializing Mock Email Provider (local/dev)")
+		slog.Info("Initializing Mock Email Provider (local/dev)")
 		return NewMockEmailProvider()
 	default:
-		log.Printf("⚠️ Unknown EMAIL_PROVIDER '%s', defaulting to Mock Email Provider", providerType)
+		slog.Warn("Unknown EMAIL_PROVIDER, defaulting to Mock Email Provider", slog.String("provider", providerType))
 		return NewMockEmailProvider()
 	}
 }

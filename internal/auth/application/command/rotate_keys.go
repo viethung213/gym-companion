@@ -3,7 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,7 +68,7 @@ func (h *RotateKeysHandler) Handle(ctx context.Context, cmd RotateKeysCommand) (
 
 		// 4. Purge expired keys (expired inactive keys)
 		if err := h.keyRepo.DeleteExpiredKeys(txCtx); err != nil {
-			log.Printf("WARNING: Failed to purge expired keys: %v", err)
+			slog.WarnContext(txCtx, "Failed to purge expired keys", slog.Any("error", err))
 		}
 
 		return nil

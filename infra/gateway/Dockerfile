@@ -16,6 +16,7 @@ COPY cmd/gateway ./cmd/gateway
 COPY internal/gateway ./internal/gateway
 COPY internal/gen/go/contracts ./internal/gen/go/contracts
 COPY internal/shared/internaltoken ./internal/shared/internaltoken
+COPY internal/shared/telemetry ./internal/shared/telemetry
 
 # Build Gateway binary with stripped debugging symbols
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/fitai-gateway ./cmd/gateway/main.go

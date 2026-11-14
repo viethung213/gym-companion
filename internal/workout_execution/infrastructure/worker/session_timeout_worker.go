@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -40,22 +40,22 @@ func (w *SessionTimeoutWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("[WorkoutExecution] Starting Session Timeout worker (interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting WorkoutExecution Session Timeout worker", slog.Duration("interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[WorkoutExecution] Stopping Session Timeout worker.")
+			slog.InfoContext(ctx, "Stopping WorkoutExecution Session Timeout worker")
 			return
 		case <-ticker.C:
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[WorkoutExecution] PANIC RECOVERED in Session Timeout worker tick: %v", r)
+						slog.ErrorContext(ctx, "PANIC RECOVERED in Session Timeout worker tick", slog.Any("panic", r))
 					}
 				}()
 				if err := w.processTimedOutSessions(ctx); err != nil {
-					log.Printf("[WorkoutExecution] Session Timeout worker error: %v", err)
+					slog.ErrorContext(ctx, "Session Timeout worker error", slog.String("error", err.Error()))
 				}
 			}()
 		}
@@ -68,7 +68,7 @@ func (w *SessionTimeoutWorker) processTimedOutSessions(ctx context.Context) erro
 		return err
 	}
 
-	log.Printf("[WorkoutExecution] Found %d sessions exceeding 240 minutes timeout.", len(sessions))
+	slog.InfoContext(ctx, "Found sessions exceeding 240 minutes timeout", slog.Int("count", len(sessions)))
 	now := time.Now().UTC()
 
 	for _, session := range sessions {
@@ -91,7 +91,10 @@ func (w *SessionTimeoutWorker) processTimedOutSessions(ctx context.Context) erro
 				txErr = saveFunc(ctx)
 			}
 			if txErr != nil {
-				log.Printf("[WorkoutExecution] Failed to save timed out session %s: %v", session.ID(), txErr)
+				slog.ErrorContext(ctx, "Failed to save timed out session",
+					slog.String("session_id", session.ID()),
+					slog.String("error", txErr.Error()),
+				)
 			}
 		}
 	}

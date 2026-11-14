@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -61,7 +61,7 @@ func (h *SendSMSNotificationHandler) Handle(ctx context.Context, cmd SendSMSNoti
 
 		if setting != nil {
 			if !setting.EnableSMS() {
-				log.Printf("[SMS Suppressed] User %s has disabled SMS notifications in settings", cmd.UserID)
+				slog.InfoContext(ctx, "User has disabled SMS notifications in settings", slog.String("user_id", cmd.UserID))
 				return &SendSMSNotificationResponse{
 					Status:  "SMS_DISABLED_BY_USER",
 					Message: "User has disabled SMS notifications in settings",
@@ -69,8 +69,10 @@ func (h *SendSMSNotificationHandler) Handle(ctx context.Context, cmd SendSMSNoti
 			}
 
 			if setting.IsInQuietHours(time.Now()) {
-				log.Printf("[SMS Suppressed] User %s is currently in quiet hours (%s - %s)",
-					cmd.UserID, setting.QuietHoursStart(), setting.QuietHoursEnd())
+				slog.InfoContext(ctx, "User is currently in quiet hours, SMS suppressed",
+					slog.String("user_id", cmd.UserID),
+					slog.String("quiet_start", setting.QuietHoursStart()),
+					slog.String("quiet_end", setting.QuietHoursEnd()))
 				return &SendSMSNotificationResponse{
 					Status:  "QUIET_HOURS_ACTIVE",
 					Message: "SMS suppressed during user quiet hours",

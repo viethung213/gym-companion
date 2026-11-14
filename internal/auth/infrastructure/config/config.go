@@ -2,7 +2,7 @@ package config
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 )
@@ -56,7 +56,7 @@ func getEnvDuration(key string, defaultDuration time.Duration) time.Duration {
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		log.Printf("WARNING: Invalid duration for environment variable %s='%s' (expected format like '15m', '24h', '720h'). Using default: %v", key, v, defaultDuration)
+		slog.Warn("Invalid duration for environment variable", slog.String("key", key), slog.String("val", v), slog.Duration("default", defaultDuration))
 		return defaultDuration
 	}
 	return d

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -52,15 +52,15 @@ func NewProfileEventConsumer(
 
 func (c *ProfileEventConsumer) Start(ctx context.Context) error {
 	if c.reader == nil {
-		log.Println("[Nutrition ProfileEventConsumer] Reader is nil, skipping consumer loop.")
+		slog.InfoContext(ctx, "Reader is nil, skipping consumer loop")
 		return nil
 	}
 
-	log.Println("[Nutrition ProfileEventConsumer] Started listening to Kafka events (UserRegistered & ProfileUpdated >= 80%)...")
+	slog.InfoContext(ctx, "Started listening to Kafka events (UserRegistered & ProfileUpdated >= 80%)")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Nutrition ProfileEventConsumer] Stopping consumer due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping consumer due to context cancellation")
 			return nil
 		default:
 			msg, err := c.reader.ReadMessage(ctx)
@@ -68,13 +68,13 @@ func (c *ProfileEventConsumer) Start(ctx context.Context) error {
 				if errors.Is(err, context.Canceled) {
 					return nil
 				}
-				log.Printf("[Nutrition ProfileEventConsumer] Error reading Kafka message: %v", err)
+				slog.ErrorContext(ctx, "Error reading Kafka message", slog.Any("error", err))
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
 			if err := c.ProcessMessage(ctx, msg); err != nil {
-				log.Printf("[Nutrition ProfileEventConsumer] Error processing message: %v", err)
+				slog.ErrorContext(ctx, "Error processing message", slog.Any("error", err))
 			}
 		}
 	}
@@ -91,9 +91,9 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[Nutrition ProfileEventConsumer] Warning checking outbox log idempotency: %v", err)
+			slog.WarnContext(ctx, "Warning checking outbox log idempotency", slog.Any("error", err))
 		} else if processed {
-			log.Printf("[Nutrition ProfileEventConsumer] Event %s already processed in outbox_log, skipping", env.ID)
+			slog.DebugContext(ctx, "Event already processed in outbox_log, skipping", slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -128,7 +128,7 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			c.saveLog(ctx, msg.Value, env, userID, "FAILED", processErr)
 			return processErr
 		}
-		log.Printf("[Nutrition ProfileEventConsumer] Seeded default meal schedule SQL records for new user: %s", userID)
+		slog.InfoContext(ctx, "Seeded default meal schedule SQL records for new user", slog.String("user_id", userID))
 		c.saveLog(ctx, msg.Value, env, userID, "PROCESSED", nil)
 
 	case "contracts.supporting.profile.v1.event.ProfileUpdated", "ProfileUpdated":
@@ -150,13 +150,14 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 		// Tỉ lệ hoàn thiện profile >= 80% (thang 0-100 hoặc 0-1)
 		isAbove80 := (rate >= 80.0) || (rate >= 0.80 && rate <= 1.0)
 		if !isAbove80 {
-			log.Printf("[Nutrition ProfileEventConsumer] Profile completion rate %.1f for user %s is < 80%%, skipping auto plan generation.", rate, userID)
+			slog.DebugContext(ctx, "Profile completion rate is < 80%, skipping auto plan generation",
+				slog.Float64("rate", float64(rate)), slog.String("user_id", userID))
 			c.saveLog(ctx, msg.Value, env, userID, "SKIPPED", nil)
 			return nil
 		}
 
 		if err := c.planRepo.SaveUserMealSchedules(ctx, userID, defaultSchedules); err != nil {
-			log.Printf("[Nutrition ProfileEventConsumer] SaveUserMealSchedules warning: %v", err)
+			slog.WarnContext(ctx, "SaveUserMealSchedules warning", slog.Any("error", err))
 		}
 
 		bioMetrics := service.BiologicalMetrics{
@@ -181,11 +182,11 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 				UserRestrictions:  data.GetGoals(),
 			})
 			if genErr != nil {
-				log.Printf("[Nutrition ProfileEventConsumer] GenerateDailyPlan error for user %s: %v", userID, genErr)
+				slog.ErrorContext(ctx, "GenerateDailyPlan error", slog.String("user_id", userID), slog.Any("error", genErr))
 				c.saveLog(ctx, msg.Value, env, userID, "FAILED", genErr)
 				return genErr
 			}
-			log.Printf("[Nutrition ProfileEventConsumer] Successfully generated daily meals for user %s (profile completion >= 80%%)", userID)
+			slog.InfoContext(ctx, "Successfully generated daily meals for user (profile completion >= 80%)", slog.String("user_id", userID))
 		}
 		c.saveLog(ctx, msg.Value, env, userID, "PROCESSED", nil)
 
@@ -205,7 +206,7 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 		}
 
 		if err := c.planRepo.SaveUserMealSchedules(ctx, userID, defaultSchedules); err != nil {
-			log.Printf("[Nutrition ProfileEventConsumer] SaveUserMealSchedules warning: %v", err)
+			slog.WarnContext(ctx, "SaveUserMealSchedules warning", slog.Any("error", err))
 		}
 
 		bioMetrics := service.BiologicalMetrics{
@@ -240,11 +241,11 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 				UserRestrictions:  data.GetGoals(),
 			})
 			if genErr != nil {
-				log.Printf("[Nutrition ProfileEventConsumer] GenerateDailyPlan error for user %s: %v", userID, genErr)
+				slog.ErrorContext(ctx, "GenerateDailyPlan error", slog.String("user_id", userID), slog.Any("error", genErr))
 				c.saveLog(ctx, msg.Value, env, userID, "FAILED", genErr)
 				return genErr
 			}
-			log.Printf("[Nutrition ProfileEventConsumer] Successfully generated daily meals for user %s (ProfileCompleted 100%%)", userID)
+			slog.InfoContext(ctx, "Successfully generated daily meals for user (ProfileCompleted 100%)", slog.String("user_id", userID))
 		}
 		c.saveLog(ctx, msg.Value, env, userID, "PROCESSED", nil)
 	}
@@ -275,6 +276,6 @@ func (c *ProfileEventConsumer) saveLog(ctx context.Context, rawPayload []byte, e
 		ErrorMessage: errMsg,
 	}
 	if saveErr := c.outboxLogRepo.SaveLog(ctx, logRecord); saveErr != nil {
-		log.Printf("[Nutrition ProfileEventConsumer] Warning: failed to save outbox log for event %s: %v", env.ID, saveErr)
+		slog.WarnContext(ctx, "Warning: failed to save outbox log for event", slog.String("event_id", env.ID), slog.Any("error", saveErr))
 	}
 }

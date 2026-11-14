@@ -1,7 +1,8 @@
 package middleware
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
@@ -12,7 +13,11 @@ func Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Printf("[Gateway Panic Recovered] %s %s: %v", r.Method, r.URL.Path, rec)
+				slog.ErrorContext(r.Context(), "Gateway panic recovered",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"panic", fmt.Sprint(rec),
+				)
 				gwerror.Internal(w, r, "Gateway internal error")
 			}
 		}()

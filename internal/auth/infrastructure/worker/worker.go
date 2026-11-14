@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
@@ -34,16 +34,16 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("Starting Outbox background worker (polling interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting Auth Outbox background worker", slog.Duration("polling_interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping Outbox background worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Auth Outbox background worker due to context cancellation")
 			return
 		case <-ticker.C:
 			if err := w.processOutbox(ctx); err != nil {
-				log.Printf("Outbox worker processing error: %v", err)
+				slog.ErrorContext(ctx, "Auth Outbox worker processing error", slog.String("error", err.Error()))
 			}
 		}
 	}
@@ -51,11 +51,11 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 
 func (w *OutboxWorker) processOutbox(ctx context.Context) error {
 	return w.outboxRepo.ProcessBatch(ctx, 500, func(publishCtx context.Context, events []*port.OutboxRecord) error {
-		log.Printf("Outbox worker: found %d unpublished events to process.", len(events))
+		slog.DebugContext(publishCtx, "Auth Outbox worker found unpublished events", slog.Int("count", len(events)))
 		if err := w.publisher.PublishBatch(publishCtx, events); err != nil {
 			return fmt.Errorf("publish batch failed: %w", err)
 		}
-		log.Printf("Outbox worker: successfully published batch of %d events.", len(events))
+		slog.DebugContext(publishCtx, "Auth Outbox worker successfully published batch", slog.Int("count", len(events)))
 		return nil
 	})
 }

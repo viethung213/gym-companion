@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -33,11 +33,11 @@ func NewUserRegisteredConsumer(
 }
 
 func (c *UserRegisteredConsumer) Start(ctx context.Context) {
-	log.Println("Starting Social UserRegistered Kafka Consumer...")
+	slog.InfoContext(ctx, "Starting Social UserRegistered Kafka Consumer")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping Social UserRegistered Kafka Consumer due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Social UserRegistered Kafka Consumer due to context cancellation")
 			return
 		default:
 			msg, err := c.reader.ReadMessage(ctx)
@@ -45,13 +45,13 @@ func (c *UserRegisteredConsumer) Start(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("Social UserRegistered consumer read error: %v", err)
+				slog.ErrorContext(ctx, "Social UserRegistered consumer read error", slog.String("error", err.Error()))
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 
 			if err := c.ProcessMessage(ctx, msg); err != nil {
-				log.Printf("Social UserRegistered consumer process error: %v", err)
+				slog.ErrorContext(ctx, "Social UserRegistered consumer process error", slog.String("error", err.Error()))
 			}
 		}
 	}

@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,7 +150,7 @@ func loadEnvFiles() {
 				}
 			}
 		}
-		log.Printf("⚙️ [Gateway Config] Loaded environment variables from %s", path)
+		slog.Info("Loaded gateway environment variables", "path", path)
 		break
 	}
 }
@@ -226,7 +226,7 @@ func (cm *Manager) StartWatcher(pollInterval time.Duration) {
 				if info.ModTime().After(cm.lastModified) {
 					newCfg, modTime, err := cm.readFile()
 					if err != nil {
-						log.Printf("[Gateway Watcher] Failed to reload %s: %v", cm.filePath, err)
+						slog.Error("Failed to reload gateway config", "path", cm.filePath, "error", err)
 						continue
 					}
 
@@ -235,8 +235,11 @@ func (cm *Manager) StartWatcher(pollInterval time.Duration) {
 					cm.lastModified = modTime
 					cm.mu.Unlock()
 
-					log.Printf("[Gateway Watcher] Successfully reloaded %d services and %d allowed hosts from %s",
-						len(newCfg.Services), len(newCfg.AllowedHosts), cm.filePath)
+					slog.Info("Successfully reloaded gateway config",
+						"services_count", len(newCfg.Services),
+						"allowed_hosts_count", len(newCfg.AllowedHosts),
+						"path", cm.filePath,
+					)
 
 					if cm.onChange != nil {
 						cm.onChange(newCfg)

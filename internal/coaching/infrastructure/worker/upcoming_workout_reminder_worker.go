@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -49,7 +49,7 @@ func NewUpcomingWorkoutReminderWorker(
 
 // Start launches the periodic ticker.
 func (w *UpcomingWorkoutReminderWorker) Start(ctx context.Context) error {
-	log.Printf("[UpcomingWorkoutReminderWorker] Started — checking upcoming workout sessions every %v", w.interval)
+	slog.InfoContext(ctx, "UpcomingWorkoutReminderWorker started, checking upcoming workout sessions", slog.Duration("interval", w.interval))
 	ticker := time.NewTicker(w.interval)
 
 	go func() {
@@ -80,7 +80,7 @@ func (w *UpcomingWorkoutReminderWorker) runCheckAt(ctx context.Context, now time
 
 	sessions, err := w.roadmapRepo.FindPendingSessionsByDate(ctx, now)
 	if err != nil {
-		log.Printf("[UpcomingWorkoutReminderWorker] Error fetching pending sessions: %v", err)
+		slog.ErrorContext(ctx, "Error fetching pending sessions in UpcomingWorkoutReminderWorker", slog.String("error", err.Error()))
 		return
 	}
 
@@ -120,9 +120,17 @@ func (w *UpcomingWorkoutReminderWorker) runCheckAt(ctx context.Context, now time
 			}
 
 			if err := w.outboxWriter.Enqueue(ctx, session.UserID, reminderEvent); err != nil {
-				log.Printf("[UpcomingWorkoutReminderWorker] Error enqueuing reminder for session %s (user %s): %v", session.SessionPlanID, session.UserID, err)
+				slog.ErrorContext(ctx, "Error enqueuing reminder for session",
+					slog.String("session_id", session.SessionPlanID),
+					slog.String("user_id", session.UserID),
+					slog.String("error", err.Error()),
+				)
 			} else {
-				log.Printf("[UpcomingWorkoutReminderWorker] Enqueued workout reminder for user %s, session %s at %s", session.UserID, session.SessionPlanID, timeStr)
+				slog.InfoContext(ctx, "Enqueued workout reminder for user",
+					slog.String("user_id", session.UserID),
+					slog.String("session_id", session.SessionPlanID),
+					slog.String("time", timeStr),
+				)
 			}
 		}
 	}

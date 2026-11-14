@@ -6,7 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -95,18 +95,27 @@ func (r *Registrar) UpstreamURL() string {
 
 // Start initiates registration and starts the heartbeat goroutine.
 func (r *Registrar) Start(ctx context.Context) {
-	log.Printf("📡 [Service Discovery] Self upstream: %s -> Gateway Admin: %s (Service ID: %s)", r.upstreamURL, r.adminURL, r.cfg.ServiceID)
+	slog.Info("Starting service discovery registrar",
+		"upstream_url", r.upstreamURL,
+		"gateway_admin_url", r.adminURL,
+		"service_id", r.cfg.ServiceID,
+	)
 
 	// Attempt initial registration immediately
 	if err := r.register(ctx); err != nil {
-		log.Printf("⚠️ [Service Discovery] Initial registration for %s failed (%v); will retry in %v",
-			r.cfg.ServiceID, err, r.cfg.HeartbeatInterval)
+		slog.Warn("Initial service discovery registration failed, retrying in background",
+			"service_id", r.cfg.ServiceID,
+			"error", err,
+			"retry_interval", r.cfg.HeartbeatInterval.String(),
+		)
 	} else {
 		r.mu.Lock()
 		r.registered = true
 		r.mu.Unlock()
-		log.Printf("✅ [Service Discovery] Successfully registered %s (%s) with API Gateway",
-			r.cfg.ServiceID, r.upstreamURL)
+		slog.Info("Successfully registered service with API Gateway",
+			"service_id", r.cfg.ServiceID,
+			"upstream_url", r.upstreamURL,
+		)
 	}
 
 	r.wg.Add(1)
@@ -123,13 +132,18 @@ func (r *Registrar) Start(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if err := r.register(ctx); err != nil {
-					log.Printf("⚠️ [Service Discovery] Heartbeat registration failed for %s: %v", r.cfg.ServiceID, err)
+					slog.Warn("Heartbeat service registration failed",
+						"service_id", r.cfg.ServiceID,
+						"error", err,
+					)
 				} else {
 					r.mu.Lock()
 					if !r.registered {
 						r.registered = true
-						log.Printf("✅ [Service Discovery] Recovered and registered %s (%s) with API Gateway",
-							r.cfg.ServiceID, r.upstreamURL)
+						slog.Info("Recovered and registered service with API Gateway",
+							"service_id", r.cfg.ServiceID,
+							"upstream_url", r.upstreamURL,
+						)
 					}
 					r.mu.Unlock()
 				}
@@ -146,7 +160,10 @@ func (r *Registrar) Stop(ctx context.Context) error {
 	if err := r.deregister(ctx); err != nil {
 		return fmt.Errorf("deregister from gateway: %w", err)
 	}
-	log.Printf("👋 [Service Discovery] Deregistered %s (%s) from API Gateway", r.cfg.ServiceID, r.upstreamURL)
+	slog.Info("Deregistered service from API Gateway",
+		"service_id", r.cfg.ServiceID,
+		"upstream_url", r.upstreamURL,
+	)
 	return nil
 }
 

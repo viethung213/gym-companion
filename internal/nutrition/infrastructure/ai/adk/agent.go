@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -302,7 +302,7 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 			if repairErr == nil && repairedPlan != nil && len(repairedPlan.Options) == len(fb.PreviousPlan.Options) {
 				return repairedPlan, nil
 			}
-			log.Printf("nutrition: single-meal repair failed: %v, retaining previous plan to enforce token limit", repairErr)
+			slog.WarnContext(ctx, "Single-meal repair failed, retaining previous plan to enforce token limit", slog.Any("error", repairErr))
 			return fb.PreviousPlan, nil
 		}
 

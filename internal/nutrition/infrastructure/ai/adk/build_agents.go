@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -409,7 +409,7 @@ func (a *NutritionAgent) buildPostWorkoutWorkflowAgent(_ context.Context) (agent
 			}
 
 			a.putResult(nodeCtx.SessionID(), plan)
-			log.Printf("nutrition adk: post-workout recalibration plan generated for session %s", nodeCtx.SessionID())
+			slog.Info("Post-workout recalibration plan generated", slog.String("session_id", nodeCtx.SessionID()))
 			return plan, nil
 		},
 		workflow.NodeConfig{},

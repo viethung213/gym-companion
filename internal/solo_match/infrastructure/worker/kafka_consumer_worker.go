@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -44,10 +44,10 @@ func (w *KafkaConsumerWorker) Start(ctx context.Context) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in SoloMatch %s: %v", w.name, r)
+			slog.ErrorContext(ctx, "PANIC RECOVERED in SoloMatch consumer", slog.String("worker", w.name), slog.Any("panic", r))
 		}
 		if closeErr := w.reader.Close(); closeErr != nil {
-			log.Printf("[SoloMatch] Error closing %s reader: %v", w.name, closeErr)
+			slog.WarnContext(ctx, "Error closing SoloMatch reader", slog.String("worker", w.name), slog.String("error", closeErr.Error()))
 		}
 	}()
 
@@ -61,7 +61,7 @@ func (w *KafkaConsumerWorker) Start(ctx context.Context) {
 				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 					return
 				}
-				log.Printf("[SoloMatch] Kafka reader error in %s: %v", w.name, err)
+				slog.ErrorContext(ctx, "Kafka reader error in SoloMatch consumer", slog.String("worker", w.name), slog.String("error", err.Error()))
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -74,7 +74,7 @@ func (w *KafkaConsumerWorker) Start(ctx context.Context) {
 func (w *KafkaConsumerWorker) dispatchMessage(ctx context.Context, rawPayload []byte) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in processing event in %s: %v", w.name, r)
+			slog.ErrorContext(ctx, "PANIC in processing event in SoloMatch consumer", slog.String("worker", w.name), slog.Any("panic", r))
 		}
 	}()
 
@@ -83,7 +83,7 @@ func (w *KafkaConsumerWorker) dispatchMessage(ctx context.Context, rawPayload []
 			continue
 		}
 		if err := h.HandleMessage(ctx, rawPayload); err != nil {
-			log.Printf("[SoloMatch] %s handler error: %v", w.name, err)
+			slog.ErrorContext(ctx, "SoloMatch consumer handler error", slog.String("worker", w.name), slog.String("error", err.Error()))
 		}
 	}
 }

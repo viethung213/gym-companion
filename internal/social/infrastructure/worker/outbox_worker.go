@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/application/port"
@@ -30,16 +30,16 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("Starting Social Outbox background worker (interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting Social Outbox background worker", slog.Duration("interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping Social Outbox background worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Social Outbox background worker due to context cancellation")
 			return
 		case <-ticker.C:
 			if err := w.processOutbox(ctx); err != nil {
-				log.Printf("Social outbox worker processing error: %v", err)
+				slog.ErrorContext(ctx, "Social outbox worker processing error", slog.String("error", err.Error()))
 			}
 		}
 	}

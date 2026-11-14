@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
@@ -171,12 +171,14 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 		}
 
 		if allSeeded {
-			log.Printf("🤖 System bots already created and synced in solo_match.system_bots (%d bots exist). Skipping bot seeder.", len(profiles))
+			slog.InfoContext(ctx, "System bots already created and synced in solo_match.system_bots, skipping bot seeder",
+				slog.Int("count", len(profiles)),
+			)
 			return nil
 		}
 	}
 
-	log.Printf("🤖 Starting API-driven System Bot seeding (%d bots)...", len(profiles))
+	slog.InfoContext(ctx, "Starting API-driven System Bot seeding", slog.Int("total_bots", len(profiles)))
 
 	for _, bot := range profiles {
 		req := &authv1message.RegisterRequest{
@@ -192,12 +194,18 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 		if err != nil {
 			st, ok := status.FromError(err)
 			if ok && st.Code() == codes.AlreadyExists {
-				log.Printf("  ℹ️ Bot already exists in Auth: %s (%s)", bot.FullName, bot.Email)
+				slog.InfoContext(ctx, "Bot already exists in Auth",
+					slog.String("full_name", bot.FullName),
+					slog.String("email", bot.Email),
+				)
 			} else {
 				return fmt.Errorf("register bot %s via auth API: %w", bot.Email, err)
 			}
 		} else {
-			log.Printf("  ✅ Bot registered via Auth API: %s (%s)", bot.FullName, bot.Email)
+			slog.InfoContext(ctx, "Bot registered via Auth API",
+				slog.String("full_name", bot.FullName),
+				slog.String("email", bot.Email),
+			)
 		}
 
 		// Nạp dữ liệu vào bảng solo_match.system_bots
@@ -228,11 +236,15 @@ func SeedSystemBots(ctx context.Context, db *sql.DB, authService AuthRegistrar) 
 				return fmt.Errorf("upsert solo_match.system_bots for bot %s: %w", bot.Email, err)
 			}
 
-			log.Printf("  🎯 Bot synced to solo_match.system_bots: %s (ID: %s, Difficulty: %s)", bot.FullName, userID, bot.DifficultyLevel)
+			slog.InfoContext(ctx, "Bot synced to solo_match.system_bots",
+				slog.String("full_name", bot.FullName),
+				slog.String("user_id", userID),
+				slog.String("difficulty", bot.DifficultyLevel),
+			)
 		}
 	}
 
-	log.Printf("🎉 Successfully seeded and synced %d System Bots.", len(profiles))
+	slog.InfoContext(ctx, "Successfully seeded and synced System Bots", slog.Int("count", len(profiles)))
 	return nil
 }
 

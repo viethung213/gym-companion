@@ -3,7 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
@@ -46,15 +46,15 @@ func NewNotificationEventConsumer(
 // Start begins consuming Kafka messages continuously until the context is canceled.
 func (c *NotificationEventConsumer) Start(ctx context.Context) {
 	if c.reader == nil {
-		log.Println("[Kafka Consumer] Notification consumer skipping: Kafka reader is nil")
+		slog.InfoContext(ctx, "Notification consumer skipping: Kafka reader is nil")
 		return
 	}
 
-	log.Println("[Kafka Consumer] Notification consumer started, listening for events...")
+	slog.InfoContext(ctx, "Notification consumer started, listening for events")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Kafka Consumer] Notification consumer stopped")
+			slog.InfoContext(ctx, "Notification consumer stopped")
 			return
 		default:
 			msg, err := c.reader.ReadMessage(ctx)
@@ -62,7 +62,7 @@ func (c *NotificationEventConsumer) Start(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("[Kafka Consumer] Read message error: %v", err)
+				slog.ErrorContext(ctx, "Read message error", slog.Any("error", err))
 				continue
 			}
 
@@ -85,7 +85,7 @@ func (c *NotificationEventConsumer) ExternalHandler() *ExternalEventHandler {
 func (c *NotificationEventConsumer) ProcessMessage(ctx context.Context, msgValue []byte) error {
 	var env cloudEventEnvelope
 	if err := json.Unmarshal(msgValue, &env); err != nil {
-		log.Printf("[Kafka Consumer] Unmarshal CloudEvent failed: %v", err)
+		slog.ErrorContext(ctx, "Unmarshal CloudEvent failed", slog.Any("error", err))
 		return err
 	}
 

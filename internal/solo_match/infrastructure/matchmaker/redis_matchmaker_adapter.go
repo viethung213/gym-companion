@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -138,7 +138,7 @@ func (a *RedisMatchmakerAdapter) ListenMatch(ctx context.Context, ticketID strin
 	// Kiểm tra kết nối subscribe
 	if _, err := pubsub.Receive(ctx); err != nil {
 		if cErr := pubsub.Close(); cErr != nil {
-			log.Printf("[SoloMatch Matchmaker] Error closing pubsub: %v", cErr)
+			slog.ErrorContext(ctx, "Error closing pubsub", slog.Any("error", cErr))
 		}
 		return nil, fmt.Errorf("redis subscribe failed: %w", err)
 	}
@@ -148,7 +148,7 @@ func (a *RedisMatchmakerAdapter) ListenMatch(ctx context.Context, ticketID strin
 	go func() {
 		defer func() {
 			if cErr := pubsub.Close(); cErr != nil {
-				log.Printf("[SoloMatch Matchmaker] Error closing pubsub: %v", cErr)
+				slog.ErrorContext(ctx, "Error closing pubsub", slog.Any("error", cErr))
 			}
 			close(outCh)
 		}()
@@ -213,7 +213,7 @@ func (a *RedisMatchmakerAdapter) notifyTicketsError(ctx context.Context, ticketI
 			continue
 		}
 		if err := a.redisClient.Publish(ctx, RedisEventPrefix+ticketID, "ERROR:"+errMsg).Err(); err != nil {
-			log.Printf("[SoloMatch Matchmaker] Failed to publish error to ticket %s: %v", ticketID, err)
+			slog.ErrorContext(ctx, "Failed to publish error to ticket", slog.String("ticket_id", ticketID), slog.Any("error", err))
 		}
 	}
 }
@@ -270,7 +270,7 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 
 	res, err := a.redisClient.Eval(ctx, luaScript, []string{RedisQueueKey}).Result()
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Redis eval error in matchPairs: %v", err)
+		slog.ErrorContext(ctx, "Redis eval error in matchPairs", slog.Any("error", err))
 		return
 	}
 
@@ -285,7 +285,7 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 	t1Parts := strings.Split(m1Str, ":")
 	t2Parts := strings.Split(m2Str, ":")
 	if len(t1Parts) != 2 || len(t2Parts) != 2 {
-		log.Printf("[SoloMatch Matchmaker] Invalid queue member format: m1=%q, m2=%q", m1Str, m2Str)
+		slog.ErrorContext(ctx, "Invalid queue member format", slog.String("m1", m1Str), slog.String("m2", m2Str))
 		return
 	}
 
@@ -293,7 +293,7 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 	t2ID, u2ID := t2Parts[0], t2Parts[1]
 
 	if u1ID == u2ID {
-		log.Printf("[SoloMatch Matchmaker] Refusing to match identical users: u1=%s, u2=%s (t1=%s, t2=%s)", u1ID, u2ID, t1ID, t2ID)
+		slog.WarnContext(ctx, "Refusing to match identical users", slog.String("u1", u1ID), slog.String("u2", u2ID), slog.String("t1", t1ID), slog.String("t2", t2ID))
 		a.notifyTicketsError(ctx, []string{t1ID, t2ID}, "cannot match user with themselves")
 		return
 	}
@@ -303,20 +303,20 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 
 	p1, err := entity.NewMatchParticipant(uuid.New().String(), matchID, u1ID)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to create participant 1 (%s): %v", u1ID, err)
+		slog.ErrorContext(ctx, "Failed to create participant 1", slog.String("user_id", u1ID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{t1ID, t2ID}, "failed to create match participant")
 		return
 	}
 	p2, err := entity.NewMatchParticipant(uuid.New().String(), matchID, u2ID)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to create participant 2 (%s): %v", u2ID, err)
+		slog.ErrorContext(ctx, "Failed to create participant 2", slog.String("user_id", u2ID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{t1ID, t2ID}, "failed to create match participant")
 		return
 	}
 
 	challenge, err := a.exerciseProvider.GetRandomChallenge(ctx)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to get exercise challenge for match %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to get exercise challenge for match", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{t1ID, t2ID}, "failed to get exercise challenge")
 		return
 	}
@@ -330,14 +330,14 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 		now,
 	)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to create PvP match %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to create PvP match", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{t1ID, t2ID}, "failed to initialize match aggregate")
 		return
 	}
 
 	// Lưu match vào PostgreSQL
 	if err := a.matchRepo.Save(ctx, match); err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to save PvP match %s to database: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to save PvP match to database", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{t1ID, t2ID}, "failed to save match to database")
 		return
 	}
@@ -354,16 +354,16 @@ func (a *RedisMatchmakerAdapter) matchPairs() {
 	}
 	if a.eventRecorder != nil {
 		if pubErr := a.eventRecorder.RecordEvents(ctx, []any{startEvt}); pubErr != nil {
-			log.Printf("[SoloMatch Matchmaker] Failed to record SoloMatchStarted event for PvP %s: %v", matchID, pubErr)
+			slog.ErrorContext(ctx, "Failed to record SoloMatchStarted event for PvP", slog.String("match_id", matchID), slog.Any("error", pubErr))
 		}
 	}
 
 	// Publish thông báo qua Redis PubSub cho cả 2 vé
 	if err := a.redisClient.Publish(ctx, RedisEventPrefix+t1ID, matchID).Err(); err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to publish match %s to ticket %s: %v", matchID, t1ID, err)
+		slog.ErrorContext(ctx, "Failed to publish match to ticket", slog.String("match_id", matchID), slog.String("ticket_id", t1ID), slog.Any("error", err))
 	}
 	if err := a.redisClient.Publish(ctx, RedisEventPrefix+t2ID, matchID).Err(); err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to publish match %s to ticket %s: %v", matchID, t2ID, err)
+		slog.ErrorContext(ctx, "Failed to publish match to ticket", slog.String("match_id", matchID), slog.String("ticket_id", t2ID), slog.Any("error", err))
 	}
 }
 
@@ -392,7 +392,7 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 		if errors.Is(err, redis.Nil) {
 			return
 		}
-		log.Printf("[SoloMatch Matchmaker] Redis eval error in fallbackBots: %v", err)
+		slog.ErrorContext(ctx, "Redis eval error in fallbackBots", slog.Any("error", err))
 		return
 	}
 	if res == nil || res == "" {
@@ -402,7 +402,7 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 	memberStr := fmt.Sprintf("%v", res)
 	parts := strings.Split(memberStr, ":")
 	if len(parts) != 2 {
-		log.Printf("[SoloMatch Matchmaker] Invalid bot queue member format: %q", memberStr)
+		slog.ErrorContext(ctx, "Invalid bot queue member format", slog.String("member", memberStr))
 		return
 	}
 
@@ -412,7 +412,7 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 
 	pUser, err := entity.NewMatchParticipant(uuid.New().String(), matchID, userID)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to create user participant for bot match %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to create user participant for bot match", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{ticketID}, "failed to create user participant")
 		return
 	}
@@ -423,30 +423,30 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 		if bErr == nil {
 			botUserID = id
 		} else {
-			log.Printf("[SoloMatch Matchmaker] Failed to get random bot user id: %v", bErr)
+			slog.ErrorContext(ctx, "Failed to get random bot user id", slog.Any("error", bErr))
 		}
 	}
 	if botUserID == "" {
-		log.Printf("[SoloMatch Matchmaker] No bot available to match with ticket %s (user %s)", ticketID, userID)
+		slog.WarnContext(ctx, "No bot available to match with ticket", slog.String("ticket_id", ticketID), slog.String("user_id", userID))
 		a.notifyTicketsError(ctx, []string{ticketID}, "no bot available for match")
 		return
 	}
 	if userID == botUserID {
-		log.Printf("[SoloMatch Matchmaker] User %s has identical id as bot %s", userID, botUserID)
+		slog.WarnContext(ctx, "User has identical id as bot", slog.String("user_id", userID), slog.String("bot_id", botUserID))
 		a.notifyTicketsError(ctx, []string{ticketID}, "user and bot have identical id")
 		return
 	}
 
 	pBot, err := entity.NewMatchParticipant(uuid.New().String(), matchID, botUserID)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to create bot participant for match %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to create bot participant for match", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{ticketID}, "failed to create bot participant")
 		return
 	}
 
 	challenge, err := a.exerciseProvider.GetRandomChallenge(ctx)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to get exercise challenge for bot match %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to get exercise challenge for bot match", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{ticketID}, "failed to get exercise challenge")
 		return
 	}
@@ -460,13 +460,13 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 		now,
 	)
 	if err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to create bot match aggregate %s: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to create bot match aggregate", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{ticketID}, "failed to initialize bot match aggregate")
 		return
 	}
 
 	if err := a.matchRepo.Save(ctx, match); err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to save bot match %s to database: %v", matchID, err)
+		slog.ErrorContext(ctx, "Failed to save bot match to database", slog.String("match_id", matchID), slog.Any("error", err))
 		a.notifyTicketsError(ctx, []string{ticketID}, "failed to save bot match to database")
 		return
 	}
@@ -483,13 +483,13 @@ func (a *RedisMatchmakerAdapter) fallbackBots() {
 	}
 	if a.eventRecorder != nil {
 		if pubErr := a.eventRecorder.RecordEvents(ctx, []any{startEvt}); pubErr != nil {
-			log.Printf("[SoloMatch Matchmaker] Failed to record SoloMatchStarted event for bot match %s: %v", matchID, pubErr)
+			slog.ErrorContext(ctx, "Failed to record SoloMatchStarted event for bot match", slog.String("match_id", matchID), slog.Any("error", pubErr))
 			a.notifyTicketsError(ctx, []string{ticketID}, "failed to initialize bot match event")
 			return
 		}
 	}
 
 	if err := a.redisClient.Publish(ctx, RedisEventPrefix+ticketID, matchID).Err(); err != nil {
-		log.Printf("[SoloMatch Matchmaker] Failed to publish bot match %s to ticket %s: %v", matchID, ticketID, err)
+		slog.ErrorContext(ctx, "Failed to publish bot match to ticket", slog.String("match_id", matchID), slog.String("ticket_id", ticketID), slog.Any("error", err))
 	}
 }
