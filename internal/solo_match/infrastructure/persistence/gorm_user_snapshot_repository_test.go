@@ -34,6 +34,7 @@ func setupUserSnapshotTestDB(t *testing.T) *gorm.DB {
 			user_id TEXT PRIMARY KEY,
 			display_name TEXT NOT NULL,
 			avatar_url TEXT DEFAULT '',
+			xp INTEGER NOT NULL DEFAULT 0,
 			synced_at DATETIME NOT NULL
 		);
 	`
@@ -136,6 +137,55 @@ func TestGORMUserSnapshotRepository(t *testing.T) {
 		}
 		if _, exists := resMap["user_not_exist"]; exists {
 			t.Errorf("did not expect user_not_exist in map")
+		}
+	})
+
+	t.Run("UpdateXP updates xp without clobbering profile and Upsert preserves xp", func(t *testing.T) {
+		snap, _ := entity.NewUserSnapshot("user_xp_1", "Minjun", "https://minjun.png", now)
+		if err := repo.Upsert(ctx, snap); err != nil {
+			t.Fatalf("Upsert failed: %v", err)
+		}
+
+		later := now.Add(10 * time.Minute)
+		if err := repo.UpdateXP(ctx, "user_xp_1", 1250, later); err != nil {
+			t.Fatalf("UpdateXP failed: %v", err)
+		}
+
+		found, err := repo.FindByUserID(ctx, "user_xp_1")
+		if err != nil || found == nil {
+			t.Fatalf("FindByUserID failed: %v", err)
+		}
+		if found.XP() != 1250 {
+			t.Errorf("XP got %d, want 1250", found.XP())
+		}
+		if found.DisplayName() != "Minjun" || found.AvatarURL() != "https://minjun.png" {
+			t.Errorf("UpdateXP clobbered profile: name=%q avatar=%q", found.DisplayName(), found.AvatarURL())
+		}
+
+		// Subsequent profile Upsert must preserve XP
+		snapUpdated, _ := entity.NewUserSnapshot("user_xp_1", "Minjun Kim", "https://minjun2.png", later.Add(time.Minute))
+		if err := repo.Upsert(ctx, snapUpdated); err != nil {
+			t.Fatalf("Upsert after UpdateXP failed: %v", err)
+		}
+		foundAfterUpsert, _ := repo.FindByUserID(ctx, "user_xp_1")
+		if foundAfterUpsert.XP() != 1250 {
+			t.Errorf("Upsert overwrote XP: got %d, want 1250", foundAfterUpsert.XP())
+		}
+		if foundAfterUpsert.DisplayName() != "Minjun Kim" {
+			t.Errorf("DisplayName got %s, want Minjun Kim", foundAfterUpsert.DisplayName())
+		}
+	})
+
+	t.Run("UpdateXP creates default snapshot if user does not exist yet", func(t *testing.T) {
+		if err := repo.UpdateXP(ctx, "user_xp_new", 420, now); err != nil {
+			t.Fatalf("UpdateXP on new user failed: %v", err)
+		}
+		found, err := repo.FindByUserID(ctx, "user_xp_new")
+		if err != nil || found == nil {
+			t.Fatalf("expected snapshot to be created, got %v, err=%v", found, err)
+		}
+		if found.XP() != 420 || found.DisplayName() != "Gym Athlete" {
+			t.Errorf("got xp=%d name=%q, want xp=420 name=Gym Athlete", found.XP(), found.DisplayName())
 		}
 	})
 }

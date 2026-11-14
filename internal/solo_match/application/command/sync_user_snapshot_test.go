@@ -18,6 +18,16 @@ func (s *syncSnapshotMock) Upsert(ctx context.Context, snap *entity.UserSnapshot
 	return nil
 }
 
+func (s *syncSnapshotMock) UpdateXP(ctx context.Context, userID string, xp int64, syncedAt time.Time) error {
+	snap, ok := s.snapshots[userID]
+	if !ok || snap == nil {
+		snap, _ = entity.NewUserSnapshot(userID, "", "", syncedAt)
+		s.snapshots[userID] = snap
+	}
+	snap.UpdateXP(xp, syncedAt)
+	return nil
+}
+
 func (s *syncSnapshotMock) FindByUserID(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
 	return s.snapshots[userID], nil
 }
@@ -67,6 +77,25 @@ func TestSyncUserSnapshotHandler(t *testing.T) {
 		err := handler.Handle(ctx, cmd)
 		if err == nil {
 			t.Errorf("expected error for empty user ID, got nil")
+		}
+	})
+
+	t.Run("successfully syncs user XP and clamps negative XP", func(t *testing.T) {
+		err := handler.HandleXP(ctx, command.SyncUserXPCommand{
+			UserID:   "user_100",
+			XP:       1250,
+			SyncedAt: now,
+		})
+		if err != nil {
+			t.Fatalf("HandleXP unexpected error: %v", err)
+		}
+		snap, _ := snapshotRepo.FindByUserID(ctx, "user_100")
+		if snap == nil || snap.XP() != 1250 {
+			t.Fatalf("expected xp 1250, got %+v", snap)
+		}
+
+		if err := handler.HandleXP(ctx, command.SyncUserXPCommand{UserID: "", XP: 100}); err == nil {
+			t.Errorf("expected error for empty user ID in HandleXP")
 		}
 	})
 }
