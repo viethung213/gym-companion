@@ -147,6 +147,40 @@ func (r *PostgresRepository) buildSearchQuery(
 	if filters.MeasurementType != "" {
 		query = query.Where("e.measurement_type = ?", filters.MeasurementType)
 	}
+	if filters.HasMotionSpec != nil {
+		if *filters.HasMotionSpec {
+			query = query.Where(
+				`EXISTS (
+					SELECT 1 FROM workout_execution.motion_specifications ms
+					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.local_rules_url), '') <> ''
+				)`,
+			)
+		} else {
+			query = query.Where(
+				`NOT EXISTS (
+					SELECT 1 FROM workout_execution.motion_specifications ms
+					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.local_rules_url), '') <> ''
+				)`,
+			)
+		}
+	}
+	if filters.HasVoiceSpec != nil {
+		if *filters.HasVoiceSpec {
+			query = query.Where(
+				`EXISTS (
+					SELECT 1 FROM workout_execution.motion_specifications ms
+					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.dialogue_engine_url), '') <> ''
+				)`,
+			)
+		} else {
+			query = query.Where(
+				`NOT EXISTS (
+					SELECT 1 FROM workout_execution.motion_specifications ms
+					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.dialogue_engine_url), '') <> ''
+				)`,
+			)
+		}
+	}
 	for _, muscleID := range filters.SecondaryMuscleIDs {
 		query = query.Where(
 			`EXISTS (
