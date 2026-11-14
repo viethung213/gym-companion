@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/viethung213/gym-companion/internal/coaching"
 	coachingpersistence "github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
@@ -26,18 +27,33 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"github.com/viethung213/gym-companion/internal/shared/seeder"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatalf("fatal error: %v", err) //nolint:forbidigo // Only allowed once in main
+		slog.Error("fatal error in AI service", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
 	loadEnvFiles(".env.ai", ".env")
+
+	telemetry.InitLogger("fitai-ai")
+
+	shutdownTracer, err := telemetry.InitTracer(context.Background(), "fitai-ai")
+	if err != nil {
+		slog.Warn("Failed to initialize OpenTelemetry tracer for AI service", "error", err)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownTracer(shutdownCtx)
+		}()
+	}
 
 	dir, _ := os.Getwd()
 	aiProvider := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
@@ -52,11 +68,14 @@ func run() error {
 	coachingKey := os.Getenv("GOOGLE_API_KEY_COACHING")
 	nutritionKey := os.Getenv("GOOGLE_API_KEY_NUTRITION")
 
-	log.Printf("📂 [AI Service] Working Directory: %s", dir)
-	log.Printf("🤖 [AI Provider] Active: %s (Groq Model: %s)", aiProvider, groqModel)
-	log.Printf("🔑 [Env Check] GROQ_API_KEY: %s", maskKey(groqKey))
-	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_COACHING: %s", maskKey(coachingKey))
-	log.Printf("🔑 [Env Check] GOOGLE_API_KEY_NUTRITION: %s", maskKey(nutritionKey))
+	slog.Info("Initializing AI Service",
+		"working_dir", dir,
+		"ai_provider", aiProvider,
+		"groq_model", groqModel,
+		"has_groq_key", groqKey != "",
+		"has_coaching_key", coachingKey != "",
+		"has_nutrition_key", nutritionKey != "",
+	)
 
 	appPort := os.Getenv("APP_PORT")
 	if appPort == "" {
@@ -79,7 +98,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("initialize coaching database pool: %w", err)
 	}
-	log.Println("Initialized isolated Coaching Database Pool successfully.")
+	slog.Info("Initialized isolated Coaching Database Pool successfully")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -93,13 +112,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("initialize nutrition database pool: %w", err)
 	}
-	log.Println("Initialized isolated Nutrition Database Pool successfully.")
+	slog.Info("Initialized isolated Nutrition Database Pool successfully")
 
 	notificationDB, err := dbRegistry.GetPool("notification")
 	if err != nil {
 		return fmt.Errorf("initialize notification database pool: %w", err)
 	}
-	log.Println("Initialized isolated Notification Database Pool successfully.")
+	slog.Info("Initialized isolated Notification Database Pool successfully")
 
 	internalSecret := os.Getenv("INTERNAL_SECRET")
 	if internalSecret == "" {
@@ -110,7 +129,7 @@ func run() error {
 	if gatewayURL == "" {
 		gatewayURL = "http://localhost:8000"
 	}
-	log.Printf("🌐 [AI Service] Gateway Upstream URL for Core RPC: %s", gatewayURL)
+	slog.Info("Gateway upstream configured for Core RPC", "gateway_url", gatewayURL)
 
 	// Initialize Coaching Module
 	coachGRPCHandler, _, shutdownCoaching, err := coaching.Initialize(ctx, &coaching.ModuleDeps{
@@ -148,10 +167,11 @@ func run() error {
 	defer shutdownNotification()
 
 	// Start HTTP Server with ConnectRPC, h2c, and CORS
-	log.Printf("🚀 Starting AI Service (ConnectRPC + gRPC over h2c) on port %s...\n", appPort)
+	slog.Info("Starting AI Service", "port", appPort, "protocol", "ConnectRPC + gRPC over h2c")
 	mux := http.NewServeMux()
 
 	connectServer := connect.NewServer(
+		middleware.NewConnectTracingInterceptor("ai"),
 		middleware.NewConnectRecoveryInterceptor(),
 		middleware.NewConnectLoggingInterceptor(),
 		middleware.NewConnectErrorMappingInterceptor(),
@@ -167,11 +187,12 @@ func run() error {
 
 	connecthttp.Mount(mux, connectServer)
 
-	// Health endpoint
+	// Health and Metrics endpoints
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK (AI Service)"))
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Wrap multiplexer with CORS middleware
 	corsHandler := cors.New(cors.Options{
@@ -191,16 +212,18 @@ func run() error {
 	h2cHandler := h2c.NewHandler(corsHandler, &http2.Server{})
 
 	server := &http.Server{
-		Addr:    ":" + appPort,
-		Handler: h2cHandler,
+		Addr:              ":" + appPort,
+		Handler:           h2cHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Run background seeder tasks for AI
 	go func() {
 		seedCtx := context.Background()
-		log.Println("🌱 Triggering background seeding for Food catalog...")
+		slog.Info("Triggering background seeding for Food catalog")
 		if seedErr := seeder.SeedFoodItems(seedCtx, nutritionDB, nutritionGRPCHandler); seedErr != nil {
-			log.Printf("⚠️ Background seeding food catalog error: %v", seedErr)
+			slog.Warn("Background seeding food catalog error", "error", seedErr)
 		}
 	}()
 
@@ -244,7 +267,7 @@ func run() error {
 	case err := <-errChan:
 		return err
 	case sig := <-sigChan:
-		log.Printf("🛑 [AI Service] Received signal %v, initiating graceful shutdown...", sig)
+		slog.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -253,7 +276,7 @@ func run() error {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown: %w", err)
 	}
-	log.Println("👋 [AI Service] Graceful shutdown complete")
+	slog.Info("AI Service graceful shutdown complete")
 	return nil
 }
 
@@ -283,14 +306,4 @@ func loadEnvFiles(files ...string) {
 			}
 		}
 	}
-}
-
-func maskKey(k string) string {
-	if k == "" {
-		return "<EMPTY>"
-	}
-	if len(k) <= 8 {
-		return k[:2] + "****"
-	}
-	return k[:6] + "..." + k[len(k)-4:] + fmt.Sprintf(" (len=%d)", len(k))
 }

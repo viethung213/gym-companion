@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -25,9 +25,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/infrastructure/worker"
 	authGRPC "github.com/viethung213/gym-companion/internal/auth/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/service/authv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 // ModuleDeps holds the external database connection and gRPC server instances needed by Auth.
@@ -50,13 +49,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		return nil, nil, fmt.Errorf("load config: %w", err)
 	}
 
-	// 2. Initialize GORM DB wrapper over sql.DB
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
-		PrepareStmt:            false,
-		SkipDefaultTransaction: true,
-	})
+	// 2. Initialize GORM DB wrapper over sql.DB with OpenTelemetry tracing
+	gormDB, err := database.OpenGorm(deps.DB, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
@@ -104,7 +98,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	_, err = keyRepo.GetActiveKey(ctx)
 	if err != nil {
 		if errors.Is(err, apperror.ErrKeyNotFound) {
-			log.Println("No active signing key found. Generating initial active key...")
+			slog.Info("No active signing key found, generating initial active key")
 			_, err = rotateKeysHandler.Handle(ctx, command.RotateKeysCommand{
 				KeyTTL: cfg.KeyRotationTTL,
 			})
@@ -125,7 +119,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in background key rotation check: %v", r)
+				slog.Error("PANIC RECOVERED in background key rotation check", slog.Any("panic", r))
 			}
 		}()
 
@@ -136,16 +130,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 			case <-wCtx.Done():
 				return
 			case <-ticker.C:
-				log.Println("Running background active key rotation check...")
+				slog.Debug("Running background active key rotation check")
 				activeKey, err := keyRepo.GetActiveKey(wCtx)
 				if err == nil {
 					if time.Until(activeKey.ExpiresAt) < 24*time.Hour {
-						log.Println("Active key near expiration. Triggering key rotation...")
+						slog.Info("Active key near expiration, triggering key rotation")
 						_, err = rotateKeysHandler.Handle(wCtx, command.RotateKeysCommand{
 							KeyTTL: cfg.KeyRotationTTL,
 						})
 						if err != nil {
-							log.Printf("ERROR: Background automated key rotation failed: %v", err)
+							slog.Error("Background automated key rotation failed", slog.String("error", err.Error()))
 						}
 					}
 				}
@@ -171,7 +165,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 
 	highPriorityWriter, hpErr := deps.KafkaRegistry.GetWriter("notification.events.high-priority", kafkaBrokers)
 	if hpErr != nil {
-		log.Printf("Warning: failed to get high-priority notification kafka writer: %v", hpErr)
+		slog.Warn("Failed to get high-priority notification kafka writer", slog.String("error", hpErr.Error()))
 	}
 
 	kafkaPub := authKafka.NewPublisher(writer, highPriorityWriter)
@@ -182,7 +176,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in Outbox background worker: %v", r)
+				slog.Error("PANIC RECOVERED in Outbox background worker", slog.Any("panic", r))
 			}
 		}()
 		outboxWorker.Start(workerCtx)
@@ -192,14 +186,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	var shutdownOnce sync.Once
 	shutdown := func() {
 		shutdownOnce.Do(func() {
-			log.Println("Shutting down Auth Bounded Context background workers...")
+			slog.Info("Shutting down Auth Bounded Context background workers")
 			cancelWorkers()
 			wg.Wait()
-			log.Println("Auth Bounded Context background workers stopped. Closing Kafka publisher...")
+			slog.Info("Auth Bounded Context background workers stopped, closing Kafka publisher")
 			if err := kafkaPub.Close(); err != nil {
-				log.Printf("WARNING: failed to close auth Kafka publisher: %v", err)
+				slog.Warn("Failed to close auth Kafka publisher", slog.String("error", err.Error()))
 			}
-			log.Println("Auth Bounded Context Kafka publisher closed successfully.")
+			slog.Info("Auth Bounded Context Kafka publisher closed successfully")
 		})
 	}
 
@@ -246,7 +240,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		unlockUserHandler,
 	)
 
-	log.Println("Auth Bounded Context initialized successfully.")
+	slog.Info("Auth Bounded Context initialized successfully")
 	return grpcHandler, shutdown, nil
 }
 

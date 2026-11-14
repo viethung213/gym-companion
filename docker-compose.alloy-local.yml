@@ -1,0 +1,37 @@
+services:
+  alloy:
+    image: grafana/alloy:v1.4.2
+    container_name: fitai-alloy-local
+    hostname: fitai-vps
+    restart: unless-stopped
+    env_file:
+      - .env.alloy.local
+    environment:
+      - PROCFS_PATH=/proc
+      - SYSFS_PATH=/sys
+      - ROOTFS_PATH=/
+    volumes:
+      - ./deployments/vps/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "12345:12345" # Alloy Web Dashboard
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+    networks:
+      fitai-network:
+        aliases:
+          - alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+
+networks:
+  fitai-network:
+    external: true
+
+volumes:
+  alloy-data:
+

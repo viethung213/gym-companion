@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -89,7 +89,12 @@ func LoadConfig() Config {
 		masked = fmt.Sprintf("%s... (len=%d)", activeKey[:2], len(activeKey))
 	}
 
-	log.Printf("[Nutrition Config] Provider: %s, Active Model: %s, Max Tokens: %d, Key Status: %s", aiProvider, activeModel, maxOutputTokens, masked)
+	slog.Info("Nutrition Config initialized",
+		slog.String("provider", aiProvider),
+		slog.String("active_model", activeModel),
+		slog.Int("max_tokens", maxOutputTokens),
+		slog.String("key_status", masked),
+	)
 
 	return Config{
 		AIProvider:           aiProvider,

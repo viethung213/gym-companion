@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -36,7 +36,7 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 	}
 	defer func() {
 		if _, unlockErr := conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockID); unlockErr != nil {
-			log.Printf("Warning: release migration advisory lock failed: %v", unlockErr)
+			slog.Warn("Failed to release migration advisory lock", "error", unlockErr)
 		}
 	}()
 
@@ -73,7 +73,7 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 		}
 		sort.Strings(files)
 
-		log.Printf("Executing %d embedded SQL migrations for [%s]...", len(files), dir)
+		slog.InfoContext(ctx, "Executing embedded SQL migrations", "count", len(files), "dir", dir)
 
 		for _, file := range files {
 			filePath := subDirPath + "/" + file
@@ -88,7 +88,7 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 			if _, execErr := conn.ExecContext(ctx, string(content)); execErr != nil {
 				return fmt.Errorf("execute embedded migration %s: %w", filePath, execErr)
 			}
-			log.Printf("Successfully applied SQL migration: [%s/%s]", dir, file)
+			slog.InfoContext(ctx, "Successfully applied SQL migration", "dir", dir, "file", file)
 		}
 	}
 
@@ -125,7 +125,7 @@ func runSeedsOnConn(ctx context.Context, conn *sql.Conn) error {
 	}
 	sort.Strings(files)
 
-	log.Printf("Executing %d embedded SQL seeds...", len(files))
+	slog.InfoContext(ctx, "Executing embedded SQL seeds", "count", len(files))
 
 	for _, file := range files {
 		content, readFileErr := seedFS.ReadFile("seeds/" + file)
@@ -138,7 +138,7 @@ func runSeedsOnConn(ctx context.Context, conn *sql.Conn) error {
 		if _, execErr := conn.ExecContext(ctx, string(content)); execErr != nil {
 			return fmt.Errorf("execute embedded seed %s: %w", file, execErr)
 		}
-		log.Printf("Successfully applied SQL seed: %s", file)
+		slog.InfoContext(ctx, "Successfully applied SQL seed", "file", file)
 	}
 
 	return nil

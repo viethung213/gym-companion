@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -20,9 +20,8 @@ import (
 	exerciseConsumer "github.com/viethung213/gym-companion/internal/exercise/transport/consumer"
 	exerciseGRPC "github.com/viethung213/gym-companion/internal/exercise/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
@@ -32,13 +31,8 @@ type ModuleDeps struct {
 
 func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseServer, func(), error) {
 
-	// Initialize GORM DB wrapper over sql.DB
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
-		PrepareStmt:            false,
-		SkipDefaultTransaction: true,
-	})
+	// Initialize GORM DB wrapper over sql.DB with OpenTelemetry tracing
+	gormDB, err := database.OpenGorm(deps.DB, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
@@ -147,7 +141,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in Exercise Outbox background worker: %v", r)
+				slog.Error("PANIC RECOVERED in Exercise Outbox background worker", slog.Any("panic", r))
 			}
 		}()
 		outboxWorker.Start(workerCtx)
@@ -162,7 +156,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 				defer wg.Done()
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in Exercise MotionSpec consumer worker: %v", r)
+						slog.Error("PANIC RECOVERED in Exercise MotionSpec consumer worker", slog.Any("panic", r))
 					}
 					_ = motionSpecReader.Close()
 				}()
@@ -184,11 +178,11 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 						func() {
 							defer func() {
 								if r := recover(); r != nil {
-									log.Printf("PANIC RECOVERED in Exercise MotionSpec event handling: %v", r)
+									slog.Error("PANIC RECOVERED in Exercise MotionSpec event handling", slog.Any("panic", r))
 								}
 							}()
 							if err := motionSpecConsumer.ConsumeMotionSpecReady(workerCtx, msg.Value); err != nil {
-								log.Printf("Exercise failed to process MotionSpec event: %v", err)
+								slog.Error("Exercise failed to process MotionSpec event", slog.String("error", err.Error()))
 							}
 						}()
 					}
@@ -199,17 +193,17 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 
 	// Shutdown callback function
 	shutdown := func() {
-		log.Println("Shutting down Exercise Bounded Context background workers...")
+		slog.Info("Shutting down Exercise Bounded Context background workers...")
 		cancelWorkers()
 		wg.Wait()
-		log.Println("Exercise Bounded Context background workers stopped. Closing Kafka publisher...")
+		slog.Info("Exercise Bounded Context background workers stopped, closing Kafka publisher...")
 		if err := kafkaPub.Close(); err != nil {
-			log.Printf("WARNING: failed to close exercise Kafka publisher: %v", err)
+			slog.Warn("Failed to close exercise Kafka publisher", slog.String("error", err.Error()))
 		}
-		log.Println("Exercise Bounded Context Kafka publisher closed successfully.")
+		slog.Info("Exercise Bounded Context Kafka publisher closed successfully.")
 	}
 
-	log.Println("Exercise Bounded Context initialized successfully.")
+	slog.Info("Exercise Bounded Context initialized successfully.")
 	return grpcHandler, shutdown, nil
 }
 

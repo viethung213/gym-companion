@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -51,9 +51,9 @@ func (c *SoloMatchStartedConsumer) HandleMessage(ctx context.Context, rawPayload
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[WorkoutExecution] Warning checking outbox_log idempotency for %s: %v", env.ID, err)
+			slog.WarnContext(ctx, "Warning checking outbox_log idempotency", slog.String("event_id", env.ID), slog.String("error", err.Error()))
 		} else if processed {
-			log.Printf("[WorkoutExecution] SoloMatchStarted event %s already processed, skipping", env.ID)
+			slog.DebugContext(ctx, "SoloMatchStarted event already processed, skipping", slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -102,7 +102,7 @@ func (c *SoloMatchStartedConsumer) HandleMessage(ctx context.Context, rawPayload
 			ErrorMessage: errMsg,
 		}
 		if saveErr := c.outboxLogRepo.SaveLog(ctx, logRecord); saveErr != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to save outbox log for event %s: %v", env.ID, saveErr)
+			slog.WarnContext(ctx, "Failed to save outbox log for event", slog.String("event_id", env.ID), slog.String("error", saveErr.Error()))
 		}
 	}
 

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/service/solomatchv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/query"
@@ -27,7 +28,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/worker"
 	"github.com/viethung213/gym-companion/internal/solo_match/transport/consumer"
 	"github.com/viethung213/gym-companion/internal/solo_match/transport/grpc"
-	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -42,19 +42,9 @@ type ModuleDeps struct {
 
 // Initialize wires dependencies, registers services, and starts background workers.
 func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), error) {
-	gormLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  logger.Warn,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
-		},
-	)
+	gormLogger := logger.Default.LogMode(logger.Warn)
 
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
+	gormDB, err := database.OpenGorm(deps.DB, &gorm.Config{
 		Logger:                 gormLogger,
 		PrepareStmt:            false,
 		SkipDefaultTransaction: true,
@@ -145,7 +135,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		if wErr == nil && writer != nil {
 			kafkaWriter = writer
 		} else {
-			log.Printf("[SoloMatch] Warning: failed to obtain kafka writer: %v", wErr)
+			slog.Warn("Failed to obtain solo match kafka writer", slog.Any("error", wErr))
 		}
 	}
 
@@ -164,7 +154,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in SoloMatch Outbox Publisher: %v", r)
+				slog.Error("PANIC RECOVERED in SoloMatch Outbox Publisher", slog.Any("panic", r))
 			}
 		}()
 		outboxPub.Start(workerCtx)
@@ -177,7 +167,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in SoloMatch Match Timeout Worker: %v", r)
+				slog.Error("PANIC RECOVERED in SoloMatch Match Timeout Worker", slog.Any("panic", r))
 			}
 		}()
 		matchTimeoutWorker.Start(workerCtx)
@@ -207,7 +197,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 				workoutWorker.Start(workerCtx)
 			}()
 		} else if rErr != nil {
-			log.Printf("[SoloMatch] Warning: failed to obtain workout events reader: %v", rErr)
+			slog.Warn("Failed to obtain workout events reader", slog.Any("error", rErr))
 		}
 
 		// Consumer 3B: Auth Events (User Registered)
@@ -224,7 +214,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 				authWorker.Start(workerCtx)
 			}()
 		} else if aErr != nil {
-			log.Printf("[SoloMatch] Warning: failed to obtain auth events reader: %v", aErr)
+			slog.Warn("Failed to obtain auth events reader", slog.Any("error", aErr))
 		}
 
 		// Consumer 3C: Profile Events (User Identity Updated)
@@ -241,24 +231,24 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 				profileWorker.Start(workerCtx)
 			}()
 		} else if pErr != nil {
-			log.Printf("[SoloMatch] Warning: failed to obtain profile events reader: %v", pErr)
+			slog.Warn("Failed to obtain profile events reader", slog.Any("error", pErr))
 		}
 	}
 
 	shutdown := func() {
-		log.Println("Shutting down Solo Match Bounded Context background workers...")
+		slog.Info("Shutting down Solo Match Bounded Context background workers...")
 		if queuePort != nil {
 			if qErr := queuePort.Close(); qErr != nil {
-				log.Printf("[SoloMatch] Warning: error closing matchmaker queue: %v", qErr)
+				slog.Warn("Error closing matchmaker queue", slog.Any("error", qErr))
 			}
 		}
 		outboxPub.Stop()
 		cancelWorkers()
 		wg.Wait()
-		log.Println("Solo Match Bounded Context background workers stopped successfully.")
+		slog.Info("Solo Match Bounded Context background workers stopped successfully.")
 	}
 
-	log.Println("Solo Match Bounded Context initialized successfully.")
+	slog.Info("Solo Match Bounded Context initialized successfully.")
 	return grpcHandler, shutdown, nil
 }
 

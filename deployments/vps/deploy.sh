@@ -84,6 +84,13 @@ if [ "$SERVICE_NAME" = "all" ]; then
     for S in "${SERVICES[@]}"; do
         deploy_single_service "$S"
     done
+
+    # Khởi chạy Grafana Alloy (Telemetry Collector) nếu có cấu hình
+    if [ -f "./secrets/.env.alloy.prod" ]; then
+        echo "--------------------------------------------------"
+        echo ">> Đang khởi chạy / cập nhật Grafana Alloy..."
+        docker compose -f "$COMPOSE_FILE" up -d alloy
+    fi
 else
     deploy_single_service "$SERVICE_NAME"
 fi

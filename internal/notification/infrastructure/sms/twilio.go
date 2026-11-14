@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/config"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 )
 
 var _ port.SMSProvider = (*TwilioProvider)(nil)
@@ -27,7 +28,7 @@ type TwilioProvider struct {
 func NewTwilioProvider(cfg *config.Config) *TwilioProvider {
 	if cfg == nil {
 		return &TwilioProvider{
-			httpClient: &http.Client{Timeout: 10 * time.Second},
+			httpClient: telemetry.NewHTTPClient(10 * time.Second),
 		}
 	}
 
@@ -35,7 +36,7 @@ func NewTwilioProvider(cfg *config.Config) *TwilioProvider {
 		accountSID: cfg.TwilioAccountSID,
 		authToken:  cfg.TwilioAuthToken,
 		fromNumber: cfg.TwilioFromNumber,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: telemetry.NewHTTPClient(10 * time.Second),
 	}
 }
 
@@ -45,7 +46,7 @@ func (p *TwilioProvider) SendSMS(ctx context.Context, toPhoneNumber, message str
 	}
 
 	if p.accountSID == "" || p.authToken == "" {
-		log.Printf("[Twilio SMS Disabled] To: %s | Message: %s", toPhoneNumber, message)
+		slog.InfoContext(ctx, "Twilio SMS disabled (dry run)", slog.String("to", toPhoneNumber), slog.String("message", message))
 		return nil
 	}
 

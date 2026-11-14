@@ -1,0 +1,180 @@
+// ------------------------------------------------------------------------------
+// 1. HOST / VPS METRICS (Node Exporter tích hợp sẵn trong Alloy)
+// ------------------------------------------------------------------------------
+prometheus.exporter.unix "node" {
+  procfs_path = coalesce(sys.env("PROCFS_PATH"), "/host/proc")
+  sysfs_path  = coalesce(sys.env("SYSFS_PATH"), "/host/sys")
+  rootfs_path = coalesce(sys.env("ROOTFS_PATH"), "/host/root")
+}
+
+discovery.relabel "vps_metrics" {
+  targets = prometheus.exporter.unix.node.targets
+  rule {
+    target_label = "instance"
+    replacement  = coalesce(sys.env("HOST_NAME"), "fitai-vps")
+  }
+  rule {
+    target_label = "nodename"
+    replacement  = coalesce(sys.env("HOST_NAME"), "fitai-vps")
+  }
+}
+
+prometheus.scrape "vps_metrics" {
+  targets         = discovery.relabel.vps_metrics.output
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+}
+
+// ------------------------------------------------------------------------------
+// 2. GATEWAY & SERVICE METRICS
+// ------------------------------------------------------------------------------
+prometheus.scrape "gateway_metrics" {
+  targets = [
+    {
+      "__address__" = coalesce(sys.env("GATEWAY_METRICS_ADDR"), "gateway:8001"),
+      "job"         = "fitai-gateway",
+      "service"     = "gateway",
+    },
+  ]
+  bearer_token    = sys.env("ADMIN_KEY")
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "core_metrics" {
+  targets = [
+    {
+      "__address__" = coalesce(sys.env("CORE_METRICS_ADDR"), "core:8080"),
+      "job"         = "fitai-core",
+      "service"     = "core",
+    },
+  ]
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "ai_metrics" {
+  targets = [
+    {
+      "__address__" = coalesce(sys.env("AI_METRICS_ADDR"), "ai:8082"),
+      "job"         = "fitai-ai",
+      "service"     = "ai",
+    },
+  ]
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+}
+
+// Đẩy toàn bộ Metrics lên Grafana Cloud Prometheus/Mimir
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_METRICS_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_METRICS_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// 3. DOCKER LOGS PIPELINE (Tự động phát hiện và thu thập log tất cả container)
+// ------------------------------------------------------------------------------
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  // Lấy tên container sạch (bỏ dấu gạch chéo đầu: /fitai-core -> fitai-core)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Gắn nhãn service nếu container được chạy qua docker-compose
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "default" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_logs.output
+  forward_to = [loki.process.filter_logs.receiver]
+}
+
+// Pipeline xử lý log (bóc tách JSON và trích xuất trace_id để liên kết với Tempo)
+loki.process "filter_logs" {
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "trace_id",
+      msg      = "msg",
+    }
+  }
+
+  // Tự động gắn nhãn level nếu có trong JSON log
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+// Đẩy toàn bộ Logs lên Grafana Cloud Loki
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_LOGS_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_LOGS_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// 4. DISTRIBUTED TRACES (OTLP Receiver -> Batch -> Tempo)
+// ------------------------------------------------------------------------------
+// Hứng OTLP traces từ Gateway & Core qua mạng nội bộ Docker (port 4317 gRPC, 4318 HTTP)
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Gom batch các spans để giảm số lượng request gửi đi
+otelcol.processor.batch "default" {
+  timeout     = "2s"
+  send_batch_size = 500
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// Xác thực với Grafana Cloud Tempo
+otelcol.auth.basic "tempo" {
+  username = sys.env("GRAFANA_TRACES_USER")
+  password = sys.env("GRAFANA_CLOUD_TOKEN")
+}
+
+// Đẩy Traces lên Grafana Cloud Tempo qua gRPC
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = sys.env("GRAFANA_TRACES_ENDPOINT")
+    auth     = otelcol.auth.basic.tempo.handler
+  }
+}
+

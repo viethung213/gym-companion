@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
@@ -50,16 +50,16 @@ func (w *InboundEventRetryWorker) Start(ctx context.Context) error {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("[Notification InboundEventRetryWorker] Started background retry worker (interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Started Notification InboundEventRetryWorker", slog.Duration("interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Notification InboundEventRetryWorker] Stopping worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Notification InboundEventRetryWorker due to context cancellation")
 			return nil
 		case <-ticker.C:
 			if err := w.processFailedLogs(ctx); err != nil {
-				log.Printf("[Notification InboundEventRetryWorker] Processing error: %v", err)
+				slog.ErrorContext(ctx, "Notification InboundEventRetryWorker processing error", slog.String("error", err.Error()))
 			}
 		}
 	}
@@ -79,19 +79,19 @@ func (w *InboundEventRetryWorker) processFailedLogs(ctx context.Context) error {
 		return nil
 	}
 
-	log.Printf("[Notification InboundEventRetryWorker] Found %d failed inbound events to retry...", len(failedLogs))
+	slog.InfoContext(ctx, "Found failed inbound events to retry", slog.Int("count", len(failedLogs)))
 
 	for _, logRec := range failedLogs {
 		var env cloudEventEnvelope
 		if err := json.Unmarshal(logRec.Payload, &env); err != nil {
-			log.Printf("[Notification InboundEventRetryWorker] Unmarshal payload failed for log ID '%s': %v", logRec.ID, err)
+			slog.WarnContext(ctx, "Unmarshal payload failed for inbound log", slog.String("log_id", logRec.ID), slog.String("error", err.Error()))
 			_ = w.outboxLogRepo.UpdateLogStatus(ctx, logRec.ID, "FAILED_UNPARSEABLE", err.Error())
 			continue
 		}
 
 		var payload defaultEventData
 		if err := json.Unmarshal(env.Data, &payload); err != nil {
-			log.Printf("[Notification InboundEventRetryWorker] Unmarshal event data failed for log ID '%s': %v", logRec.ID, err)
+			slog.WarnContext(ctx, "Unmarshal event data failed for inbound log", slog.String("log_id", logRec.ID), slog.String("error", err.Error()))
 			_ = w.outboxLogRepo.UpdateLogStatus(ctx, logRec.ID, "FAILED_UNPARSEABLE", err.Error())
 			continue
 		}
@@ -123,10 +123,10 @@ func (w *InboundEventRetryWorker) processFailedLogs(ctx context.Context) error {
 		})
 
 		if sendErr != nil {
-			log.Printf("[Notification InboundEventRetryWorker] Retry failed for log ID '%s': %v", logRec.ID, sendErr)
+			slog.WarnContext(ctx, "Retry failed for inbound log", slog.String("log_id", logRec.ID), slog.String("error", sendErr.Error()))
 			_ = w.outboxLogRepo.UpdateLogStatus(ctx, logRec.ID, "FAILED", sendErr.Error())
 		} else {
-			log.Printf("[Notification InboundEventRetryWorker] Retry SUCCESS for log ID '%s' (EventID: %s)", logRec.ID, env.ID)
+			slog.InfoContext(ctx, "Retry SUCCESS for inbound log", slog.String("log_id", logRec.ID), slog.String("event_id", env.ID))
 			_ = w.outboxLogRepo.UpdateLogStatus(ctx, logRec.ID, "SUCCESS", "")
 		}
 	}

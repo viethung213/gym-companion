@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -177,8 +177,12 @@ func retryTransient[T any](ctx context.Context, label string, fn func() (T, erro
 		}
 
 		delay := transientDelay(err, try)
-		log.Printf("coaching: %s hit a transient failure, waiting %s before retry %d/%d: %v",
-			label, delay, try+1, maxTransientRetries, err)
+		slog.WarnContext(ctx, "Hit a transient failure, waiting before retry",
+			slog.String("label", label),
+			slog.Duration("delay", delay),
+			slog.Int("attempt", try+1),
+			slog.Int("max_retries", maxTransientRetries),
+			slog.Any("error", err))
 
 		if waitErr := sleepCtx(ctx, delay); waitErr != nil {
 			return zero, waitErr

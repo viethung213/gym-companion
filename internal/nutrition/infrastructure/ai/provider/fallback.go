@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -87,14 +87,16 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 			if isQuotaOrRateLimitErr(lastErr) {
 				if idx < len(f.models)-1 {
 					nextModel := f.models[idx+1]
-					log.Printf("[FallbackLLM] Model %s hit quota/rate limit error (%v). Auto-falling back to %s after 1s...",
-						m.Name(), lastErr, nextModel.Name())
+					slog.WarnContext(ctx, "Model hit quota/rate limit error, auto-falling back",
+						slog.String("current_model", m.Name()),
+						slog.String("next_model", nextModel.Name()),
+						slog.Any("error", lastErr))
 					time.Sleep(1 * time.Second)
 					continue
 				}
 
 				// Nếu là model cuối cùng mà bị 429, chờ 2s rồi thử lại 1 lần cuối
-				log.Printf("[FallbackLLM] Model %s hit rate limit (429). Retrying after 2s cooldown...", m.Name())
+				slog.WarnContext(ctx, "Model hit rate limit, retrying after cooldown", slog.String("model", m.Name()))
 				time.Sleep(2 * time.Second)
 				var retryErr error
 				for resp, err := range m.GenerateContent(ctx, modelReq, stream) {

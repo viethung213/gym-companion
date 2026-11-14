@@ -3,7 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
@@ -98,7 +98,7 @@ func (h *SelfEventHandler) Handle(
 
 	var payload genericNotificationPayload
 	if err := json.Unmarshal(env.Data, &payload); err != nil {
-		log.Printf("[Self Event Handler] Unmarshal generic notification data failed for '%s': %v", env.Type, err)
+		slog.ErrorContext(ctx, "Unmarshal generic notification data failed", slog.String("event_type", env.Type), slog.Any("error", err))
 		return err
 	}
 
@@ -128,9 +128,9 @@ func (h *SelfEventHandler) Handle(
 	if h.outboxLogRepo != nil && env.ID != "" {
 		fresh, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, partitionKey, msgValue, "PROCESSING", "")
 		if logErr != nil {
-			log.Printf("[Self Event Handler] LogProcessed error for event '%s': %v", env.ID, logErr)
+			slog.ErrorContext(ctx, "LogProcessed error for event", slog.String("event_id", env.ID), slog.Any("error", logErr))
 		} else if !fresh {
-			log.Printf("[Self Event Handler] Duplicate event '%s' (ID: %s) already processed, skipping...", env.Type, env.ID)
+			slog.DebugContext(ctx, "Duplicate event already processed, skipping", slog.String("event_type", env.Type), slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -166,7 +166,7 @@ func (h *SelfEventHandler) Handle(
 					})
 					if err != nil {
 						lastErr = err
-						log.Printf("[Self Event Handler] Push dispatch error for user %s: %v", uid, err)
+						slog.ErrorContext(ctx, "Push dispatch error", slog.String("user_id", uid), slog.Any("error", err))
 					}
 				}
 			}
@@ -196,7 +196,7 @@ func (h *SelfEventHandler) Handle(
 							})
 							if err != nil {
 								lastErr = err
-								log.Printf("[Self Event Handler] Email dispatch error to %s: %v", emailAddr, err)
+								slog.ErrorContext(ctx, "Email dispatch error", slog.String("to", emailAddr), slog.Any("error", err))
 							}
 						}
 					} else {
@@ -209,11 +209,11 @@ func (h *SelfEventHandler) Handle(
 						})
 						if err != nil {
 							lastErr = err
-							log.Printf("[Self Event Handler] Email dispatch error to %s: %v", emailAddr, err)
+							slog.ErrorContext(ctx, "Email dispatch error", slog.String("to", emailAddr), slog.Any("error", err))
 						}
 					}
 				} else {
-					log.Printf("[Self Event Handler] EMAIL requested but no recipient email in data (event ID: %s)", env.ID)
+					slog.WarnContext(ctx, "EMAIL requested but no recipient email in data", slog.String("event_id", env.ID))
 				}
 			}
 
@@ -244,7 +244,7 @@ func (h *SelfEventHandler) Handle(
 							})
 							if err != nil {
 								lastErr = err
-								log.Printf("[Self Event Handler] SMS dispatch error to %s: %v", phoneNum, err)
+								slog.ErrorContext(ctx, "SMS dispatch error", slog.String("to", phoneNum), slog.Any("error", err))
 							}
 						}
 					} else {
@@ -256,11 +256,11 @@ func (h *SelfEventHandler) Handle(
 						})
 						if err != nil {
 							lastErr = err
-							log.Printf("[Self Event Handler] SMS dispatch error to %s: %v", phoneNum, err)
+							slog.ErrorContext(ctx, "SMS dispatch error", slog.String("to", phoneNum), slog.Any("error", err))
 						}
 					}
 				} else {
-					log.Printf("[Self Event Handler] SMS requested but no recipient phone in data (event ID: %s)", env.ID)
+					slog.WarnContext(ctx, "SMS requested but no recipient phone in data", slog.String("event_id", env.ID))
 				}
 			}
 		}

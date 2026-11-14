@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
@@ -97,7 +97,8 @@ func (c *MotionSpecConsumer) ConsumeMotionSpecReady(ctx context.Context, payload
 		return nil
 	}
 
-	log.Printf("MotionSpecConsumer: updating exercise %s has_ai_supported = %v (event_id: %s)", exerciseID, isReady, eventID)
+	slog.InfoContext(ctx, "Updating exercise has_ai_supported",
+		slog.String("exercise_id", exerciseID), slog.Bool("has_ai_supported", isReady), slog.String("event_id", eventID))
 	_, err = c.handler.Handle(ctx, &command.SetAISupportedCommand{
 		ID:        exerciseID,
 		Supported: isReady,

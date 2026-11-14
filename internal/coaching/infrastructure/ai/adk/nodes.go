@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -143,11 +143,13 @@ func (c *CoachingContextAgent) buildNodes() {
 			cleaned := cleanJSONResponse(planText)
 			switch {
 			case cleaned == "":
-				log.Printf("[parse_to_schema] Received EMPTY planText (raw len=%d): %q", len(planText), planText)
+				slog.Debug("[parse_to_schema] Received EMPTY planText", slog.Int("raw_len", len(planText)), slog.String("raw", planText))
 			case len(cleaned) < 500:
-				log.Printf("[parse_to_schema] Received planText (raw len=%d, cleaned len=%d): %s", len(planText), len(cleaned), cleaned)
+				slog.Debug("[parse_to_schema] Received planText",
+					slog.Int("raw_len", len(planText)), slog.Int("cleaned_len", len(cleaned)), slog.String("cleaned", cleaned))
 			default:
-				log.Printf("[parse_to_schema] Received planText (raw len=%d, cleaned len=%d), tail: %s", len(planText), len(cleaned), cleaned[len(cleaned)-200:])
+				slog.Debug("[parse_to_schema] Received planText",
+					slog.Int("raw_len", len(planText)), slog.Int("cleaned_len", len(cleaned)), slog.String("tail", cleaned[len(cleaned)-200:]))
 			}
 			var plan GeneratedPlan
 			if parseErr := json.Unmarshal([]byte(cleaned), &plan); parseErr != nil {

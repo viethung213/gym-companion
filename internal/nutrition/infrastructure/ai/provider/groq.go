@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
@@ -50,7 +50,7 @@ func (g *GroqProvider) Build(ctx context.Context, cfg *config.Config) (model.LLM
 	for _, name := range modelNames {
 		m, err := openaimodel.NewModel(ctx, name, clientCfg)
 		if err != nil {
-			log.Printf("[GroqProvider] Warning: Failed to initialize Groq model %s: %v", name, err)
+			slog.WarnContext(ctx, "Failed to initialize Groq model", slog.String("model", name), slog.Any("error", err))
 			continue
 		}
 		models = append(models, m)

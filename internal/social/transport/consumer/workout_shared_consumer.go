@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -36,11 +36,11 @@ func NewWorkoutSharedConsumer(
 }
 
 func (c *WorkoutSharedConsumer) Start(ctx context.Context) {
-	log.Println("Starting Social WorkoutShared Kafka Consumer...")
+	slog.InfoContext(ctx, "Starting Social WorkoutShared Kafka Consumer")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping Social WorkoutShared Kafka Consumer due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Social WorkoutShared Kafka Consumer due to context cancellation")
 			return
 		default:
 			msg, err := c.reader.ReadMessage(ctx)
@@ -48,13 +48,13 @@ func (c *WorkoutSharedConsumer) Start(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("Social WorkoutShared consumer read error: %v", err)
+				slog.ErrorContext(ctx, "Social WorkoutShared consumer read error", slog.String("error", err.Error()))
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 
 			if err := c.ProcessMessage(ctx, msg); err != nil {
-				log.Printf("Social WorkoutShared consumer process error: %v", err)
+				slog.ErrorContext(ctx, "Social WorkoutShared consumer process error", slog.String("error", err.Error()))
 			}
 		}
 	}

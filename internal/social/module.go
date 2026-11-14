@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/service/socialv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
@@ -24,8 +25,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/infrastructure/worker"
 	socialConsumer "github.com/viethung213/gym-companion/internal/social/transport/consumer"
 	socialGRPC "github.com/viethung213/gym-companion/internal/social/transport/grpc"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
@@ -34,11 +33,7 @@ type ModuleDeps struct {
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, func(), error) {
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
+	gormDB, err := database.OpenGorm(deps.DB, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("wrap social db pool in gorm: %w", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 const (
@@ -139,7 +139,7 @@ func runWithRetries(
 		if err != nil {
 			// A reviewer that is down or incoherent must not block a plan that
 			// already passed every deterministic gate.
-			log.Printf("coaching: review unavailable on round %d, shipping unreviewed: %v", n, err)
+			slog.Warn("Coaching review unavailable, shipping unreviewed", slog.Int("round", n), slog.Any("error", err))
 			result.Degraded = true
 			result.Issues = append(result.Issues, "plan shipped without review: "+err.Error())
 			return result, nil
@@ -160,8 +160,8 @@ func runWithRetries(
 		}
 
 		if verdict.Confidence < minActionableConfidence {
-			log.Printf("coaching: review rejected round %d at confidence %.2f, too unsure to act on",
-				n, verdict.Confidence)
+			slog.Warn("Coaching review rejected, confidence too low to act on",
+				slog.Int("round", n), slog.Float64("confidence", verdict.Confidence))
 			result.Degraded = true
 			result.Issues = append(result.Issues, reviewIssueLines(verdict)...)
 			return result, nil

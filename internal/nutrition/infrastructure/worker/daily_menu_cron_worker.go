@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -55,7 +55,7 @@ func NewDailyMenuCronWorker(
 // Start bắt đầu vòng lặp cron mỗi 24 giờ.
 func (w *DailyMenuCronWorker) Start(ctx context.Context) error {
 	ticker := time.NewTicker(24 * time.Hour)
-	log.Printf("[DailyMenuCronWorker] Started — sẽ sinh thực đơn cho user hoạt động lúc 5:00 AM mỗi ngày")
+	slog.InfoContext(ctx, "DailyMenuCronWorker started — generates daily menus for active users")
 
 	go func() {
 		for {
@@ -77,21 +77,23 @@ func (w *DailyMenuCronWorker) Start(ctx context.Context) error {
 
 // runDailyGeneration lấy danh sách user hoạt động và sinh thực đơn song song với semaphore pool.
 func (w *DailyMenuCronWorker) runDailyGeneration(ctx context.Context) {
-	log.Printf("[DailyMenuCronWorker] 5:00 AM Cron Triggered: đang tải danh sách user hoạt động...")
+	slog.InfoContext(ctx, "DailyMenuCronWorker triggered, loading active users")
 
 	activeUserIDs, err := w.planRepo.FindActiveUserIDs(ctx, activeUserWithinDays)
 	if err != nil {
-		log.Printf("[DailyMenuCronWorker] Lỗi lấy active users: %v", err)
+		slog.ErrorContext(ctx, "Failed to get active users in DailyMenuCronWorker", slog.String("error", err.Error()))
 		return
 	}
 
 	if len(activeUserIDs) == 0 {
-		log.Printf("[DailyMenuCronWorker] Không có user hoạt động trong %d ngày qua — bỏ qua.", activeUserWithinDays)
+		slog.InfoContext(ctx, "No active users found in past days, skipping menu generation", slog.Int("days", activeUserWithinDays))
 		return
 	}
 
-	log.Printf("[DailyMenuCronWorker] Bắt đầu sinh thực đơn cho %d user (max %d concurrent AI calls)...",
-		len(activeUserIDs), maxConcurrentAICalls)
+	slog.InfoContext(ctx, "Starting daily menu generation",
+		slog.Int("total_users", len(activeUserIDs)),
+		slog.Int("max_concurrent", maxConcurrentAICalls),
+	)
 
 	semaphore := make(chan struct{}, maxConcurrentAICalls)
 	var wg sync.WaitGroup
@@ -117,7 +119,7 @@ func (w *DailyMenuCronWorker) runDailyGeneration(ctx context.Context) {
 			mu.Lock()
 			if genErr != nil {
 				failCount++
-				log.Printf("[DailyMenuCronWorker] Lỗi sinh thực đơn user %s: %v", uid, genErr)
+				slog.ErrorContext(ctx, "Failed to generate daily plan for user", slog.String("user_id", uid), slog.String("error", genErr.Error()))
 			} else {
 				successCount++
 			}
@@ -126,25 +128,28 @@ func (w *DailyMenuCronWorker) runDailyGeneration(ctx context.Context) {
 	}
 
 	wg.Wait()
-	log.Printf("[DailyMenuCronWorker] Hoàn thành: %d thành công, %d thất bại / tổng %d user",
-		successCount, failCount, len(activeUserIDs))
+	slog.InfoContext(ctx, "DailyMenuCronWorker completed",
+		slog.Int("success", successCount),
+		slog.Int("failed", failCount),
+		slog.Int("total", len(activeUserIDs)),
+	)
 }
 
 // fetchBiologicalMetrics lấy chỉ số sinh trắc học từ ProfileService.
 // Nếu profile không tìm thấy hoặc lỗi, trả về defaultBiologicalMetrics.
 func (w *DailyMenuCronWorker) fetchBiologicalMetrics(ctx context.Context, userID string) service.BiologicalMetrics {
 	if w.profileClient == nil {
-		log.Printf("[DailyMenuCronWorker] profileClient chưa được cấu hình, dùng fallback cho user %s", userID)
+		slog.WarnContext(ctx, "profileClient not configured, using fallback metrics", slog.String("user_id", userID))
 		return getDefaultBiologicalMetrics()
 	}
 
 	profileMetrics, err := w.profileClient.GetBiologicalMetrics(ctx, userID)
 	if err != nil {
-		log.Printf("[DailyMenuCronWorker] Không lấy được profile user %s (err: %v), dùng fallback", userID, err)
+		slog.WarnContext(ctx, "Could not fetch profile metrics, using fallback", slog.String("user_id", userID), slog.String("error", err.Error()))
 		return getDefaultBiologicalMetrics()
 	}
 	if profileMetrics == nil {
-		log.Printf("[DailyMenuCronWorker] User %s chưa có profile, dùng fallback", userID)
+		slog.WarnContext(ctx, "User profile not found, using fallback", slog.String("user_id", userID))
 		return getDefaultBiologicalMetrics()
 	}
 

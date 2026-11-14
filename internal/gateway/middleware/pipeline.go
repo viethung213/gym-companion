@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -101,7 +101,7 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 		}
 		internalToken, err := p.translator.Generate(userID, role, reqID)
 		if err != nil {
-			log.Printf("[Gateway Token Gen Error]: %v", err)
+			slog.ErrorContext(r.Context(), "Gateway token generation failed", "error", err)
 			gwerror.Internal(w, r, "Token generation failed")
 			return
 		}
@@ -130,7 +130,10 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 		if p.enforceTLS {
 			isTLS := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 			if !isTLS {
-				log.Printf("[Gateway Security] Rejected non-TLS request to %s from %s", r.URL.Path, r.RemoteAddr)
+				slog.WarnContext(r.Context(), "Rejected non-TLS request",
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+				)
 				gwerror.TLSRequired(w, r)
 				return
 			}

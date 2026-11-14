@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"strings"
 	"time"
@@ -80,7 +80,7 @@ func SeedBotSocialActivities(ctx context.Context, db *sql.DB, socialAPI SocialAP
 		return fmt.Errorf("lookup bot user IDs: %w", err)
 	}
 	if len(botUserIDs) < 2 {
-		log.Printf("⚠️ Fewer than 2 bots found (%d). Skipping social bot seeding.", len(botUserIDs))
+		slog.WarnContext(ctx, "Fewer than 2 bots found, skipping social bot seeding", slog.Int("count", len(botUserIDs)))
 		return nil
 	}
 
@@ -100,11 +100,13 @@ func SeedBotSocialActivities(ctx context.Context, db *sql.DB, socialAPI SocialAP
 	var existingCount int
 	err = db.QueryRowContext(ctx, query, args...).Scan(&existingCount)
 	if err == nil && existingCount >= 200 {
-		log.Printf("🤖 Bot social activities already seeded (%d items exist). Skipping social seeder.", existingCount)
+		slog.InfoContext(ctx, "Bot social activities already seeded, skipping social seeder",
+			slog.Int("count", existingCount),
+		)
 		return nil
 	}
 
-	log.Printf("🌱 Starting Application-driven Social Activity Seeding for %d bots...", len(botUserIDs))
+	slog.InfoContext(ctx, "Starting Application-driven Social Activity Seeding", slog.Int("bots", len(botUserIDs)))
 	r := rand.New(rand.NewSource(42)) // Deterministic seed for reproducible testing
 
 	postCaptions := defaultPostCaptions()
@@ -126,7 +128,7 @@ func SeedBotSocialActivities(ctx context.Context, db *sql.DB, socialAPI SocialAP
 			})
 		}
 	}
-	log.Printf("  ✅ Bot social graph (follows) connected successfully.")
+	slog.InfoContext(ctx, "Bot social graph (follows) connected successfully")
 
 	// 4. Create ~50-60 posts per bot (approx 500-600 total items)
 	// Seeded through the standard CreatePost API (identical to real user API)
@@ -151,7 +153,10 @@ func SeedBotSocialActivities(ctx context.Context, db *sql.DB, socialAPI SocialAP
 			}
 		}
 	}
-	log.Printf("  ✅ Created %d feed items across %d bots.", len(createdItems), len(botUserIDs))
+	slog.InfoContext(ctx, "Created feed items across bots",
+		slog.Int("items", len(createdItems)),
+		slog.Int("bots", len(botUserIDs)),
+	)
 
 	// 5. Seed Interactions (Reactions & Comments) on selected posts
 	// To generate realistic Trending Pool candidates (reaction*2 + comment*5)
@@ -192,8 +197,11 @@ func SeedBotSocialActivities(ctx context.Context, db *sql.DB, socialAPI SocialAP
 		}
 	}
 
-	log.Printf("🎉 Successfully seeded social feed: %d posts, %d reactions, %d comments.",
-		len(createdItems), reactionCount, commentCount)
+	slog.InfoContext(ctx, "Successfully seeded social feed",
+		slog.Int("posts", len(createdItems)),
+		slog.Int("reactions", reactionCount),
+		slog.Int("comments", commentCount),
+	)
 	return nil
 }
 

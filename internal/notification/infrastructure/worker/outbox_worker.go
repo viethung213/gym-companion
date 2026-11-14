@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,16 +38,16 @@ func (w *OutboxWorker) Start(ctx context.Context) error {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("[Notification OutboxWorker] Started background worker (interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Started Notification OutboxWorker", slog.Duration("interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Notification OutboxWorker] Stopping worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Notification OutboxWorker due to context cancellation")
 			return nil
 		case <-ticker.C:
 			if err := w.processOutbox(ctx); err != nil {
-				log.Printf("[Notification OutboxWorker] Processing error: %v", err)
+				slog.ErrorContext(ctx, "Notification OutboxWorker processing error", slog.String("error", err.Error()))
 			}
 		}
 	}
@@ -94,7 +94,7 @@ func (w *OutboxWorker) processOutbox(ctx context.Context) error {
 			}
 		}
 
-		log.Printf("[Notification OutboxWorker] Successfully published batch of %d events.", len(records))
+		slog.DebugContext(publishCtx, "Notification OutboxWorker successfully published batch", slog.Int("count", len(records)))
 		return nil
 	})
 }

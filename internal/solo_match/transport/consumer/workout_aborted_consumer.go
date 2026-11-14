@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
@@ -52,9 +52,9 @@ func (c *WorkoutAbortedConsumer) HandleMessage(ctx context.Context, rawPayload [
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[SoloMatch] OutboxLog IsProcessed error: %v", err)
+			slog.WarnContext(ctx, "OutboxLog IsProcessed error", slog.String("event_id", env.ID), slog.String("error", err.Error()))
 		} else if processed {
-			log.Printf("[SoloMatch] Event %s already processed, skipping (Idempotent)", env.ID)
+			slog.DebugContext(ctx, "Event already processed, skipping (Idempotent)", slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -74,7 +74,12 @@ func (c *WorkoutAbortedConsumer) HandleMessage(ctx context.Context, rawPayload [
 		reason = "USER_FORFEITED"
 	}
 
-	log.Printf("[SoloMatch] Received %s for match %s, user %s, reason: %s", env.Type, data.MatchID, data.UserID, reason)
+	slog.InfoContext(ctx, "Received soloTrackingAborted event",
+		slog.String("event_type", env.Type),
+		slog.String("match_id", data.MatchID),
+		slog.String("user_id", data.UserID),
+		slog.String("reason", reason),
+	)
 
 	err := c.handler.Handle(ctx, command.RecordParticipantAbortCommand{
 		MatchID: data.MatchID,
@@ -90,7 +95,7 @@ func (c *WorkoutAbortedConsumer) HandleMessage(ctx context.Context, rawPayload [
 			errMsg = err.Error()
 		}
 		if saveErr := c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, status, errMsg); saveErr != nil {
-			log.Printf("[SoloMatch] Failed to save outbox log for event %s: %v", env.ID, saveErr)
+			slog.WarnContext(ctx, "Failed to save outbox log for event", slog.String("event_id", env.ID), slog.String("error", saveErr.Error()))
 		}
 	}
 

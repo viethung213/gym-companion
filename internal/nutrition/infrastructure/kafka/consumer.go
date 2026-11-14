@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -48,16 +48,16 @@ func NewConsumer(
 
 func (c *Consumer) Start(ctx context.Context) error {
 	if c.reader == nil {
-		log.Println("[Nutrition Kafka Consumer] Kafka reader is nil, skipping consumer loop.")
+		slog.InfoContext(ctx, "Kafka reader is nil, skipping consumer loop")
 		return nil
 	}
 
-	log.Println("[Nutrition Kafka Consumer] Started listening to Kafka topic 'workout_execution.events'")
+	slog.InfoContext(ctx, "Started listening to Kafka topic", slog.String("topic", "workout_execution.events"))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Nutrition Kafka Consumer] Shutting down Kafka consumer.")
+			slog.InfoContext(ctx, "Shutting down Kafka consumer")
 			return nil
 		default:
 			msg, err := c.reader.FetchMessage(ctx)
@@ -65,14 +65,14 @@ func (c *Consumer) Start(ctx context.Context) error {
 				if ctx.Err() != nil {
 					return nil
 				}
-				log.Printf("[Nutrition Kafka Consumer] Error fetching message: %v", err)
+				slog.ErrorContext(ctx, "Error fetching message", slog.Any("error", err))
 				continue
 			}
 
 			c.handleMessage(ctx, msg)
 
 			if err := c.reader.CommitMessages(ctx, msg); err != nil {
-				log.Printf("[Nutrition Kafka Consumer] Error committing message: %v", err)
+				slog.ErrorContext(ctx, "Error committing message", slog.Any("error", err))
 			}
 		}
 	}
@@ -82,7 +82,7 @@ func (c *Consumer) Start(ctx context.Context) error {
 func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	var env cloudEventEnvelope
 	if err := json.Unmarshal(msg.Value, &env); err != nil {
-		log.Printf("[Nutrition Kafka Consumer] Error unmarshaling CloudEvent envelope: %v", err)
+		slog.ErrorContext(ctx, "Error unmarshaling CloudEvent envelope", slog.Any("error", err))
 		return
 	}
 
@@ -94,9 +94,9 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[Nutrition Kafka Consumer] Warning checking outbox log idempotency: %v", err)
+			slog.WarnContext(ctx, "Warning checking outbox log idempotency", slog.Any("error", err))
 		} else if processed {
-			log.Printf("[Nutrition Kafka Consumer] Event %s already processed in outbox_log, skipping", env.ID)
+			slog.DebugContext(ctx, "Event already processed in outbox_log, skipping", slog.String("event_id", env.ID))
 			return
 		}
 	}
@@ -104,21 +104,23 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	var payload WorkoutSessionCompletedPayload
 	if len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, &payload); err != nil {
-			log.Printf("[Nutrition Kafka Consumer] Error unmarshaling event payload: %v", err)
+			slog.ErrorContext(ctx, "Error unmarshaling event payload", slog.Any("error", err))
 			c.saveLog(ctx, msg.Value, env, "", err)
 			return
 		}
 	} else {
 		// Fallback if payload is not wrapped in data
 		if err := json.Unmarshal(msg.Value, &payload); err != nil {
-			log.Printf("[Nutrition Kafka Consumer] Error unmarshaling raw payload: %v", err)
+			slog.ErrorContext(ctx, "Error unmarshaling raw payload", slog.Any("error", err))
 			c.saveLog(ctx, msg.Value, env, "", err)
 			return
 		}
 	}
 
-	log.Printf("[Nutrition Kafka Consumer] Received WorkoutSessionCompleted Event: UserID=%s, SessionID=%s, Volume=%.2f",
-		payload.UserID, payload.SessionID, payload.TotalVolume)
+	slog.InfoContext(ctx, "Received WorkoutSessionCompleted Event",
+		slog.String("user_id", payload.UserID),
+		slog.String("session_id", payload.SessionID),
+		slog.Float64("volume", payload.TotalVolume))
 
 	var processErr error
 	if c.recalibrateHandler != nil && payload.UserID != "" {
@@ -128,9 +130,9 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 			AvailableIngredients: nil,
 		})
 		if processErr != nil {
-			log.Printf("[Nutrition Kafka Consumer] Failed to recalibrate plan on workout event: %v", processErr)
+			slog.ErrorContext(ctx, "Failed to recalibrate plan on workout event", slog.Any("error", processErr))
 		} else {
-			log.Printf("[Nutrition Kafka Consumer] Successfully rebalanced nutrition plan for user %s", payload.UserID)
+			slog.InfoContext(ctx, "Successfully rebalanced nutrition plan for user", slog.String("user_id", payload.UserID))
 		}
 	}
 
@@ -162,6 +164,6 @@ func (c *Consumer) saveLog(ctx context.Context, rawPayload []byte, env cloudEven
 		ErrorMessage: errMsg,
 	}
 	if saveErr := c.outboxLogRepo.SaveLog(ctx, logRecord); saveErr != nil {
-		log.Printf("[Nutrition Kafka Consumer] Warning: failed to save outbox log for event %s: %v", env.ID, saveErr)
+		slog.WarnContext(ctx, "Warning: failed to save outbox log for event", slog.String("event_id", env.ID), slog.Any("error", saveErr))
 	}
 }

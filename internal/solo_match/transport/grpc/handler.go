@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 
 	solomatchv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/solo_match/v1/message"
@@ -100,7 +100,7 @@ func (h *Handler) handleJoinQueue(
 				TicketID: result.TicketID,
 				UserID:   userID,
 			}); cErr != nil {
-				log.Printf("[SoloMatch] Failed to cancel matchmaking queue on disconnect: %v", cErr)
+				slog.WarnContext(context.Background(), "Failed to cancel matchmaking queue on disconnect", slog.Any("error", cErr))
 			}
 			return ctx.Err()
 
@@ -129,7 +129,7 @@ func (h *Handler) handleJoinQueue(
 				}
 				snapshots, sErr := h.snapshotRepo.FindByUserIDs(ctx, userIDs)
 				if sErr != nil {
-					log.Printf("[SoloMatch] Failed to find snapshots for users %v: %v", userIDs, sErr)
+					slog.WarnContext(ctx, "Failed to find snapshots for users", slog.Any("user_ids", userIDs), slog.Any("error", sErr))
 				}
 				if snapshots == nil {
 					snapshots = make(map[string]*entity.UserSnapshot)

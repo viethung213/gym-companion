@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -24,8 +24,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/transport/consumer"
 	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service/coachingv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	"github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -51,7 +51,7 @@ type ModuleDeps struct {
 
 // Initialize sets up the coaching module (coaching context agent, gRPC services, etc).
 func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, port.CoachAgent, func(), error) {
-	log.Println("Initializing Coaching Module...")
+	slog.Info("Initializing Coaching Module...")
 
 	if deps.IDGenerator == nil {
 		deps.IDGenerator = persistence.UUIDGenerator{}
@@ -60,9 +60,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	var gormDB *gorm.DB = deps.GormDB
 	if gormDB == nil && deps.DB != nil {
 		var err error
-		gormDB, err = gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: deps.DB}), &gorm.Config{})
+		gormDB, err = database.OpenGorm(deps.DB, nil)
 		if err != nil {
-			log.Printf("[Coaching Module] Warning: Failed to wrap *sql.DB into GORM: %v", err)
+			slog.Warn("Failed to wrap *sql.DB into GORM in Coaching Module", slog.String("error", err.Error()))
 		}
 	}
 
@@ -189,9 +189,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		go func() {
 			_ = reminderWorker.Start(ctx)
 		}()
-		log.Println("✅ Coaching UpcomingWorkoutReminderWorker started")
+		slog.Info("Coaching UpcomingWorkoutReminderWorker started")
 	} else {
-		log.Println("⚠️ Coaching UpcomingWorkoutReminderWorker not started (missing RoadmapRepo or OutboxWriter)")
+		slog.Warn("Coaching UpcomingWorkoutReminderWorker not started (missing RoadmapRepo or OutboxWriter)")
 	}
 
 	var outboxWorker *worker.OutboxWorker
@@ -210,7 +210,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 				kafkaPub := coachingKafka.NewPublisher(writer)
 				outboxWorker = worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
 				go outboxWorker.Start(ctx)
-				log.Println("✅ Coaching OutboxWorker started")
+				slog.Info("Coaching OutboxWorker started")
 			}
 		}
 
@@ -224,12 +224,12 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 				var consumerCtx context.Context
 				consumerCtx, profileConsumerCancel = context.WithCancel(ctx)
 				go profileConsumer.Start(consumerCtx)
-				log.Println("✅ Coaching ProfileCompletedConsumer started (profile.events)")
+				slog.Info("Coaching ProfileCompletedConsumer started (profile.events)")
 			} else {
-				log.Printf("⚠️ Coaching ProfileCompletedConsumer not started: reader error=%v", rErr)
+				slog.Warn("Coaching ProfileCompletedConsumer not started", slog.Any("reader_error", rErr))
 			}
 		} else {
-			log.Println("⚠️ Coaching ProfileCompletedConsumer not started (missing InitiateRoadmapHandler or OutboxRepo)")
+			slog.Warn("Coaching ProfileCompletedConsumer not started (missing InitiateRoadmapHandler or OutboxRepo)")
 		}
 
 		// Subscribe to workout_execution.events for session completion / abortion.
@@ -247,19 +247,19 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 				var weCtx context.Context
 				weCtx, workoutConsumerCancel = context.WithCancel(ctx)
 				go workoutConsumer.Start(weCtx)
-				log.Println("✅ Coaching WorkoutExecutionConsumer started (workout_execution.events)")
+				slog.Info("Coaching WorkoutExecutionConsumer started (workout_execution.events)")
 			} else {
-				log.Printf("⚠️ Coaching WorkoutExecutionConsumer not started: reader error=%v", weErr)
+				slog.Warn("Coaching WorkoutExecutionConsumer not started", slog.Any("reader_error", weErr))
 			}
 		} else {
-			log.Println("⚠️ Coaching WorkoutExecutionConsumer not started (missing CompleteSessionHandler, AbortSessionHandler or OutboxRepo)")
+			slog.Warn("Coaching WorkoutExecutionConsumer not started (missing CompleteSessionHandler, AbortSessionHandler or OutboxRepo)")
 		}
 	}
 
-	log.Println("✅ Coaching Module initialized successfully")
+	slog.Info("Coaching Module initialized successfully")
 
 	shutdown := func() {
-		log.Println("Shutting down Coaching Module...")
+		slog.Info("Shutting down Coaching Module...")
 		if profileConsumerCancel != nil {
 			profileConsumerCancel()
 		}

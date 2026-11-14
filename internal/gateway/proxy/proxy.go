@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/tls"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -66,7 +66,13 @@ func (pe *Engine) CreateProxy(target *url.URL, hooks ...Hooks) *httputil.Reverse
 
 	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		reqID := r.Header.Get("X-Request-ID")
-		log.Printf("[Gateway Proxy Error] [ReqID: %s] %s %s -> %s: %v", reqID, r.Method, r.URL.Path, target.String(), err)
+		slog.ErrorContext(r.Context(), "Gateway proxy error",
+			"req_id", reqID,
+			"method", r.Method,
+			"path", r.URL.Path,
+			"target", target.String(),
+			"error", err,
+		)
 		if hook.OnError != nil {
 			hook.OnError(err)
 		}

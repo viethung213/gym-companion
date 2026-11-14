@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -23,9 +23,8 @@ import (
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
 	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
@@ -43,13 +42,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		return nil, nil, fmt.Errorf("load notification config: %w", err)
 	}
 
-	// Wrap sql.DB with GORM
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
-		PrepareStmt:            false,
-		SkipDefaultTransaction: true,
-	})
+	// Wrap sql.DB with GORM with OpenTelemetry tracing
+	gormDB, err := database.OpenGorm(deps.DB, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
@@ -105,7 +99,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 				_ = outboxWorker.Start(ctxWorkers)
 			}()
 		} else {
-			log.Printf("Warning: failed to get kafka writer for notification outbox: %v", wErr)
+			slog.Warn("Failed to get kafka writer for notification outbox", slog.Any("error", wErr))
 		}
 
 		// 1. HIGH-PRIORITY Notification Consumer: Dedicated group & Multi-worker pool for instant dispatch
@@ -117,9 +111,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 			for i := 0; i < highWorkers; i++ {
 				go highConsumer.Start(ctxWorkers)
 			}
-			log.Printf("Notification HIGH-PRIORITY consumer started (%d workers) on topic '%s'", highWorkers, highTopic)
+			slog.Info("Notification HIGH-PRIORITY consumer started", slog.Int("workers", highWorkers), slog.String("topic", highTopic))
 		} else {
-			log.Printf("Warning: failed to get kafka reader for high-priority topic %s: %v", highTopic, highErr)
+			slog.Warn("Failed to get kafka reader for high-priority topic", slog.String("topic", highTopic), slog.Any("error", highErr))
 		}
 
 		// 2. NORMAL-PRIORITY Notification Consumer: Dedicated group for background/standard dispatch
@@ -128,9 +122,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		if normalErr == nil && normalReader != nil {
 			normalConsumer := notificationConsumer.NewNotificationEventConsumer(normalReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
 			go normalConsumer.Start(ctxWorkers)
-			log.Printf("Notification NORMAL-PRIORITY consumer started on topic '%s'", normalTopic)
+			slog.Info("Notification NORMAL-PRIORITY consumer started", slog.String("topic", normalTopic))
 		} else {
-			log.Printf("Warning: failed to get kafka reader for normal-priority topic %s: %v", normalTopic, normalErr)
+			slog.Warn("Failed to get kafka reader for normal-priority topic", slog.String("topic", normalTopic), slog.Any("error", normalErr))
 		}
 
 		// 3. CORE DOMAIN Inbound Event Consumers (Coaching, Nutrition, Workout Execution)
@@ -144,9 +138,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 			if rErr == nil && reader != nil {
 				consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
 				go consumer.Start(ctxWorkers)
-				log.Printf("Notification Core consumer started on topic '%s'", topic)
+				slog.Info("Notification Core consumer started", slog.String("topic", topic))
 			} else {
-				log.Printf("Warning: failed to get kafka reader for core topic %s: %v", topic, rErr)
+				slog.Warn("Failed to get kafka reader for core topic", slog.String("topic", topic), slog.Any("error", rErr))
 			}
 		}
 
@@ -164,10 +158,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		if kafkaPub != nil {
 			_ = kafkaPub.Close()
 		}
-		log.Println("Notification module cleaned up successfully.")
+		slog.Info("Notification module cleaned up successfully")
 	}
 
-	log.Println("Initialized isolated Notification Bounded Context successfully.")
+	slog.Info("Initialized isolated Notification Bounded Context successfully")
 	return grpcHandler, cleanup, nil
 }
 
