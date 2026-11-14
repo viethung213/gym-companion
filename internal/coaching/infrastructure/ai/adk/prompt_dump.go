@@ -3,7 +3,7 @@ package adk
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,7 +145,7 @@ func (d *modelDumper) before(ctx agent.Context, req *model.LLMRequest) (*model.L
 	}
 
 	if err := d.write("req", d.reqSeq.Add(1), dump); err != nil {
-		log.Printf("coaching: request dump skipped: %v", err)
+		slog.Warn("Coaching request dump skipped", slog.Any("error", err))
 	}
 
 	return nil, nil
@@ -169,7 +169,7 @@ func (d *modelDumper) after(_ agent.Context, res *model.LLMResponse, resErr erro
 	}
 
 	if err := d.write("res", d.resSeq.Add(1), dump); err != nil {
-		log.Printf("coaching: response dump skipped: %v", err)
+		slog.Warn("Coaching response dump skipped", slog.Any("error", err))
 	}
 
 	return nil, nil
@@ -194,7 +194,7 @@ func (d *modelDumper) write(kind string, n int64, payload any) error {
 		return fmt.Errorf("write dump %s: %w", path, err)
 	}
 
-	log.Printf("coaching: dump → %s", path)
+	slog.Debug("Coaching prompt dumped", slog.String("path", path))
 	return nil
 }
 

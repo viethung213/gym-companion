@@ -5,9 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/command"
@@ -32,7 +32,6 @@ import (
 	workoutConsumer "github.com/viethung213/gym-companion/internal/workout_execution/transport/consumer"
 	workoutGRPC "github.com/viethung213/gym-companion/internal/workout_execution/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/workout_execution/transport/webtransport"
-	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -47,19 +46,9 @@ type ModuleDeps struct {
 // Initialize wires dependencies, registers gRPC services, and starts background workers.
 func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler, func(), error) {
 
-	gormLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  logger.Warn,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
-		},
-	)
+	gormLogger := logger.Default.LogMode(logger.Warn)
 
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
+	gormDB, err := database.OpenGorm(deps.DB, &gorm.Config{
 		Logger:                 gormLogger,
 		PrepareStmt:            false,
 		SkipDefaultTransaction: true,
@@ -173,7 +162,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in WorkoutExecution Outbox worker: %v", r)
+				slog.Error("PANIC RECOVERED in WorkoutExecution Outbox worker", slog.Any("panic", r))
 			}
 		}()
 		outboxWorker.Start(workerCtx)
@@ -183,7 +172,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in WorkoutExecution Timeout worker: %v", r)
+				slog.Error("PANIC RECOVERED in WorkoutExecution Timeout worker", slog.Any("panic", r))
 			}
 		}()
 		timeoutWorker.Start(workerCtx)
@@ -193,7 +182,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in WorkoutExecution Critical Inactivity worker: %v", r)
+				slog.Error("PANIC RECOVERED in WorkoutExecution Critical Inactivity worker", slog.Any("panic", r))
 			}
 		}()
 		criticalWorker.Start(workerCtx)
@@ -209,7 +198,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 				defer wg.Done()
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in WorkoutExecution ExerciseCreated consumer worker: %v", r)
+						slog.Error("PANIC RECOVERED in WorkoutExecution ExerciseCreated consumer worker", slog.Any("panic", r))
 					}
 					_ = exerciseReader.Close()
 				}()
@@ -224,7 +213,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
-							log.Printf("[WorkoutExecution] Exercise reader error: %v", err)
+							slog.Error("WorkoutExecution exercise reader error", slog.String("error", err.Error()))
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -232,18 +221,18 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 						func() {
 							defer func() {
 								if r := recover(); r != nil {
-									log.Printf("PANIC RECOVERED in ExerciseCreated event handling: %v", r)
+									slog.Error("PANIC RECOVERED in ExerciseCreated event handling", slog.Any("panic", r))
 								}
 							}()
 							if err := exerciseCreatedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								log.Printf("WorkoutExecution failed to process ExerciseCreated event: %v", err)
+								slog.Error("WorkoutExecution failed to process ExerciseCreated event", slog.String("error", err.Error()))
 							}
 						}()
 					}
 				}
 			}()
 		} else if err != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to obtain exercise events reader: %v", err)
+			slog.Warn("Failed to obtain exercise events reader", slog.String("error", err.Error()))
 		}
 
 		// Start WorkoutSessionCompleted event consumer worker (listening to topic 'workout_execution.events')
@@ -254,7 +243,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 				defer wg.Done()
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in WorkoutExecution PREventConsumer worker: %v", r)
+						slog.Error("PANIC RECOVERED in WorkoutExecution PREventConsumer worker", slog.Any("panic", r))
 					}
 					_ = sessionCompletedReader.Close()
 				}()
@@ -269,7 +258,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
-							log.Printf("[WorkoutExecution] PR consumer reader error: %v", err)
+							slog.Error("WorkoutExecution PR consumer reader error", slog.String("error", err.Error()))
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -277,18 +266,18 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 						func() {
 							defer func() {
 								if r := recover(); r != nil {
-									log.Printf("PANIC RECOVERED in PREventConsumer event handling: %v", r)
+									slog.Error("PANIC RECOVERED in PREventConsumer event handling", slog.Any("panic", r))
 								}
 							}()
 							if err := prConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								log.Printf("WorkoutExecution failed to process WorkoutSessionCompleted event for PR: %v", err)
+								slog.Error("WorkoutExecution failed to process WorkoutSessionCompleted event for PR", slog.String("error", err.Error()))
 							}
 						}()
 					}
 				}
 			}()
 		} else if err != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to obtain PR consumer reader: %v", err)
+			slog.Warn("Failed to obtain PR consumer reader", slog.String("error", err.Error()))
 		}
 
 		// Start SoloMatchStarted event consumer worker (listening to topic 'solo_match.events')
@@ -299,7 +288,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 				defer wg.Done()
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("PANIC RECOVERED in WorkoutExecution SoloMatchStarted consumer worker: %v", r)
+						slog.Error("PANIC RECOVERED in WorkoutExecution SoloMatchStarted consumer worker", slog.Any("panic", r))
 					}
 					_ = soloMatchReader.Close()
 				}()
@@ -314,7 +303,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 							if errors.Is(err, context.Canceled) {
 								return
 							}
-							log.Printf("[WorkoutExecution] Solo match reader error: %v", err)
+							slog.Error("WorkoutExecution solo match reader error", slog.String("error", err.Error()))
 							time.Sleep(1 * time.Second)
 							continue
 						}
@@ -322,33 +311,33 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 						func() {
 							defer func() {
 								if r := recover(); r != nil {
-									log.Printf("PANIC RECOVERED in SoloMatch event handling: %v", r)
+									slog.Error("PANIC RECOVERED in SoloMatch event handling", slog.Any("panic", r))
 								}
 							}()
 							if err := soloMatchStartedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								log.Printf("WorkoutExecution failed to process SoloMatchStarted event: %v", err)
+								slog.Error("WorkoutExecution failed to process SoloMatchStarted event", slog.String("error", err.Error()))
 							}
 							if err := soloMatchCancelledConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								log.Printf("WorkoutExecution failed to process SoloMatchCancelled event: %v", err)
+								slog.Error("WorkoutExecution failed to process SoloMatchCancelled event", slog.String("error", err.Error()))
 							}
 						}()
 					}
 				}
 			}()
 		} else if err != nil {
-			log.Printf("[WorkoutExecution] Warning: failed to obtain solo match reader: %v", err)
+			slog.Warn("Failed to obtain solo match reader", slog.String("error", err.Error()))
 		}
 	}
 
 	shutdown := func() {
-		log.Println("Shutting down Workout Execution Bounded Context background workers...")
+		slog.Info("Shutting down Workout Execution Bounded Context background workers")
 		cancelWorkers()
 		soloBotManager.StopAll()
 		wg.Wait()
-		log.Println("Workout Execution Bounded Context background workers stopped successfully.")
+		slog.Info("Workout Execution Bounded Context background workers stopped successfully")
 	}
 
-	log.Println("Workout Execution Bounded Context initialized successfully.")
+	slog.Info("Workout Execution Bounded Context initialized successfully")
 	return grpcHandler, shutdown, nil
 }
 
@@ -401,8 +390,8 @@ func RegisterWebTransport(
 	mux.Handle(webtransport.ConfigPath, wtServer.ConfigHandler())
 	mux.Handle(webtransport.SoloWebSocketPath, wtServer.SoloWebSocketHandler())
 
-	log.Printf("WebTransport HTTP/3 server listening on %s (UDP)", wtAddr)
-	log.Printf("WebTransport config mounted at %s, fallback at %s", webtransport.ConfigPath, webtransport.SoloWebSocketPath)
+	slog.Info("WebTransport HTTP/3 server listening", slog.String("addr", wtAddr))
+	slog.Info("WebTransport mounted", slog.String("config_path", webtransport.ConfigPath), slog.String("ws_path", webtransport.SoloWebSocketPath))
 
 	endpoints := []string{
 		webtransport.ConfigPath,
@@ -410,8 +399,8 @@ func RegisterWebTransport(
 	}
 
 	return func() {
-		log.Println("Shutting down WebTransport server...")
+		slog.Info("Shutting down WebTransport server")
 		_ = wtServer.Close()
-		log.Println("WebTransport server stopped.")
+		slog.Info("WebTransport server stopped")
 	}, endpoints, nil
 }

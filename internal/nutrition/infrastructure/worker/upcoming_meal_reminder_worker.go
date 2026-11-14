@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -50,7 +50,7 @@ func NewUpcomingMealReminderWorker(
 
 // Start launches the background ticker.
 func (w *UpcomingMealReminderWorker) Start(ctx context.Context) error {
-	log.Printf("[UpcomingMealReminderWorker] Started — checking upcoming meals every %v", w.interval)
+	slog.InfoContext(ctx, "UpcomingMealReminderWorker started, checking upcoming meals", slog.Duration("interval", w.interval))
 	ticker := time.NewTicker(w.interval)
 
 	go func() {
@@ -78,7 +78,7 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 
 	plans, err := w.planRepo.FindPlansForDate(ctx, now)
 	if err != nil {
-		log.Printf("[UpcomingMealReminderWorker] Error fetching plans for date: %v", err)
+		slog.ErrorContext(ctx, "Error fetching plans for date in UpcomingMealReminderWorker", slog.String("error", err.Error()))
 		return
 	}
 
@@ -128,9 +128,17 @@ func (w *UpcomingMealReminderWorker) runCheck(ctx context.Context) {
 				)
 
 				if err := w.eventRecorder.RecordEvents(ctx, []any{reminderEvent}); err != nil {
-					log.Printf("[UpcomingMealReminderWorker] Error recording reminder for meal %s (user %s): %v", meal.MealType(), plan.UserID(), err)
+					slog.ErrorContext(ctx, "Error recording reminder for meal",
+						slog.String("meal_type", meal.MealType()),
+						slog.String("user_id", plan.UserID()),
+						slog.String("error", err.Error()),
+					)
 				} else {
-					log.Printf("[UpcomingMealReminderWorker] Recorded meal reminder for user %s, meal %s at %s", plan.UserID(), meal.MealType(), scheduledTimeStr)
+					slog.InfoContext(ctx, "Recorded meal reminder for user",
+						slog.String("user_id", plan.UserID()),
+						slog.String("meal_type", meal.MealType()),
+						slog.String("scheduled_time", scheduledTimeStr),
+					)
 				}
 			}
 		}

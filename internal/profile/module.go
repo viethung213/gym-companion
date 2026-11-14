@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -20,9 +20,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/worker"
 	profileConsumer "github.com/viethung213/gym-companion/internal/profile/transport/consumer"
 	profileGRPC "github.com/viethung213/gym-companion/internal/profile/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type ModuleDeps struct {
@@ -31,11 +30,7 @@ type ModuleDeps struct {
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler, func(), error) {
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
+	gormDB, err := database.OpenGorm(deps.DB, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("wrap connection pool in gorm: %w", err)
 	}
@@ -96,13 +91,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 	}
 
 	shutdown := func() {
-		log.Println("Shutting down Profile Bounded Context background workers...")
+		slog.Info("Shutting down Profile Bounded Context background workers...")
 		cancelWorkers()
 		wg.Wait()
 		if kafkaPub != nil {
 			_ = kafkaPub.Close()
 		}
-		log.Println("Profile Bounded Context background workers stopped.")
+		slog.Info("Profile Bounded Context background workers stopped.")
 	}
 
 	grpcHandler := profileGRPC.NewGRPCHandler(
@@ -116,7 +111,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 		getBodyMetricsHistoryHandler,
 		getInjuryHistoryHandler,
 	)
-	log.Println("Profile Bounded Context initialized successfully.")
+	slog.Info("Profile Bounded Context initialized successfully.")
 	return grpcHandler, shutdown, nil
 }
 

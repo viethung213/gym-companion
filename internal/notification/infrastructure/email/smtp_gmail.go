@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/smtp"
 	"strings"
 
@@ -53,7 +53,7 @@ func (p *GmailProvider) SendEmail(ctx context.Context, to, subject, body string)
 	}
 
 	if p.username == "" || p.password == "" {
-		log.Printf("[Gmail SMTP Disabled] To: %s | Subject: %s | Body: %s", to, subject, body)
+		slog.InfoContext(ctx, "Gmail SMTP disabled (dry run)", slog.String("to", to), slog.String("subject", subject), slog.String("body", body))
 		return nil
 	}
 

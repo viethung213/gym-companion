@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -21,8 +21,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/transport/consumer"
 	gamificationGRPC "github.com/viethung213/gym-companion/internal/gamification/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -35,19 +35,9 @@ type ModuleDeps struct {
 
 // Initialize wires domain, application, infrastructure, and transport components.
 func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC.Handler, shutdown func(), err error) {
-	gormLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  logger.Warn,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
-		},
-	)
+	gormLogger := logger.Default.LogMode(logger.Warn)
 
-	gormDB, err := gorm.Open(gormPostgres.New(gormPostgres.Config{
-		Conn: deps.DB,
-	}), &gorm.Config{
+	gormDB, err := database.OpenGorm(deps.DB, &gorm.Config{
 		Logger:                 gormLogger,
 		PrepareStmt:            false,
 		SkipDefaultTransaction: true,
@@ -138,7 +128,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		if writer, wErr := deps.KafkaRegistry.GetWriter("gamification.events", brokers); wErr == nil {
 			kafkaPub = infraKafka.NewPublisher(writer)
 		} else {
-			log.Printf("[Gamification] Warning: failed to create Kafka writer: %v", wErr)
+			slog.Warn("Failed to create Kafka writer", slog.String("module", "gamification"), slog.Any("error", wErr))
 		}
 
 		if authReader, aErr := deps.KafkaRegistry.GetReader("gamification-user-registered-group", "auth.events", brokers); aErr == nil {
@@ -215,10 +205,10 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	}
 
 	shutdown = func() {
-		log.Println("[Gamification] Shutting down background workers...")
+		slog.Info("Shutting down background workers...", slog.String("module", "gamification"))
 		cancelWorkers()
 		wg.Wait()
-		log.Println("[Gamification] Background workers shutdown complete.")
+		slog.Info("Background workers shutdown complete.", slog.String("module", "gamification"))
 	}
 
 	return grpcHandler, shutdown, nil

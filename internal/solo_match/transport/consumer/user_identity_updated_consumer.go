@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -49,9 +49,9 @@ func (c *UserIdentityUpdatedConsumer) HandleMessage(ctx context.Context, rawPayl
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[SoloMatch] OutboxLog IsProcessed error: %v", err)
+			slog.WarnContext(ctx, "OutboxLog IsProcessed error", slog.String("event_id", env.ID), slog.String("error", err.Error()))
 		} else if processed {
-			log.Printf("[SoloMatch] Event %s already processed, skipping (Idempotent)", env.ID)
+			slog.DebugContext(ctx, "Event already processed, skipping (Idempotent)", slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -72,7 +72,7 @@ func (c *UserIdentityUpdatedConsumer) HandleMessage(ctx context.Context, rawPayl
 		}
 	}
 
-	log.Printf("[SoloMatch] Syncing UserIdentityUpdated snapshot: %s (%s)", data.UserID, data.FullName)
+	slog.InfoContext(ctx, "Syncing UserIdentityUpdated snapshot", slog.String("user_id", data.UserID), slog.String("full_name", data.FullName))
 
 	err := c.handler.Handle(ctx, command.SyncUserSnapshotCommand{
 		UserID:      data.UserID,
@@ -89,7 +89,7 @@ func (c *UserIdentityUpdatedConsumer) HandleMessage(ctx context.Context, rawPayl
 			errMsg = err.Error()
 		}
 		if saveErr := c.outboxLogRepo.Save(ctx, env.ID, env.Type, rawPayload, data.UserID, status, errMsg); saveErr != nil {
-			log.Printf("[SoloMatch] Failed to save outbox log for event %s: %v", env.ID, saveErr)
+			slog.WarnContext(ctx, "Failed to save outbox log for event", slog.String("event_id", env.ID), slog.String("error", saveErr.Error()))
 		}
 	}
 

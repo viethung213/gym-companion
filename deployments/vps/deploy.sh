@@ -84,6 +84,27 @@ if [ "$SERVICE_NAME" = "all" ]; then
     for S in "${SERVICES[@]}"; do
         deploy_single_service "$S"
     done
+
+    # Khởi chạy Grafana Alloy (Telemetry Collector) nếu có cấu hình
+    if [ -f "./secrets/.env.alloy.prod" ]; then
+        echo "--------------------------------------------------"
+        echo ">> Đang kiểm tra cấu hình Grafana Alloy..."
+
+        # Tự động dọn dẹp nếu Docker đã lỡ tạo thư mục rác khi chưa có file config.alloy
+        if [ -d "./alloy/config.alloy" ]; then
+            echo "   [!] Phát hiện './alloy/config.alloy' là thư mục rác do Docker tạo nhầm. Đang dọn dẹp..."
+            rm -rf "./alloy/config.alloy"
+        fi
+
+        mkdir -p "./alloy"
+        if [ ! -f "./alloy/config.alloy" ]; then
+            echo "   [!] CẢNH BÁO: Chưa tìm thấy file cấu hình './alloy/config.alloy' trên VPS."
+            echo "       Hãy đảm bảo đã copy 'deployments/vps/alloy/config.alloy' vào '/opt/gym-companion/alloy/config.alloy'."
+        else
+            echo ">> Đang khởi chạy / cập nhật Grafana Alloy..."
+            docker compose -f "$COMPOSE_FILE" up -d alloy
+        fi
+    fi
 else
     deploy_single_service "$SERVICE_NAME"
 fi

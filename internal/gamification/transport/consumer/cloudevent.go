@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -31,11 +31,11 @@ func runConsumerLoop(
 	if reader == nil {
 		return
 	}
-	log.Printf("[Gamification] Starting %s Kafka Consumer...", name)
+	slog.InfoContext(ctx, "Starting Gamification Kafka Consumer", slog.String("consumer", name))
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[Gamification] Stopping %s Kafka Consumer due to context cancellation.", name)
+			slog.InfoContext(ctx, "Stopping Gamification Kafka Consumer due to context cancellation", slog.String("consumer", name))
 			return
 		default:
 			msg, err := reader.FetchMessage(ctx)
@@ -43,7 +43,7 @@ func runConsumerLoop(
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("[Gamification] %s consumer fetch error: %v", name, err)
+				slog.ErrorContext(ctx, "Gamification consumer fetch error", slog.String("consumer", name), slog.String("error", err.Error()))
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
@@ -61,11 +61,12 @@ func runConsumerLoop(
 			}
 
 			if processErr != nil {
-				log.Printf("[Gamification] %s consumer skipping failed message after 3 retries (recorded in outbox_log): %v", name, processErr)
+				slog.WarnContext(ctx, "Gamification consumer skipping failed message after 3 retries",
+					slog.String("consumer", name), slog.String("error", processErr.Error()))
 			}
 
 			if err := reader.CommitMessages(ctx, msg); err != nil {
-				log.Printf("[Gamification] %s consumer commit error: %v", name, err)
+				slog.ErrorContext(ctx, "Gamification consumer commit error", slog.String("consumer", name), slog.String("error", err.Error()))
 			}
 		}
 	}

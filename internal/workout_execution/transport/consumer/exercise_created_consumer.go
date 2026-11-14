@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -100,9 +100,9 @@ func (c *ExerciseCreatedConsumer) HandleMessage(ctx context.Context, rawPayload 
 	if c.outboxLogRepo != nil && env.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, env.ID)
 		if err != nil {
-			log.Printf("[WorkoutExecution] Warning checking outbox_log idempotency: %v", err)
+			slog.WarnContext(ctx, "Warning checking outbox_log idempotency", slog.String("event_id", env.ID), slog.String("error", err.Error()))
 		} else if processed {
-			log.Printf("[WorkoutExecution] Event %s already processed in outbox_log, skipping", env.ID)
+			slog.DebugContext(ctx, "Event already processed in outbox_log, skipping", slog.String("event_id", env.ID))
 			return nil
 		}
 	}
@@ -117,7 +117,7 @@ func (c *ExerciseCreatedConsumer) HandleMessage(ctx context.Context, rawPayload 
 		exName = exID
 	}
 
-	log.Printf("[WorkoutExecution] Received ExerciseCreated event for exercise_id: %s, name: %s (event_type: %s)", exID, exName, env.Type)
+	slog.InfoContext(ctx, "Received ExerciseCreated event", slog.String("exercise_id", exID), slog.String("name", exName), slog.String("event_type", env.Type))
 	handleErr := c.OnExerciseCreated(ctx, exID, exName)
 
 	// Record processed/failed event in outbox_log for idempotency and auditing
@@ -139,7 +139,7 @@ func (c *ExerciseCreatedConsumer) HandleMessage(ctx context.Context, rawPayload 
 			ErrorMessage: errMsg,
 		}
 		if logErr := c.outboxLogRepo.SaveLog(ctx, logRecord); logErr != nil {
-			log.Printf("[WorkoutExecution] Failed to save outbox_log record for event %s: %v", env.ID, logErr)
+			slog.WarnContext(ctx, "Failed to save outbox_log record for event", slog.String("event_id", env.ID), slog.String("error", logErr.Error()))
 		}
 	}
 
@@ -154,7 +154,7 @@ func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exercis
 
 	existing, err := c.motionRepo.FindByExerciseID(ctx, exerciseID)
 	if err == nil && existing != nil {
-		log.Printf("[WorkoutExecution] Draft MotionSpecification already exists for exercise_id: %s, skipping", exerciseID)
+		slog.DebugContext(ctx, "Draft MotionSpecification already exists for exercise_id, skipping", slog.String("exercise_id", exerciseID))
 		return nil
 	}
 	if err != nil && !errors.Is(err, derror.ErrMotionSpecNotFound) {
@@ -167,6 +167,6 @@ func (c *ExerciseCreatedConsumer) OnExerciseCreated(ctx context.Context, exercis
 		return fmt.Errorf("exercise created consumer save draft: %w", err)
 	}
 
-	log.Printf("[WorkoutExecution] Successfully created draft MotionSpecification for exercise_id: %s (name: %s)", exerciseID, exerciseName)
+	slog.InfoContext(ctx, "Successfully created draft MotionSpecification", slog.String("exercise_id", exerciseID), slog.String("name", exerciseName))
 	return nil
 }

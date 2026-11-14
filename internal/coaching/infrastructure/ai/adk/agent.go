@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -118,8 +118,10 @@ func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID strin
 	}
 
 	if res.Degraded {
-		log.Printf("coaching: roadmap for user %s generated in DEGRADED mode (%d issues): %v",
-			userID, len(res.Issues), res.Issues)
+		slog.WarnContext(ctx, "Roadmap generated in DEGRADED mode",
+			slog.String("user_id", userID),
+			slog.Int("issue_count", len(res.Issues)),
+			slog.Any("issues", res.Issues))
 	}
 
 	return c.mapToDomainRoadmap(ctx, res.Plan, res.Names, userID, time.Now().UTC())

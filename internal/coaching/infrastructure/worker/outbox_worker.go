@@ -5,7 +5,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -38,18 +38,18 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 
 	defer ticker.Stop()
 
-	log.Printf("[Coaching] Outbox worker started (interval=%v)", w.interval)
+	slog.InfoContext(ctx, "Coaching Outbox worker started", slog.Duration("interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Coaching] Outbox worker stopping (ctx cancelled)")
+			slog.InfoContext(ctx, "Coaching Outbox worker stopping (ctx cancelled)")
 
 			return
 
 		case <-ticker.C:
 			if err := w.tick(ctx); err != nil {
-				log.Printf("[Coaching] outbox tick error: %v", err)
+				slog.ErrorContext(ctx, "Coaching outbox tick error", slog.String("error", err.Error()))
 			}
 		}
 	}

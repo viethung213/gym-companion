@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 )
 
@@ -106,7 +106,7 @@ func runWithRetries(
 		// Gate 2: Reviewer LLM phản biện chất lượng ẩm thực & độ khả thi
 		verdict, err := review(n, clonePlan(outcome.Plan), report, priorFeedback)
 		if err != nil {
-			log.Printf("nutrition: review unavailable on round %d, shipping unreviewed: %v", n, err)
+			slog.Warn("Nutrition review unavailable, shipping unreviewed", slog.Int("round", n), slog.Any("error", err))
 			result.Degraded = true
 			result.Issues = append(result.Issues, "plan shipped without review: "+err.Error())
 			return result, nil
@@ -135,8 +135,8 @@ func runWithRetries(
 		}
 
 		if verdict.Confidence < minActionableConfidence {
-			log.Printf("nutrition: review rejected round %d at confidence %.2f, too unsure to act on",
-				n, verdict.Confidence)
+			slog.Warn("Nutrition review rejected, confidence too low to act on",
+				slog.Int("round", n), slog.Float64("confidence", verdict.Confidence))
 			result.Degraded = true
 			result.Issues = append(result.Issues, reviewIssueLines(verdict)...)
 			return result, nil

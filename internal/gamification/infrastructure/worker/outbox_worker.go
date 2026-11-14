@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
@@ -38,22 +38,22 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("[Gamification] Starting Outbox worker (polling interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting Gamification Outbox worker", slog.Duration("polling_interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Gamification] Stopping Outbox worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Gamification Outbox worker due to context cancellation")
 			return
 		case <-ticker.C:
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[Gamification] PANIC RECOVERED in Outbox worker tick: %v", r)
+						slog.ErrorContext(ctx, "PANIC RECOVERED in Gamification Outbox worker tick", slog.Any("panic", r))
 					}
 				}()
 				if err := w.processOutbox(ctx); err != nil {
-					log.Printf("[Gamification] Outbox worker processing error: %v", err)
+					slog.ErrorContext(ctx, "Gamification Outbox worker processing error", slog.String("error", err.Error()))
 				}
 			}()
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	"golang.org/x/net/http2"
 )
 
@@ -32,17 +33,18 @@ type ConnectProfileClient struct {
 // NewConnectProfileClient constructs a ConnectProfileClient communicating through API Gateway.
 func NewConnectProfileClient(gatewayURL, internalSecret string, httpClient *http.Client) *ConnectProfileClient {
 	if httpClient == nil {
-		httpClient = &http.Client{
-			Transport: &http2.Transport{
-				AllowHTTP: true,
-				DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, network, addr)
-				},
-				ReadIdleTimeout: 30 * time.Second,
-				PingTimeout:     5 * time.Second,
+		h2cTransport := &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
 			},
-			Timeout: 10 * time.Second,
+			ReadIdleTimeout: 30 * time.Second,
+			PingTimeout:     5 * time.Second,
+		}
+		httpClient = &http.Client{
+			Transport: telemetry.WrapHTTPTransport(h2cTransport),
+			Timeout:   10 * time.Second,
 		}
 	}
 	transport := connecthttp.NewTransport(httpClient, gatewayURL)

@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
@@ -56,25 +56,25 @@ func (w *CriticalInactivityWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf(
-		"[WorkoutExecution] Starting Critical Inactivity worker (interval: %v, threshold: %v)...",
-		w.interval, w.inactivityThreshold,
+	slog.InfoContext(ctx, "Starting WorkoutExecution Critical Inactivity worker",
+		slog.Duration("interval", w.interval),
+		slog.Duration("threshold", w.inactivityThreshold),
 	)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[WorkoutExecution] Stopping Critical Inactivity worker.")
+			slog.InfoContext(ctx, "Stopping WorkoutExecution Critical Inactivity worker")
 			return
 		case <-ticker.C:
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[WorkoutExecution] PANIC RECOVERED in Critical Inactivity worker tick: %v", r)
+						slog.ErrorContext(ctx, "PANIC RECOVERED in Critical Inactivity worker tick", slog.Any("panic", r))
 					}
 				}()
 				if err := w.processCriticalInactiveSessions(ctx); err != nil {
-					log.Printf("[WorkoutExecution] Critical Inactivity worker error: %v", err)
+					slog.ErrorContext(ctx, "Critical Inactivity worker error", slog.String("error", err.Error()))
 				}
 			}()
 		}
@@ -87,7 +87,7 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 		return err
 	}
 
-	log.Printf("[WorkoutExecution] Found %d sessions with critical inactivity.", len(sessions))
+	slog.InfoContext(ctx, "Found sessions with critical inactivity", slog.Int("count", len(sessions)))
 	now := time.Now().UTC()
 
 	for _, session := range sessions {
@@ -97,8 +97,10 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 		}
 
 		if err := session.MarkCriticalInactivity(now, lastCriticalAt); err != nil {
-			log.Printf("[WorkoutExecution] Could not mark session %q as critically inactive: %v",
-				session.ID(), err)
+			slog.WarnContext(ctx, "Could not mark session as critically inactive",
+				slog.String("session_id", session.ID()),
+				slog.String("error", err.Error()),
+			)
 			continue
 		}
 
@@ -120,7 +122,10 @@ func (w *CriticalInactivityWorker) processCriticalInactiveSessions(ctx context.C
 			txErr = saveFunc(ctx)
 		}
 		if txErr != nil {
-			log.Printf("[WorkoutExecution] Failed to save critically inactive session %s: %v", session.ID(), txErr)
+			slog.ErrorContext(ctx, "Failed to save critically inactive session",
+				slog.String("session_id", session.ID()),
+				slog.String("error", txErr.Error()),
+			)
 		}
 	}
 

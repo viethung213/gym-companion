@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
@@ -33,22 +33,22 @@ func (w *MatchTimeoutWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Printf("[SoloMatch] Starting Match Timeout worker (interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting SoloMatch Match Timeout worker", slog.Duration("interval", w.interval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[SoloMatch] Stopping Match Timeout worker.")
+			slog.InfoContext(ctx, "Stopping SoloMatch Match Timeout worker")
 			return
 		case <-ticker.C:
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[SoloMatch] PANIC RECOVERED in Match Timeout worker tick: %v", r)
+						slog.ErrorContext(ctx, "PANIC RECOVERED in Match Timeout worker tick", slog.Any("panic", r))
 					}
 				}()
 				if err := w.handler.Handle(ctx, command.HandleMatchTimeoutCommand{}); err != nil {
-					log.Printf("[SoloMatch] Timeout worker sweep error: %v", err)
+					slog.ErrorContext(ctx, "SoloMatch timeout worker sweep error", slog.String("error", err.Error()))
 				}
 			}()
 		}

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -144,9 +144,11 @@ func SeedAIMotionSpecifications(ctx context.Context, workoutDB, exerciseDB *sql.
 	}
 
 	if len(matched) == 0 {
-		log.Println("🤖 No matching exercises found in exercise.exercises to seed motion specifications. Checking existing specs.")
+		slog.InfoContext(ctx, "No matching exercises found in exercise.exercises to seed motion specifications, checking existing specs")
 	} else {
-		log.Printf("🤖 Seeding %d AI motion specifications into workout_execution...", len(matched))
+		slog.InfoContext(ctx, "Seeding AI motion specifications into workout_execution",
+			slog.Int("count", len(matched)),
+		)
 
 		tx, err := workoutDB.BeginTx(ctx, nil)
 		if err != nil {
@@ -222,13 +224,15 @@ func SeedAIMotionSpecifications(ctx context.Context, workoutDB, exerciseDB *sql.
 			}
 		}
 
-		log.Printf("✅ Successfully seeded %d AI motion specifications and synced has_ai_supported flags.", len(matchedIDs))
+		slog.InfoContext(ctx, "Successfully seeded AI motion specifications and synced has_ai_supported flags",
+			slog.Int("count", len(matchedIDs)),
+		)
 	}
 
 	// Dual-pool self-healing sync: Ensure any existing ready motion specifications in workoutDB
 	// also have has_ai_supported set to TRUE in exerciseDB (repairs partial commits across network partitions).
 	if existingRows, qErr := workoutDB.QueryContext(ctx, "SELECT exercise_id FROM workout_execution.motion_specifications WHERE is_ready = TRUE"); qErr != nil {
-		log.Printf("⚠️ Querying existing motion specifications failed: %v", qErr)
+		slog.WarnContext(ctx, "Querying existing motion specifications failed", slog.String("error", qErr.Error()))
 	} else {
 		defer existingRows.Close()
 		var readyIDs []any
@@ -239,7 +243,7 @@ func SeedAIMotionSpecifications(ctx context.Context, workoutDB, exerciseDB *sql.
 			}
 		}
 		if err := existingRows.Err(); err != nil {
-			log.Printf("⚠️ Iterating existing motion specifications failed: %v", err)
+			slog.WarnContext(ctx, "Iterating existing motion specifications failed", slog.String("error", err.Error()))
 		} else if len(readyIDs) > 0 {
 			placeholders := make([]string, len(readyIDs))
 			for i := range readyIDs {
@@ -250,7 +254,7 @@ func SeedAIMotionSpecifications(ctx context.Context, workoutDB, exerciseDB *sql.
 				strings.Join(placeholders, ", "),
 			)
 			if _, syncErr := exerciseDB.ExecContext(ctx, syncQuery, readyIDs...); syncErr != nil {
-				log.Printf("⚠️ Syncing existing has_ai_supported failed: %v", syncErr)
+				slog.WarnContext(ctx, "Syncing existing has_ai_supported failed", slog.String("error", syncErr.Error()))
 			}
 		}
 	}

@@ -3,7 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -62,7 +62,7 @@ func (r *Registry) GetClient() (*redis.Client, error) {
 	if strings.HasPrefix(redisAddr, "redis://") || strings.HasPrefix(redisAddr, "rediss://") {
 		parsedOpts, parseErr := redis.ParseURL(redisAddr)
 		if parseErr != nil {
-			log.Printf("[Redis Registry] Warning: Failed to parse REDIS_URL %s: %v, falling back to Addr", redisAddr, parseErr)
+			slog.Warn("Failed to parse REDIS_URL, falling back to Addr", "url", redisAddr, "error", parseErr)
 			opts = &redis.Options{Addr: redisAddr}
 		} else {
 			opts = parsedOpts
@@ -85,7 +85,7 @@ func (r *Registry) GetClient() (*redis.Client, error) {
 	}
 
 	r.client = client
-	log.Printf("Connected to Redis successfully at %s.", redisAddr)
+	slog.Info("Connected to Redis successfully", "addr", redisAddr)
 	return r.client, nil
 }
 
@@ -97,6 +97,6 @@ func (r *Registry) CloseAll() {
 	if r.client != nil {
 		_ = r.client.Close()
 		r.client = nil
-		log.Println("Closed shared Redis client pool.")
+		slog.Info("Closed shared Redis client pool")
 	}
 }

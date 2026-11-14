@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -273,8 +273,11 @@ func (gw *Gateway) RegisterService(serviceID, upstreamURL string, prefixes []str
 	})
 
 	if isNew {
-		log.Printf("🔗 [Service Discovery] Registered upstream %s for %s (%d prefixes, HTTP/2 h2c)",
-			upstreamURL, serviceID, len(prefixes))
+		slog.Info("Service Discovery registered upstream",
+			"service_id", serviceID,
+			"upstream_url", upstreamURL,
+			"prefixes_count", len(prefixes),
+		)
 	}
 	return nil
 }
@@ -291,7 +294,7 @@ func (gw *Gateway) DeregisterService(serviceID, upstreamURL string) error {
 			route.LB.RemoveServer(upstreamURL)
 		}
 	}
-	log.Printf("🔌 [Service Discovery] Deregistered upstream %s for %s", upstreamURL, serviceID)
+	slog.Info("Service Discovery deregistered upstream", "service_id", serviceID, "upstream_url", upstreamURL)
 	return nil
 }
 
@@ -312,7 +315,10 @@ func (gw *Gateway) onInstanceEvicted(serviceID, upstreamURL string) {
 			route.LB.RemoveServer(upstreamURL)
 		}
 	}
-	log.Printf("⚠️ [Service Discovery] Evicted stale upstream %s for %s (heartbeat TTL expired)", upstreamURL, serviceID)
+	slog.Warn("Service Discovery evicted stale upstream (heartbeat TTL expired)",
+		"service_id", serviceID,
+		"upstream_url", upstreamURL,
+	)
 }
 
 // GetAuthUpstreamURL finds an upstream URL capable of serving AuthService.

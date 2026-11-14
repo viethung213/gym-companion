@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
@@ -54,7 +54,7 @@ func (g *GeminiProvider) Build(ctx context.Context, cfg *config.Config) (model.L
 	for _, name := range modelNames {
 		m, err := gemini.NewModel(ctx, name, clientCfg)
 		if err != nil {
-			log.Printf("[GeminiProvider] Warning: Failed to initialize model %s: %v", name, err)
+			slog.WarnContext(ctx, "Failed to initialize Gemini model", slog.String("model", name), slog.Any("error", err))
 			continue
 		}
 		models = append(models, m)

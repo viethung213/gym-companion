@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -44,7 +44,7 @@ func NewServer(port, adminKey string, inspector Inspector) *Server {
 
 // Start begins listening and serving incoming admin requests.
 func (s *Server) Start() error {
-	log.Printf("🛡️ [Gateway Admin] Control Plane listening on http://0.0.0.0%s", s.addr)
+	slog.Info("Gateway Admin Control Plane listening", "addr", "http://0.0.0.0"+s.addr)
 	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("gateway admin server: %w", err)
 	}

@@ -3,12 +3,19 @@ package middleware
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
+	"log/slog"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
-	"google.golang.org/grpc/codes"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -27,39 +34,39 @@ func ToConnectError(err error) error {
 	}
 	var code connect.Code
 	switch st.Code() {
-	case codes.OK:
+	case grpccodes.OK:
 		return nil
-	case codes.Canceled:
+	case grpccodes.Canceled:
 		code = connect.CodeCanceled
-	case codes.Unknown:
+	case grpccodes.Unknown:
 		code = connect.CodeUnknown
-	case codes.InvalidArgument:
+	case grpccodes.InvalidArgument:
 		code = connect.CodeInvalidArgument
-	case codes.DeadlineExceeded:
+	case grpccodes.DeadlineExceeded:
 		code = connect.CodeDeadlineExceeded
-	case codes.NotFound:
+	case grpccodes.NotFound:
 		code = connect.CodeNotFound
-	case codes.AlreadyExists:
+	case grpccodes.AlreadyExists:
 		code = connect.CodeAlreadyExists
-	case codes.PermissionDenied:
+	case grpccodes.PermissionDenied:
 		code = connect.CodePermissionDenied
-	case codes.ResourceExhausted:
+	case grpccodes.ResourceExhausted:
 		code = connect.CodeResourceExhausted
-	case codes.FailedPrecondition:
+	case grpccodes.FailedPrecondition:
 		code = connect.CodeFailedPrecondition
-	case codes.Aborted:
+	case grpccodes.Aborted:
 		code = connect.CodeAborted
-	case codes.OutOfRange:
+	case grpccodes.OutOfRange:
 		code = connect.CodeOutOfRange
-	case codes.Unimplemented:
+	case grpccodes.Unimplemented:
 		code = connect.CodeUnimplemented
-	case codes.Internal:
+	case grpccodes.Internal:
 		code = connect.CodeInternal
-	case codes.Unavailable:
+	case grpccodes.Unavailable:
 		code = connect.CodeUnavailable
-	case codes.DataLoss:
+	case grpccodes.DataLoss:
 		code = connect.CodeDataLoss
-	case codes.Unauthenticated:
+	case grpccodes.Unauthenticated:
 		code = connect.CodeUnauthenticated
 	default:
 		code = connect.CodeUnknown
@@ -91,7 +98,7 @@ func NewConnectErrorMappingInterceptor() connect.ServerInterceptor {
 // =========================================================================
 
 // NewConnectLoggingInterceptor returns a Connect server interceptor that logs RPC duration,
-// procedure, and status codes for both Unary and Streaming RPCs.
+// procedure, and status codes for both Unary and Streaming RPCs using structured slog.
 func NewConnectLoggingInterceptor() connect.ServerInterceptor {
 	return func(next connect.ServerFunc) connect.ServerFunc {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
@@ -104,14 +111,25 @@ func NewConnectLoggingInterceptor() connect.ServerInterceptor {
 				connectErr := ToConnectError(err)
 				var cErr *connect.Error
 				if errors.As(connectErr, &cErr) {
-					log.Printf("Connect RPC | Procedure: %s | Duration: %v | Code: %s | Message: %s",
-						procedure, duration, cErr.Code(), cErr.Message())
+					slog.ErrorContext(ctx, "Connect RPC call failed",
+						"procedure", procedure,
+						"duration_ms", duration.Milliseconds(),
+						"code", cErr.Code().String(),
+						"error", cErr.Message(),
+					)
 				} else {
-					log.Printf("Connect RPC | Procedure: %s | Duration: %v | Error: %v",
-						procedure, duration, err)
+					slog.ErrorContext(ctx, "Connect RPC call failed",
+						"procedure", procedure,
+						"duration_ms", duration.Milliseconds(),
+						"error", err.Error(),
+					)
 				}
 			} else {
-				log.Printf("Connect RPC | Procedure: %s | Duration: %v | Code: OK", procedure, duration)
+				slog.InfoContext(ctx, "Connect RPC call completed",
+					"procedure", procedure,
+					"duration_ms", duration.Milliseconds(),
+					"code", "OK",
+				)
 			}
 			return err
 		}
@@ -129,12 +147,102 @@ func NewConnectRecoveryInterceptor() connect.ServerInterceptor {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) (err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("panic recovered in Connect RPC handler (%s): %v\nstacktrace: %s",
-						spec.Procedure, r, string(debug.Stack()))
+					slog.ErrorContext(ctx, "panic recovered in Connect RPC handler",
+						"procedure", spec.Procedure,
+						"panic", fmt.Sprint(r),
+						"stack", string(debug.Stack()),
+					)
 					err = connect.NewError(connect.CodeInternal, "internal server error")
 				}
 			}()
 			return next(ctx, spec, stream)
+		}
+	}
+}
+
+// =========================================================================
+// 4. Tracing Interceptor
+// =========================================================================
+
+type connectHeaderCarrier struct {
+	header *connect.Header
+}
+
+func (c connectHeaderCarrier) Get(key string) string {
+	if c.header == nil {
+		return ""
+	}
+	return c.header.Get(key)
+}
+
+func (c connectHeaderCarrier) Set(key, value string) {
+	if c.header != nil {
+		c.header.Set(key, value)
+	}
+}
+
+func (c connectHeaderCarrier) Keys() []string {
+	if c.header == nil {
+		return nil
+	}
+	keys := make([]string, 0, c.header.Len())
+	for k := range c.header.All() {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// extractModuleFromProcedure extracts the module name from a protobuf procedure path.
+// Example: "/contracts.core.workout_execution.v1.service.WorkoutExecutionService/StartSession" -> "workout_execution"
+func extractModuleFromProcedure(procedure string) string {
+	parts := strings.Split(procedure, ".")
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+	return ""
+}
+
+// NewConnectTracingInterceptor extracts distributed trace context from incoming Connect RPC
+// requests, starts a Server span, and propagates traceparent into context and outgoing responses.
+func NewConnectTracingInterceptor(serviceName ...string) connect.ServerInterceptor {
+	tracerName := "fitai-backend"
+	if len(serviceName) > 0 && serviceName[0] != "" {
+		tracerName = serviceName[0]
+	}
+	tracer := otel.GetTracerProvider().Tracer(tracerName)
+
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			// Extract W3C TraceContext from incoming headers if provided
+			info, _ := connect.CallInfoForServerContext(ctx)
+			if info != nil && info.RequestHeader() != nil {
+				ctx = otel.GetTextMapPropagator().Extract(ctx, connectHeaderCarrier{header: info.RequestHeader()})
+			}
+
+			module := extractModuleFromProcedure(spec.Procedure)
+			attrs := []attribute.KeyValue{
+				attribute.String("rpc.system", "connect"),
+				attribute.String("rpc.procedure", spec.Procedure),
+			}
+			if module != "" {
+				attrs = append(attrs, attribute.String("app.module", module))
+				ctx = telemetry.ContextWithModule(ctx, module)
+			}
+
+			ctx, span := tracer.Start(ctx, spec.Procedure,
+				trace.WithSpanKind(trace.SpanKindServer),
+				trace.WithAttributes(attrs...),
+			)
+			defer span.End()
+
+			err := next(ctx, spec, stream)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(otelcodes.Error, err.Error())
+			} else {
+				span.SetStatus(otelcodes.Ok, "OK")
+			}
+			return err
 		}
 	}
 }

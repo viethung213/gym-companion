@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/solo_match/application/port"
@@ -35,7 +35,7 @@ func (p *OutboxPublisherWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
-	log.Printf("[SoloMatch] Starting Outbox Publisher with SKIP LOCKED (polling: %v)...", p.interval)
+	slog.InfoContext(ctx, "Starting SoloMatch Outbox Publisher", slog.Duration("polling_interval", p.interval))
 
 	for {
 		select {
@@ -47,11 +47,11 @@ func (p *OutboxPublisherWorker) Start(ctx context.Context) {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[SoloMatch] PANIC recovered in Outbox Publisher tick: %v", r)
+						slog.ErrorContext(ctx, "PANIC recovered in SoloMatch Outbox Publisher tick", slog.Any("panic", r))
 					}
 				}()
 				if err := p.processPendingEvents(ctx); err != nil {
-					log.Printf("[SoloMatch] Outbox Publisher process error: %v", err)
+					slog.ErrorContext(ctx, "SoloMatch Outbox Publisher process error", slog.String("error", err.Error()))
 				}
 			}()
 		}

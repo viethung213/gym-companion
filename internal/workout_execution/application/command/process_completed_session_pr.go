@@ -3,7 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,7 +78,7 @@ func (h *ProcessCompletedSessionForPRHandler) HandleProcess(
 			formVerified := set.FormScore != nil && *set.FormScore >= 70.0
 			existingPR, findErr := h.prRepo.FindByUserIDAndExerciseIDForUpdate(txCtx, userID, exerciseID)
 			if findErr != nil {
-				log.Printf("[WARN] Failed to find PR for exercise %s (user %s): %v", exerciseID, userID, findErr)
+				slog.WarnContext(txCtx, "Failed to find PR for exercise", slog.String("exercise_id", exerciseID), slog.String("user_id", userID), slog.Any("error", findErr))
 				return nil
 			}
 

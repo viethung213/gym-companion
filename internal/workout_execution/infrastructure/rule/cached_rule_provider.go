@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
@@ -39,9 +40,7 @@ func NewCachedRuleProvider(
 	return &CachedRuleProvider{
 		specRepo:        specRepo,
 		storageProvider: storageProvider,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		httpClient:      telemetry.NewHTTPClient(10 * time.Second),
 	}
 }
 

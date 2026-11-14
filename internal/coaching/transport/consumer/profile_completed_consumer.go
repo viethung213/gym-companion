@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	segmentio "github.com/segmentio/kafka-go"
@@ -91,12 +91,12 @@ func NewProfileCompletedConsumer(
 
 // Start begins the blocking read loop. It stops when ctx is cancelled.
 func (c *ProfileCompletedConsumer) Start(ctx context.Context) {
-	log.Println("[Coaching] Starting ProfileCompletedConsumer on topic profile.events...")
+	slog.InfoContext(ctx, "Starting ProfileCompletedConsumer on topic profile.events")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Coaching] Stopping ProfileCompletedConsumer due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping ProfileCompletedConsumer due to context cancellation")
 			return
 		default:
 			msg, err := c.reader.ReadMessage(ctx)
@@ -105,13 +105,13 @@ func (c *ProfileCompletedConsumer) Start(ctx context.Context) {
 					return
 				}
 
-				log.Printf("[Coaching] Error reading profile.events: %v", err)
+				slog.ErrorContext(ctx, "Error reading profile.events", slog.String("error", err.Error()))
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
 			if processErr := c.processWithRetry(ctx, &msg); processErr != nil {
-				log.Printf("[Coaching] Exhausted retries processing profile event: %v", processErr)
+				slog.ErrorContext(ctx, "Exhausted retries processing profile event", slog.String("error", processErr.Error()))
 			}
 		}
 	}
@@ -129,7 +129,8 @@ func (c *ProfileCompletedConsumer) processWithRetry(ctx context.Context, msg *se
 			return nil
 		}
 
-		log.Printf("[Coaching] Profile event attempt %d/%d failed: %v", attempt, maxRetries, lastErr)
+		slog.WarnContext(ctx, "Profile event attempt failed",
+			slog.Int("attempt", attempt), slog.Int("max_retries", maxRetries), slog.String("error", lastErr.Error()))
 		time.Sleep(time.Duration(attempt*100) * time.Millisecond)
 	}
 
@@ -155,7 +156,7 @@ func (c *ProfileCompletedConsumer) HandleMessage(ctx context.Context, rawValue [
 	}
 
 	if !fresh {
-		log.Printf("[Coaching] Duplicate profile event skipped: id=%s", env.ID)
+		slog.DebugContext(ctx, "Duplicate profile event skipped", slog.String("event_id", env.ID))
 		return nil
 	}
 
@@ -173,7 +174,7 @@ func (c *ProfileCompletedConsumer) HandleMessage(ctx context.Context, rawValue [
 		return c.handleInjuryRecovered(ctx, env.Data)
 
 	default:
-		log.Printf("[Coaching] ProfileCompletedConsumer ignoring event type: %s", env.Type)
+		slog.DebugContext(ctx, "ProfileCompletedConsumer ignoring event type", slog.String("event_type", env.Type))
 		return nil
 	}
 }
@@ -189,23 +190,23 @@ func (c *ProfileCompletedConsumer) handleProfileCompleted(ctx context.Context, d
 	}
 
 	if p.UserID == "" {
-		log.Println("[Coaching] ProfileCompleted event missing user_id; ignored")
+		slog.WarnContext(ctx, "ProfileCompleted event missing user_id; ignored")
 		return nil
 	}
 
-	log.Printf("[Coaching] ProfileCompleted received for user %s — initiating roadmap", p.UserID)
+	slog.InfoContext(ctx, "ProfileCompleted received, initiating roadmap", slog.String("user_id", p.UserID))
 
 	_, err := c.initiate.Handle(ctx, command.InitiateRoadmapCommand{UserID: p.UserID})
 	if err != nil {
 		if errors.Is(err, roadmap.ErrActiveRoadmapExists) {
-			log.Printf("[Coaching] User %s already has an active roadmap; skipping auto-initiation", p.UserID)
+			slog.InfoContext(ctx, "User already has an active roadmap, skipping auto-initiation", slog.String("user_id", p.UserID))
 			return nil
 		}
 
 		return fmt.Errorf("initiate roadmap for user %s: %w", p.UserID, err)
 	}
 
-	log.Printf("[Coaching] Successfully auto-initiated roadmap for user %s", p.UserID)
+	slog.InfoContext(ctx, "Successfully auto-initiated roadmap", slog.String("user_id", p.UserID))
 	return nil
 }
 
@@ -223,7 +224,7 @@ func (c *ProfileCompletedConsumer) handleProfileUpdated(ctx context.Context, dat
 		return nil
 	}
 
-	log.Printf("[Coaching] ProfileUpdated received for user %s — regenerating pending schedule", p.UserID)
+	slog.InfoContext(ctx, "ProfileUpdated received, regenerating pending schedule", slog.String("user_id", p.UserID))
 	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
 		UserID: p.UserID,
 		Reason: "profile_updated",
@@ -248,7 +249,7 @@ func (c *ProfileCompletedConsumer) handleInjuryReported(ctx context.Context, dat
 		return nil
 	}
 
-	log.Printf("[Coaching] InjuryReported received for user %s (muscle: %s) — regenerating schedule", p.UserID, p.MuscleGroup)
+	slog.InfoContext(ctx, "InjuryReported received, regenerating schedule", slog.String("user_id", p.UserID), slog.String("muscle_group", p.MuscleGroup))
 	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
 		UserID: p.UserID,
 		Reason: "injury_reported",
@@ -273,7 +274,7 @@ func (c *ProfileCompletedConsumer) handleInjuryRecovered(ctx context.Context, da
 		return nil
 	}
 
-	log.Printf("[Coaching] InjuryRecovered received for user %s — regenerating schedule", p.UserID)
+	slog.InfoContext(ctx, "InjuryRecovered received, regenerating schedule", slog.String("user_id", p.UserID))
 	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
 		UserID: p.UserID,
 		Reason: "injury_recovered",

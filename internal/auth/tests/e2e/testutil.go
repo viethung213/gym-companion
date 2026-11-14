@@ -5,7 +5,7 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -124,7 +124,7 @@ func startE2ETestServer(t *testing.T) (string, *gorm.DB, func()) {
 	// Run HTTP server in background
 	go func() {
 		if err := httpServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP Server run error: %v", err)
+			slog.Error("HTTP Server run error", slog.Any("error", err))
 		}
 	}()
 

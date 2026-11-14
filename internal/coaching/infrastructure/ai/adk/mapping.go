@@ -3,7 +3,7 @@ package adk
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
@@ -148,8 +148,9 @@ func (c *CoachingContextAgent) mapToRegeneratedSessions(
 			if err != nil {
 				// Validation already reported this; skip rather than emit a
 				// session the domain would reject for a zero date.
-				log.Printf("coaching: skipping regenerated session with unparseable date %q for user %s",
-					sp.ScheduledDate, userID)
+				slog.Warn("Skipping regenerated session with unparseable date",
+					slog.String("date", sp.ScheduledDate),
+					slog.String("user_id", userID))
 				continue
 			}
 
@@ -221,7 +222,7 @@ func (c *CoachingContextAgent) resolveExerciseName(
 
 	ex, err := c.catalog.GetByID(ctx, exerciseID)
 	if err != nil {
-		log.Printf("coaching: no catalog name for exercise %s: %v", exerciseID, err)
+		slog.WarnContext(ctx, "No catalog name for exercise", slog.String("exercise_id", exerciseID), slog.Any("error", err))
 		return ""
 	}
 	return ex.Name

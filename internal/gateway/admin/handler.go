@@ -75,6 +75,11 @@ func (h *Handler) authMiddleware(next http.Handler) http.Handler {
 		}
 
 		key := r.Header.Get(HeaderAdminKey)
+		if key == "" {
+			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+				key = strings.TrimPrefix(auth, "Bearer ")
+			}
+		}
 		if key == "" || subtle.ConstantTimeCompare([]byte(key), []byte(h.adminKey)) != 1 {
 			gwerror.Unauthenticated(w, r, "Invalid or missing admin key")
 			return

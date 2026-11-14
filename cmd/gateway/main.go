@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,23 +15,42 @@ import (
 	"github.com/viethung213/gym-companion/internal/gateway"
 	"github.com/viethung213/gym-companion/internal/gateway/admin"
 	"github.com/viethung213/gym-companion/internal/gateway/config"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatalf("fatal gateway error: %v", err)
+		slog.Error("fatal gateway error", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
+	telemetry.InitLogger("fitai-gateway")
+
+	shutdownTracer, err := telemetry.InitTracer(context.Background(), "fitai-gateway")
+	if err != nil {
+		slog.Warn("Failed to initialize OpenTelemetry tracer for gateway", "error", err)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownTracer(shutdownCtx)
+		}()
+	}
+
 	cfg := config.LoadStartupConfig()
 
-	log.Printf("🚀 [API Gateway] Initializing on port :%s (Env: %s)", cfg.Port, cfg.AppEnv)
-	log.Printf("📄 [API Gateway] Route config: %s", cfg.ConfigPath)
-	log.Printf("⏱️ [API Gateway] Token TTL: %v | Watch Interval: %v", cfg.TokenTTL, cfg.WatchInterval)
-	log.Printf("🔒 [API Gateway] Enforce TLS (HTTPS): %v", cfg.EnforceTLS)
+	slog.Info("Initializing API Gateway",
+		"port", cfg.Port,
+		"env", cfg.AppEnv,
+		"route_config", cfg.ConfigPath,
+		"token_ttl", cfg.TokenTTL.String(),
+		"watch_interval", cfg.WatchInterval.String(),
+		"enforce_tls", cfg.EnforceTLS,
+	)
 
 	// Gateway automatically discovers Auth Service upstream from the route config!
 	gw, err := gateway.NewGateway(gateway.Options{
@@ -67,7 +86,10 @@ func run() error {
 	errChan := make(chan error, 2)
 
 	go func() {
-		log.Printf("✅ [API Gateway] Listening and serving at http://localhost:%s (Stateless, Zero-DB, Auto-Auth Discovery)", cfg.Port)
+		slog.Info("API Gateway listening and serving",
+			"addr", "http://localhost:"+cfg.Port,
+			"mode", "Stateless, Zero-DB, Auto-Auth Discovery",
+		)
 		if err := gatewayServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errChan <- fmt.Errorf("gateway server: %w", err)
 		}
@@ -88,7 +110,7 @@ func run() error {
 	case err := <-errChan:
 		return err
 	case sig := <-sigChan:
-		log.Printf("🛑 [API Gateway] Received signal %v, initiating graceful shutdown...", sig)
+		slog.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -101,6 +123,6 @@ func run() error {
 		return fmt.Errorf("gateway server shutdown: %w", err)
 	}
 
-	log.Println("👋 [API Gateway] Graceful shutdown complete")
+	slog.Info("API Gateway graceful shutdown complete")
 	return nil
 }

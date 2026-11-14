@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/config"
+	"github.com/viethung213/gym-companion/internal/shared/telemetry"
 )
 
 var _ port.SMSProvider = (*InfobipProvider)(nil)
@@ -28,7 +29,7 @@ type InfobipProvider struct {
 func NewInfobipProvider(cfg *config.Config) *InfobipProvider {
 	if cfg == nil {
 		return &InfobipProvider{
-			httpClient: &http.Client{Timeout: 10 * time.Second},
+			httpClient: telemetry.NewHTTPClient(10 * time.Second),
 		}
 	}
 
@@ -40,7 +41,7 @@ func NewInfobipProvider(cfg *config.Config) *InfobipProvider {
 		baseURL:    baseURL,
 		apiKey:     cfg.InfobipAPIKey,
 		from:       cfg.InfobipFrom,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: telemetry.NewHTTPClient(10 * time.Second),
 	}
 }
 
@@ -64,7 +65,7 @@ func (p *InfobipProvider) SendSMS(ctx context.Context, toPhoneNumber, message st
 	}
 
 	if p.baseURL == "" || p.apiKey == "" {
-		log.Printf("[Infobip SMS Disabled] To: %s | Message: %s", toPhoneNumber, message)
+		slog.InfoContext(ctx, "Infobip SMS disabled (dry run)", slog.String("to", toPhoneNumber), slog.String("message", message))
 		return nil
 	}
 

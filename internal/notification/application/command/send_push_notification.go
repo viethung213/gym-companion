@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,7 +112,7 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 
 		if setting != nil {
 			if !setting.EnablePush() {
-				log.Printf("[Push Suppressed] User %s has disabled push notifications in settings", cmd.UserID)
+				slog.InfoContext(ctx, "User has disabled push notifications in settings", slog.String("user_id", cmd.UserID))
 				return &SendPushNotificationResponse{
 					NotificationID: inAppNotif.ID(),
 					Status:         "PUSH_DISABLED_BY_USER",
@@ -121,8 +121,10 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 			}
 
 			if setting.IsInQuietHours(time.Now()) {
-				log.Printf("[Push Suppressed] User %s is currently in quiet hours (%s - %s)",
-					cmd.UserID, setting.QuietHoursStart(), setting.QuietHoursEnd())
+				slog.InfoContext(ctx, "User is currently in quiet hours, push suppressed",
+					slog.String("user_id", cmd.UserID),
+					slog.String("quiet_start", setting.QuietHoursStart()),
+					slog.String("quiet_end", setting.QuietHoursEnd()))
 				return &SendPushNotificationResponse{
 					NotificationID: inAppNotif.ID(),
 					Status:         "QUIET_HOURS_ACTIVE",
@@ -160,7 +162,7 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 	// 6. Deactivate invalid/unregistered tokens if any returned by FCM
 	if len(pushResp.InvalidTokens) > 0 {
 		if deactErr := h.deviceRepo.DeactivateTokens(ctx, pushResp.InvalidTokens); deactErr != nil {
-			log.Printf("Warning: failed to deactivate invalid tokens: %v", deactErr)
+			slog.WarnContext(ctx, "Warning: failed to deactivate invalid tokens", slog.Any("error", deactErr))
 		}
 	}
 

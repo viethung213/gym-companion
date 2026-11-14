@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/application/port"
@@ -39,11 +39,11 @@ func NewTrendingPoolWorker(
 
 // Start begins periodic refreshing of the trending candidate pool until ctx is cancelled.
 func (w *TrendingPoolWorker) Start(ctx context.Context) {
-	log.Printf("Starting Social Trending Pool worker (interval: %v)...", w.interval)
+	slog.InfoContext(ctx, "Starting Social Trending Pool worker", slog.Duration("interval", w.interval))
 
 	// Warm the cache immediately on startup
 	if err := w.Refresh(ctx); err != nil {
-		log.Printf("Social trending pool initial warm-up warning: %v", err)
+		slog.WarnContext(ctx, "Social trending pool initial warm-up warning", slog.String("error", err.Error()))
 	}
 
 	ticker := time.NewTicker(w.interval)
@@ -52,11 +52,11 @@ func (w *TrendingPoolWorker) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping Social Trending Pool worker due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Social Trending Pool worker due to context cancellation")
 			return
 		case <-ticker.C:
 			if err := w.Refresh(ctx); err != nil {
-				log.Printf("Social trending pool refresh error: %v", err)
+				slog.ErrorContext(ctx, "Social trending pool refresh error", slog.String("error", err.Error()))
 			}
 		}
 	}

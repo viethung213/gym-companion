@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -50,11 +50,11 @@ func NewUserRegisteredConsumer(
 }
 
 func (c *UserRegisteredConsumer) Start(ctx context.Context) {
-	log.Println("Starting Profile UserRegistered Kafka Consumer with Outbox Log & 3-Attempt Retry...")
+	slog.InfoContext(ctx, "Starting Profile UserRegistered Kafka Consumer with Outbox Log & 3-Attempt Retry")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping Profile UserRegistered Kafka Consumer due to context cancellation.")
+			slog.InfoContext(ctx, "Stopping Profile UserRegistered Kafka Consumer due to context cancellation")
 			return
 		default:
 			msg, err := c.reader.ReadMessage(ctx)
@@ -62,13 +62,13 @@ func (c *UserRegisteredConsumer) Start(ctx context.Context) {
 				if errors.Is(err, context.Canceled) {
 					return
 				}
-				log.Printf("Error reading message from auth.events topic: %v", err)
+				slog.ErrorContext(ctx, "Error reading message from auth.events topic", slog.String("error", err.Error()))
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
 			if err := c.ProcessMessage(ctx, msg); err != nil {
-				log.Printf("Exhausted all retries processing UserRegistered event: %v", err)
+				slog.ErrorContext(ctx, "Exhausted all retries processing UserRegistered event", slog.String("error", err.Error()))
 			}
 		}
 	}
@@ -86,15 +86,15 @@ func (c *UserRegisteredConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 		return nil
 	}
 
-	log.Printf("Profile UserRegisteredConsumer received event ID: %s, type: %s", event.ID, event.Type)
+	slog.InfoContext(ctx, "Profile UserRegisteredConsumer received event", slog.String("event_id", event.ID), slog.String("event_type", event.Type))
 
 	// 1. Check Outbox Log Idempotency: skip if already processed
 	if c.outboxLogRepo != nil && event.ID != "" {
 		processed, err := c.outboxLogRepo.IsProcessed(ctx, event.ID)
 		if err != nil {
-			log.Printf("Warning: error checking outbox log idempotency: %v", err)
+			slog.WarnContext(ctx, "Error checking outbox log idempotency", slog.String("error", err.Error()))
 		} else if processed {
-			log.Printf("Event %s already processed in outbox_log, skipping (idempotent)", event.ID)
+			slog.DebugContext(ctx, "Event already processed in outbox_log, skipping (idempotent)", slog.String("event_id", event.ID))
 			return nil
 		}
 	}
@@ -167,11 +167,14 @@ func (c *UserRegisteredConsumer) ProcessMessage(ctx context.Context, msg kafka.M
 		})
 
 		if processErr == nil {
-			log.Printf("Successfully processed UserRegistered event on attempt %d/%d for user: %s", attempt, maxRetries, data.GetUserId())
+			slog.InfoContext(ctx, "Successfully processed UserRegistered event",
+				slog.Int("attempt", attempt), slog.Int("max_retries", maxRetries), slog.String("user_id", data.GetUserId()))
 			return nil
 		}
 
-		log.Printf("Attempt %d/%d failed to process UserRegistered event for user %s: %v", attempt, maxRetries, data.GetUserId(), processErr)
+		slog.WarnContext(ctx, "Failed to process UserRegistered event",
+			slog.Int("attempt", attempt), slog.Int("max_retries", maxRetries),
+			slog.String("user_id", data.GetUserId()), slog.String("error", processErr.Error()))
 		time.Sleep(time.Duration(attempt*100) * time.Millisecond)
 	}
 
