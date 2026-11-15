@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
@@ -76,13 +77,9 @@ func (r *PostgresRepository) SearchActive(
 		return nil, 0, err
 	}
 
-	exercises := make([]*domain.Exercise, 0, len(records))
-	for i := range records {
-		exercise, err := r.rehydrate(ctx, &records[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		exercises = append(exercises, exercise)
+	exercises, err := r.rehydrateBatch(ctx, records)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	return exercises, totalCount, nil
@@ -91,26 +88,21 @@ func (r *PostgresRepository) SearchActive(
 func (r *PostgresRepository) GetRandomAISupported(
 	ctx context.Context,
 ) (*domain.Exercise, error) {
-	var record exerciseRecord
+	var ids []string
 	err := r.db.WithContext(ctx).
+		Model(&exerciseRecord{}).
 		Where("status = ?", string(domain.StatusActive)).
 		Where("has_ai_supported = ?", true).
-		Order("RANDOM()").
-		First(&record).Error
+		Pluck("id", &ids).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrExerciseNotFound
-		}
-
-		return nil, fmt.Errorf("find random exercise: %w", err)
+		return nil, fmt.Errorf("find random ai exercise ids: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil, domain.ErrExerciseNotFound
 	}
 
-	exercise, err := r.rehydrate(ctx, &record)
-	if err != nil {
-		return nil, err
-	}
-
-	return exercise, nil
+	chosenID := ids[rand.IntN(len(ids))]
+	return r.FindByID(ctx, chosenID)
 }
 
 func (r *PostgresRepository) GetMetadata(ctx context.Context) (port.Metadata, error) {
@@ -172,21 +164,52 @@ func (r *PostgresRepository) rehydrate(
 	ctx context.Context,
 	record *exerciseRecord,
 ) (*domain.Exercise, error) {
-	secondaryMuscleIDs, err := querySecondaryMuscleIDs(ctx, r.db, record.ID)
+	exercises, err := r.rehydrateBatch(ctx, []exerciseRecord{*record})
 	if err != nil {
 		return nil, err
 	}
-	tagIDs, err := queryTagIDs(ctx, r.db, record.ID)
+	if len(exercises) == 0 {
+		return nil, domain.ErrExerciseNotFound
+	}
+
+	return exercises[0], nil
+}
+
+func (r *PostgresRepository) rehydrateBatch(
+	ctx context.Context,
+	records []exerciseRecord,
+) ([]*domain.Exercise, error) {
+	if len(records) == 0 {
+		return []*domain.Exercise{}, nil
+	}
+
+	ids := make([]string, len(records))
+	for i := range records {
+		ids[i] = records[i].ID
+	}
+
+	musclesMap, err := querySecondaryMuscleIDs(ctx, r.db, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	exercise, err := domain.RehydrateExercise(record.toDomainInfo(secondaryMuscleIDs, tagIDs))
+	tagsMap, err := queryTagIDs(ctx, r.db, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	return exercise, nil
+	exercises := make([]*domain.Exercise, 0, len(records))
+	for i := range records {
+		secMuscles := musclesMap[records[i].ID]
+		tags := tagsMap[records[i].ID]
+		exercise, err := domain.RehydrateExercise(records[i].toDomainInfo(secMuscles, tags))
+		if err != nil {
+			return nil, err
+		}
+		exercises = append(exercises, exercise)
+	}
+
+	return exercises, nil
 }
 
 // BodyPart CRUD
