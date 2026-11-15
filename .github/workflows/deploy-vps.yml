@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - all
+          - postgres
           - gateway
           - core
           - ai
@@ -27,6 +28,7 @@ on:
       - "Test & Publish Gateway Docker Image"
       - "Publish Dedicated Kafka Docker Image"
       - "Publish Dedicated Redis Docker Image"
+      - "Publish Dedicated Postgres Docker Image"
     types:
       - completed
     branches:
