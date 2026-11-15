@@ -94,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_exercises_target_muscle ON exercise.exercises(tar
 CREATE INDEX IF NOT EXISTS idx_exercises_status ON exercise.exercises(status);
 CREATE INDEX IF NOT EXISTS idx_exercises_measurement_type ON exercise.exercises(measurement_type);
 CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm ON exercise.exercises USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_exercises_ai_supported_active ON exercise.exercises (id) WHERE status = 'ACTIVE' AND has_ai_supported = true;
 
 -- 4. EXERCISE SECONDARY MUSCLES (Many-to-Many)
 CREATE TABLE IF NOT EXISTS exercise.exercise_secondary_muscles (

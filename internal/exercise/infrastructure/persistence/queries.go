@@ -240,35 +240,57 @@ func (r *PostgresRepository) searchActiveRecords(
 func querySecondaryMuscleIDs(
 	ctx context.Context,
 	db *gorm.DB,
-	exerciseID string,
-) ([]string, error) {
-	var ids []string
+	exerciseIDs []string,
+) (map[string][]string, error) {
+	if len(exerciseIDs) == 0 {
+		return make(map[string][]string), nil
+	}
+
+	var records []exerciseSecondaryMuscleRecord
 	err := db.WithContext(ctx).
 		Model(&exerciseSecondaryMuscleRecord{}).
-		Where("exercise_id = ?", exerciseID).
+		Where("exercise_id IN ?", exerciseIDs).
 		Order("muscle_id").
-		Pluck("muscle_id", &ids).
+		Find(&records).
 		Error
 	if err != nil {
 		return nil, fmt.Errorf("load secondary muscles: %w", err)
 	}
 
-	return ids, nil
+	result := make(map[string][]string, len(exerciseIDs))
+	for _, rec := range records {
+		result[rec.ExerciseID] = append(result[rec.ExerciseID], rec.MuscleID)
+	}
+
+	return result, nil
 }
 
-func queryTagIDs(ctx context.Context, db *gorm.DB, exerciseID string) ([]string, error) {
-	var ids []string
+func queryTagIDs(
+	ctx context.Context,
+	db *gorm.DB,
+	exerciseIDs []string,
+) (map[string][]string, error) {
+	if len(exerciseIDs) == 0 {
+		return make(map[string][]string), nil
+	}
+
+	var records []exerciseTagRecord
 	err := db.WithContext(ctx).
 		Model(&exerciseTagRecord{}).
-		Where("exercise_id = ?", exerciseID).
+		Where("exercise_id IN ?", exerciseIDs).
 		Order("tag_id").
-		Pluck("tag_id", &ids).
+		Find(&records).
 		Error
 	if err != nil {
 		return nil, fmt.Errorf("load tags: %w", err)
 	}
 
-	return ids, nil
+	result := make(map[string][]string, len(exerciseIDs))
+	for _, rec := range records {
+		result[rec.ExerciseID] = append(result[rec.ExerciseID], rec.TagID)
+	}
+
+	return result, nil
 }
 
 func queryBodyParts(ctx context.Context, db *gorm.DB) ([]port.BodyPart, error) {
