@@ -88,6 +88,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	getPRsQuery := query.NewGetPersonalRecordsQueryHandler(prRepo)
 	getErrorsQuery := query.NewGetWorkoutSessionErrorsQueryHandler(sessionRepo)
 	getHistoryQuery := query.NewGetWorkoutHistoryQueryHandler(sessionRepo)
+	getSessionDetailQuery := query.NewGetWorkoutSessionDetailQueryHandler(sessionRepo)
 	listMotionSpecsQuery := query.NewListMotionSpecificationsQueryHandler(motionRepo)
 	searchMotionSpecsQuery := query.NewSearchMotionSpecificationsQueryHandler(motionRepo)
 	getMotionSpecStatsQuery := query.NewGetMotionSpecificationStatsQueryHandler(motionRepo)
@@ -122,6 +123,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		getPRsQuery,
 		getErrorsQuery,
 		getHistoryQuery,
+		getSessionDetailQuery,
 		updateMotionSpecHandler,
 		deleteMotionSpecHandler,
 		listMotionSpecsQuery,

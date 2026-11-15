@@ -180,10 +180,11 @@ func TestGRPCHandler(t *testing.T) {
 	prQ := query.NewGetPersonalRecordsQueryHandler(prRepo)
 	errsQ := query.NewGetWorkoutSessionErrorsQueryHandler(sessionRepo)
 	historyQ := query.NewGetWorkoutHistoryQueryHandler(sessionRepo)
+	detailQ := query.NewGetWorkoutSessionDetailQueryHandler(sessionRepo)
 
 	grpcHandler := grpc.NewGRPCHandler(
 		startH, startScheduledH, logSetH, completeH, shareH, abortH, syncH,
-		motionQ, prQ, errsQ, historyQ,
+		motionQ, prQ, errsQ, historyQ, detailQ,
 		command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
 		command.NewDeleteMotionSpecificationHandler(motionRepo),
 		query.NewListMotionSpecificationsQueryHandler(motionRepo),
@@ -481,6 +482,57 @@ func TestGRPCHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("GetWorkoutSessionDetail error and success", func(t *testing.T) {
+		ctxUser := context.WithValue(context.Background(), middleware.UserIDKey, "u1")
+
+		// 1. Missing session_id
+		_, err := grpcHandler.GetWorkoutSessionDetail(ctxUser, &workoutexecutionv1message.GetWorkoutSessionDetailRequest{})
+		if err == nil {
+			t.Fatal("expected error for empty session_id, got nil")
+		}
+
+		// 2. Not found
+		sessionRepo.session = nil
+		_, err = grpcHandler.GetWorkoutSessionDetail(ctxUser, &workoutexecutionv1message.GetWorkoutSessionDetailRequest{SessionId: "sess-none"})
+		if err == nil {
+			t.Fatal("expected not found error, got nil")
+		}
+
+		// 3. Forbidden (wrong user)
+		sessOther, _ := aggregate.NewWorkoutSession("sess-other", "u-other", "p1")
+		sessionRepo.session = sessOther
+		_, err = grpcHandler.GetWorkoutSessionDetail(ctxUser, &workoutexecutionv1message.GetWorkoutSessionDetailRequest{SessionId: "sess-other"})
+		if err == nil {
+			t.Fatal("expected forbidden error, got nil")
+		}
+
+		// 4. Success
+		now := time.Now().UTC()
+		sessOk, _ := aggregate.NewWorkoutSession("sess-ok", "u1", "p1")
+		sessOk.LogSet(aggregate.WorkoutSetLog{
+			ID:         "set-1",
+			SessionID:  "sess-ok",
+			SetNumber:  1,
+			ExerciseID: "ex-1",
+			TargetReps: 10,
+			ActualReps: 10,
+			Weight:     100,
+			CreatedAt:  now,
+		})
+		sessionRepo.session = sessOk
+
+		res, err := grpcHandler.GetWorkoutSessionDetail(ctxUser, &workoutexecutionv1message.GetWorkoutSessionDetailRequest{SessionId: "sess-ok"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.GetSessionId() != "sess-ok" {
+			t.Errorf("got sessionId %s, want sess-ok", res.GetSessionId())
+		}
+		if len(res.GetSets()) != 1 {
+			t.Errorf("got sets count %d, want 1", len(res.GetSets()))
+		}
+	})
+
 	t.Run("AdminGetPersonalRecords forbidden for User and success for Admin", func(t *testing.T) {
 		ctxUser := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "u1"), middleware.UserRoleKey, "User")
 		ctxAdmin := context.WithValue(context.WithValue(context.Background(), middleware.UserIDKey, "admin1"), middleware.UserRoleKey, "Admin")
@@ -601,10 +653,11 @@ func TestLogWorkoutSet_ErrorMapping(t *testing.T) {
 			prQ := query.NewGetPersonalRecordsQueryHandler(prRepo)
 			errsQ := query.NewGetWorkoutSessionErrorsQueryHandler(repo)
 			historyQ := query.NewGetWorkoutHistoryQueryHandler(repo)
+			detailQ := query.NewGetWorkoutSessionDetailQueryHandler(repo)
 
 			h := grpc.NewGRPCHandler(
 				startH, startScheduledH, logSetH, completeH, shareH, abortH, syncH,
-				motionQ, prQ, errsQ, historyQ,
+				motionQ, prQ, errsQ, historyQ, detailQ,
 				command.NewUpdateMotionSpecificationHandler(motionRepo, nil, tx),
 				command.NewDeleteMotionSpecificationHandler(motionRepo),
 				query.NewListMotionSpecificationsQueryHandler(motionRepo),

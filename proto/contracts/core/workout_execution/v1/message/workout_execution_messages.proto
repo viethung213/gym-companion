@@ -155,6 +155,39 @@ message GetWorkoutSessionErrorsResponse {
   repeated ErrorLog errors = 2;
 }
 
+message WorkoutSetDetail {
+  string id = 1;
+  int32 set_number = 2;
+  string exercise_id = 3;
+  int32 target_reps = 4;
+  int32 actual_reps = 5;
+  float weight = 6;
+  optional float form_score = 7;
+  float rpe = 8;
+  string camera_angle = 9;
+  repeated RepLog reps = 10;
+}
+
+message GetWorkoutSessionDetailRequest {
+  string session_id = 1;
+}
+
+message GetWorkoutSessionDetailResponse {
+  string session_id = 1;
+  string user_id = 2;
+  string plan_id = 3;
+  string status = 4;
+  google.protobuf.Timestamp scheduled_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+  int32 total_sets = 8;
+  float total_volume = 9;
+  optional float average_form_score = 10;
+  optional float average_rpe = 11;
+  repeated WorkoutSetDetail sets = 12;
+  repeated ErrorLog errors = 13;
+}
+
 message GetWorkoutHistoryRequest {
   int32 limit = 1;
   int32 offset = 2;

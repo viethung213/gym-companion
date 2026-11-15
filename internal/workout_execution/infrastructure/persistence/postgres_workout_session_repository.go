@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/repository"
@@ -91,7 +90,7 @@ func (r *PostgresWorkoutSessionRepository) Save(ctx context.Context, session *ag
 func (r *PostgresWorkoutSessionRepository) FindByID(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
 	db := GetDB(ctx, r.db)
 	var model WorkoutSessionModel
-	err := db.Preload("Sets.Reps").Preload("Errors").First(&model, "id = ?", id).Error
+	err := db.Preload("Sets.Reps").Preload("Errors").Take(&model, "id = ?", id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -104,7 +103,7 @@ func (r *PostgresWorkoutSessionRepository) FindByID(ctx context.Context, id stri
 func (r *PostgresWorkoutSessionRepository) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.WorkoutSession, error) {
 	db := GetDB(ctx, r.db)
 	var model WorkoutSessionModel
-	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("Sets.Reps").Preload("Errors").First(&model, "id = ?", id).Error
+	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("Sets.Reps").Preload("Errors").Take(&model, "id = ?", id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -199,7 +198,7 @@ func (r *PostgresWorkoutSessionRepository) FindHistoryByUserID(
 	}
 	db := GetDB(ctx, r.db)
 	var models []WorkoutSessionModel
-	err := db.Preload("Sets.Reps").Preload("Errors").
+	err := db.
 		Where("user_id = ? AND status = ?", userID, "COMPLETED").
 		Order("started_at DESC").
 		Limit(limit).Offset(offset).
@@ -274,7 +273,7 @@ func (r *PostgresPersonalRecordRepository) FindByUserIDAndExerciseID(
 ) (*aggregate.PersonalRecord, error) {
 	db := GetDB(ctx, r.db)
 	var model PersonalRecordModel
-	err := db.First(&model, "user_id = ? AND exercise_id = ?", userID, exerciseID).Error
+	err := db.Take(&model, "user_id = ? AND exercise_id = ?", userID, exerciseID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -359,18 +358,10 @@ func (r *PostgresMotionSpecificationRepository) Save(ctx context.Context, spec *
 	return nil
 }
 
-func isUUIDString(s string) bool {
-	if len(s) != 36 {
-		return false
-	}
-	_, err := uuid.Parse(s)
-	return err == nil
-}
-
 func (r *PostgresMotionSpecificationRepository) FindByExerciseID(ctx context.Context, exerciseID string) (*aggregate.MotionSpecification, error) {
 	db := GetDB(ctx, r.db)
 	var model MotionSpecificationModel
-	err := db.First(&model, "exercise_id = ?", exerciseID).Error
+	err := db.Take(&model, "exercise_id = ?", exerciseID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrMotionSpecNotFound

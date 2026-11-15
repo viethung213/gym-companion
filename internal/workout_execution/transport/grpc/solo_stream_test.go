@@ -105,7 +105,7 @@ func TestStreamSoloMatchTracking(t *testing.T) {
 
 	h := grpc.NewGRPCHandler(
 		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		soloService,
 	)
 

@@ -35,6 +35,7 @@ type GRPCHandler struct {
 	getPRsQuery                  *query.GetPersonalRecordsQueryHandler
 	getErrorsQuery               *query.GetWorkoutSessionErrorsQueryHandler
 	getHistoryQuery              *query.GetWorkoutHistoryQueryHandler
+	getSessionDetailQuery        *query.GetWorkoutSessionDetailQueryHandler
 	updateMotionSpecHandler      *command.UpdateMotionSpecificationHandler
 	deleteMotionSpecHandler      *command.DeleteMotionSpecificationHandler
 	listMotionSpecsQuery         *query.ListMotionSpecificationsQueryHandler
@@ -61,6 +62,7 @@ func NewGRPCHandler(
 	getPRsQuery *query.GetPersonalRecordsQueryHandler,
 	getErrorsQuery *query.GetWorkoutSessionErrorsQueryHandler,
 	getHistoryQuery *query.GetWorkoutHistoryQueryHandler,
+	getSessionDetailQuery *query.GetWorkoutSessionDetailQueryHandler,
 	updateMotionSpecHandler *command.UpdateMotionSpecificationHandler,
 	deleteMotionSpecHandler *command.DeleteMotionSpecificationHandler,
 	listMotionSpecsQuery *query.ListMotionSpecificationsQueryHandler,
@@ -82,6 +84,7 @@ func NewGRPCHandler(
 		getPRsQuery:                  getPRsQuery,
 		getErrorsQuery:               getErrorsQuery,
 		getHistoryQuery:              getHistoryQuery,
+		getSessionDetailQuery:        getSessionDetailQuery,
 		updateMotionSpecHandler:      updateMotionSpecHandler,
 		deleteMotionSpecHandler:      deleteMotionSpecHandler,
 		listMotionSpecsQuery:         listMotionSpecsQuery,
@@ -424,6 +427,102 @@ func (h *GRPCHandler) GetWorkoutHistory(ctx context.Context, req *workoutexecuti
 
 	return &workoutexecutionv1message.GetWorkoutHistoryResponse{
 		Sessions: pbSessions,
+	}, nil
+}
+
+func (h *GRPCHandler) GetWorkoutSessionDetail(ctx context.Context, req *workoutexecutionv1message.GetWorkoutSessionDetailRequest) (*workoutexecutionv1message.GetWorkoutSessionDetailResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionID := req.GetSessionId()
+	if sessionID == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	}
+
+	session, err := h.getSessionDetailQuery.Handle(ctx, sessionID, userID)
+	if err != nil {
+		if errors.Is(err, derror.ErrForbidden) {
+			return nil, status.Errorf(codes.PermissionDenied, "access to workout session denied: %v", err)
+		}
+		if errors.Is(err, derror.ErrWorkoutSessionNotFound) {
+			return nil, status.Errorf(codes.NotFound, "workout session not found: %v", err)
+		}
+		return nil, toGRPCError("failed to get workout session detail", err)
+	}
+
+	summary := session.CalculateSummary()
+	rawSets := session.Sets()
+	pbSets := make([]*workoutexecutionv1message.WorkoutSetDetail, len(rawSets))
+	for i, set := range rawSets {
+		pbReps := make([]*workoutexecutionv1message.RepLog, len(set.Reps))
+		for j, rep := range set.Reps {
+			pbReps[j] = &workoutexecutionv1message.RepLog{
+				RepNumber:     int32(rep.RepNumber),
+				RomPercentage: rep.ROMPercentage,
+				ErrorCodes:    rep.GetErrorCodes(),
+				JointAngles:   rep.GetJointAngles(),
+			}
+		}
+
+		pbSets[i] = &workoutexecutionv1message.WorkoutSetDetail{
+			Id:          set.ID,
+			SetNumber:   int32(set.SetNumber),
+			ExerciseId:  set.ExerciseID,
+			TargetReps:  int32(set.TargetReps),
+			ActualReps:  int32(set.ActualReps),
+			Weight:      set.Weight,
+			FormScore:   set.FormScore,
+			Rpe:         set.RPE,
+			CameraAngle: set.CameraAngle,
+			Reps:        pbReps,
+		}
+	}
+
+	rawErrors := session.Errors()
+	pbErrors := make([]*workoutexecutionv1message.ErrorLog, len(rawErrors))
+	for i, errItem := range rawErrors {
+		pbErrors[i] = &workoutexecutionv1message.ErrorLog{
+			ErrorCode:  errItem.ErrorCode,
+			Severity:   errItem.Severity,
+			Timestamp:  timestamppb.New(errItem.Timestamp),
+			SetNumber:  int32(errItem.SetNumber),
+			RepNumber:  int32(errItem.RepNumber),
+			ExerciseId: errItem.ExerciseID,
+		}
+	}
+
+	var scheduledAt, startedAt, endedAt *timestamppb.Timestamp
+	if session.ScheduledAt() != nil {
+		scheduledAt = timestamppb.New(*session.ScheduledAt())
+	}
+	if session.StartedAt() != nil {
+		startedAt = timestamppb.New(*session.StartedAt())
+	}
+	if session.EndedAt() != nil {
+		endedAt = timestamppb.New(*session.EndedAt())
+	}
+
+	var avgRPE *float32
+	if summary.AverageRPE > 0 {
+		avgRPE = &summary.AverageRPE
+	}
+
+	return &workoutexecutionv1message.GetWorkoutSessionDetailResponse{
+		SessionId:        session.ID(),
+		UserId:           session.UserID(),
+		PlanId:           session.PlanID(),
+		Status:           session.Status().String(),
+		ScheduledAt:      scheduledAt,
+		StartedAt:        startedAt,
+		EndedAt:          endedAt,
+		TotalSets:        int32(summary.TotalSets),
+		TotalVolume:      summary.TotalVolume,
+		AverageFormScore: summary.AverageFormScore,
+		AverageRpe:       avgRPE,
+		Sets:             pbSets,
+		Errors:           pbErrors,
 	}, nil
 }
 
@@ -841,6 +940,14 @@ func (c *ConnectWorkoutExecutionHandler) GetWorkoutSessionErrors(ctx context.Con
 
 func (c *ConnectWorkoutExecutionHandler) GetWorkoutHistory(ctx context.Context, req *workoutexecutionv1message.GetWorkoutHistoryRequest) (*workoutexecutionv1message.GetWorkoutHistoryResponse, error) {
 	res, err := c.grpcHandler.GetWorkoutHistory(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (c *ConnectWorkoutExecutionHandler) GetWorkoutSessionDetail(ctx context.Context, req *workoutexecutionv1message.GetWorkoutSessionDetailRequest) (*workoutexecutionv1message.GetWorkoutSessionDetailResponse, error) {
+	res, err := c.grpcHandler.GetWorkoutSessionDetail(ctx, req)
 	if err != nil {
 		return nil, err
 	}

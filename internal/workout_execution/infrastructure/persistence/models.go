@@ -285,11 +285,13 @@ func SessionToDomain(m *WorkoutSessionModel) *aggregate.WorkoutSession {
 	}
 
 	status := aggregate.ParseSessionStatus(m.Status)
-	return aggregate.ReconstituteWorkoutSession(
+	sess := aggregate.ReconstituteWorkoutSession(
 		m.ID, m.UserID, m.PlanID, status, sets, errs,
 		m.ScheduledAt, m.StartedAt, m.EndedAt, m.CreatedAt, m.UpdatedAt,
 		m.IsShared, m.Version,
 	)
+	sess.WithSummary(vo.NewSessionSummary(m.TotalSets, m.TotalVolume, m.AverageFormScore, m.AverageRPE))
+	return sess
 }
 
 func PersonalRecordToPersistence(pr *aggregate.PersonalRecord) *PersonalRecordModel {

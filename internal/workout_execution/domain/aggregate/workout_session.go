@@ -109,6 +109,7 @@ type WorkoutSession struct {
 	status       SessionStatus
 	sets         []WorkoutSetLog
 	errors       []SessionError
+	summary      *vo.SessionSummary
 	scheduledAt  *time.Time
 	startedAt    *time.Time
 	endedAt      *time.Time
@@ -396,10 +397,19 @@ func (s *WorkoutSession) CalculateTotalVolume() float32 {
 	return vol
 }
 
+// WithSummary sets pre-computed summary statistics for sessions loaded without sets.
+func (s *WorkoutSession) WithSummary(summary vo.SessionSummary) *WorkoutSession {
+	s.summary = &summary
+	return s
+}
+
 // CalculateSummary aggregates session stats.
 func (s *WorkoutSession) CalculateSummary() vo.SessionSummary {
 	totalSets := len(s.sets)
 	if totalSets == 0 {
+		if s.summary != nil {
+			return *s.summary
+		}
 		return vo.NewSessionSummary(0, 0, nil, 0)
 	}
 

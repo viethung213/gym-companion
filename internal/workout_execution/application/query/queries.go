@@ -117,6 +117,32 @@ func (h *GetWorkoutSessionErrorsQueryHandler) Handle(ctx context.Context, sessio
 	return session.Errors(), nil
 }
 
+// GetWorkoutSessionDetailQueryHandler handles fetching full session details.
+type GetWorkoutSessionDetailQueryHandler struct {
+	sessionRepo repository.WorkoutSessionRepository
+}
+
+// NewGetWorkoutSessionDetailQueryHandler constructs handler.
+func NewGetWorkoutSessionDetailQueryHandler(sessionRepo repository.WorkoutSessionRepository) *GetWorkoutSessionDetailQueryHandler {
+	return &GetWorkoutSessionDetailQueryHandler{
+		sessionRepo: sessionRepo,
+	}
+}
+
+// Handle executes query to fetch full session details including sets, reps, and errors.
+func (h *GetWorkoutSessionDetailQueryHandler) Handle(ctx context.Context, sessionID, userID string) (*aggregate.WorkoutSession, error) {
+	session, err := h.sessionRepo.FindByID(ctx, sessionID)
+	if err != nil || session == nil {
+		return nil, derror.ErrWorkoutSessionNotFound
+	}
+
+	if userID != "" && session.UserID() != userID {
+		return nil, derror.ErrForbidden
+	}
+
+	return session, nil
+}
+
 // GetWorkoutHistoryQueryHandler handles fetching session history.
 type GetWorkoutHistoryQueryHandler struct {
 	sessionRepo repository.WorkoutSessionRepository

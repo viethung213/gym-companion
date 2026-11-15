@@ -120,6 +120,23 @@ service WorkoutExecutionService {
     };
   }
 
+  // Lấy chi tiết một buổi tập bao gồm toàn bộ hiệp tập, rep và lỗi tư thế
+  rpc GetWorkoutSessionDetail (contracts.core.workout_execution.v1.message.GetWorkoutSessionDetailRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutSessionDetailResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/execution/sessions/{session_id}"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Lấy thông tin chi tiết đầy đủ của một buổi tập theo ID";
+      tags: "Workout Execution";
+      security: {
+        security_requirement: {
+          key: "BearerAuth";
+          value: {};
+        }
+      }
+    };
+  }
+
   // Lấy lịch sử các buổi tập của người dùng đang đăng nhập
   rpc GetWorkoutHistory (contracts.core.workout_execution.v1.message.GetWorkoutHistoryRequest) returns (contracts.core.workout_execution.v1.message.GetWorkoutHistoryResponse) {
     option (google.api.http) = {

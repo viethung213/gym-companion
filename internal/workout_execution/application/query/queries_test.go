@@ -350,13 +350,40 @@ func TestGetWorkoutSessionErrorsQueryHandler(t *testing.T) {
 		}
 
 		if len(errs) != 1 {
-
 			t.Errorf("got count %d, want 1", len(errs))
-
 		}
+	})
+}
 
+func TestGetWorkoutSessionDetailQueryHandler(t *testing.T) {
+	t.Run("session not found error", func(t *testing.T) {
+		h := query.NewGetWorkoutSessionDetailQueryHandler(&mockSessionRepo{})
+		_, err := h.Handle(context.Background(), "sess-1", "u-1")
+		if !errors.Is(err, derror.ErrWorkoutSessionNotFound) {
+			t.Errorf("got %v, want %v", err, derror.ErrWorkoutSessionNotFound)
+		}
 	})
 
+	t.Run("forbidden error when user mismatch", func(t *testing.T) {
+		session, _ := aggregate.NewWorkoutSession("sess-1", "u-other", "plan-1")
+		h := query.NewGetWorkoutSessionDetailQueryHandler(&mockSessionRepo{session: session})
+		_, err := h.Handle(context.Background(), "sess-1", "u-1")
+		if !errors.Is(err, derror.ErrForbidden) {
+			t.Errorf("got %v, want %v", err, derror.ErrForbidden)
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		session, _ := aggregate.NewWorkoutSession("sess-1", "u-1", "plan-1")
+		h := query.NewGetWorkoutSessionDetailQueryHandler(&mockSessionRepo{session: session})
+		res, err := h.Handle(context.Background(), "sess-1", "u-1")
+		if err != nil {
+			t.Fatalf("got err = %v, want nil", err)
+		}
+		if res.ID() != "sess-1" {
+			t.Errorf("got ID %s, want sess-1", res.ID())
+		}
+	})
 }
 
 func TestGetWorkoutHistoryQueryHandler(t *testing.T) {
