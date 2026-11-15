@@ -57,6 +57,19 @@ func TestWorkoutSession_Lifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("CalculateSummary with pre-loaded WithSummary and no sets", func(t *testing.T) {
+		session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
+		form := float32(85.0)
+		session.WithSummary(vo.NewSessionSummary(3, 1500.0, &form, 7.5))
+		summary := session.CalculateSummary()
+		if summary.TotalSets != 3 || summary.TotalVolume != 1500.0 {
+			t.Errorf("got TotalSets=%d, Volume=%v; want 3, 1500.0", summary.TotalSets, summary.TotalVolume)
+		}
+		if summary.AverageFormScore == nil || *summary.AverageFormScore != 85.0 {
+			t.Errorf("got formScore=%v, want 85.0", summary.AverageFormScore)
+		}
+	})
+
 	t.Run("Complete session without overload confirmation required", func(t *testing.T) {
 		session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
 		session.PopEvents() // clear start event

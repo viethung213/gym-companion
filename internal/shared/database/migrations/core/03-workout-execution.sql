@@ -61,9 +61,10 @@ CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (
     )
 );
 
-CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_id ON workout_execution.workout_sessions(user_id);
+DROP INDEX IF EXISTS workout_execution.idx_workout_sessions_user_id;
+DROP INDEX IF EXISTS workout_execution.idx_workout_sessions_user_status;
 CREATE INDEX IF NOT EXISTS idx_workout_sessions_status ON workout_execution.workout_sessions(status);
-CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_status ON workout_execution.workout_sessions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_status_started ON workout_execution.workout_sessions(user_id, status, started_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_workout_sessions_active_user ON workout_execution.workout_sessions(user_id) WHERE status = 'IN_PROGRESS';
 
 -- 3. WORKOUT SET LOGS
