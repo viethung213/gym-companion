@@ -85,20 +85,18 @@ func (r *UserRepository) FindByIdentity(
 	identityType string,
 	identifier string,
 ) (*aggregate.User, error) {
-	var ident UserIdentityModel
-	err := GetDB(ctx, r.db).First(
-		&ident,
-		"identity_type = ? AND identifier = ?",
-		identityType,
-		identifier,
-	).Error
+	var dbUser UserModel
+	err := GetDB(ctx, r.db).
+		Joins("Identity").
+		Where(`"Identity".identity_type = ? AND "Identity".identifier = ?`, identityType, identifier).
+		First(&dbUser).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrUserNotFound
 		}
-		return nil, fmt.Errorf("gorm find identity: %w", err)
+		return nil, fmt.Errorf("gorm find user by identity: %w", err)
 	}
-	return r.FindByID(ctx, ident.UserID)
+	return dbUser.ToDomain()
 }
 
 // List retrieves users with filtering by role, status, search keyword, and pagination.
