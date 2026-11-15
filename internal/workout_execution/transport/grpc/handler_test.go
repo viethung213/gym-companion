@@ -509,7 +509,7 @@ func TestGRPCHandler(t *testing.T) {
 		// 4. Success
 		now := time.Now().UTC()
 		sessOk, _ := aggregate.NewWorkoutSession("sess-ok", "u1", "p1")
-		sessOk.LogSet(aggregate.WorkoutSetLog{
+		if err := sessOk.LogSet(aggregate.WorkoutSetLog{
 			ID:         "set-1",
 			SessionID:  "sess-ok",
 			SetNumber:  1,
@@ -518,7 +518,9 @@ func TestGRPCHandler(t *testing.T) {
 			ActualReps: 10,
 			Weight:     100,
 			CreatedAt:  now,
-		})
+		}); err != nil {
+			t.Fatalf("failed to log set: %v", err)
+		}
 		sessionRepo.session = sessOk
 
 		res, err := grpcHandler.GetWorkoutSessionDetail(ctxUser, &workoutexecutionv1message.GetWorkoutSessionDetailRequest{SessionId: "sess-ok"})
