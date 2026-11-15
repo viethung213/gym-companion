@@ -80,7 +80,7 @@ echo ">> [2/4] Kiểm tra phiên bản image từ GitHub..."
 docker network inspect fitai-network >/dev/null 2>&1 || docker network create fitai-network
 if [ "$SERVICE_NAME" = "all" ]; then
     # Duyệt qua từng service đã cấu hình
-    SERVICES=("gateway" "kafka" "redis" "core" "ai")
+    SERVICES=("postgres" "kafka" "redis" "gateway" "core" "ai")
     for S in "${SERVICES[@]}"; do
         deploy_single_service "$S"
     done
