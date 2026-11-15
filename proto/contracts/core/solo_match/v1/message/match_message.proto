@@ -37,6 +37,7 @@ message UserSnapshotView {
   string user_id = 1;
   string display_name = 2;
   string avatar_url = 3;
+  int64 xp = 4;
 }
 
 message ParticipantView {

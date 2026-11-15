@@ -11,6 +11,7 @@ type UserSnapshotDTO struct {
 	UserID      string `json:"userId"`
 	DisplayName string `json:"displayName"`
 	AvatarURL   string `json:"avatarUrl"`
+	XP          int64  `json:"xp"`
 }
 
 type ParticipantDTO struct {
@@ -51,6 +52,7 @@ func ToSoloMatchDTO(m *aggregate.SoloMatch, snapshots map[string]*entity.UserSna
 		if snap != nil {
 			snapDTO.DisplayName = snap.DisplayName()
 			snapDTO.AvatarURL = snap.AvatarURL()
+			snapDTO.XP = snap.XP()
 		}
 
 		isBot := false

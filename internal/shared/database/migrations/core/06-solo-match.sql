@@ -42,8 +42,11 @@ CREATE TABLE IF NOT EXISTS solo_match.user_snapshots (
     user_id UUID PRIMARY KEY,
     display_name VARCHAR(128) NOT NULL,
     avatar_url TEXT NOT NULL DEFAULT '',
+    xp BIGINT NOT NULL DEFAULT 0,
     synced_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE solo_match.user_snapshots ADD COLUMN IF NOT EXISTS xp BIGINT NOT NULL DEFAULT 0;
 
 -- 3. SOLO MATCHES (Match lifecycle & final outcome)
 CREATE TABLE IF NOT EXISTS solo_match.solo_matches (

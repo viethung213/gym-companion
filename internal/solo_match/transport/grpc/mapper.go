@@ -18,6 +18,7 @@ func ToSoloMatchView(d *dto.SoloMatchDTO) *solomatchv1message.SoloMatchView {
 				UserId:      p.User.UserID,
 				DisplayName: p.User.DisplayName,
 				AvatarUrl:   p.User.AvatarURL,
+				Xp:          p.User.XP,
 			},
 			ScoreValue:  float32(p.ScoreValue),
 			IsCompleted: p.IsCompleted,
