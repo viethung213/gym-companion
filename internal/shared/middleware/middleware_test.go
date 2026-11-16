@@ -49,12 +49,66 @@ func TestConnectLoggingInterceptor(t *testing.T) {
 		t.Fatalf("expected success, got err=%v", err)
 	}
 
-	// 2. Logging error
-	errHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+	// 2. Logging client/business error (warn level)
+	clientErrHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
 		return connect.NewError(connect.CodeInvalidArgument, "bad argument")
 	})
-	if err := errHandler(context.Background(), connect.Spec{Procedure: "/test/LoggingErr"}, nil); err == nil {
+	if err := clientErrHandler(context.Background(), connect.Spec{Procedure: "/test/LoggingClientErr"}, nil); err == nil {
 		t.Fatal("expected error, got nil")
+	}
+
+	// 3. Logging server/system error (error level)
+	serverErrHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return connect.NewError(connect.CodeInternal, "internal server failure")
+	})
+	if err := serverErrHandler(context.Background(), connect.Spec{Procedure: "/test/LoggingServerErr"}, nil); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// 4. Logging raw unmapped error (error level)
+	rawErrHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return errors.New("raw unexpected failure")
+	})
+	if err := rawErrHandler(context.Background(), connect.Spec{Procedure: "/test/LoggingRawErr"}, nil); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestIsClientError(t *testing.T) {
+	t.Parallel()
+
+	clientCodes := []connect.Code{
+		connect.CodeCanceled,
+		connect.CodeInvalidArgument,
+		connect.CodeNotFound,
+		connect.CodeAlreadyExists,
+		connect.CodePermissionDenied,
+		connect.CodeResourceExhausted,
+		connect.CodeFailedPrecondition,
+		connect.CodeAborted,
+		connect.CodeOutOfRange,
+		connect.CodeUnauthenticated,
+	}
+
+	for _, code := range clientCodes {
+		if !IsClientError(code) {
+			t.Errorf("expected IsClientError(%v) = true, got false", code)
+		}
+	}
+
+	serverCodes := []connect.Code{
+		connect.CodeUnknown,
+		connect.CodeDeadlineExceeded,
+		connect.CodeUnimplemented,
+		connect.CodeInternal,
+		connect.CodeUnavailable,
+		connect.CodeDataLoss,
+	}
+
+	for _, code := range serverCodes {
+		if IsClientError(code) {
+			t.Errorf("expected IsClientError(%v) = false, got true", code)
+		}
 	}
 }
 
@@ -195,5 +249,56 @@ func TestConnectErrorMappingInterceptor(t *testing.T) {
 	}
 	if cErr.Code() != connect.CodeUnauthenticated {
 		t.Errorf("expected connect.CodeUnauthenticated, got %s", cErr.Code())
+	}
+}
+
+func TestConnectTracingInterceptor(t *testing.T) {
+	t.Parallel()
+
+	interceptor := NewConnectTracingInterceptor("test-service")
+
+	// 1. Success path
+	successHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return nil
+	})
+	if err := successHandler(context.Background(), connect.Spec{Procedure: "/contracts.core.auth.v1.service.AuthService/Login"}, nil); err != nil {
+		t.Fatalf("expected success, got err=%v", err)
+	}
+
+	// 2. Client error path (should not crash and handles client code)
+	clientErrHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return connect.NewError(connect.CodeAlreadyExists, "brand request already pending")
+	})
+	if err := clientErrHandler(context.Background(), connect.Spec{Procedure: "/contracts.generic.auth.v1.service.AuthService/RegisterBrand"}, nil); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// 3. Server error path
+	serverErrHandler := interceptor(func(_ context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return connect.NewError(connect.CodeInternal, "db failure")
+	})
+	if err := serverErrHandler(context.Background(), connect.Spec{Procedure: "/contracts.core.auth.v1.service.AuthService/InternalOp"}, nil); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestExtractModuleFromProcedure(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		procedure string
+		want      string
+	}{
+		{"/contracts.core.workout_execution.v1.service.WorkoutExecutionService/StartSession", "workout_execution"},
+		{"/contracts.generic.auth.v1.service.AuthService/Login", "auth"},
+		{"/short.path", ""},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		got := extractModuleFromProcedure(tt.procedure)
+		if got != tt.want {
+			t.Errorf("extractModuleFromProcedure(%q) = %q, want %q", tt.procedure, got, tt.want)
+		}
 	}
 }
