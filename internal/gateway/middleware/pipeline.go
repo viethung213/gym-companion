@@ -38,7 +38,7 @@ func NewPipeline(opts PipelineOptions) *Pipeline {
 
 	return &Pipeline{
 		hostFilter:  hf,
-		rateLimiter: NewRateLimiter(),
+		rateLimiter: NewRateLimiter().WithInternalSecret(opts.InternalSecret),
 		jwtVal:      NewJWTValidator(opts.KeyProvider),
 		translator:  NewTokenTranslator(opts.InternalSecret, opts.TokenTTL),
 		enforceTLS:  opts.EnforceTLS,

@@ -315,22 +315,29 @@ func TestGatewayE2E_AdminControlPlaneMetrics(t *testing.T) {
 		t.Errorf("admin request without key got status %d, want %d", unauthResp.StatusCode, http.StatusUnauthorized)
 	}
 
-	// 2. Verify Admin overview stats with key
-	authReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, env.adminURL+"/admin/overview", nil)
-	authReq.Header.Set("X-Admin-Key", env.adminKey)
-	authResp, err := client.Do(authReq)
-	if err != nil {
-		t.Fatalf("failed auth admin request: %v", err)
-	}
-	defer authResp.Body.Close()
-
-	if authResp.StatusCode != http.StatusOK {
-		t.Fatalf("admin overview got status %d, want %d", authResp.StatusCode, http.StatusOK)
-	}
-
+	// 2. Verify Admin overview stats with key (with polling for async recording)
 	var stats telemetry.OverviewStats
-	if err := json.NewDecoder(authResp.Body).Decode(&stats); err != nil {
-		t.Fatalf("failed to decode overview stats: %v", err)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		authReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, env.adminURL+"/admin/overview", nil)
+		authReq.Header.Set("X-Admin-Key", env.adminKey)
+		authResp, err := client.Do(authReq)
+		if err != nil {
+			t.Fatalf("failed auth admin request: %v", err)
+		}
+
+		if authResp.StatusCode != http.StatusOK {
+			authResp.Body.Close()
+			t.Fatalf("admin overview got status %d, want %d", authResp.StatusCode, http.StatusOK)
+		}
+
+		_ = json.NewDecoder(authResp.Body).Decode(&stats)
+		authResp.Body.Close()
+
+		if stats.TotalRequests >= 1 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 	if stats.TotalRequests < 1 {
 		t.Errorf("got TotalRequests %d, want >= 1", stats.TotalRequests)
@@ -374,23 +381,32 @@ func TestGatewayE2E_AdminTraces(t *testing.T) {
 	}
 	gwResp.Body.Close()
 
-	// Query traces from Admin Control Plane
-	traceReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, env.adminURL+"/admin/traces", nil)
-	traceReq.Header.Set("X-Admin-Key", env.adminKey)
-	traceResp, err := client.Do(traceReq)
-	if err != nil {
-		t.Fatalf("failed to query traces: %v", err)
-	}
-	defer traceResp.Body.Close()
-
-	if traceResp.StatusCode != http.StatusOK {
-		t.Fatalf("traces query got status %d, want %d", traceResp.StatusCode, http.StatusOK)
-	}
-
+	// Query traces from Admin Control Plane (with polling for async recording)
 	var traces []telemetry.RequestJourney
-	if err := json.NewDecoder(traceResp.Body).Decode(&traces); err != nil {
-		t.Fatalf("failed to decode traces: %v", err)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		traceReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, env.adminURL+"/admin/traces", nil)
+		traceReq.Header.Set("X-Admin-Key", env.adminKey)
+		traceResp, err := client.Do(traceReq)
+		if err != nil {
+			t.Fatalf("failed to query traces: %v", err)
+		}
+
+		if traceResp.StatusCode != http.StatusOK {
+			traceResp.Body.Close()
+			t.Fatalf("traces query got status %d, want %d", traceResp.StatusCode, http.StatusOK)
+		}
+
+		traces = nil
+		_ = json.NewDecoder(traceResp.Body).Decode(&traces)
+		traceResp.Body.Close()
+
+		if len(traces) > 0 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
+
 	if len(traces) == 0 {
 		t.Error("expected at least 1 recorded trace journey, got 0")
 	}
