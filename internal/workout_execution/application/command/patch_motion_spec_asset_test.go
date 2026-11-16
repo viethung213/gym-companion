@@ -24,7 +24,7 @@ func (m *mockStorageProviderForPatch) GeneratePresignedUploadURL(ctx context.Con
 	return "http://upload/" + fileName, "http://cdn/" + fileName, nil
 }
 
-func (m *mockStorageProviderForPatch) GetObject(ctx context.Context, objectKey string) ([]byte, error) {
+func (m *mockStorageProviderForPatch) GetObject(ctx context.Context, objectKey string, fallbackURL ...string) ([]byte, error) {
 	data, ok := m.storage[objectKey]
 	if !ok {
 		return []byte("{}"), nil
@@ -138,6 +138,28 @@ func TestPatchMotionSpecificationAssetHandler(t *testing.T) {
 		}
 		if _, exists := rules["deprecated_rule"]; exists {
 			t.Error("want deprecated_rule to be deleted from JSON")
+		}
+	})
+
+	t.Run("Patch delegating to storage provider handles external URL fallback", func(t *testing.T) {
+		specWithExternalURL := aggregate.RestoreMotionSpecification(
+			"ex-ext", "External Exercise",
+			"http://cdn/det.onnx", "http://cdn/skel.onnx",
+			"https://example.com/rules.json", "http://cdn/diag.json",
+			"side", true, time.Now().UTC(), time.Now().UTC(),
+		)
+		_ = repo.Save(context.Background(), specWithExternalURL)
+
+		res, err := handler.Handle(context.Background(), command.PatchMotionSpecificationAssetCommand{
+			ExerciseID: "ex-ext",
+			AssetType:  command.AssetTypePoseRules,
+			PatchJSON:  `{"fast": true}`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res == nil {
+			t.Fatal("expected non-nil result")
 		}
 	})
 }

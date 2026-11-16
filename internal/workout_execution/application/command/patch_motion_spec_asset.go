@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/apperror"
@@ -100,26 +98,11 @@ func (h *PatchMotionSpecificationAssetHandler) Handle(
 	}
 	objectKey := deriveObjectKeyFromURL(existingURL, assetTypeNormalized, exerciseID)
 
-	// 3. Fetch existing JSON from S3 or via HTTP GET fallback
+	// 3. Fetch existing JSON from storage (delegated to Infrastructure with fallback URL)
 	existingMap := make(map[string]interface{})
 	var rawBytes []byte
 	if h.storageProvider != nil {
-		rawBytes, _ = h.storageProvider.GetObject(ctx, objectKey)
-	}
-
-	// Fallback to HTTP GET if S3 GetObject returned empty but an existing HTTP URL exists
-	if len(rawBytes) == 0 && strings.HasPrefix(existingURL, "http") {
-		req, httpErr := http.NewRequestWithContext(ctx, http.MethodGet, existingURL, nil)
-		if httpErr == nil {
-			resp, doErr := http.DefaultClient.Do(req)
-			if doErr == nil && resp.StatusCode == http.StatusOK {
-				data, readErr := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				if readErr == nil && len(data) > 0 {
-					rawBytes = data
-				}
-			}
-		}
+		rawBytes, _ = h.storageProvider.GetObject(ctx, objectKey, existingURL)
 	}
 
 	if len(rawBytes) > 0 {
