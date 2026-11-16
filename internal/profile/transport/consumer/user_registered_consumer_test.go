@@ -42,9 +42,49 @@ func (m *mockUserRepo) FindByUserID(ctx context.Context, userID string) (*aggreg
 	return p, nil
 }
 
-func (m *mockUserRepo) Update(ctx context.Context, p *aggregate.UserProfile) error {
+func (m *mockUserRepo) UpdateProfile(ctx context.Context, p *aggregate.UserProfile) error {
 	m.profiles[p.UserID()] = p
 	return nil
+}
+
+func (m *mockUserRepo) UpdateIdentity(ctx context.Context, userID string, fullName, avatarURL string) error {
+	p, ok := m.profiles[userID]
+	if !ok {
+		return derror.ErrProfileNotFound
+	}
+	p.SetIdentity(fullName, avatarURL)
+	return nil
+}
+
+func (m *mockUserRepo) AddPeriodicMetric(ctx context.Context, userID string, metric vo.PeriodicMetric, updatedBio vo.BiologicalMetrics) error {
+	p, ok := m.profiles[userID]
+	if !ok {
+		return derror.ErrProfileNotFound
+	}
+	p.AddPeriodicMetric(metric)
+	return nil
+}
+
+func (m *mockUserRepo) AddInjury(ctx context.Context, userID string, injury *entity.Injury) error {
+	p, ok := m.profiles[userID]
+	if !ok {
+		return derror.ErrProfileNotFound
+	}
+	_ = p.AddInjury(injury)
+	return nil
+}
+
+func (m *mockUserRepo) RecoverInjury(ctx context.Context, userID string, injuryID string) error {
+	p, ok := m.profiles[userID]
+	if !ok {
+		return derror.ErrProfileNotFound
+	}
+	for _, inj := range p.Injuries() {
+		if inj.ID() == injuryID {
+			return nil
+		}
+	}
+	return derror.ErrInjuryNotFound
 }
 
 func (m *mockUserRepo) FindBodyMetricsHistory(ctx context.Context, userID string) ([]vo.PeriodicMetric, error) {

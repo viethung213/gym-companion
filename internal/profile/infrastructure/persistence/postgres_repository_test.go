@@ -129,8 +129,8 @@ func TestPostgresUserProfileRepository(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Update call
-	err = repo.Update(ctx, p)
+	// UpdateProfile call
+	err = repo.UpdateProfile(ctx, p)
 	require.NoError(t, err)
 
 	// FindByUserID
@@ -143,10 +143,11 @@ func TestPostgresUserProfileRepository(t *testing.T) {
 	assert.Equal(t, "Shoulder", fetched.Injuries()[0].MuscleGroup())
 	assert.False(t, fetched.Injuries()[0].IsRecovered())
 
-	// Recover injury and update profile
-	err = fetched.RecoverInjury("inj-101", time.Now())
+	// Recover injury and update in db via surgical RecoverInjury
+	recTime := time.Now()
+	err = fetched.RecoverInjury("inj-101", recTime)
 	require.NoError(t, err)
-	err = repo.Update(ctx, fetched)
+	err = repo.RecoverInjury(ctx, "user-infra-1", "inj-101")
 	require.NoError(t, err)
 
 	// FindByUserID must still reconstitute recovered injury

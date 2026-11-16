@@ -52,7 +52,7 @@ func (h *UpdateIdentityHandler) Handle(ctx context.Context, cmd UpdateIdentityCo
 	events := profile.PopEvents()
 
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if repoErr := h.repo.Update(txCtx, profile); repoErr != nil {
+		if repoErr := h.repo.UpdateIdentity(txCtx, profile.UserID(), profile.FullName(), profile.AvatarURL()); repoErr != nil {
 			return repoErr
 		}
 		if h.eventRecorder != nil && len(events) > 0 {
