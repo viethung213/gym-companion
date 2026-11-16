@@ -54,7 +54,7 @@ func (h *ReportInjuryHandler) Handle(ctx context.Context, cmd ReportInjuryComman
 
 	events := profile.PopEvents()
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if saveErr := h.repo.Update(txCtx, profile); saveErr != nil {
+		if saveErr := h.repo.AddInjury(txCtx, cmd.UserID, inj); saveErr != nil {
 			return saveErr
 		}
 		if h.eventRecorder != nil && len(events) > 0 {

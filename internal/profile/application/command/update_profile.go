@@ -85,7 +85,7 @@ func (h *UpdateProfileHandler) Handle(ctx context.Context, cmd UpdateProfileComm
 	events := profile.PopEvents()
 
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err := h.repo.Update(txCtx, profile); err != nil {
+		if err := h.repo.UpdateProfile(txCtx, profile); err != nil {
 			return err
 		}
 		if h.eventRecorder != nil && len(events) > 0 {

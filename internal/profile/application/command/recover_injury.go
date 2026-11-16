@@ -38,14 +38,15 @@ func (h *RecoverInjuryHandler) Handle(ctx context.Context, cmd RecoverInjuryComm
 		return fmt.Errorf("find profile to recover injury: %w", err)
 	}
 
-	if err := profile.RecoverInjury(cmd.InjuryID, time.Now()); err != nil {
+	now := time.Now()
+	if err := profile.RecoverInjury(cmd.InjuryID, now); err != nil {
 		return fmt.Errorf("recover injury: %w", err)
 	}
 
 	events := profile.PopEvents()
 
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err := h.repo.Update(txCtx, profile); err != nil {
+		if err := h.repo.RecoverInjury(txCtx, cmd.UserID, cmd.InjuryID); err != nil {
 			return err
 		}
 		if h.eventRecorder != nil && len(events) > 0 {

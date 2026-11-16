@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
@@ -35,15 +36,15 @@ func (r *PostgresUserProfileRepository) Save(ctx context.Context, profile *aggre
 		return fmt.Errorf("save user profile model: %w", err)
 	}
 
-	for _, m := range metricModels {
-		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(m).Error; err != nil {
-			return fmt.Errorf("save body metric model: %w", err)
+	if len(metricModels) > 0 {
+		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(metricModels, 100).Error; err != nil {
+			return fmt.Errorf("save body metric models batch: %w", err)
 		}
 	}
 
-	for _, inj := range injuryModels {
-		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(inj).Error; err != nil {
-			return fmt.Errorf("save injury model: %w", err)
+	if len(injuryModels) > 0 {
+		if err := db.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(injuryModels, 100).Error; err != nil {
+			return fmt.Errorf("save injury models batch: %w", err)
 		}
 	}
 
@@ -77,6 +78,126 @@ func (r *PostgresUserProfileRepository) FindByUserID(ctx context.Context, userID
 	}
 
 	return domain, nil
+}
+
+func (r *PostgresUserProfileRepository) UpdateProfile(ctx context.Context, profile *aggregate.UserProfile) error {
+	userModel, _, _, err := ToPersistenceModels(profile)
+	if err != nil {
+		return fmt.Errorf("map domain to persistence: %w", err)
+	}
+
+	db := GetDB(ctx, r.db)
+	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(userModel).Error; err != nil {
+		return fmt.Errorf("update user profile: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresUserProfileRepository) UpdateIdentity(ctx context.Context, userID, fullName, avatarURL string) error {
+	db := GetDB(ctx, r.db)
+	now := time.Now()
+	updates := map[string]any{
+		"full_name":  fullName,
+		"avatar_url": avatarURL,
+		"updated_at": now,
+	}
+
+	res := db.Model(&UserProfileModel{}).Where("user_id = ?", userID).Updates(updates)
+	if res.Error != nil {
+		return fmt.Errorf("update identity in db: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return derror.ErrProfileNotFound
+	}
+	return nil
+}
+
+//nolint:gocritic // heavy value object passed by value
+func (r *PostgresUserProfileRepository) AddPeriodicMetric(
+	ctx context.Context,
+	userID string,
+	metric vo.PeriodicMetric,
+	updatedBio vo.BiologicalMetrics,
+) error {
+	db := GetDB(ctx, r.db)
+
+	h := metric.HeightCm()
+	if h <= 0 {
+		h = updatedBio.HeightCm()
+	}
+
+	metricModel := &BodyMetricModel{
+		ID:               metric.ID(),
+		UserID:           userID,
+		WeightKg:         metric.WeightKg(),
+		HeightCm:         h,
+		BodyFatPercent:   metric.BodyFatPercent(),
+		ProgressPhotoURL: metric.ProgressPhotoURL(),
+		LoggedAt:         metric.LoggedAt(),
+	}
+
+	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(metricModel).Error; err != nil {
+		return fmt.Errorf("insert periodic metric: %w", err)
+	}
+
+	now := time.Now()
+	if err := db.Model(&UserProfileModel{}).Where("user_id = ?", userID).Update("updated_at", now).Error; err != nil {
+		return fmt.Errorf("update user profile timestamp on periodic metric: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresUserProfileRepository) AddInjury(ctx context.Context, userID string, injury *entity.Injury) error {
+	db := GetDB(ctx, r.db)
+	now := time.Now()
+	injuryModel := &InjuryModel{
+		ID:          injury.ID(),
+		UserID:      userID,
+		MuscleGroup: injury.MuscleGroup(),
+		Severity:    injury.Severity(),
+		Notes:       injury.Notes(),
+		ReportedAt:  injury.ReportedAt(),
+		IsRecovered: injury.IsRecovered(),
+		RecoveredAt: injury.RecoveredAt(),
+		CreatedAt:   injury.ReportedAt(),
+		UpdatedAt:   now,
+	}
+
+	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(injuryModel).Error; err != nil {
+		return fmt.Errorf("insert injury: %w", err)
+	}
+
+	if err := db.Model(&UserProfileModel{}).Where("user_id = ?", userID).Update("updated_at", now).Error; err != nil {
+		return fmt.Errorf("update user profile timestamp on injury: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresUserProfileRepository) RecoverInjury(ctx context.Context, userID, injuryID string) error {
+	db := GetDB(ctx, r.db)
+	now := time.Now()
+
+	res := db.Model(&InjuryModel{}).
+		Where("id = ? AND user_id = ?", injuryID, userID).
+		Updates(map[string]any{
+			"is_recovered": true,
+			"recovered_at": &now,
+			"updated_at":   now,
+		})
+	if res.Error != nil {
+		return fmt.Errorf("recover injury: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return derror.ErrInjuryNotFound
+	}
+
+	if err := db.Model(&UserProfileModel{}).Where("user_id = ?", userID).Update("updated_at", now).Error; err != nil {
+		return fmt.Errorf("update user profile timestamp on recover injury: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PostgresUserProfileRepository) FindBodyMetricsHistory(ctx context.Context, userID string) ([]vo.PeriodicMetric, error) {
@@ -118,8 +239,4 @@ func (r *PostgresUserProfileRepository) FindInjuryHistory(ctx context.Context, u
 		result = append(result, inj)
 	}
 	return result, nil
-}
-
-func (r *PostgresUserProfileRepository) Update(ctx context.Context, profile *aggregate.UserProfile) error {
-	return r.Save(ctx, profile)
 }
