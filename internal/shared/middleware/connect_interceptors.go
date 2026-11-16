@@ -74,6 +74,27 @@ func ToConnectError(err error) error {
 	return connect.NewError(code, st.Message())
 }
 
+// IsClientError determines if a Connect status code represents a client error or business rule
+// violation (equivalent to HTTP 4xx). Client errors should be logged at WARN level rather than ERROR
+// to avoid skewing operational SLOs and alert thresholds.
+func IsClientError(code connect.Code) bool {
+	switch code {
+	case connect.CodeCanceled,
+		connect.CodeInvalidArgument,
+		connect.CodeNotFound,
+		connect.CodeAlreadyExists,
+		connect.CodePermissionDenied,
+		connect.CodeResourceExhausted,
+		connect.CodeFailedPrecondition,
+		connect.CodeAborted,
+		connect.CodeOutOfRange,
+		connect.CodeUnauthenticated:
+		return true
+	default:
+		return false
+	}
+}
+
 // =========================================================================
 // 1. Error Mapping Interceptor
 // =========================================================================
@@ -111,12 +132,21 @@ func NewConnectLoggingInterceptor() connect.ServerInterceptor {
 				connectErr := ToConnectError(err)
 				var cErr *connect.Error
 				if errors.As(connectErr, &cErr) {
-					slog.ErrorContext(ctx, "Connect RPC call failed",
-						"procedure", procedure,
-						"duration_ms", duration.Milliseconds(),
-						"code", cErr.Code().String(),
-						"error", cErr.Message(),
-					)
+					if IsClientError(cErr.Code()) {
+						slog.WarnContext(ctx, "Connect RPC call rejected",
+							"procedure", procedure,
+							"duration_ms", duration.Milliseconds(),
+							"code", cErr.Code().String(),
+							"error", cErr.Message(),
+						)
+					} else {
+						slog.ErrorContext(ctx, "Connect RPC call failed",
+							"procedure", procedure,
+							"duration_ms", duration.Milliseconds(),
+							"code", cErr.Code().String(),
+							"error", cErr.Message(),
+						)
+					}
 				} else {
 					slog.ErrorContext(ctx, "Connect RPC call failed",
 						"procedure", procedure,
@@ -237,8 +267,15 @@ func NewConnectTracingInterceptor(serviceName ...string) connect.ServerIntercept
 
 			err := next(ctx, spec, stream)
 			if err != nil {
-				span.RecordError(err)
-				span.SetStatus(otelcodes.Error, err.Error())
+				connectErr := ToConnectError(err)
+				var cErr *connect.Error
+				if errors.As(connectErr, &cErr) && IsClientError(cErr.Code()) {
+					span.SetAttributes(attribute.String("rpc.connect.status_code", cErr.Code().String()))
+					span.SetStatus(otelcodes.Ok, cErr.Code().String())
+				} else {
+					span.RecordError(err)
+					span.SetStatus(otelcodes.Error, err.Error())
+				}
 			} else {
 				span.SetStatus(otelcodes.Ok, "OK")
 			}
