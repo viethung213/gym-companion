@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
+	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 	"golang.org/x/time/rate"
 )
 
@@ -23,10 +24,11 @@ type limiterEntry struct {
 
 // RateLimiter manages in-memory token bucket rate limiting for the API Gateway.
 type RateLimiter struct {
-	mu        sync.Mutex
-	limiters  map[string]*limiterEntry
-	ttl       time.Duration
-	lastSweep time.Time
+	mu             sync.Mutex
+	limiters       map[string]*limiterEntry
+	ttl            time.Duration
+	lastSweep      time.Time
+	internalSecret string
 }
 
 // NewRateLimiter initializes a rate limiter with memory sweep cleanup.
@@ -36,6 +38,12 @@ func NewRateLimiter() *RateLimiter {
 		ttl:       defaultLimiterTTL,
 		lastSweep: time.Now(),
 	}
+}
+
+// WithInternalSecret configures the internal secret for zero-trust service-to-service rate-limit bypass.
+func (rl *RateLimiter) WithInternalSecret(secret string) *RateLimiter {
+	rl.internalSecret = secret
+	return rl
 }
 
 // GetLimiter returns or creates a rate.Limiter for a given key with requests per minute.
@@ -111,6 +119,14 @@ func ExtractClientIP(r *http.Request) string {
 // Wrap returns an http.Handler that enforces rate limiting per client IP & endpoint.
 func (rl *RateLimiter) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 1. Bypass rate limiting for authentic internal microservice calls
+		if token := r.Header.Get(HeaderInternalToken); token != "" && rl.internalSecret != "" {
+			if _, err := internaltoken.Validate(token, rl.internalSecret); err == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		path := r.URL.Path
 		clientIP := ExtractClientIP(r)
 		key := clientIP + ":" + path
