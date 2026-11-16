@@ -76,7 +76,7 @@ func (m *mockStorageProvider) GeneratePresignedUploadURL(ctx context.Context, fi
 	return "http://upload/" + fileName, "http://cdn/" + fileName, nil
 }
 
-func (m *mockStorageProvider) GetObject(ctx context.Context, objectKey string) ([]byte, error) {
+func (m *mockStorageProvider) GetObject(ctx context.Context, objectKey string, _ ...string) ([]byte, error) {
 	m.hits[objectKey]++
 	data, ok := m.storage[objectKey]
 	if !ok {

@@ -180,11 +180,14 @@ func (p *CachedRuleProvider) fetchAsset(ctx context.Context, fileURL, assetType,
 
 	// 2. If URL has http/https, download via HTTP GET
 	if strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://") {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
+		fetchCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, fileURL, nil)
 		if err == nil {
 			client := p.httpClient
 			if client == nil {
-				client = &http.Client{Timeout: 10 * time.Second}
+				client = &http.Client{Timeout: 3 * time.Second}
 			}
 			resp, doErr := client.Do(req)
 			if doErr == nil {

@@ -2,8 +2,11 @@ package storage_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/storage"
 )
@@ -95,6 +98,45 @@ func TestS3StorageProvider_GeneratePresignedUploadURL(t *testing.T) {
 		_, err := provider.PutObject(context.Background(), "", []byte("test"), "application/json")
 		if err == nil {
 			t.Error("want error on empty object key, got nil")
+		}
+	})
+
+	t.Run("GetObject fallback HTTP succeeds when S3 lacks object", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"fallback": true}`))
+		}))
+		defer ts.Close()
+
+		data, err := provider.GetObject(context.Background(), "non_existent.json", ts.URL+"/rules.json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if string(data) != `{"fallback": true}` {
+			t.Errorf("got data = %s, want %s", string(data), `{"fallback": true}`)
+		}
+	})
+
+	t.Run("GetObject fallback HTTP respects timeout when server hangs", func(t *testing.T) {
+		slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(200 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"slow": true}`))
+		}))
+		defer slowServer.Close()
+
+		customClient := &http.Client{Timeout: 50 * time.Millisecond}
+		providerWithTimeout := storage.NewS3StorageProvider(cfg).WithHTTPClient(customClient)
+
+		start := time.Now()
+		_, err := providerWithTimeout.GetObject(context.Background(), "non_existent.json", slowServer.URL+"/rules.json")
+		elapsed := time.Since(start)
+
+		if err == nil {
+			t.Error("want error on timeout, got nil")
+		}
+		if elapsed > 150*time.Millisecond {
+			t.Errorf("GetObject took %v, expected < 150ms due to timeout", elapsed)
 		}
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 	"strings"
 	"time"
@@ -33,13 +34,14 @@ type S3StorageConfig struct {
 }
 
 // S3StorageProvider implements port.ObjectStorageProvider using AWS SDK v2.
-
 type S3StorageProvider struct {
 	config S3StorageConfig
 
 	client *s3.Client
 
 	presignClient *s3.PresignClient
+
+	httpClient *http.Client
 }
 
 var _ port.ObjectStorageProvider = (*S3StorageProvider)(nil)
@@ -95,14 +97,24 @@ func NewS3StorageProvider(cfg S3StorageConfig) *S3StorageProvider {
 	presignClient := s3.NewPresignClient(client)
 
 	return &S3StorageProvider{
-
 		config: cfg,
 
 		client: client,
 
 		presignClient: presignClient,
-	}
 
+		httpClient: &http.Client{
+			Timeout: 3 * time.Second,
+		},
+	}
+}
+
+// WithHTTPClient allows injecting custom HTTP client for testing.
+func (p *S3StorageProvider) WithHTTPClient(client *http.Client) *S3StorageProvider {
+	if client != nil {
+		p.httpClient = client
+	}
+	return p
 }
 
 // deriveCDNDomain computes the public CDN base URL from a Supabase/S3 endpoint.
@@ -160,43 +172,56 @@ func (p *S3StorageProvider) GeneratePresignedUploadURL(ctx context.Context, file
 
 }
 
-// GetObject fetches object bytes from S3/Supabase storage by key.
-
-func (p *S3StorageProvider) GetObject(ctx context.Context, objectKey string) ([]byte, error) {
-
+// GetObject fetches object bytes from S3/Supabase storage by key, with optional HTTP fallback.
+func (p *S3StorageProvider) GetObject(ctx context.Context, objectKey string, fallbackURL ...string) ([]byte, error) {
 	key := strings.TrimPrefix(path.Clean(objectKey), "/")
-
 	if key == "" {
-
 		return nil, fmt.Errorf("s3 get object: object key is required")
-
 	}
 
 	out, err := p.client.GetObject(ctx, &s3.GetObjectInput{
-
 		Bucket: aws.String(p.config.BucketName),
-
-		Key: aws.String(key),
+		Key:    aws.String(key),
 	})
+	if err == nil {
+		defer out.Body.Close()
+		data, readErr := io.ReadAll(out.Body)
+		if readErr == nil && len(data) > 0 {
+			return data, nil
+		}
+	}
+
+	// Fallback to HTTP download if S3 does not have the object and fallbackURL is provided
+	if len(fallbackURL) > 0 && fallbackURL[0] != "" {
+		targetURL := fallbackURL[0]
+		if strings.HasPrefix(targetURL, "http://") || strings.HasPrefix(targetURL, "https://") {
+			fetchCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+
+			req, reqErr := http.NewRequestWithContext(fetchCtx, http.MethodGet, targetURL, nil)
+			if reqErr == nil {
+				client := p.httpClient
+				if client == nil {
+					client = &http.Client{Timeout: 3 * time.Second}
+				}
+				resp, doErr := client.Do(req)
+				if doErr == nil {
+					defer resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						data, readErr := io.ReadAll(resp.Body)
+						if readErr == nil && len(data) > 0 {
+							return data, nil
+						}
+					}
+				}
+			}
+		}
+	}
 
 	if err != nil {
-
 		return nil, fmt.Errorf("s3 get object (%s): %w", key, err)
-
 	}
-
-	defer out.Body.Close()
-
-	data, err := io.ReadAll(out.Body)
-
-	if err != nil {
-
-		return nil, fmt.Errorf("s3 read object body (%s): %w", key, err)
-
-	}
-
-	return data, nil
-
+	return nil, fmt.Errorf("s3 get object (%s): empty content", key)
 }
 
 // PutObject uploads object bytes directly to S3/Supabase storage and returns public URL.

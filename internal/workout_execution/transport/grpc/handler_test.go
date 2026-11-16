@@ -700,7 +700,7 @@ func (m *mockStorageProvider) GeneratePresignedUploadURL(ctx context.Context, fi
 	return "https://cdn.fitai.com/upload/" + fileName, "https://cdn.fitai.com/models/" + fileName, nil
 }
 
-func (m *mockStorageProvider) GetObject(ctx context.Context, objectKey string) ([]byte, error) {
+func (m *mockStorageProvider) GetObject(ctx context.Context, objectKey string, _ ...string) ([]byte, error) {
 	return []byte("{}"), nil
 }
 
