@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
@@ -20,6 +21,7 @@ import (
 	nutritionKafka "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/profileclient"
+	nutritionRedis "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/redis"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/worker"
 	nutritionConsumer "github.com/viethung213/gym-companion/internal/nutrition/transport/consumer"
 	nutritionGRPC "github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
@@ -31,28 +33,39 @@ import (
 type ModuleDeps struct {
 	DB             *sql.DB
 	KafkaRegistry  *sharedKafka.Registry
+	RedisClient    *redis.Client
 	GatewayURL     string
 	InternalSecret string
 }
 
 type Module struct {
-	GRPCHandler          *nutritionGRPC.GRPCHandler
-	OutboxWorker         *worker.OutboxWorker
-	CronWorker           *worker.DailyMenuCronWorker
-	MealReminderWorker   *worker.UpcomingMealReminderWorker
-	ProfileEventConsumer *nutritionConsumer.ProfileEventConsumer
-	KafkaConsumer        *nutritionKafka.Consumer
-	KafkaPub             *nutritionKafka.Publisher
-	TxManager            *persistence.SQLTransactionManager
+	GRPCHandler               *nutritionGRPC.GRPCHandler
+	NutritionInsightHdlr      *query.GetNutritionInsightHandler
+	GenerateWeeklyInsightHdlr *command.GenerateWeeklyInsightHandler
+	OutboxWorker              *worker.OutboxWorker
+	CronWorker                *worker.DailyMenuCronWorker
+	WeeklyInsightWorker       *worker.WeeklyInsightCronWorker
+	MealReminderWorker        *worker.UpcomingMealReminderWorker
+	ProfileEventConsumer      *nutritionConsumer.ProfileEventConsumer
+	KafkaConsumer             *nutritionKafka.Consumer
+	KafkaPub                  *nutritionKafka.Publisher
+	TxManager                 *persistence.SQLTransactionManager
 }
 
-func NewModule(ctx context.Context, db *gorm.DB, kafkaRegistry *sharedKafka.Registry, profileCli repository.ProfileClient) *Module {
+func NewModule(
+	ctx context.Context,
+	db *gorm.DB,
+	kafkaRegistry *sharedKafka.Registry,
+	profileCli repository.ProfileClient,
+	cronCoordinator repository.CronTaskCoordinator,
+) *Module {
 	txManager := persistence.NewSQLTransactionManager(db)
 
 	foodRepo := persistence.NewPostgresFoodItemRepository(db)
 	recipeCacheRepo := persistence.NewPostgresRecipeCacheRepository(db)
 	planRepo := persistence.NewPostgresNutritionPlanRepository(db)
 	historyRepo := persistence.NewPostgresMealHistoryRepository(db)
+	weeklyInsightRepo := persistence.NewPostgresWeeklyInsightRepository(db)
 	outboxRepo := persistence.NewPostgresOutboxRepository(db)
 	outboxLogRepo := persistence.NewPostgresOutboxLogRepository(db)
 
@@ -66,17 +79,19 @@ func NewModule(ctx context.Context, db *gorm.DB, kafkaRegistry *sharedKafka.Regi
 	tdeeCalc := service.NewTDEECalculator()
 	menuGen := service.NewMenuGenerator(recipeCacheRepo, foodRepo, aiAgent)
 
-	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, outboxWriter, tdeeCalc, menuGen, txManager)
+	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, outboxWriter, tdeeCalc, menuGen, txManager).
+		WithWeeklyInsightRepo(weeklyInsightRepo)
 	recalPlanHdlr := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, outboxWriter, menuGen, txManager)
 	logMealHdlr := command.NewLogMealHandler(planRepo, historyRepo, outboxWriter, aiAgent, txManager)
 	createFoodItemHdlr := command.NewCreateFoodItemHandler(foodRepo)
 	approveFoodItemHdlr := command.NewApproveFoodItemHandler(foodRepo)
 	updateMealScheduleHdlr := command.NewUpdateMealScheduleHandler(planRepo, txManager)
+	generateWeeklyInsightHdlr := command.NewGenerateWeeklyInsightHandler(planRepo, historyRepo, weeklyInsightRepo, aiAgent)
 
 	getTodayMenuHdlr := query.NewGetTodayMenuHandler(planRepo)
 	getNutritionHistHdlr := query.NewGetNutritionHistoryHandler(historyRepo)
 	getNutritionSummHdlr := query.NewGetNutritionSummaryHandler(planRepo, historyRepo)
-	getNutritionInsightHdlr := query.NewGetNutritionInsightHandler(planRepo, historyRepo, aiAgent)
+	getNutritionInsightHdlr := query.NewGetNutritionInsightHandler(weeklyInsightRepo)
 
 	grpcHdlr := nutritionGRPC.NewGRPCHandler(
 		genPlanHdlr,
@@ -116,18 +131,22 @@ func NewModule(ctx context.Context, db *gorm.DB, kafkaRegistry *sharedKafka.Regi
 	}
 
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
-	cronWorker := worker.NewDailyMenuCronWorker(genPlanHdlr, planRepo, profileCli)
+	cronWorker := worker.NewDailyMenuCronWorker(genPlanHdlr, planRepo, profileCli, cronCoordinator, 5, 0)
+	weeklyInsightWorker := worker.NewWeeklyInsightCronWorker(generateWeeklyInsightHdlr, planRepo, cronCoordinator, 23, 0)
 	mealReminderWorker := worker.NewUpcomingMealReminderWorker(planRepo, outboxWriter, 5*time.Minute)
 
 	return &Module{
-		GRPCHandler:          grpcHdlr,
-		OutboxWorker:         outboxWorker,
-		CronWorker:           cronWorker,
-		MealReminderWorker:   mealReminderWorker,
-		ProfileEventConsumer: profileEventConsumer,
-		KafkaConsumer:        kafkaConsumer,
-		KafkaPub:             kafkaPub,
-		TxManager:            txManager,
+		GRPCHandler:               grpcHdlr,
+		NutritionInsightHdlr:      getNutritionInsightHdlr,
+		GenerateWeeklyInsightHdlr: generateWeeklyInsightHdlr,
+		OutboxWorker:              outboxWorker,
+		CronWorker:                cronWorker,
+		WeeklyInsightWorker:       weeklyInsightWorker,
+		MealReminderWorker:        mealReminderWorker,
+		ProfileEventConsumer:      profileEventConsumer,
+		KafkaConsumer:             kafkaConsumer,
+		KafkaPub:                  kafkaPub,
+		TxManager:                 txManager,
 	}
 }
 
@@ -146,7 +165,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 		profileCli = profileclient.NewConnectProfileClient(deps.GatewayURL, deps.InternalSecret, nil)
 	}
 
-	mod := NewModule(ctx, gormDB, deps.KafkaRegistry, profileCli)
+	var cronCoordinator repository.CronTaskCoordinator
+	if deps.RedisClient != nil {
+		cronCoordinator = nutritionRedis.NewCronTaskCoordinator(deps.RedisClient)
+	}
+
+	mod := NewModule(ctx, gormDB, deps.KafkaRegistry, profileCli, cronCoordinator)
 
 	workerCtx, cancel := context.WithCancel(ctx)
 	mod.StartWorkers(workerCtx)
@@ -154,6 +178,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 	shutdown := func() {
 		cancel()
 		mod.CronWorker.Stop()
+		if mod.WeeklyInsightWorker != nil {
+			mod.WeeklyInsightWorker.Stop()
+		}
 		if mod.MealReminderWorker != nil {
 			mod.MealReminderWorker.Stop()
 		}
@@ -183,6 +210,11 @@ func (m *Module) StartWorkers(ctx context.Context) {
 	go func() {
 		_ = m.CronWorker.Start(ctx)
 	}()
+	if m.WeeklyInsightWorker != nil {
+		go func() {
+			_ = m.WeeklyInsightWorker.Start(ctx)
+		}()
+	}
 	if m.MealReminderWorker != nil {
 		go func() {
 			_ = m.MealReminderWorker.Start(ctx)

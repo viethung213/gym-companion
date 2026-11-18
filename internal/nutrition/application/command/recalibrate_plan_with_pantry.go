@@ -10,7 +10,6 @@ import (
 	domainEvent "github.com/viethung213/gym-companion/internal/nutrition/domain/event"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 type RecalibratePlanWithPantryCommand struct {
@@ -53,19 +52,12 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd Recal
 		return nil, fmt.Errorf("recalibrate pantry: plan not found for date %s: %w", cmd.PlanDate.Format("2006-01-02"), err)
 	}
 
-	var lockouts vo.LockoutRegistry
-	history, histErr := h.historyRepo.FindByUserID(ctx, cmd.UserID)
-	if histErr == nil && history != nil {
-		lockouts = history.LockoutRegistry()
-	}
-
 	// External AI Generation is intentionally executed outside the DB transaction to prevent connection bottleneck
 	recalibratedPlan, genErr := h.menuGenerator.GeneratePlanWithPantry(
 		ctx,
 		cmd.UserID,
 		cmd.PlanDate,
 		plan.CalorieAllocation(),
-		lockouts,
 		cmd.AvailableIngredients,
 	)
 	if genErr != nil {

@@ -14,7 +14,6 @@ import (
 
 type SessionFilterContext struct {
 	UserID           string
-	LockoutRegistry  vo.LockoutRegistry
 	UserRestrictions []string
 	PlanDate         time.Time
 }
@@ -62,7 +61,7 @@ type FetchCatalogOptions struct {
 // FetchActiveFoodCatalog tải một nhóm nhỏ 5-8 nguyên liệu an toàn ngẫu nhiên/xoay vòng theo nhóm (PROTEIN, CARB, VEGGIE, SNACK).
 // Tự động chuẩn hóa:
 // 1. Loại bỏ 100% món chứa dị ứng của người dùng (UserRestrictions).
-// 2. Loại bỏ 100% món bị khóa lặp chu kỳ 7 ngày (LockoutRegistry).
+// 2. Ưu tiên và chấm điểm mềm theo lịch sử tiêu thụ và mục tiêu dinh dưỡng.
 // 3. Loại bỏ các món nằm trong ExcludeIDs (các món xung đột ẩm thực hoặc bị Reviewer phản biện).
 // 4. Hỗ trợ Page để lấy các đợt nguyên liệu tiếp theo khi đợt trước không hòa hợp với nguyên liệu tủ lạnh.
 // 5. Giới hạn trả về 5-8 nguyên liệu ngẫu nhiên thay vì gửi toàn bộ DB, giúp tiết kiệm >90% token.
@@ -78,8 +77,8 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, sessionID, 
 		planDate = time.Now()
 	}
 
-	// 1. Lọc an toàn chuẩn hóa: Dị ứng + Chu kỳ lặp 7 ngày
-	safeCatalog := service.FilterSafeFoods(catalog, sCtx.LockoutRegistry, sCtx.UserRestrictions, planDate)
+	// 1. Lọc dị ứng an toàn tuyệt đối
+	safeCatalog := service.FilterAllergensOnly(catalog, sCtx.UserRestrictions)
 	if len(safeCatalog) == 0 {
 		return nil, nil
 	}
@@ -155,14 +154,6 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, sessionID, 
 	sampled := service.SamplePaged(candidates, targetLimit, pageOpt, rng)
 
 	return ToFoodNutrientDTOs(sampled), nil
-}
-
-func (t *NutritionTools) CheckLockoutRules(
-	_ context.Context,
-	lockoutRegistry vo.LockoutRegistry,
-	ingredients []string,
-) (collisions, warnings []string) {
-	return lockoutRegistry.CheckCollisions(ingredients, time.Now())
 }
 
 func (t *NutritionTools) CalculateMacroGramRatio(

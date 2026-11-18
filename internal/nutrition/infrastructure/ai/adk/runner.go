@@ -36,7 +36,6 @@ func (a *NutritionAgent) runWorkflow(
 	if a.tools != nil {
 		a.tools.RegisterSessionContext(sessionID, SessionFilterContext{
 			UserID:           pCtx.UserID,
-			LockoutRegistry:  pCtx.LockoutRegistry,
 			UserRestrictions: pCtx.UserRestrictions,
 			PlanDate:         pCtx.PlanDate,
 		})
@@ -58,6 +57,12 @@ func (a *NutritionAgent) runWorkflow(
 		"mandatory_user_ingredients":  pCtx.MandatoryUserIngredients,
 		"supplementary_db_candidates": pCtx.SupplementaryIngredients,
 		"available_ingredients":       pCtx.AvailableIngredients,
+	}
+	if len(pCtx.PreferredIngredients) > 0 {
+		inputMap["preferred_ingredients"] = pCtx.PreferredIngredients
+	}
+	if pCtx.WeeklyCookingStyle != "" {
+		inputMap["weekly_cooking_style"] = pCtx.WeeklyCookingStyle
 	}
 	if len(fb) > 0 && fb[0] != nil {
 		if len(fb[0].Issues) > 0 {

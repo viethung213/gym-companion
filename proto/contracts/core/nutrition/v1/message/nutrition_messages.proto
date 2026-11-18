@@ -110,6 +110,8 @@ message CreateFoodItemRequest {
   string protein_source = 8;
   string carb_source = 9;
   bool is_nutifood_product = 10;
+  float price_per_100g = 11;
+  string cost_tier = 12; // "BUDGET", "STANDARD", "PREMIUM"
 }
 
 message CreateFoodItemResponse {
@@ -130,32 +132,40 @@ message ApproveFoodItemResponse {
 }
 
 message ImprovementAreaProto {
-  string area = 1;
-  float current_avg = 2;
-  float target = 3;
-  string suggestion = 4;
-  string priority = 5; // "HIGH", "MEDIUM", "LOW"
+  string nutrient = 1;     // "CALORIES", "PROTEIN", "CARBS", "FAT"
+  string action = 2;       // "INCREASE", "DECREASE"
+  float delta_amount = 3;  // Lượng cần điều chỉnh trong tuần
+  string suggestion = 4;   // Lời khuyên cụ thể từ AI
 }
 
-message RecommendedAdjustmentsProto {
-  float calories_delta = 1;
-  float protein_ratio_delta = 2;
-  repeated string focus_foods = 3;
+message WeeklyMacroSummaryProto {
+  float consumed_calories = 1;
+  float target_calories = 2;
+  float consumed_protein = 3;
+  float target_protein = 4;
+  float consumed_carbs = 5;
+  float target_carbs = 6;
+  float consumed_fat = 7;
+  float target_fat = 8;
+  int32 logged_meals_count = 9;
+  int32 total_meals_count = 10;
 }
 
 message GetNutritionInsightRequest {
   string user_id = 1;
-  string goal_type = 2;  // "WEIGHT_LOSS", "MUSCLE_GAIN", "MAINTENANCE"
-  int32 range_days = 3;  // số ngày phân tích, mặc định 7
+  string week_start_date = 2; // Tùy chọn (YYYY-MM-DD), nếu để trống BE mặc định lấy tuần gần nhất
 }
 
 message GetNutritionInsightResponse {
   int32 overall_score = 1;
   string summary = 2;
-  repeated string strengths = 3;
-  repeated ImprovementAreaProto improvement_areas = 4;
-  string weekly_trend = 5; // "IMPROVING", "DECLINING", "STABLE"
-  RecommendedAdjustmentsProto recommended_adjustments = 6;
+  string predicted_cooking_style = 3;
+  repeated string preferred_ingredients = 4;
+  repeated ImprovementAreaProto improvement_areas = 5;
+  string start_date = 6;
+  string end_date = 7;
+  int64 evaluated_at_unix = 8;
+  WeeklyMacroSummaryProto weekly_summary = 9;
 }
 
 message MealScheduleItem {

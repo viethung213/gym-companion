@@ -37,7 +37,7 @@ Giao tiếp với `service_core` thông qua **API Gateway** bằng giao thức *
 
 ## Mục lục Kiểm thử (Test Index)
 
-File test: [`connect_readers_test.go`](file:///e:/LEAN/DATN/gym-companion/internal/coaching/infrastructure/adapters/connect_readers_test.go)
+File test: [`connect_readers_test.go`](connect_readers_test.go)
 
 | Test Function / Suite | Mục đích kiểm thử | Kịch bản chi tiết | Kết quả mong đợi |
 | :--- | :--- | :--- | :--- |

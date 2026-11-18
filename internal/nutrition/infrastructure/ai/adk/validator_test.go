@@ -3,7 +3,6 @@ package adk
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
@@ -36,11 +35,10 @@ func (m *mockFoodRepoForValidator) Update(_ context.Context, _ *aggregate.FoodIt
 func TestPlanValidator_Validate(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f-chicken", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, []string{"Poultry"}, "CHICKEN", "", false)
+	foodChicken := newTestFoodItem("f-chicken", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, []string{"Poultry"}, "CHICKEN", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f-chicken": foodChicken}}
 
-	lockout := vo.NewLockoutRegistry(nil).ApplyLockout(vo.LockoutTypeProtein, "Ức gà", 7*24*time.Hour, time.Now())
-	validator := newPlanValidator(repo, lockout)
+	validator := newPlanValidator(repo)
 
 	plan := &GeneratedMealPlan{
 		Options: []GeneratedMealOption{
@@ -72,13 +70,13 @@ func TestPlanValidator_Validate(t *testing.T) {
 func TestPlanValidator_AutoHealing(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("real-uuid-chicken", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false)
-	foodFish := aggregate.NewFoodItem("real-uuid-fish", "Cá hồi", "PROTEIN", 200, 20, 0, 12, nil, "FISH", "", false)
+	foodChicken := newTestFoodItem("real-uuid-chicken", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false)
+	foodFish := newTestFoodItem("real-uuid-fish", "Cá hồi", "PROTEIN", 200, 20, 0, 12, nil, "FISH", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{
 		"real-uuid-chicken": foodChicken,
 		"real-uuid-fish":    foodFish,
 	}}
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	plan := &GeneratedMealPlan{
 		Options: []GeneratedMealOption{
@@ -111,7 +109,7 @@ func TestPlanValidator_PantryAndNewFoodCatalogItems(t *testing.T) {
 	t.Parallel()
 
 	repo := &mockFoodRepoForValidator{items: make(map[string]*aggregate.FoodItem)}
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	availablePantry := []FoodNutrientDTO{
 		{

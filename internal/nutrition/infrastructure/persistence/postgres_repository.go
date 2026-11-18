@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/entity"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"gorm.io/gorm"
@@ -152,8 +153,11 @@ func (r *PostgresNutritionPlanRepository) FindByUserIDAndDate(ctx context.Contex
 	var gormPlan GormNutritionPlan
 	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location()).UTC()
 	endOfDay := startOfDay.Add(24 * time.Hour)
+	dateStr := date.Format("2006-01-02")
+	utcDateStr := date.UTC().Format("2006-01-02")
 	db := GetDB(ctx, r.db)
-	if err := db.First(&gormPlan, "user_id = ? AND plan_date >= ? AND plan_date < ?", userID, startOfDay, endOfDay).Error; err != nil {
+	query := "user_id = ? AND (DATE(plan_date) = ? OR DATE(plan_date) = ? OR (plan_date >= ? AND plan_date < ?))"
+	if err := db.First(&gormPlan, query, userID, dateStr, utcDateStr, startOfDay, endOfDay).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -164,6 +168,43 @@ func (r *PostgresNutritionPlanRepository) FindByUserIDAndDate(ctx context.Contex
 	meals, _ := UnmarshalDailyMealsJSON(gormPlan.MealsJSON)
 
 	return aggregate.NewNutritionPlan(gormPlan.ID, gormPlan.UserID, gormPlan.PlanDate, alloc, meals), nil
+}
+
+func (r *PostgresNutritionPlanRepository) FindByUserIDAndDates(
+	ctx context.Context,
+	userID string,
+	dates []time.Time,
+) ([]*aggregate.NutritionPlan, error) {
+	if len(dates) == 0 {
+		return nil, nil
+	}
+
+	dateStrs := make([]string, 0, len(dates)*2)
+	for _, d := range dates {
+		dateStr := d.Format("2006-01-02")
+		utcDateStr := d.UTC().Format("2006-01-02")
+		dateStrs = append(dateStrs, dateStr)
+		if utcDateStr != dateStr {
+			dateStrs = append(dateStrs, utcDateStr)
+		}
+	}
+
+	var gormPlans []GormNutritionPlan
+	db := GetDB(ctx, r.db)
+	if err := db.Where("user_id = ? AND (DATE(plan_date) IN ? OR plan_date IN ?)", userID, dateStrs, dateStrs).
+		Order("plan_date ASC").
+		Find(&gormPlans).Error; err != nil {
+		return nil, fmt.Errorf("postgres nutrition plan repo find by dates: %w", err)
+	}
+
+	plans := make([]*aggregate.NutritionPlan, 0, len(gormPlans))
+	for i := range gormPlans {
+		p := &gormPlans[i]
+		alloc, _ := vo.NewCalorieAllocation(p.TargetCalories, p.TargetProtein, p.TargetCarbs, p.TargetFat)
+		meals, _ := UnmarshalDailyMealsJSON(p.MealsJSON)
+		plans = append(plans, aggregate.NewNutritionPlan(p.ID, p.UserID, p.PlanDate, alloc, meals))
+	}
+	return plans, nil
 }
 
 func (r *PostgresNutritionPlanRepository) Save(ctx context.Context, plan *aggregate.NutritionPlan) error {
@@ -331,19 +372,48 @@ func (r *PostgresMealHistoryRepository) FindByUserID(ctx context.Context, userID
 		return nil, fmt.Errorf("postgres meal history repo find: %w", err)
 	}
 
-	var gormLockouts []GormLockoutRegistry
-	_ = db.Where("user_id = ? AND unlocked_at > ?", userID, time.Now()).Find(&gormLockouts).Error
-
-	lockoutItems := make([]vo.LockoutItem, 0, len(gormLockouts))
-	for _, l := range gormLockouts {
-		lockoutItems = append(lockoutItems, vo.NewLockoutItem(l.ItemType, l.ItemName, l.UnlockedAt))
-	}
-	lockoutReg := vo.NewLockoutRegistry(lockoutItems)
-
-	history := aggregate.NewMealHistory(gormHist.ID, gormHist.UserID, lockoutReg)
+	history := aggregate.NewMealHistory(gormHist.ID, gormHist.UserID)
 
 	var gormLogs []GormMealLog
-	_ = db.Where("history_id = ?", gormHist.ID).Find(&gormLogs).Error
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
+	_ = db.Where("history_id = ? AND logged_at >= ?", gormHist.ID, sevenDaysAgo).Order("logged_at ASC").Find(&gormLogs).Error
+	for i := range gormLogs {
+		logItem := &gormLogs[i]
+		history.AddMealLog(aggregate.NewMealLog(
+			logItem.ID, logItem.HistoryID, logItem.UserID, logItem.MealType, logItem.MealName, logItem.Portion,
+			logItem.Calories, logItem.Protein, logItem.Carbs, logItem.Fat, logItem.LoggedAt,
+		))
+	}
+
+	return history, nil
+}
+
+func (r *PostgresMealHistoryRepository) FindByUserIDAndDateRange(
+	ctx context.Context,
+	userID string,
+	from, to time.Time,
+) (*aggregate.MealHistory, error) {
+	var gormHist GormMealHistory
+	db := GetDB(ctx, r.db)
+	if err := db.First(&gormHist, "user_id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("postgres meal history repo find by user and date range: %w", err)
+	}
+
+	startOfDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, from.Location())
+	endOfDay := time.Date(to.Year(), to.Month(), to.Day(), 23, 59, 59, 999999999, to.Location())
+
+	var gormLogs []GormMealLog
+	err := db.Where("history_id = ? AND logged_at >= ? AND logged_at <= ?", gormHist.ID, startOfDay, endOfDay).
+		Order("logged_at ASC").
+		Find(&gormLogs).Error
+	if err != nil {
+		return nil, fmt.Errorf("postgres meal history repo find logs by date range: %w", err)
+	}
+
+	history := aggregate.NewMealHistory(gormHist.ID, gormHist.UserID)
 	for i := range gormLogs {
 		logItem := &gormLogs[i]
 		history.AddMealLog(aggregate.NewMealLog(
@@ -407,20 +477,91 @@ func (r *PostgresMealHistoryRepository) Save(ctx context.Context, history *aggre
 			}
 		}
 
-		for _, item := range history.LockoutRegistry().Items() {
-			gormLock := &GormLockoutRegistry{
-				ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte("lockout_"+history.UserID()+"_"+item.ItemName())).String(),
-				UserID:     history.UserID(),
-				ItemType:   item.ItemType(),
-				ItemName:   item.ItemName(),
-				UnlockedAt: item.UnlockedAt(),
-				CreatedAt:  time.Now(),
-			}
-			if err := tx.Save(gormLock).Error; err != nil {
-				return fmt.Errorf("postgres meal history repo save lockout: %w", err)
-			}
-		}
-
 		return nil
 	})
+}
+
+type PostgresWeeklyInsightRepository struct {
+	db *gorm.DB
+}
+
+var _ repository.WeeklyInsightRepository = (*PostgresWeeklyInsightRepository)(nil)
+
+func NewPostgresWeeklyInsightRepository(db *gorm.DB) *PostgresWeeklyInsightRepository {
+	return &PostgresWeeklyInsightRepository{db: db}
+}
+
+func (r *PostgresWeeklyInsightRepository) Save(ctx context.Context, insight *entity.WeeklyInsight) error {
+	if insight == nil {
+		return errors.New("weekly insight is nil")
+	}
+	db := GetDB(ctx, r.db)
+	gormModel, err := ToGormWeeklyInsight(insight)
+	if err != nil {
+		return fmt.Errorf("postgres weekly insight repo to gorm: %w", err)
+	}
+
+	if gormModel.ID == "" {
+		gormModel.ID = uuid.New().String()
+	}
+
+	err = db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "start_date"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"end_date",
+			"overall_score",
+			"summary",
+			"predicted_cooking_style",
+			"preferred_ingredients",
+			"improvement_areas",
+			"consumed_calories",
+			"target_calories",
+			"consumed_protein",
+			"target_protein",
+			"consumed_carbs",
+			"target_carbs",
+			"consumed_fat",
+			"target_fat",
+			"logged_meals_count",
+			"total_meals_count",
+			"updated_at",
+		}),
+	}).Create(gormModel).Error
+
+	if err != nil {
+		return fmt.Errorf("postgres weekly insight repo save: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresWeeklyInsightRepository) GetLatestByUserID(ctx context.Context, userID string) (*entity.WeeklyInsight, error) {
+	db := GetDB(ctx, r.db)
+	var gormModel GormWeeklyInsight
+	err := db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("start_date DESC").
+		First(&gormModel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("postgres weekly insight repo get latest: %w", err)
+	}
+	return gormModel.ToDomain(), nil
+}
+
+func (r *PostgresWeeklyInsightRepository) GetByUserIDAndStartDate(ctx context.Context, userID string, startDate time.Time) (*entity.WeeklyInsight, error) {
+	db := GetDB(ctx, r.db)
+	var gormModel GormWeeklyInsight
+	dateStr := startDate.Format("2006-01-02")
+	err := db.WithContext(ctx).
+		Where("user_id = ? AND (DATE(start_date) = ? OR start_date = ?)", userID, dateStr, startDate).
+		First(&gormModel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("postgres weekly insight repo get by user and date: %w", err)
+	}
+	return gormModel.ToDomain(), nil
 }

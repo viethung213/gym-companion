@@ -19,16 +19,16 @@ import (
 type mockFoodRepoForAIEval struct{}
 
 func (m *mockFoodRepoForAIEval) FindByID(_ context.Context, id string) (*aggregate.FoodItem, error) {
-	return aggregate.NewFoodItem(id, "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false), nil
+	return aggregate.NewFoodItem(id, "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false, 13000, "BUDGET")
 }
 func (m *mockFoodRepoForAIEval) FindByName(_ context.Context, name string) (*aggregate.FoodItem, error) {
 	return nil, nil
 }
 func (m *mockFoodRepoForAIEval) FindActiveCatalog(_ context.Context) ([]vo.FoodNutrient, error) {
 	return []vo.FoodNutrient{
-		vo.NewFoodNutrient("food-p1", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false),
-		vo.NewFoodNutrient("food-c1", "Khoai lang luộc", "CARB", 90, 2, 21, 0.1, nil, "", "SWEET_POTATO", false),
-		vo.NewFoodNutrient("food-v1", "Bông cải xanh", "VEGGIE", 34, 2.8, 7, 0.4, nil, "", "", false),
+		vo.NewFoodNutrient("food-p1", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false, 13000, "BUDGET"),
+		vo.NewFoodNutrient("food-c1", "Khoai lang luộc", "CARB", 90, 2, 21, 0.1, nil, "", "SWEET_POTATO", false, 4500, "BUDGET"),
+		vo.NewFoodNutrient("food-v1", "Bông cải xanh", "VEGGIE", 34, 2.8, 7, 0.4, nil, "", "", false, 9000, "STANDARD"),
 	}, nil
 }
 func (m *mockFoodRepoForAIEval) FindNutiFoodProducts(_ context.Context) ([]vo.FoodNutrient, error) {
@@ -93,7 +93,6 @@ func TestADKAI_MultiIterationEvaluation(t *testing.T) {
 	}
 
 	catalog, _ := foodRepo.FindActiveCatalog(ctx)
-	lockoutRegistry := vo.NewLockoutRegistry(nil)
 
 	workflowsToTest := []struct {
 		name     string
@@ -122,7 +121,7 @@ func TestADKAI_MultiIterationEvaluation(t *testing.T) {
 					UserRestrictions:     nil,
 				}
 
-				results, selectErr := agent.SelectCreativeMealOptions(ctx, promptCtx, lockoutRegistry)
+				results, selectErr := agent.SelectCreativeMealOptions(ctx, promptCtx)
 				if selectErr != nil {
 					t.Logf("Iteration %d/%d [%s] failed: %v", i, iterations, wf.name, selectErr)
 					continue

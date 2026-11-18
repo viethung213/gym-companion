@@ -1,117 +1,153 @@
-# Kiến Trúc Sinh Thực Đơn Thông Minh: Kết Hợp Server Rule-Based Engine & External AI
+# Kiến Trúc Sinh Thực Đơn: Phối Hợp Backend Go & External AI (Google ADK v2)
 
-Tài liệu này mô tả chi tiết chiến lược kiến trúc hạ tầng và quy trình nghiệp vụ để sinh thực đơn cá nhân hóa cho module **Nutrition / NutiFood** (`internal/nutrition`).
+Tài liệu này mô tả chi tiết kiến trúc và phân định trách nhiệm kỹ thuật giữa **Backend Go** và **External AI Service** trong quy trình sinh thực đơn cá nhân hóa của module **Nutrition** (`internal/nutrition`).
 
-Kiến trúc này giải quyết triệt để bài toán **Tối ưu chi phí AI (giảm 95% API calls)**, **Tăng tốc độ phản hồi (< 50ms)**, đồng thời đảm bảo **Sự đa dạng tuyệt đối không trùng lặp** và **Tính chính xác 100% về Calo/Macros**.
+Mọi nội dung trong tài liệu này phản ánh **100% mã nguồn thực tế** đang triển khai trong codebase.
 
 ---
 
-## 1. Nguyên Lý Cốt Lõi: Server-Heavy & AI Creative Chef
-
-> [!IMPORTANT]
-> **Khẳng định kiến trúc**: 
-> Hệ thống chuyển dịch **90% khối lượng tính toán toán học, lọc quy tắc và căn chỉnh dinh dưỡng sang Server Go Backend (Rule-Based Engine)**. 
-> External AI (Gemini / OpenAI) đóng vai trò là **"Đầu bếp sáng tạo" (Creative Chef)** — chỉ làm nhiệm vụ biến tấu tên món ăn, phong cách nêm nếm và hướng dẫn chế biến từ các khối nguyên liệu chuẩn đã được Server chuẩn bị sẵn.
+## 1. Phân Định Trách Nhiệm Kỹ Thuật (Backend Go vs External AI)
 
 ```mermaid
 graph TD
-    A[User / Cron Request] --> B[Server Rule-Based Engine]
-    B -->|1. Tính TDEE & Target Macros| C[TDEE Calculator]
-    B -->|2. Lọc Dị Ứng & Lockout 7/5/3 ngày| D[LockoutRegistry]
-    B -->|3. Ghép Tổ Hợp Nguyên Liệu & Tính Gram per 100g| E[Combinatorial Matrix]
-    E -->|Nguyên liệu chuẩn + Target Calo| F{Đã có trong Recipe Cache?}
-    F -->|CÓ - Hit Cache| G[Lấy trực tiếp từ DB - 0$ AI Cost / <10ms]
-    F -->|KHÔNG - Miss Cache| H[External AI Service - Creative Chef]
-    H -->|Đặt tên món + Bổ sung nguyên liệu phụ| I[Lưu Công Thức vào Recipe Cache & Tự Động Đồng Bộ Nguyên Liệu Phụ Mới vào DB]
-    G --> J[Trả thực đơn mượt mà cho User]
-    I --> J
+    UserReq[Cron 5:00 AM / User Request] --> Handler[GenerateDailyPlanHandler]
+    
+    subgraph BE_Responsibility [TRÁCH NHIỆM BACKEND GO]
+        Handler --> TDEE[1. TDEECalculator: Tính BMR, Base TDEE & Target Macros ngày]
+        Handler --> HistoryQuery[2. Truy vấn Lịch sử tiêu thụ 7 ngày qua: Batch query FindByUserIDAndDates]
+        Handler --> InsightQuery[3. Lấy WeeklyInsight: PreferredIngredients & WeeklyCookingStyle]
+        Handler --> AllergenFilter[4. FoodFilter: Lọc an toàn dị ứng FilterAllergensOnly]
+        Handler --> Selector[5. CandidateSelector: Chấm điểm đa mục tiêu, phân rã hàm mũ & Jitter RNG]
+        Selector --> SelectedList[Tập nguyên liệu ứng viên AvailableIngredients]
+    end
+
+    subgraph AI_Responsibility [TRÁCH NHIỆM EXTERNAL AI - Google ADK v2]
+        SelectedList --> AIAgent[ADKNutritionAgent: dailyWorkflowAgent]
+        AIAgent --> Prompt[Prompt: prompts/daily.txt]
+        AIAgent --> TrioSelect[1. Chọn bộ 3 nguyên liệu: Protein + Carb + Veggie cho từng món]
+        AIAgent --> GramCalc[2. Tính định lượng gram từng nguyên liệu & macro món ăn]
+        AIAgent --> ChefNaming[3. Sáng tạo tên món < 5 từ & các bước nấu < 15 từ/bước]
+        AIAgent --> CatalogSync[4. Khai báo NewFoodCatalogItems nếu dùng nguyên liệu mới]
+        AIAgent --> GeneratedPlan[Trả về JSON Contract: 8 Meal Options]
+    end
+
+    subgraph BE_PostProcessing [HẬU XỬ LÝ & LƯU TRỮ CỦA BACKEND]
+        GeneratedPlan --> Validator[PlanValidator: Chuẩn hóa ID/Name & Sync nguyên liệu mới vào DB]
+        Validator --> Distribute[MenuGenerator: Phân bổ 8 Options vào 4 bữa Sáng/Trưa/Tối/Phụ]
+        Distribute --> Schedule[Gán lịch ăn UpdateMealSchedule]
+        Schedule --> DBTrans[Transaction: Lưu NutritionPlan & Ghi Outbox Event]
+        DBTrans --> RecipeCache[(Lưu Recipe Cache)]
+    end
 ```
 
 ---
 
-## 2. Giải Đáp Thắc Mắc Kiến Trúc Cốt Lõi
+## 2. Chi Tiết Trách Nhiệm Của Từng Thành Phần
 
-### Câu hỏi 1: Nếu như thế này thì sẽ thiên về Server chạy nhiều hơn, AI chỉ thực hiện biến tấu cách nấu/chế biến thôi đúng không?
+### 2.1. Backend Go Đảm Nhiệm Những Gì?
 
-**ĐÚNG HOÀN TOÀN!** 
-- **Server Go Backend gánh 90% khối lượng công việc**: Server chịu trách nhiệm tính toán chính xác 100% số gram nguyên liệu, cân bằng tỷ lệ Protein/Carb/Fat, lọc bỏ nguyên liệu gây dị ứng, kiểm tra danh sách nguyên liệu bị khóa (`LockoutRegistry`), và ghép ma trận tổ hợp nguyên liệu.
-- **External AI đóng vai trò "Đầu bếp sáng tạo" (Creative Chef)**: AI không cần bận tâm đến phép tính calo phức tạp. AI chỉ nhận được 3-4 nguyên liệu chuẩn đã tính sẵn calo từ Server và sáng tạo tên món ăn hấp dẫn (VD: *"Ức gà áp chảo sốt chanh dây thảo mộc"*), phong cách nêm nếm và hướng dẫn các bước nấu nhanh.
+Backend Go đóng vai trò là **Bộ Điều Phối & Lọc Quy Tắc Nghiệp Vụ (Orchestrator & Business Rule Guard)**:
 
----
+1. **Tính toán Chỉ tiêu Dinh dưỡng (Target Macros)**:
+   - Dùng `TDEECalculator` tính BMR theo công thức Mifflin-St Jeor dựa trên cân nặng, chiều cao, tuổi, giới tính và hệ số hoạt động (`ActivityFactor`).
+   - Căn cứ vào mục tiêu (`GoalCutting`, `GoalBulking`, `GoalMaintenance`) để tính Target Calories, Protein, Carb, Fat theo chuẩn khoa học.
+   - Áp dụng ràng buộc an toàn **BR-NU-01**: Target Calories luôn $\ge 1200\text{ kcal/ngày}$.
+   - Chia tỷ lệ calo chuẩn cho 4 bữa: Sáng (25%), Trưa (35%), Tối (30%), Bữa phụ (10%).
 
-### Câu hỏi 2: Mỗi lần có cách chế biến mới thì có nên Cache lại luôn không?
+2. **Thu Thập & Trích Xuất Lịch Sử Ăn Thực Tế (`HistoricalConsumption`)**:
+   - Truy vấn `MealHistoryRepository` trong 7 ngày gần nhất để xác định các ngày người dùng thực sự ghi nhận bữa ăn.
+   - Dùng Batch Query `NutritionPlanRepository.FindByUserIDAndDates` để lấy đúng kế hoạch của các ngày có log (tránh truy vấn dư thừa).
+   - Đi thẳng vào đúng bữa (`MealType`) tương ứng để trích xuất danh sách nguyên liệu thực tế `Ingredients []string`.
 
-**CÓ, RẤT NÊN CACHE LẠI NGAY LẬP TỨC!**
-- **Cơ chế Recipe Cache Tự Động Mở Rộng (Self-Growing Recipe Library)**:
-  - Khi External AI tạo ra 1 cách chế biến mới lạ cho một tổ hợp nguyên liệu (VD: `Ức gà + Khoai lang + Bông cải`), Server **LẬP TỨC CACHE VÀO CSDL (`nutrition.food_items` / `nutrition.recipes`)**.
-  - **Lần đầu tiên**: Tốn 1 lần gọi External AI để sinh cách chế biến mới -> Lưu vào DB.
-  - **Từ lần thứ 2 trở đi**: Khi bất kỳ người dùng nào khác (hoặc chính user đó sau vài ngày) ghép trúng tổ hợp nguyên liệu này, Server sẽ **lấy luôn công thức từ DB Cache** mà **KHÔNG CẦN GỌI AI NỮA**. Chi phí = 0$, thời gian phản hồi siêu tốc `< 10ms`.
+3. **Thu Thập Sở Thích & Thói Quen Tuần Trước (`WeeklyInsight`)**:
+   - Truy vấn `WeeklyInsightRepository.GetLatestByUserID`.
+   - Kiểm tra điều kiện hiệu lực: Khoảng cách giữa ngày lập kế hoạch (`PlanDate`) và ngày kết thúc đánh giá (`EndDate`) không quá 8 ngày.
+   - Trích xuất danh sách nguyên liệu yêu thích (`PreferredIngredients`) và phong cách nấu ăn dự đoán (`WeeklyCookingStyle`).
 
----
+4. **Lọc Dị Ứng Tinh Giản (`FoodFilter.FilterAllergensOnly`)**:
+   - Quét danh mục thực phẩm hoạt động (`activeCatalog`).
+   - Loại bỏ các nguyên liệu có tên (`Name`) trùng hoặc chứa từ khóa dị ứng của người dùng (`UserRestrictions`), đảm bảo an toàn sức khỏe nhưng không lọc nhầm do quét lan sang danh mục cha.
 
-## 3. 6 Chiến Lược Tối Ưu Chi Phí & Đa Dạng Thực Đơn
+5. **Chấm Điểm & Tuyển Chọn Ứng Viên Nguyên Liệu (`CandidateSelector` - BR-NU-02)**:
+   - Thay vì khóa cứng (hard lockout) làm cạn kiệt nguyên liệu, hệ thống tính điểm mềm đa tiêu chí:
+     $$S(i, u, t) = w_n \cdot N_i + w_p \cdot P_{iu} - w_r \cdot R_{it} - w_c \cdot C_i + \text{jitter}$$
+   - **Mật độ dinh dưỡng ($N_i$)**: Tỷ lệ đạm/calo có lợi.
+   - **Sở thích ($P_{iu}$)**: Ưu tiên các nguyên liệu nằm trong `PreferredIngredients`.
+   - **Phạt ăn lại gần đây ($R_{it}$ - Exponential Decay)**:
+     $$R(i) = \sum_{k} s(i, i_k) \cdot e^{-\Delta t_k / \tau} \quad (\tau = 48\text{h})$$
+     với $s(i, i_k)$ là độ tương đồng so khớp trực tiếp với danh sách nguyên liệu bữa ăn cũ.
+   - **Phạt ngân sách ($C_i$)**: Phạt nếu món vượt quá mức chi trả (`targetBudget`). Không phạt ($0.0$) nếu người dùng không thiết lập ngân sách.
+   - **Tie-Breaker (`DeterministicRNG`)**: Dùng hash `UserID + PlanDate` tạo jitter $\pm 0.05$ để phân định các món ngang điểm, đảm bảo tính nhất quán (idempotent) khi chạy lại trong ngày.
 
-### 3.1. Tổ Hợp Nguyên Liệu Cấu Trúc (Combinatorial Ingredient Matrix)
-Thay vì lưu các "món ăn tĩnh cố định", Server quản lý các **khối nguyên liệu độc lập** trong CSDL:
-- **Khối Protein ($N_1 = 30$)**: Ức gà, Thịt bò, Cá hồi, Tôm, Đậu phụ, Trứng, Mực...
-- **Khối Tinh bột ($N_2 = 20$)**: Cơm gạo lứt, Khoai lang, Yến mạch, Bún lứt, Mì kiều mạch...
-- **Khối Rau củ ($N_3 = 20$)**: Bông cải xanh, Măng tây, Cà chua, Rau bina, Ớt chuông...
-- **Khối Chế biến ($N_4 = 15$)**: Áp chảo thảo mộc, Sốt chanh dây, Nướng giấy bạc, Xào tỏi oliu, Hấp gừng...
-
-$$\text{Tổng số công thức kết hợp} = 30 \times 20 \times 20 \times 15 = \mathbf{180,000} \text{ món ăn khác nhau}$$
-
-Server tự động thực hiện phép tính ma trận tổ hợp để ghép các khối nguyên liệu sao cho tổng Calo/Protein/Carb/Fat vừa khít với nhu cầu người dùng.
-
----
-
-### 3.2. Cá Nhân Hóa Theo `UserID` + `LockoutRegistry` (BR-NU-02)
-- **Random Seed theo User**: Server sử dụng `Hash(UserID + Ngày)` làm hạt giống ngẫu nhiên để chọn ma trận nguyên liệu. 
-  - *Kết quả*: 2 người dùng có cùng TDEE mở app cùng thời điểm sẽ nhận được 2 thực đơn **hoàn toàn khác nhau**.
-- **Khóa Chống Lặp (`LockoutRegistry`)**: Khi người dùng ăn 1 món (VD: Ức gà), Server tự động khóa Protein chính trong 7 ngày, Carb chính trong 5 ngày, Chủ đề món trong 3 ngày. Trong 7 ngày tiếp theo, Server loại bỏ hoàn toàn ức gà khỏi ma trận tổ hợp của user đó.
-
----
-
-### 3.3. Rule-Based Engine + AI Agent Resilience (Google ADK & Auto Quota Fallback)
-- **Server Go Backend**: Thực hiện công việc tính toán nặng nhất — căn chỉnh chính xác từng gram nguyên liệu (VD: 130g ức gà + 140g khoai lang + 80g bông cải = 510 kcal, 42g Protein).
-- **External AI (Google ADK v2 Multi-Agent Orchestration)**: Sử dụng framework **Google ADK v2** với `ADKNutritionAgent`, nhận prompt siêu ngắn chứa 3 nguyên liệu chuẩn + target macros từ Server và đóng vai trò sáng tạo tên món (VD: *"Ức gà áp chảo sốt chanh dây thảo mộc"*).
-- **Cơ chế Tự Động Chuyển Đổi Model Dự Phòng (`FallbackLLM` Auto Quota Failover)**:
-  - Hệ thống tích hợp wrapper `FallbackLLM` triển khai giao diện `model.LLM` của Google ADK v2.
-  - Tùy chỉnh linh hoạt qua biến môi trường: `GEMINI_MODEL` (Mô hình chính: `gemini-2.5-flash`) và `GEMINI_FALLBACK_MODELS` (Mô hình dự phòng: `gemini-2.0-flash,gemini-2.5-flash-lite,gemini-1.5-flash`).
-  - Khi mô hình chính cạn Quota hoặc vấp lỗi HTTP `429 Too Many Requests` / `RESOURCE_EXHAUSTED`, `FallbackLLM` tự động nhận biết, ghi log cảnh báo và gọi mô hình dự phòng kế tiếp ngay lập tức trong thời gian thực mà người dùng không bị gián đoạn.
-- **Embedded Prompt Architecture (`//go:embed prompts/*.txt`)**:
-  - Toàn bộ các file prompt hướng dẫn (`generator.txt`, `daily.txt`, `post_workout.txt`, `pantry.txt`, `adhoc.txt`, `estimate_nutrient.txt`, `nutrition_insight.txt`) được nhúng trực tiếp vào Go binary lúc biên dịch thông qua `//go:embed prompts/*.txt`.
-  - Đảm bảo khởi tạo an toàn, độc lập môi trường làm việc (`Cwd`), tránh lỗi truy cập đường dẫn file và tăng tốc độ đọc prompt lên tối đa.
-
-### 3.4. Caching Công Thức & Số Liệu Dinh Dưỡng (Recipe & Nutrient Cache)
-- Món ăn ngoài kế hoạch: Khi user tự nhập tên món (VD: *"1 tô bún bò huế"*), Server kiểm tra Cache. Nếu món này đã từng được AI ước tính cho 1 user khác trước đây, Server tái sử dụng ngay lập tức với chi phí = 0$.
-
-### 3.5. Xử Lý Thay Đổi Định Lượng Khi Tập Luyện & Tỷ Lệ Gia Vị/Chế Biến
-
-> [!WARNING]
-> **Thách thức ẩm thực**: Khi thay đổi định lượng nguyên liệu chính (VD: tăng ức gà từ 130g lên 220g), tỷ lệ gia vị (muối, mắm, dầu ăn), thời gian áp chảo/nướng và quy trình chế biến sẽ bị thay đổi. Nếu chỉ nhân số gram cơ học trên UI mà không điều chỉnh cách nấu, món ăn có thể bị nhạt, cháy hoặc chín không đều.
-
-Để giải quyết vấn đề này mà vẫn tối ưu chi phí hạ tầng, hệ thống áp dụng:
-
-#### Phương án : Gọi AI Điều Chỉnh Công Thức (Khi Người Dùng Muốn Tăng Trực Tiếp Bữa Chính)
-- **Cách làm**: Nếu người dùng chọn tăng trực tiếp số lượng nguyên liệu ở món chính bữa tối, Server gửi 1 prompt siêu nhẹ sang External AI:
-  > *"Công thức hiện tại là 'Ức gà áp chảo sốt chanh dây' (130g ức gà, áp chảo 5 phút). Nay tăng ức gà lên 220g. Hãy điều chỉnh lại lượng gia vị (dầu ăn, sốt chanh dây) và thời gian áp chảo phù hợp."*
-- **Ưu điểm**: Công thức được AI tinh chỉnh chuẩn vị ẩm thực, thời gian nấu chuẩn xác. AI chỉ trả về dòng điều chỉnh gia vị & thời gian nấu ngắn gọn (tốn rất ít token).
+6. **Hậu Xử Lý, Thẩm Định & Lưu Trữ**:
+   - Gọi AI **1 lần duy nhất** (`DAILY_PLAN`) cho cả ngày để tiết kiệm thời gian phản hồi và hạn ngạch API.
+   - Chạy `planValidator`: Khớp `ProteinFoodID`, `CarbFoodID`, `VeggieFoodID` với catalog hoặc tự động lưu `NewFoodCatalogItems` vào DB `foodRepo`.
+   - Ghép 8 options do AI trả về vào 4 bữa ăn (`Breakfast`, `Lunch`, `Dinner`, `Snack`), mỗi bữa 2 lựa chọn.
+   - Cập nhật khung giờ ăn cá nhân hóa (`UpdateMealSchedule`).
+   - Lưu `NutritionPlan` và ghi Outbox Event `NutritionPlanGenerated` trong 1 transaction CSDL.
+   - Lưu công thức vào `RecipeCacheRepository` phục vụ tra cứu sau này.
 
 ---
 
-### 3.6. Sinh Thực Đơn Lười (Deferred / On-Demand Lazy Generation)
-- **Cron 5:00 AM**: Không sinh thực đơn AI đắt đỏ cho 100% người dùng. Cron 5:00 AM chỉ chạy Rule Engine Server để tạo khung tổ hợp nguyên liệu nhanh trong DB.
-- **Khi User mở app**: Hệ thống kiểm tra Recipe Cache. 90% trường hợp món ăn đã có trong Cache -> hiển thị tức thì (<20ms). Chỉ 10% trường hợp công thức chưa từng xuất hiện mới gọi AI để tạo tên món mới.
+### 2.2. External AI (Google ADK v2) Đảm Nhiệm Những Gì?
+
+External AI nhận ngữ cảnh đã được Backend chuẩn bị kỹ lưỡng (`AIMenuPromptContext`) và thực thi quy trình **Sáng Tạo & Cân Bằng Dinh Dưỡng Thực Tế**:
+
+1. **Lựa Chọn Bộ 3 Nguyên Liệu Cho Từng Món (Ingredient Trio Selection)**:
+   - Từ danh sách `available_ingredients` do Backend cung cấp, AI tự chọn tổ hợp: 1 Nguồn đạm (Protein) + 1 Nguồn tinh bột (Carb) + 1 Nguồn chất xơ (Veggie).
+   - Đảm bảo tính đa dạng: Option 1 và Option 2 trong cùng 1 bữa phải dùng bộ 3 nguyên liệu hoàn toàn khác nhau.
+   - Đảm bảo đặc tính bữa ăn:
+     - **Sáng (25%)**: Nhẹ nhàng, dễ tiêu (trứng, bánh mì nguyên cám, yến mạch, sữa chua, hoa quả).
+     - **Trưa (35%)**: Giàu năng lượng và đạm chính (ức gà, bò, cá hồi, cơm lứt, khoai, bông cải xanh).
+     - **Tối (30%)**: Thanh đạm, dễ tiêu (tôm, cá, thịt nạc, bún lứt, nấm, rau xanh).
+     - **Bữa phụ (10%)**: Đồ ăn nhẹ (các loại hạt, sữa chua, hoa quả, trứng luộc), cấm sinh món ăn chính nặng bụng.
+
+2. **Tính Toán Định Lượng Gram & Macros Của Từng Món**:
+   - AI tự phân bổ số lượng gram của từng thành phần trong món ăn (`gram`).
+   - AI tự tính toán tổng lượng Calo, Protein, Carb, Fat thực tế của từng món ăn (`total_protein_grams`, `total_carb_grams`, `total_fat_grams`) sao cho bám sát target của từng bữa ăn do Backend yêu cầu.
+
+3. **Sáng Tạo Tên Món & Hướng Dẫn Chế Biến Thực Tế**:
+   - `recipe_name`: Ngắn gọn, súc tích, **dưới 5 từ** (< 5 words).
+   - `cooking_steps`: Các bước thực tế, dễ làm; **mỗi bước dưới 15 từ** (< 15 words/bước), không giới hạn số bước nhưng không được thêm văn phong rườm rà.
+
+4. **Cá Nhân Hóa Phong Cách Nấu Ăn (Weekly Cooking Style)**:
+   - Tuân thủ tỷ lệ:
+     - **70% Habitual Style (~5-6 options)**: Bám theo phong cách nấu quen thuộc của user tuần trước (`weekly_cooking_style`).
+     - **30% Novelty Style (~2-3 options)**: Đổi mới phương pháp chế biến (nướng, hấp, áp chảo, nấu canh...) để chống ngán.
+
+5. **Tự Động Mở Rộng Danh Mục Nguyên Liệu (`NewFoodCatalogItems`)**:
+   - Khi cần gia vị hoặc nguyên liệu mới chưa có trong danh sách Backend gửi sang (đặc biệt khi xử lý tủ lạnh `pantry`), AI tự khai báo thông tin dinh dưỡng ước tính per 100g để Backend tự động thêm vào danh mục hệ thống.
 
 ---
 
-## 4. Tổng Kết So Sánh Tối Ưu Hạ Tầng
+## 3. Cơ Chế Chịu Lỗi & Failover Của Hạ Tầng AI
 
-| Chỉ số / Tiêu chí | Mô Hình AI Thuần Túy (Ban Đầu) | Mô Hình Server Rule Engine + Recipe Cache (Mới) |
-| :--- | :--- | :--- |
-| **Vai trò Server** | Chỉ nhận/truyền dữ liệu | **Gánh 90% tính toán toán học, lockout, ma trận nguyên liệu** |
-| **Vai trò External AI** | Tính calo + Sinh toàn bộ món | **Chỉ biến tấu tên món & cách chế biến mới lạ** |
-| **Cơ chế Caching** | Không cache công thức AI | **Tự động lưu công thức AI mới vào DB để dùng lại vĩnh viễn** |
-| **Số AI API Call / User / Ngày** | **8 - 10 lần / ngày** | **0 - 0.3 lần / ngày** (Giảm >95% chi phí) |
-| **Tốc độ phản hồi UI** | 1.5s - 3s | **< 20ms** (Hit Cache từ CSDL) |
-| **Độ chính xác Calo/Macros** | Đôi lúc bị ảo giác (Hallucination) | **Chính xác 100%** theo công thức chuẩn khoa học |
+Hệ thống tích hợp wrapper `FallbackLLM` để đảm bảo sinh thực đơn không bị gián đoạn:
+
+```mermaid
+graph LR
+    Agent[ADKNutritionAgent] --> Fallback[FallbackLLM Provider]
+    Fallback -->|Mô hình chính| M1[GEMINI_MODEL: gemini-2.5-flash]
+    M1 -->|429 Rate Limit / Quota Exceeded| M2[GEMINI_FALLBACK_MODELS: gemini-2.0-flash]
+    M2 -->|429 Rate Limit / Quota Exceeded| M3[gemini-2.5-flash-lite]
+    M3 -->|429 Rate Limit / Quota Exceeded| M4[gemini-1.5-flash]
+```
+
+- **Nhúng Prompt Tĩnh (`//go:embed prompts/*.txt`)**:
+  - Toàn bộ prompt nghiệp vụ (`daily.txt`, `pantry.txt`, `post_workout.txt`, `adhoc.txt`, `estimate_nutrient.txt`, `nutrition_insight.txt`) được đóng gói trực tiếp vào Go binary lúc compile, độc lập tuyệt đối với thư mục làm việc và loại bỏ hoàn toàn lỗi đọc file lúc runtime.
+
+---
+
+## 4. Tóm Tắt So Sánh Trách Nhiệm
+
+| Hạng mục công việc | Backend Go | External AI (Google ADK v2) |
+| :--- | :---: | :---: |
+| **Tính toán BMR, Base TDEE & Target Calo/Macros tổng** | **Chịu trách nhiệm 100%** (`TDEECalculator`) | Nhận chỉ tiêu từ Backend |
+| **Lọc dị ứng của người dùng** | **Chịu trách nhiệm 100%** (`FoodFilter`) | Kiểm tra lại trong prompt |
+| **Quản lý lịch sử ăn & Phân rã hàm mũ Recency Decay** | **Chịu trách nhiệm 100%** (`CandidateSelector`) | Không quản lý |
+| **Chọn danh sách nguyên liệu ứng viên khả thi** | **Chịu trách nhiệm 100%** (`CandidateSelector`) | Nhận danh sách từ Backend |
+| **Ghép bộ 3 nguyên liệu (Protein + Carb + Veggie)** | Không can thiệp | **Chịu trách nhiệm 100%** |
+| **Tính số gram từng nguyên liệu & macro từng món** | Không can thiệp | **Chịu trách nhiệm 100%** |
+| **Sáng tạo tên món ăn & các bước chế biến** | Không can thiệp | **Chịu trách nhiệm 100%** |
+| **Phân bổ món vào 4 bữa ăn & Gán lịch ăn** | **Chịu trách nhiệm 100%** (`MenuGenerator`) | Chỉ trả mảng 8 options |
+| **Lưu trữ CSDL, Outbox Event & Recipe Cache** | **Chịu trách nhiệm 100%** (`PlanRepo`, `TxManager`) | Không can thiệp |

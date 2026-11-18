@@ -18,6 +18,8 @@ type FoodNutrientDTO struct {
 	ProteinSource     string   `json:"protein_source,omitempty"`
 	CarbSource        string   `json:"carb_source,omitempty"`
 	IsNutiFoodProduct bool     `json:"is_nutifood_product,omitempty"`
+	PricePer100g      float64  `json:"price_per_100g,omitempty"`
+	CostTier          string   `json:"cost_tier,omitempty"`
 }
 
 //nolint:gocritic // hugeParam: fn value object mapping
@@ -34,6 +36,8 @@ func ToFoodNutrientDTO(fn vo.FoodNutrient) FoodNutrientDTO {
 		ProteinSource:     fn.ProteinSource(),
 		CarbSource:        fn.CarbSource(),
 		IsNutiFoodProduct: fn.IsNutiFoodProduct(),
+		PricePer100g:      fn.PricePer100g(),
+		CostTier:          fn.CostTier(),
 	}
 }
 
@@ -59,6 +63,8 @@ func (dto FoodNutrientDTO) ToDomain() vo.FoodNutrient {
 		dto.ProteinSource,
 		dto.CarbSource,
 		dto.IsNutiFoodProduct,
+		dto.PricePer100g,
+		dto.CostTier,
 	)
 }
 
@@ -71,20 +77,21 @@ func ToFoodNutrientDomains(dtos []FoodNutrientDTO) []vo.FoodNutrient {
 }
 
 type NutritionPromptContext struct {
-	UserID                   string             `json:"user_id"`
-	PlanDate                 time.Time          `json:"plan_date"`
-	MealType                 string             `json:"meal_type"`
-	NutritionGoal            string             `json:"nutrition_goal,omitempty"`
-	TargetDailyCalories      float64            `json:"target_daily_calories,omitempty"`
-	TargetMealCalories       float64            `json:"target_meal_calories"`
-	TargetProteinGrams       float64            `json:"target_protein_grams,omitempty"`
-	TargetCarbGrams          float64            `json:"target_carb_grams,omitempty"`
-	TargetFatGrams           float64            `json:"target_fat_grams,omitempty"`
-	UserRestrictions         []string           `json:"user_restrictions"`
-	MandatoryUserIngredients []FoodNutrientDTO  `json:"mandatory_user_ingredients,omitempty"`
-	SupplementaryIngredients []FoodNutrientDTO  `json:"supplementary_db_candidates,omitempty"`
-	AvailableIngredients     []FoodNutrientDTO  `json:"available_ingredients"`
-	LockoutRegistry          vo.LockoutRegistry `json:"-"`
+	UserID                   string            `json:"user_id"`
+	PlanDate                 time.Time         `json:"plan_date"`
+	MealType                 string            `json:"meal_type"`
+	NutritionGoal            string            `json:"nutrition_goal,omitempty"`
+	TargetDailyCalories      float64           `json:"target_daily_calories,omitempty"`
+	TargetMealCalories       float64           `json:"target_meal_calories"`
+	TargetProteinGrams       float64           `json:"target_protein_grams,omitempty"`
+	TargetCarbGrams          float64           `json:"target_carb_grams,omitempty"`
+	TargetFatGrams           float64           `json:"target_fat_grams,omitempty"`
+	UserRestrictions         []string          `json:"user_restrictions"`
+	MandatoryUserIngredients []FoodNutrientDTO `json:"mandatory_user_ingredients,omitempty"`
+	SupplementaryIngredients []FoodNutrientDTO `json:"supplementary_db_candidates,omitempty"`
+	AvailableIngredients     []FoodNutrientDTO `json:"available_ingredients"`
+	PreferredIngredients     []string          `json:"preferred_ingredients,omitempty"`
+	WeeklyCookingStyle       string            `json:"weekly_cooking_style,omitempty"`
 }
 
 type SupplementaryIngredientSpec struct {

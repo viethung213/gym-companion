@@ -129,6 +129,8 @@ func isQuotaOrRateLimitErr(err error) bool {
 	return strings.Contains(msg, "429") ||
 		strings.Contains(msg, "413") ||
 		strings.Contains(msg, "503") ||
+		strings.Contains(msg, "504") ||
+		strings.Contains(msg, "deadline") ||
 		strings.Contains(msg, "unavailable") ||
 		strings.Contains(msg, "high demand") ||
 		strings.Contains(msg, "overloaded") ||

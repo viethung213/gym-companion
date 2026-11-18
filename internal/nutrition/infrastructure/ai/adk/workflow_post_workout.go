@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 // ExecutePostWorkoutRecalibrationWorkflow runs the post-workout calorie rebalancing workflow.
@@ -14,15 +13,10 @@ func (a *NutritionAgent) ExecutePostWorkoutRecalibrationWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,
 	_ float64,
-	lockoutRegistry vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
-	domainFoods := ToFoodNutrientDomains(promptCtx.AvailableIngredients)
-	filteredFoods := lockoutRegistry.FilterAvailableIngredients(domainFoods, promptCtx.PlanDate)
-	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
-	promptCtx.AvailableIngredients = availableDTOs
 	plan, err := a.runPostWorkoutWorkflow(ctx, promptCtx)
 	if err != nil {
 		return nil, err
 	}
-	return a.persistNewFoodItemsAndMap(ctx, plan, availableDTOs)
+	return a.persistNewFoodItemsAndMap(ctx, plan, promptCtx.AvailableIngredients)
 }

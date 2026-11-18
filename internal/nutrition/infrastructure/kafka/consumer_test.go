@@ -24,6 +24,10 @@ func (m *mockPlanRepo) FindByUserIDAndDate(ctx context.Context, userID string, d
 	return nil, errors.New("plan not found")
 }
 
+func (m *mockPlanRepo) FindByUserIDAndDates(_ context.Context, _ string, _ []time.Time) ([]*aggregate.NutritionPlan, error) {
+	return nil, nil
+}
+
 func (m *mockPlanRepo) Save(ctx context.Context, plan *aggregate.NutritionPlan) error {
 	return nil
 }

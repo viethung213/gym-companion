@@ -47,7 +47,7 @@ func newE2EHandler(t *testing.T) (*grpc.GRPCHandler, *testutil.Repos) {
 		query.NewGetTodayMenuHandler(repos.NutritionPlan),
 		query.NewGetNutritionHistoryHandler(repos.MealHistory),
 		query.NewGetNutritionSummaryHandler(repos.NutritionPlan, repos.MealHistory),
-		query.NewGetNutritionInsightHandler(repos.NutritionPlan, repos.MealHistory, ai),
+		query.NewGetNutritionInsightHandler(repos.WeeklyInsight),
 	)
 
 	return h, repos

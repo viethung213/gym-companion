@@ -56,9 +56,9 @@ stateDiagram-v2
         PostMealPush --> LogOptionC: Nhánh C - Nhập món ngoài + KHÔNG Calo (Estimator Single-Turn Agent)
     }
 
-    LogOptionA --> DBLogged: Lưu MealLog + Cập nhật Lockout (7/5/3 ngày) + Cập nhật Vòng Calo
+    LogOptionA --> DBLogged: Lưu MealLog + Phát Event MealLogged + Cập nhật Vòng Calo
     LogOptionB --> DBLogged
-    LogOptionC --> AIEstimate: AI Estimator ước tính Calo/Macros -> Cache vào DB -> Lưu MealLog + Lockout
+    LogOptionC --> AIEstimate: AI Estimator ước tính Calo/Macros -> Cache vào DB -> Lưu MealLog
     AIEstimate --> DBLogged
 
     DBLogged --> [*]
@@ -70,12 +70,12 @@ stateDiagram-v2
 
 ### Luồng 1: Sinh Thực Đơn Đầu Ngày (5:00 AM Scheduled Cron Job & `DailyMenuCronWorker`)
 - **Thời gian**: Đúng 5:00 AM hàng ngày (`0 5 * * *`).
-- **Thực thi**: Background Worker `DailyMenuCronWorker` ([daily_menu_cron_worker.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/worker/daily_menu_cron_worker.go)) quét danh sách active users (có hoạt động trong 7 ngày qua).
+- **Thực thi**: Background Worker `DailyMenuCronWorker` ([daily_menu_cron_worker.go](../infrastructure/worker/daily_menu_cron_worker.go)) quét danh sách active users (có hoạt động trong 7 ngày qua).
 - **Sử dụng Semaphore Pool**: `maxConcurrentAICalls = 10` để kiểm soát số lượng cuộc gọi đồng thời.
 - **Hành động**:
   1. Lấy chỉ số sinh trắc học (`BiologicalMetrics`) từ `ProfileClient`.
   2. `TDEECalculator` tính `Base TDEE` theo công thức Mifflin-St Jeor (Rest Day TDEE, target >= 1200 kcal - **BR-NU-01**).
-  3. Server chạy `CombinatorialMatrix` tổ hợp nguyên liệu và tính gram per 100g.
+  3. `CandidateSelector` chấm điểm đa mục tiêu, phân rã hàm mũ và tuyển chọn danh sách nguyên liệu ứng viên khả thi (`AvailableIngredients`).
   4. Lấy prompt `prompts/daily.txt` (đã nhúng qua `//go:embed`) và gọi `ADKNutritionAgent.dailyWorkflowAgent`.
   5. `FallbackLLM` tự động gọi `gemini-2.5-flash`, nếu bị hết quota (429) sẽ tự chuyển sang `gemini-2.0-flash` / `gemini-2.5-flash-lite`.
   6. Tra cứu `RecipeCacheRepository`:
@@ -92,9 +92,9 @@ stateDiagram-v2
 - **Hành động**:
   1. Giữ nguyên các bữa ăn đã log từ sáng.
   2. Đọc prompt `prompts/pantry.txt` qua `//go:embed` và kích hoạt `ADKNutritionAgent.pantryWorkflowAgent`.
-  3. Đánh giá nguyên liệu có sẵn với `LockoutRegistry`:
-     - **Trùng Lockout (`BR-NU-02.2`)**: Vẫn cho dùng nguyên liệu (tránh lãng phí), gán cờ `RequiresNovelCookingStyle` yêu cầu AI hướng dẫn **phương pháp chế biến mới lạ**.
-     - **Không trùng Lockout**: Ưu tiên xếp vào ma trận các bữa chưa ăn.
+  3. Đánh giá nguyên liệu có sẵn với `PantrySelector` và lịch sử tiêu thụ gần đây (`HistoricalConsumption`):
+     - **Nguyên liệu ăn gần đây (Recency Penalty cao)**: Vẫn cho phép tận dụng nguyên liệu trong tủ lạnh để tránh lãng phí thực phẩm, nhưng gán cờ `RequiresNovelCookingStyle = true` yêu cầu AI Creative Chef hướng dẫn **phương pháp chế biến mới lạ**.
+     - **Nguyên liệu mới / chưa ăn gần đây**: Ưu tiên điểm cao và xếp vào ma trận các bữa chưa ăn.
   4. `FallbackLLM` tự động điều phối gọi model khả dụng không bị 429 Rate Limit.
   5. AI Creative Chef đặt tên món & hướng dẫn nấu -> Lưu Recipe Cache và trả thực đơn mới về Client.
 
@@ -104,7 +104,7 @@ stateDiagram-v2
 - **Tình huống**: Người dùng hoàn thành buổi tập lúc 17:30 chiều tiêu hao 450 kcal.
 - **Trigger**: Kafka Event `contracts.core.workout_execution.v1.event.WorkoutSessionCompleted`.
 - **Hành động**:
-  1. Consumer `Nutrition Workout Event Consumer` ([consumer.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/kafka/consumer.go)) nhận sự kiện.
+  1. Consumer `Nutrition Workout Event Consumer` ([consumer.go](../infrastructure/kafka/consumer.go)) nhận sự kiện.
   2. Server tính toán: $\text{Target Calo Mới} = \text{Base TDEE} + 450 \text{ kcal}$.
   3. Giữ nguyên bữa sáng & trưa đã ăn.
   4. Đọc prompt `prompts/post_workout.txt` qua `//go:embed` và gọi `ADKNutritionAgent.postWorkoutWorkflowAgent`.
@@ -130,7 +130,7 @@ stateDiagram-v2
      - **CHƯA CÓ CACHE**: Đọc prompt `prompts/estimate_nutrient.txt` qua `//go:embed` và gọi `ADKNutritionAgent.EstimateNutrient()`.
   2. AI ước tính dinh dưỡng (600 kcal, 28g P, 70g C, 22g F).
   3. Server tự động lưu công thức vào Nutrient Cache cho các lần tra cứu sau, lưu `MealLog` vào DB.
-  4. Cập nhật `LockoutRegistry` (7 ngày đạm thịt bò, 5 ngày tinh bột bún).
+  4. Ghi Outbox Event `MealLogged` để CDC xuất bản lên Kafka (thông tin tiêu thụ được tính toán động qua batch query khi tính điểm ứng viên ở các lần sinh kế hoạch sau).
 
 ---
 

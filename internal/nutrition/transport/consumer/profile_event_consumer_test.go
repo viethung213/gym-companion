@@ -31,6 +31,9 @@ func (m *mockPlanRepoForConsumer) SaveUserMealSchedules(ctx context.Context, use
 func (m *mockPlanRepoForConsumer) FindByUserIDAndDate(ctx context.Context, userID string, date time.Time) (*aggregate.NutritionPlan, error) {
 	return nil, nil
 }
+func (m *mockPlanRepoForConsumer) FindByUserIDAndDates(ctx context.Context, userID string, dates []time.Time) ([]*aggregate.NutritionPlan, error) {
+	return nil, nil
+}
 func (m *mockPlanRepoForConsumer) Save(ctx context.Context, plan *aggregate.NutritionPlan) error {
 	return nil
 }

@@ -3,7 +3,6 @@ package command
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
@@ -21,6 +20,8 @@ type CreateFoodItemCommand struct {
 	ProteinSource     string
 	CarbSource        string
 	IsNutiFoodProduct bool
+	PricePer100g      float64
+	CostTier          string
 }
 
 type CreateFoodItemHandler struct {
@@ -33,7 +34,7 @@ func NewCreateFoodItemHandler(foodRepo repository.FoodItemRepository) *CreateFoo
 
 //nolint:gocritic // cmd is passed by value per command pattern
 func (h *CreateFoodItemHandler) Handle(ctx context.Context, cmd CreateFoodItemCommand) (*aggregate.FoodItem, error) {
-	item := aggregate.ReconstructFoodItem(
+	item, err := aggregate.NewFoodItem(
 		uuid.New().String(),
 		cmd.Name,
 		cmd.Category,
@@ -45,10 +46,16 @@ func (h *CreateFoodItemHandler) Handle(ctx context.Context, cmd CreateFoodItemCo
 		cmd.ProteinSource,
 		cmd.CarbSource,
 		cmd.IsNutiFoodProduct,
-		aggregate.FoodStatusPendingApproval,
-		time.Now(),
-		time.Now(),
+		cmd.PricePer100g,
+		cmd.CostTier,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("create food item: %w", err)
+	}
+
+	if err := item.SubmitForApproval(); err != nil {
+		return nil, fmt.Errorf("submit food item for approval: %w", err)
+	}
 
 	if err := h.foodRepo.Save(ctx, item); err != nil {
 		return nil, fmt.Errorf("create food item save: %w", err)

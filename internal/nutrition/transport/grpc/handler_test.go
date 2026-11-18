@@ -9,9 +9,11 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/entity"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
+	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
 	"github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,6 +26,17 @@ type mockPlanRepoForTransport struct {
 func (m *mockPlanRepoForTransport) FindByUserIDAndDate(_ context.Context, userID string, date time.Time) (*aggregate.NutritionPlan, error) {
 	key := userID + date.Format("2006-01-02")
 	return m.plans[key], nil
+}
+
+func (m *mockPlanRepoForTransport) FindByUserIDAndDates(_ context.Context, userID string, dates []time.Time) ([]*aggregate.NutritionPlan, error) {
+	var result []*aggregate.NutritionPlan
+	for _, d := range dates {
+		key := userID + d.Format("2006-01-02")
+		if p, ok := m.plans[key]; ok {
+			result = append(result, p)
+		}
+	}
+	return result, nil
 }
 
 func (m *mockPlanRepoForTransport) Save(_ context.Context, plan *aggregate.NutritionPlan) error {
@@ -60,6 +73,10 @@ func (m *mockHistoryRepoForTransport) FindByUserID(_ context.Context, _ string) 
 	return m.history, nil
 }
 
+func (m *mockHistoryRepoForTransport) FindByUserIDAndDateRange(_ context.Context, _ string, _, _ time.Time) (*aggregate.MealHistory, error) {
+	return m.history, nil
+}
+
 func (m *mockHistoryRepoForTransport) Save(_ context.Context, history *aggregate.MealHistory) error {
 	m.history = history
 	return nil
@@ -79,7 +96,7 @@ func (m *mockFoodRepoForTransport) FindByName(_ context.Context, _ string) (*agg
 
 func (m *mockFoodRepoForTransport) FindActiveCatalog(_ context.Context) ([]vo.FoodNutrient, error) {
 	return []vo.FoodNutrient{
-		vo.NewFoodNutrient("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false),
+		vo.NewFoodNutrient("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false, 13000, "BUDGET"),
 	}, nil
 }
 
@@ -112,7 +129,6 @@ type mockAIServiceForTransport struct{}
 func (m *mockAIServiceForTransport) SelectCreativeMealOptions(
 	_ context.Context,
 	_ repository.AIMenuPromptContext,
-	_ vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
 	return []repository.GeneratedRecipeResult{
 		{
@@ -159,13 +175,11 @@ func TestGRPCHandler_Integration(t *testing.T) {
 	getNutritionHistoryHdlr := query.NewGetNutritionHistoryHandler(historyRepo)
 	getNutritionSummaryHdlr := query.NewGetNutritionSummaryHandler(planRepo, historyRepo)
 
-	getNutritionInsightHdlr := query.NewGetNutritionInsightHandler(planRepo, historyRepo, aiStub)
-
 	handler := grpc.NewGRPCHandler(
 		genPlanHdlr, recalPlanHdlr, logMealHdlr,
 		createFoodItemHdlr, approveFoodItemHdlr, updateMealScheduleHdlr,
 		getTodayMenuHdlr, getNutritionHistoryHdlr, getNutritionSummaryHdlr,
-		getNutritionInsightHdlr,
+		query.NewGetNutritionInsightHandler(nil),
 	)
 
 	// 1. Validation error test
@@ -250,7 +264,7 @@ func TestGRPCHandler_GetNutritionHistory(t *testing.T) {
 		query.NewGetTodayMenuHandler(planRepo),
 		query.NewGetNutritionHistoryHandler(historyRepo),
 		query.NewGetNutritionSummaryHandler(planRepo, historyRepo),
-		query.NewGetNutritionInsightHandler(planRepo, historyRepo, aiStub),
+		query.NewGetNutritionInsightHandler(nil),
 	)
 
 	// Validation: empty user_id
@@ -270,8 +284,7 @@ func TestGRPCHandler_GetNutritionHistory(t *testing.T) {
 
 	// Happy path: with logged meals
 	now := time.Now()
-	lockout := vo.NewLockoutRegistry(nil)
-	history := aggregate.NewMealHistory("h-1", "hist-user-1", lockout)
+	history := aggregate.NewMealHistory("h-1", "hist-user-1")
 	history.AddMealLog(aggregate.NewMealLog("ml-1", "h-1", "hist-user-1", "Lunch", "Cơm gà", "1 dĩa", 500, 30, 60, 10, now))
 	historyRepo.history = history
 
@@ -311,7 +324,7 @@ func TestGRPCHandler_GetNutritionSummary(t *testing.T) {
 		query.NewGetTodayMenuHandler(planRepo),
 		query.NewGetNutritionHistoryHandler(historyRepo),
 		query.NewGetNutritionSummaryHandler(planRepo, historyRepo),
-		query.NewGetNutritionInsightHandler(planRepo, historyRepo, aiStub),
+		query.NewGetNutritionInsightHandler(nil),
 	)
 
 	// Validation: empty user_id
@@ -332,5 +345,90 @@ func TestGRPCHandler_GetNutritionSummary(t *testing.T) {
 	}
 	if resp.GetTargetCalories() <= 0 {
 		t.Fatalf("got target calories %f, want > 0", resp.GetTargetCalories())
+	}
+}
+
+func TestGetNutritionInsight_Handler(t *testing.T) {
+	ctx := context.Background()
+	db := testutil.NewTestDB(t, "")
+	repos := testutil.NewRepos(db)
+
+	insightHdlr := query.NewGetNutritionInsightHandler(repos.WeeklyInsight)
+	handler := grpc.NewGRPCHandler(
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil,
+		insightHdlr,
+	)
+
+	// 1. Validation error: empty user_id
+	_, err := handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{UserId: ""})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	}
+
+	// 2. Not found
+	_, err = handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{UserId: "unknown-user"})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.NotFound)
+	}
+
+	// 3. Seed weekly insight
+	now := time.Now()
+	startDate := now.AddDate(0, 0, -6)
+	seedInsight := entity.NewWeeklyInsight(
+		"insight-test-1",
+		"insight-user-1",
+		startDate,
+		now,
+		85,
+		"Đạt mục tiêu rất tốt",
+		"Luộc, hấp thanh đạm",
+		[]string{"Ức gà", "Bông cải xanh"},
+		[]entity.WeeklyImprovementArea{
+			{
+				Nutrient:    "PROTEIN",
+				Action:      "INCREASE",
+				DeltaAmount: 15,
+				Suggestion:  "Bổ sung thêm đạm buổi sáng",
+			},
+		},
+		entity.WeeklyMacroSummary{
+			ConsumedCalories: 14000,
+			TargetCalories:   14000,
+			ConsumedProtein:  800,
+			TargetProtein:    850,
+			ConsumedCarbs:    1200,
+			TargetCarbs:      1200,
+			ConsumedFat:      400,
+			TargetFat:        400,
+			LoggedMealsCount: 28,
+			TotalMealsCount:  28,
+		},
+		now,
+		now,
+	)
+	if err := repos.WeeklyInsight.Save(ctx, seedInsight); err != nil {
+		t.Fatalf("failed to save seed insight: %v", err)
+	}
+
+	// 4. Successful retrieval without LLM call
+	resp, err := handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{UserId: "insight-user-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetOverallScore() != 85 {
+		t.Errorf("got overall score %d, want 85", resp.GetOverallScore())
+	}
+	if resp.GetPredictedCookingStyle() != "Luộc, hấp thanh đạm" {
+		t.Errorf("got style %s, want Luộc, hấp thanh đạm", resp.GetPredictedCookingStyle())
+	}
+	if len(resp.GetImprovementAreas()) != 1 {
+		t.Fatalf("got %d improvement areas, want 1", len(resp.GetImprovementAreas()))
+	}
+	if resp.GetImprovementAreas()[0].GetNutrient() != "PROTEIN" {
+		t.Errorf("got nutrient %s, want PROTEIN", resp.GetImprovementAreas()[0].GetNutrient())
+	}
+	if resp.GetWeeklySummary().GetConsumedCalories() != 14000 {
+		t.Errorf("got consumed calories %f, want 14000", resp.GetWeeklySummary().GetConsumedCalories())
 	}
 }

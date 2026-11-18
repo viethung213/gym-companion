@@ -16,6 +16,8 @@ type GormFoodItem struct {
 	ProteinSource     string    `gorm:"column:protein_source"`
 	CarbSource        string    `gorm:"column:carb_source"`
 	IsNutiFoodProduct bool      `gorm:"column:is_nutifood_product"`
+	PricePer100g      float64   `gorm:"column:price_per_100g"`
+	CostTier          string    `gorm:"column:cost_tier"`
 	Status            string    `gorm:"column:status"`
 	CreatedAt         time.Time `gorm:"column:created_at"`
 	UpdatedAt         time.Time `gorm:"column:updated_at"`
@@ -85,19 +87,6 @@ func (g *GormMealLog) TableName() string {
 	return "nutrition.meal_logs"
 }
 
-type GormLockoutRegistry struct {
-	ID         string    `gorm:"column:id;primaryKey"`
-	UserID     string    `gorm:"column:user_id"`
-	ItemType   string    `gorm:"column:item_type"`
-	ItemName   string    `gorm:"column:item_name"`
-	UnlockedAt time.Time `gorm:"column:unlocked_at"`
-	CreatedAt  time.Time `gorm:"column:created_at"`
-}
-
-func (g *GormLockoutRegistry) TableName() string {
-	return "nutrition.lockout_registries"
-}
-
 type GormOutbox struct {
 	ID            string     `gorm:"column:id;primaryKey"`
 	EventID       string     `gorm:"column:event_id;uniqueIndex"`
@@ -142,4 +131,32 @@ type GormUserMealSchedule struct {
 
 func (g *GormUserMealSchedule) TableName() string {
 	return "nutrition.user_meal_schedules"
+}
+
+type GormWeeklyInsight struct {
+	ID                    string    `gorm:"column:id;primaryKey"`
+	UserID                string    `gorm:"column:user_id;uniqueIndex:unique_user_week"`
+	StartDate             time.Time `gorm:"column:start_date;type:date;uniqueIndex:unique_user_week"`
+	EndDate               time.Time `gorm:"column:end_date;type:date"`
+	OverallScore          int       `gorm:"column:overall_score"`
+	Summary               string    `gorm:"column:summary"`
+	PredictedCookingStyle string    `gorm:"column:predicted_cooking_style"`
+	PreferredIngredients  []byte    `gorm:"column:preferred_ingredients;type:jsonb"`
+	ImprovementAreas      []byte    `gorm:"column:improvement_areas;type:jsonb"`
+	ConsumedCalories      float64   `gorm:"column:consumed_calories"`
+	TargetCalories        float64   `gorm:"column:target_calories"`
+	ConsumedProtein       float64   `gorm:"column:consumed_protein"`
+	TargetProtein         float64   `gorm:"column:target_protein"`
+	ConsumedCarbs         float64   `gorm:"column:consumed_carbs"`
+	TargetCarbs           float64   `gorm:"column:target_carbs"`
+	ConsumedFat           float64   `gorm:"column:consumed_fat"`
+	TargetFat             float64   `gorm:"column:target_fat"`
+	LoggedMealsCount      int       `gorm:"column:logged_meals_count"`
+	TotalMealsCount       int       `gorm:"column:total_meals_count"`
+	CreatedAt             time.Time `gorm:"column:created_at"`
+	UpdatedAt             time.Time `gorm:"column:updated_at"`
+}
+
+func (g *GormWeeklyInsight) TableName() string {
+	return "nutrition.weekly_insights"
 }

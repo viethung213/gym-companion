@@ -30,6 +30,8 @@ type foodItemSeedRecord struct {
 	ProteinSource     string   `json:"protein_source"`
 	CarbSource        string   `json:"carb_source"`
 	IsNutiFoodProduct bool     `json:"is_nutifood_product"`
+	PricePer100g      float32  `json:"price_per_100g"`
+	CostTier          string   `json:"cost_tier"`
 	Status            string   `json:"status"`
 }
 
@@ -116,6 +118,8 @@ func SeedFoodItems(ctx context.Context, db *sql.DB, foodService FoodRegistrar) e
 			ProteinSource:     record.ProteinSource,
 			CarbSource:        record.CarbSource,
 			IsNutifoodProduct: record.IsNutiFoodProduct,
+			PricePer_100G:     record.PricePer100g,
+			CostTier:          record.CostTier,
 		}
 
 		createResp, err := foodService.CreateFoodItem(adminCtx, req)

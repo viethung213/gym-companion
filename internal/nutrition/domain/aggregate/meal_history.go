@@ -2,8 +2,6 @@ package aggregate
 
 import (
 	"time"
-
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 type MealLog struct {
@@ -52,31 +50,28 @@ func (m *MealLog) Carbs() float64      { return m.carbs }
 func (m *MealLog) Fat() float64        { return m.fat }
 func (m *MealLog) LoggedAt() time.Time { return m.loggedAt }
 
-// MealHistory Aggregate Root for managing historical logged meals and lockout registries.
+// MealHistory Aggregate Root for managing historical logged meals.
 type MealHistory struct {
-	id              string
-	userID          string
-	mealLogs        []MealLog
-	lockoutRegistry vo.LockoutRegistry
-	createdAt       time.Time
-	updatedAt       time.Time
+	id        string
+	userID    string
+	mealLogs  []MealLog
+	createdAt time.Time
+	updatedAt time.Time
 }
 
-func NewMealHistory(id, userID string, lockoutRegistry vo.LockoutRegistry) *MealHistory {
+func NewMealHistory(id, userID string) *MealHistory {
 	now := time.Now()
 	return &MealHistory{
-		id:              id,
-		userID:          userID,
-		mealLogs:        make([]MealLog, 0),
-		lockoutRegistry: lockoutRegistry,
-		createdAt:       now,
-		updatedAt:       now,
+		id:        id,
+		userID:    userID,
+		mealLogs:  make([]MealLog, 0),
+		createdAt: now,
+		updatedAt: now,
 	}
 }
 
-func (h *MealHistory) ID() string                          { return h.id }
-func (h *MealHistory) UserID() string                      { return h.userID }
-func (h *MealHistory) LockoutRegistry() vo.LockoutRegistry { return h.lockoutRegistry }
+func (h *MealHistory) ID() string     { return h.id }
+func (h *MealHistory) UserID() string { return h.userID }
 func (h *MealHistory) MealLogs() []MealLog {
 	copied := make([]MealLog, len(h.mealLogs))
 	copy(copied, h.mealLogs)
@@ -86,11 +81,6 @@ func (h *MealHistory) MealLogs() []MealLog {
 //nolint:gocritic // log parameter is passed by value per domain aggregate design
 func (h *MealHistory) AddMealLog(log MealLog) {
 	h.mealLogs = append(h.mealLogs, log)
-	h.updatedAt = time.Now()
-}
-
-func (h *MealHistory) ApplyLockoutRule(itemType, itemName string, duration time.Duration, now time.Time) {
-	h.lockoutRegistry = h.lockoutRegistry.ApplyLockout(itemType, itemName, duration, now)
 	h.updatedAt = time.Now()
 }
 

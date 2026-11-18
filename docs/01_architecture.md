@@ -62,11 +62,11 @@ graph TB
 
 | Bounded Context (Logic) | Phân loại | Thư mục Vật lý (`internal/`) | Lý do thiết kế & Trách nhiệm triển khai |
 | :--- | :--- | :--- | :--- |
-| **User Profile** | Supporting | [profile/](file:///e:/LEAN/TTTN/internal/profile) | Quản lý thông tin thể trạng, lịch sử chỉ số cơ thể và hồ sơ người dùng. |
-| **Coaching & Planning** | Core | [coaching/](file:///e:/LEAN/TTTN/internal/coaching) | Chịu trách nhiệm sinh lộ trình tập (Roadmap), sinh giáo án ngày và thích ứng giáo án tập luyện. |
-| **Workout Execution & Motion** | Core | [workout_execution/](file:///e:/LEAN/TTTN/internal/workout_execution) | Chấm điểm tập đúng/sai thông qua AI Camera (Form Score), đếm rep/set và lưu trữ nhật ký tập thực tế. |
-| **Nutrition** | Core | [nutrition/](file:///e:/LEAN/TTTN/internal/nutrition) | Quản lý chế độ ăn uống, calo/macro, gợi ý thực đơn và danh mục thực phẩm chuẩn. |
-| *Không có (Generic)* | Generic | [auth/](file:///e:/LEAN/TTTN/internal/auth) · [notification/](file:///e:/LEAN/TTTN/internal/notification) · [audio/](file:///e:/LEAN/TTTN/internal/audio) | Các dịch vụ kỹ thuật dùng chung cho toàn bộ hệ thống (Xác thực, Thông báo, Tích hợp Âm thanh). |
+| **User Profile** | Supporting | [profile/](../internal/profile) | Quản lý thông tin thể trạng, lịch sử chỉ số cơ thể và hồ sơ người dùng. |
+| **Coaching & Planning** | Core | [coaching/](../internal/coaching) | Chịu trách nhiệm sinh lộ trình tập (Roadmap), sinh giáo án ngày và thích ứng giáo án tập luyện. |
+| **Workout Execution & Motion** | Core | [workout_execution/](../internal/workout_execution) | Chấm điểm tập đúng/sai thông qua AI Camera (Form Score), đếm rep/set và lưu trữ nhật ký tập thực tế. |
+| **Nutrition** | Core | [nutrition/](../internal/nutrition) | Quản lý chế độ ăn uống, calo/macro, gợi ý thực đơn và danh mục thực phẩm chuẩn. |
+| *Không có (Generic)* | Generic | [auth/](../internal/auth) · [notification/](../internal/notification) · [audio/](../internal/audio) | Các dịch vụ kỹ thuật dùng chung cho toàn bộ hệ thống (Xác thực, Thông báo, Tích hợp Âm thanh). |
 
 ---
 

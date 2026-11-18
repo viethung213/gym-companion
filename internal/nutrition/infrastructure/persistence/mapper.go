@@ -2,9 +2,11 @@ package persistence
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/entity"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
@@ -27,6 +29,8 @@ func (g *GormFoodItem) ToDomain() *aggregate.FoodItem {
 		g.ProteinSource,
 		g.CarbSource,
 		g.IsNutiFoodProduct,
+		g.PricePer100g,
+		g.CostTier,
 		g.Status,
 		g.CreatedAt,
 		g.UpdatedAt,
@@ -51,6 +55,8 @@ func (g *GormFoodItem) ToNutrientDomain() vo.FoodNutrient {
 		g.ProteinSource,
 		g.CarbSource,
 		g.IsNutiFoodProduct,
+		g.PricePer100g,
+		g.CostTier,
 	)
 }
 
@@ -68,6 +74,8 @@ func FromDomainFoodItem(item *aggregate.FoodItem) *GormFoodItem {
 		ProteinSource:     item.ProteinSource(),
 		CarbSource:        item.CarbSource(),
 		IsNutiFoodProduct: item.IsNutiFoodProduct(),
+		PricePer100g:      item.PricePer100g(),
+		CostTier:          item.CostTier(),
 		Status:            item.Status(),
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
@@ -212,4 +220,107 @@ func UnmarshalIngredientsJSON(data []byte) ([]aggregate.IngredientGram, error) {
 		ings = append(ings, aggregate.NewIngredientGram(dto.IngredientName, dto.Grams, dto.IsSupplementary))
 	}
 	return ings, nil
+}
+
+type jsonWeeklyImprovementAreaDTO struct {
+	Nutrient    string  `json:"nutrient"`
+	Action      string  `json:"action"`
+	DeltaAmount float64 `json:"delta_amount"`
+	Suggestion  string  `json:"suggestion"`
+}
+
+func (g *GormWeeklyInsight) ToDomain() *entity.WeeklyInsight {
+	var prefs []string
+	if len(g.PreferredIngredients) > 0 {
+		_ = json.Unmarshal(g.PreferredIngredients, &prefs)
+	}
+
+	var areaDTOs []jsonWeeklyImprovementAreaDTO
+	if len(g.ImprovementAreas) > 0 {
+		_ = json.Unmarshal(g.ImprovementAreas, &areaDTOs)
+	}
+	areas := make([]entity.WeeklyImprovementArea, 0, len(areaDTOs))
+	for _, a := range areaDTOs {
+		areas = append(areas, entity.WeeklyImprovementArea{
+			Nutrient:    a.Nutrient,
+			Action:      a.Action,
+			DeltaAmount: a.DeltaAmount,
+			Suggestion:  a.Suggestion,
+		})
+	}
+
+	summary := entity.WeeklyMacroSummary{
+		ConsumedCalories: g.ConsumedCalories,
+		TargetCalories:   g.TargetCalories,
+		ConsumedProtein:  g.ConsumedProtein,
+		TargetProtein:    g.TargetProtein,
+		ConsumedCarbs:    g.ConsumedCarbs,
+		TargetCarbs:      g.TargetCarbs,
+		ConsumedFat:      g.ConsumedFat,
+		TargetFat:        g.TargetFat,
+		LoggedMealsCount: g.LoggedMealsCount,
+		TotalMealsCount:  g.TotalMealsCount,
+	}
+
+	return entity.NewWeeklyInsight(
+		g.ID,
+		g.UserID,
+		g.StartDate,
+		g.EndDate,
+		g.OverallScore,
+		g.Summary,
+		g.PredictedCookingStyle,
+		prefs,
+		areas,
+		summary,
+		g.CreatedAt,
+		g.UpdatedAt,
+	)
+}
+
+func ToGormWeeklyInsight(domain *entity.WeeklyInsight) (*GormWeeklyInsight, error) {
+	prefsJSON, err := json.Marshal(domain.PreferredIngredients())
+	if err != nil {
+		return nil, fmt.Errorf("marshal preferred ingredients: %w", err)
+	}
+
+	areas := domain.ImprovementAreas()
+	areaDTOs := make([]jsonWeeklyImprovementAreaDTO, 0, len(areas))
+	for _, a := range areas {
+		areaDTOs = append(areaDTOs, jsonWeeklyImprovementAreaDTO{
+			Nutrient:    a.Nutrient,
+			Action:      a.Action,
+			DeltaAmount: a.DeltaAmount,
+			Suggestion:  a.Suggestion,
+		})
+	}
+	areasJSON, err := json.Marshal(areaDTOs)
+	if err != nil {
+		return nil, fmt.Errorf("marshal improvement areas: %w", err)
+	}
+
+	sum := domain.WeeklySummary()
+	return &GormWeeklyInsight{
+		ID:                    domain.ID(),
+		UserID:                domain.UserID(),
+		StartDate:             domain.StartDate(),
+		EndDate:               domain.EndDate(),
+		OverallScore:          domain.OverallScore(),
+		Summary:               domain.Summary(),
+		PredictedCookingStyle: domain.PredictedCookingStyle(),
+		PreferredIngredients:  prefsJSON,
+		ImprovementAreas:      areasJSON,
+		ConsumedCalories:      sum.ConsumedCalories,
+		TargetCalories:        sum.TargetCalories,
+		ConsumedProtein:       sum.ConsumedProtein,
+		TargetProtein:         sum.TargetProtein,
+		ConsumedCarbs:         sum.ConsumedCarbs,
+		TargetCarbs:           sum.TargetCarbs,
+		ConsumedFat:           sum.ConsumedFat,
+		TargetFat:             sum.TargetFat,
+		LoggedMealsCount:      sum.LoggedMealsCount,
+		TotalMealsCount:       sum.TotalMealsCount,
+		CreatedAt:             domain.CreatedAt(),
+		UpdatedAt:             domain.UpdatedAt(),
+	}, nil
 }

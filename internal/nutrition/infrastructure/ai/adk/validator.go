@@ -4,21 +4,17 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 type planValidator struct {
-	foodRepo        repository.FoodItemRepository
-	lockoutRegistry vo.LockoutRegistry
+	foodRepo repository.FoodItemRepository
 }
 
-func newPlanValidator(foodRepo repository.FoodItemRepository, lockoutRegistry vo.LockoutRegistry) *planValidator {
+func newPlanValidator(foodRepo repository.FoodItemRepository) *planValidator {
 	return &planValidator{
-		foodRepo:        foodRepo,
-		lockoutRegistry: lockoutRegistry,
+		foodRepo: foodRepo,
 	}
 }
 
@@ -103,12 +99,6 @@ func (v *planValidator) validate(
 					optIssues = append(optIssues, fmt.Sprintf("option %d: veggie_food '%s' contains restricted allergen '%s'", idx+1, veggieInfo.Name, tag))
 				}
 			}
-		}
-
-		// 4. Verify Lockout Rules
-		_, lockedCollisions := v.lockoutRegistry.CheckCollisions([]string{opt.ProteinFoodName, opt.CarbFoodName}, time.Now())
-		if len(lockedCollisions) > 0 {
-			optIssues = append(optIssues, fmt.Sprintf("option %d: ingredients %v are locked under 7/5/3 day repetition rules", idx+1, lockedCollisions))
 		}
 
 		if len(optIssues) > 0 {

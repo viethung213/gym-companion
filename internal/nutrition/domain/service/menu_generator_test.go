@@ -34,9 +34,9 @@ func (m *mockFoodItemRepo) FindByName(_ context.Context, name string) (*aggregat
 }
 func (m *mockFoodItemRepo) FindActiveCatalog(_ context.Context) ([]vo.FoodNutrient, error) {
 	return []vo.FoodNutrient{
-		vo.NewFoodNutrient("1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false),
-		vo.NewFoodNutrient("2", "Khoai lang", "CARB", 90, 2, 21, 0.1, nil, "", "", false),
-		vo.NewFoodNutrient("3", "Bông cải", "VEGGIE", 34, 2.8, 7, 0.4, nil, "", "", false),
+		vo.NewFoodNutrient("1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false, 13000, "BUDGET"),
+		vo.NewFoodNutrient("2", "Khoai lang", "CARB", 90, 2, 21, 0.1, nil, "", "", false, 4500, "BUDGET"),
+		vo.NewFoodNutrient("3", "Bông cải", "VEGGIE", 34, 2.8, 7, 0.4, nil, "", "", false, 9000, "STANDARD"),
 	}, nil
 }
 func (m *mockFoodItemRepo) FindNutiFoodProducts(_ context.Context) ([]vo.FoodNutrient, error) {
@@ -50,7 +50,6 @@ type mockAIServiceStub struct{}
 func (m *mockAIServiceStub) SelectCreativeMealOptions(
 	_ context.Context,
 	promptCtx repository.AIMenuPromptContext,
-	_ vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
 	return []repository.GeneratedRecipeResult{
 		{
@@ -70,7 +69,7 @@ func (m *mockAIServiceStub) EstimateNutrient(_ context.Context, _, _ string) (*r
 }
 
 func (m *mockAIServiceStub) GenerateNutritionInsight(_ context.Context, _ repository.InsightPromptContext) (*repository.NutritionInsightResult, error) {
-	return &repository.NutritionInsightResult{OverallScore: 75, Summary: "stub insight", WeeklyTrend: "STABLE"}, nil
+	return &repository.NutritionInsightResult{OverallScore: 75, Summary: "stub insight"}, nil
 }
 
 func TestMenuGenerator_GenerateDailyPlan(t *testing.T) {
@@ -83,10 +82,9 @@ func TestMenuGenerator_GenerateDailyPlan(t *testing.T) {
 	generator := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
 
 	alloc, _ := vo.NewCalorieAllocation(2000, 150, 200, 66)
-	registry := vo.NewLockoutRegistry(nil)
 
 	plan, err := generator.GenerateDailyPlan(
-		context.Background(), "user-test-1", time.Now(), alloc, registry, nil, vo.GoalMuscleGain,
+		context.Background(), "user-test-1", time.Now(), alloc, nil, vo.GoalMuscleGain,
 	)
 
 	if err != nil {

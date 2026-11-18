@@ -17,7 +17,7 @@
 **Main Flow**
 1. System đọc `BiologicalMetrics` (cân nặng, mục tiêu, mức vận động từ `WorkoutSession` hôm nay) từ `User`.
 2. System tính TDEE theo công thức Mifflin-St Jeor, tính `CalorieAllocation` (Protein/Carb/Fat).
-3. System đọc `ChatbotContext.food_restrictions` của `User` để lọc bỏ các thực phẩm gây dị ứng/ăn kiêng, đồng thời kiểm tra `LockoutRegistry` của `MealHistory` để lọc nguyên liệu bị khóa.
+3. System đọc `ChatbotContext.food_restrictions` của `User` để lọc bỏ các thực phẩm gây dị ứng (`FilterAllergensOnly`), đồng thời truy vấn lịch sử tiêu thụ gần đây (`FindByUserIDAndDates`) để tính điểm mềm phân rã hàm mũ (`CandidateSelector` - BR-NU-02).
 4. System sinh `DailyMealOption` cho 3 bữa chính + 1 bữa phụ theo `BudgetTier` user đã chọn. Đối với mỗi bữa ăn, System ưu tiên đính kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có sẵn trong cơ sở dữ liệu; nếu không có, hệ thống hiển thị hướng dẫn định lượng để người dùng tự chuẩn bị hoặc mua ngoài tiệm bình thường (BR-NU-03).
 5. System phát `NutritionPlanGenerated`.
 
@@ -27,12 +27,12 @@
 
 **Error / Edge Cases**
 - E1: `CalorieAllocation.target` < 1200 kcal sau tính toán → buộc giữ nguyên 1200 kcal (BR-NU-01).
-- E2: Tất cả nguyên liệu protein bị `LockoutRegistry` khóa → System tự giải phóng nguyên liệu ít bị khóa nhất (unlock sớm nhất) để đảm bảo có thực đơn.
+- E2: Tất cả nguyên liệu protein ăn gần đây → System áp dụng phân rã hàm mũ tự nhiên để ưu tiên món có khoảng cách xa nhất, không bao giờ bị nghẽn thực đơn.
 - E3: `BiologicalMetrics` chưa cập nhật cân nặng > 7 ngày → dùng giá trị cuối cùng và hiển thị cảnh báo.
-- E4: Tất cả các nguồn đạm (protein) đều bị loại bỏ do kết hợp giữa dị ứng (`food_restrictions`) và danh sách khóa (`LockoutRegistry`) → System giữ nguyên việc lọc dị ứng bắt buộc, tự động giải phóng sớm các nguyên liệu bị khóa trong `LockoutRegistry` để đảm bảo sinh được thực đơn.
+- E4: User có nhiều dị ứng nghiêm ngặt → System giữ nguyên việc lọc dị ứng bắt buộc, nếu danh mục an toàn còn ít vẫn sinh thực đơn từ các nguồn đạm an toàn khả dụng kèm cảnh báo.
 
 **Postcondition**: `NutritionPlan` với `DailyMealOption` đầy đủ sẵn sàng hiển thị.  
-> *`NutritionService.GenerateDailyPlan()` gọi `NutritionPlanRepository.Save()`, `UserRepository.GetChatbotContext()`, và `MealHistoryRepository.GetLockouts()`.*
+> *`NutritionService.GenerateDailyPlan()` gọi `NutritionPlanRepository.Save()`, `UserRepository.GetChatbotContext()`, và `NutritionPlanRepository.FindByUserIDAndDates()`.*
 
 **Domain Events**: `NutritionPlanGenerated`
 
@@ -46,19 +46,19 @@
 | **Precondition** | User đã đăng nhập. |
 
 **Main Flow**
-1. User tìm kiếm món ăn theo tên hoặc quét mã vạch.
-2. System trả về `FoodItem` phù hợp từ thư viện thực phẩm.
+1. User tìm kiếm món ăn theo tên hoặc quét mã vạch (hoặc 1-tap quick log từ thực đơn gợi ý).
+2. System trả về `FoodItem` phù hợp từ thư viện thực phẩm hoặc AI ước tính calo nếu nhập tự do ngoài danh mục.
 3. User xác nhận khẩu phần (gram).
-4. System tạo `MealLog`, đọc siêu dữ liệu dinh dưỡng (metadata) của `FoodItem` để xác định nguồn Protein chính, nguồn tinh bột (Carb) chính và Category/chủ đề món ăn, sau đó cập nhật `LockoutRegistry` (khóa Protein chính 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày) (BR-NU-02).
-5. System phát `MealLogged` và `LockoutApplied`.
+4. System tạo `MealLog`, ghi nhận thông tin tiêu thụ và danh sách nguyên liệu của bữa ăn.
+5. System phát `MealLogged`.
 
 **Alternative Flow**
-- A1: Không tìm thấy món trong thư viện → User nhập thủ công tên + calo/macro ước tính.
+- A1: Không tìm thấy món trong thư viện → User nhập thủ công tên + calo/macro ước tính (hoặc để AI ước tính tự động).
 
 **Error / Edge Cases**
 - E1: Quét mã vạch thất bại / sản phẩm không có trong database → fallback sang nhập thủ công.
 - E2: User cố log cùng một món 2 lần trong ngày → cảnh báo trùng lặp, vẫn cho phép nếu user xác nhận.
 
-**Postcondition**: `MealLog` được ghi, `LockoutRegistry` được cập nhật.
+**Postcondition**: `MealLog` được ghi nhận trong `MealHistory`.
 
-**Domain Events**: `MealLogged` · `LockoutApplied`
+**Domain Events**: `MealLogged`

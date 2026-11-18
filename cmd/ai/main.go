@@ -144,10 +144,17 @@ func run() error {
 	}
 	defer shutdownCoaching()
 
+	// Initialize Redis Client
+	redisClient, rErr := redisRegistry.GetClient()
+	if rErr != nil {
+		slog.Warn("Redis connection failed for AI service", "error", rErr)
+	}
+
 	// Initialize Nutrition Module
 	nutritionGRPCHandler, shutdownNutrition, err := nutrition.Initialize(ctx, nutrition.ModuleDeps{
 		DB:             nutritionDB,
 		KafkaRegistry:  kafkaRegistry,
+		RedisClient:    redisClient,
 		GatewayURL:     gatewayURL,
 		InternalSecret: internalSecret,
 	})

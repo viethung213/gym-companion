@@ -9,6 +9,8 @@
     "allergen_tags": [],
     "protein_source": "CHICKEN",
     "is_nutifood_product": false,
+    "price_per_100g": 13000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -21,6 +23,8 @@
     "allergen_tags": [],
     "protein_source": "CHICKEN",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -33,6 +37,8 @@
     "allergen_tags": [],
     "protein_source": "CHICKEN",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -45,6 +51,8 @@
     "allergen_tags": [],
     "protein_source": "CHICKEN",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -57,6 +65,8 @@
     "allergen_tags": [],
     "protein_source": "TURKEY",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -69,6 +79,8 @@
     "allergen_tags": [],
     "protein_source": "BEEF",
     "is_nutifood_product": false,
+    "price_per_100g": 35000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -81,6 +93,8 @@
     "allergen_tags": [],
     "protein_source": "BEEF",
     "is_nutifood_product": false,
+    "price_per_100g": 35000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -93,6 +107,8 @@
     "allergen_tags": [],
     "protein_source": "BEEF",
     "is_nutifood_product": false,
+    "price_per_100g": 35000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -105,6 +121,8 @@
     "allergen_tags": [],
     "protein_source": "BEEF",
     "is_nutifood_product": false,
+    "price_per_100g": 35000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -117,6 +135,8 @@
     "allergen_tags": [],
     "protein_source": "BEEF",
     "is_nutifood_product": false,
+    "price_per_100g": 35000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -129,6 +149,8 @@
     "allergen_tags": [],
     "protein_source": "PORK",
     "is_nutifood_product": false,
+    "price_per_100g": 16000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -141,6 +163,8 @@
     "allergen_tags": [],
     "protein_source": "PORK",
     "is_nutifood_product": false,
+    "price_per_100g": 16000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -153,6 +177,8 @@
     "allergen_tags": [],
     "protein_source": "PORK",
     "is_nutifood_product": false,
+    "price_per_100g": 16000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -165,6 +191,8 @@
     "allergen_tags": [],
     "protein_source": "PORK",
     "is_nutifood_product": false,
+    "price_per_100g": 16000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -177,6 +205,8 @@
     "allergen_tags": [],
     "protein_source": "PORK",
     "is_nutifood_product": false,
+    "price_per_100g": 16000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -191,6 +221,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 45000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -205,6 +237,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -219,6 +253,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -233,6 +269,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -247,6 +285,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -261,6 +301,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -275,6 +317,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -289,6 +333,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -303,6 +349,8 @@
     ],
     "protein_source": "FISH",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -317,6 +365,8 @@
     ],
     "protein_source": "SEAFOOD",
     "is_nutifood_product": false,
+    "price_per_100g": 45000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -331,6 +381,8 @@
     ],
     "protein_source": "SEAFOOD",
     "is_nutifood_product": false,
+    "price_per_100g": 45000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -345,6 +397,8 @@
     ],
     "protein_source": "SEAFOOD",
     "is_nutifood_product": false,
+    "price_per_100g": 45000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -359,6 +413,8 @@
     ],
     "protein_source": "SEAFOOD",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -373,6 +429,8 @@
     ],
     "protein_source": "SEAFOOD",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -387,6 +445,8 @@
     ],
     "protein_source": "SEAFOOD",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -401,6 +461,8 @@
     ],
     "protein_source": "EGG",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -415,6 +477,8 @@
     ],
     "protein_source": "EGG",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -429,6 +493,8 @@
     ],
     "protein_source": "EGG",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -443,6 +509,8 @@
     ],
     "protein_source": "EGG",
     "is_nutifood_product": false,
+    "price_per_100g": 6000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -457,6 +525,8 @@
     ],
     "protein_source": "SOY",
     "is_nutifood_product": false,
+    "price_per_100g": 6000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -471,6 +541,8 @@
     ],
     "protein_source": "SOY",
     "is_nutifood_product": false,
+    "price_per_100g": 6000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -485,6 +557,8 @@
     ],
     "protein_source": "SOY",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -499,6 +573,8 @@
     ],
     "protein_source": "SOY",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -513,6 +589,8 @@
     ],
     "protein_source": "WHEAT",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -525,6 +603,8 @@
     "allergen_tags": [],
     "protein_source": "LAMB",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -537,6 +617,8 @@
     "allergen_tags": [],
     "protein_source": "DUCK",
     "is_nutifood_product": false,
+    "price_per_100g": 15000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -551,6 +633,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -565,6 +649,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": false,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -577,6 +663,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -589,6 +677,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -601,6 +691,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -613,6 +705,8 @@
     "allergen_tags": [],
     "carb_source": "SWEET_POTATO",
     "is_nutifood_product": false,
+    "price_per_100g": 4500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -625,6 +719,8 @@
     "allergen_tags": [],
     "carb_source": "SWEET_POTATO",
     "is_nutifood_product": false,
+    "price_per_100g": 4500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -637,6 +733,8 @@
     "allergen_tags": [],
     "carb_source": "POTATO",
     "is_nutifood_product": false,
+    "price_per_100g": 4500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -649,6 +747,8 @@
     "allergen_tags": [],
     "carb_source": "POTATO",
     "is_nutifood_product": false,
+    "price_per_100g": 4500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -661,6 +761,8 @@
     "allergen_tags": [],
     "carb_source": "ROOT",
     "is_nutifood_product": false,
+    "price_per_100g": 4500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -673,6 +775,8 @@
     "allergen_tags": [],
     "carb_source": "ROOT",
     "is_nutifood_product": false,
+    "price_per_100g": 4500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -685,6 +789,8 @@
     "allergen_tags": [],
     "carb_source": "OATS",
     "is_nutifood_product": false,
+    "price_per_100g": 12000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -697,6 +803,8 @@
     "allergen_tags": [],
     "carb_source": "OATS",
     "is_nutifood_product": false,
+    "price_per_100g": 12000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -709,6 +817,8 @@
     "allergen_tags": [],
     "carb_source": "QUINOA",
     "is_nutifood_product": false,
+    "price_per_100g": 12000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -721,6 +831,8 @@
     "allergen_tags": [],
     "carb_source": "GRAIN",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -735,6 +847,8 @@
     ],
     "carb_source": "WHEAT",
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -749,6 +863,8 @@
     ],
     "carb_source": "WHEAT",
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -763,6 +879,8 @@
     ],
     "carb_source": "WHEAT",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -775,6 +893,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -787,6 +907,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -799,6 +921,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -813,6 +937,8 @@
     ],
     "carb_source": "WHEAT",
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -825,6 +951,8 @@
     "allergen_tags": [],
     "carb_source": "KONJAC",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -837,6 +965,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -849,6 +979,8 @@
     "allergen_tags": [],
     "carb_source": "ROOT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -861,6 +993,8 @@
     "allergen_tags": [],
     "carb_source": "RICE",
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -873,6 +1007,8 @@
     "allergen_tags": [],
     "carb_source": "CORN",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -885,6 +1021,8 @@
     "allergen_tags": [],
     "carb_source": "BEANS",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -897,6 +1035,8 @@
     "allergen_tags": [],
     "carb_source": "BEANS",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -909,6 +1049,8 @@
     "allergen_tags": [],
     "carb_source": "BEANS",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -921,6 +1063,8 @@
     "allergen_tags": [],
     "carb_source": "LENTILS",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -933,6 +1077,8 @@
     "allergen_tags": [],
     "carb_source": "BEANS",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -945,6 +1091,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -957,6 +1105,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -969,6 +1119,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -981,6 +1133,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -993,6 +1147,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1005,6 +1161,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1017,6 +1175,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1029,6 +1189,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1041,6 +1203,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1053,6 +1217,8 @@
     "allergen_tags": [],
     "carb_source": "FRUIT",
     "is_nutifood_product": false,
+    "price_per_100g": 5000,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1064,6 +1230,8 @@
     "fat_per_100g": 0.4,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1075,6 +1243,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1086,6 +1256,8 @@
     "fat_per_100g": 0.1,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1097,6 +1269,8 @@
     "fat_per_100g": 0.4,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1108,6 +1282,8 @@
     "fat_per_100g": 0.9,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1119,6 +1295,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1130,6 +1308,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1141,6 +1321,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1152,6 +1334,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1163,6 +1347,8 @@
     "fat_per_100g": 0.4,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1174,6 +1360,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1185,6 +1373,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1196,6 +1386,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1207,6 +1399,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1218,6 +1412,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1229,6 +1425,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1240,6 +1438,8 @@
     "fat_per_100g": 0.1,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1251,6 +1451,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1262,6 +1464,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1273,6 +1477,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1284,6 +1490,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1295,6 +1503,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1306,6 +1516,8 @@
     "fat_per_100g": 0.1,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1317,6 +1529,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1328,6 +1542,8 @@
     "fat_per_100g": 0.1,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1339,6 +1555,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1350,6 +1568,8 @@
     "fat_per_100g": 0.4,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1361,6 +1581,8 @@
     "fat_per_100g": 0.1,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 3500,
+    "cost_tier": "BUDGET",
     "status": "Active"
   },
   {
@@ -1372,6 +1594,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1383,6 +1607,8 @@
     "fat_per_100g": 0.3,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1394,6 +1620,8 @@
     "fat_per_100g": 0.4,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1405,6 +1633,8 @@
     "fat_per_100g": 0.5,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1416,6 +1646,8 @@
     "fat_per_100g": 0.4,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1427,6 +1659,8 @@
     "fat_per_100g": 0.2,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 9000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1438,6 +1672,8 @@
     "fat_per_100g": 100,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1449,6 +1685,8 @@
     "fat_per_100g": 100,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1460,6 +1698,8 @@
     "fat_per_100g": 100,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1473,6 +1713,8 @@
       "SESAME"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 12000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1484,6 +1726,8 @@
     "fat_per_100g": 14.7,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 25000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1497,6 +1741,8 @@
       "NUTS"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 25000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1510,6 +1756,8 @@
       "NUTS"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 25000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1523,6 +1771,8 @@
       "NUTS"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1536,6 +1786,8 @@
       "NUTS"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1547,6 +1799,8 @@
     "fat_per_100g": 30.7,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 12000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1558,6 +1812,8 @@
     "fat_per_100g": 42,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1569,6 +1825,8 @@
     "fat_per_100g": 51,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1580,6 +1838,8 @@
     "fat_per_100g": 49,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1593,6 +1853,8 @@
       "PEANUT"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 12000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1606,6 +1868,8 @@
       "NUTS"
     ],
     "is_nutifood_product": false,
+    "price_per_100g": 25000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1617,6 +1881,8 @@
     "fat_per_100g": 46,
     "allergen_tags": [],
     "is_nutifood_product": false,
+    "price_per_100g": 8000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1631,6 +1897,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 28000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1645,6 +1913,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 28000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1659,6 +1929,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 28000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1673,6 +1945,8 @@
     ],
     "protein_source": "WHEY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1687,6 +1961,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 28000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1701,6 +1977,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1715,6 +1993,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1729,6 +2009,8 @@
     ],
     "protein_source": "WHEY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1743,6 +2025,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1757,6 +2041,8 @@
     ],
     "protein_source": "SOY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1771,6 +2057,8 @@
     ],
     "protein_source": "NUTS",
     "is_nutifood_product": true,
+    "price_per_100g": 28000,
+    "cost_tier": "PREMIUM",
     "status": "Active"
   },
   {
@@ -1785,6 +2073,8 @@
     ],
     "protein_source": "NUTS",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1801,6 +2091,8 @@
     "protein_source": "SOY",
     "carb_source": "OATS",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1815,6 +2107,8 @@
     ],
     "carb_source": "WHEAT",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1830,6 +2124,8 @@
     "protein_source": "SOY",
     "carb_source": "RICE",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1844,6 +2140,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1858,6 +2156,8 @@
     ],
     "protein_source": "DAIRY",
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   },
   {
@@ -1869,6 +2169,8 @@
     "fat_per_100g": 0.1,
     "allergen_tags": [],
     "is_nutifood_product": true,
+    "price_per_100g": 18000,
+    "cost_tier": "STANDARD",
     "status": "Active"
   }
 ]
