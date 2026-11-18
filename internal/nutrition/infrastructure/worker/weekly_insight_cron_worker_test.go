@@ -14,19 +14,26 @@ import (
 )
 
 type mockWeeklyInsightRepoForWorker struct {
+	mu    sync.RWMutex
 	saved map[string]*entity.WeeklyInsight
 }
 
 func (m *mockWeeklyInsightRepoForWorker) Save(_ context.Context, insight *entity.WeeklyInsight) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.saved[insight.UserID()] = insight
 	return nil
 }
 
 func (m *mockWeeklyInsightRepoForWorker) GetLatestByUserID(_ context.Context, userID string) (*entity.WeeklyInsight, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.saved[userID], nil
 }
 
 func (m *mockWeeklyInsightRepoForWorker) GetByUserIDAndStartDate(_ context.Context, userID string, _ time.Time) (*entity.WeeklyInsight, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.saved[userID], nil
 }
 
@@ -285,18 +292,25 @@ func TestWeeklyInsightCronWorker_StartStop(t *testing.T) {
 }
 
 type mockHistoryRepoForWorker struct {
+	mu        sync.RWMutex
 	histories map[string]*aggregate.MealHistory
 }
 
 func (m *mockHistoryRepoForWorker) FindByUserID(_ context.Context, userID string) (*aggregate.MealHistory, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.histories[userID], nil
 }
 
 func (m *mockHistoryRepoForWorker) FindByUserIDAndDateRange(_ context.Context, userID string, _, _ time.Time) (*aggregate.MealHistory, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.histories[userID], nil
 }
 
 func (m *mockHistoryRepoForWorker) Save(_ context.Context, history *aggregate.MealHistory) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.histories[history.UserID()] = history
 	return nil
 }
