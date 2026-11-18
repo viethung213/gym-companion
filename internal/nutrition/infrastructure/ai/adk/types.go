@@ -22,8 +22,10 @@ type FoodNutrientDTO struct {
 	CostTier          string   `json:"cost_tier,omitempty"`
 }
 
-//nolint:gocritic // hugeParam: fn value object mapping
-func ToFoodNutrientDTO(fn vo.FoodNutrient) FoodNutrientDTO {
+func ToFoodNutrientDTO(fn *vo.FoodNutrient) FoodNutrientDTO {
+	if fn == nil {
+		return FoodNutrientDTO{}
+	}
 	return FoodNutrientDTO{
 		ID:                fn.ID(),
 		Name:              fn.Name(),
@@ -44,13 +46,12 @@ func ToFoodNutrientDTO(fn vo.FoodNutrient) FoodNutrientDTO {
 func ToFoodNutrientDTOs(fns []vo.FoodNutrient) []FoodNutrientDTO {
 	dtos := make([]FoodNutrientDTO, 0, len(fns))
 	for i := range fns {
-		dtos = append(dtos, ToFoodNutrientDTO(fns[i]))
+		dtos = append(dtos, ToFoodNutrientDTO(&fns[i]))
 	}
 	return dtos
 }
 
-//nolint:gocritic // hugeParam: dto struct value object mapping
-func (dto FoodNutrientDTO) ToDomain() vo.FoodNutrient {
+func (dto *FoodNutrientDTO) ToDomain() vo.FoodNutrient {
 	return vo.NewFoodNutrient(
 		dto.ID,
 		dto.Name,

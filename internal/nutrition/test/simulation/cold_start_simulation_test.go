@@ -146,7 +146,7 @@ func TestSimulation_ColdStartUser_7Days_ExportResults(t *testing.T) {
 			TargetBudgetTier:   targetBudget,
 			RecentConsumptions: scoringHistory,
 		}
-		scoringCandidates := scoringSelector.SelectCandidates(scoringCriteria)
+		scoringCandidates := scoringSelector.SelectCandidates(&scoringCriteria)
 		legacyCandidates := scoringCandidates
 
 		// C. Mô phỏng thực tế: Người dùng ăn 2 bữa chính (Trưa & Tối) từ các nguyên liệu được gợi ý

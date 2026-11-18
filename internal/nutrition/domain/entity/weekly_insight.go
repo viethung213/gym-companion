@@ -1,6 +1,16 @@
 package entity
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrEmptyWeeklyInsightID          = errors.New("weekly insight id cannot be empty")
+	ErrEmptyWeeklyInsightUserID      = errors.New("weekly insight user id cannot be empty")
+	ErrInvalidWeeklyInsightDateRange = errors.New("weekly insight start date must be before end date")
+	ErrInvalidWeeklyInsightScore     = errors.New("weekly insight overall score must be between 0 and 100")
+)
 
 type WeeklyImprovementArea struct {
 	Nutrient    string
@@ -37,9 +47,7 @@ type WeeklyInsight struct {
 	updatedAt             time.Time
 }
 
-// NewWeeklyInsight khởi tạo một WeeklyInsight entity hoàn chỉnh.
-//
-//nolint:gocritic // value object is copied into entity constructor
+// NewWeeklyInsight tạo mới một thực thể WeeklyInsight với đầy đủ ràng buộc nghiệp vụ (invariants).
 func NewWeeklyInsight(
 	id string,
 	userID string,
@@ -50,15 +58,24 @@ func NewWeeklyInsight(
 	predictedCookingStyle string,
 	preferredIngredients []string,
 	improvementAreas []WeeklyImprovementArea,
-	weeklySummary WeeklyMacroSummary,
-	createdAt time.Time,
-	updatedAt time.Time,
-) *WeeklyInsight {
+	weeklySummary *WeeklyMacroSummary,
+) (*WeeklyInsight, error) {
+	if err := validateInvariants(id, userID, startDate, endDate, overallScore); err != nil {
+		return nil, err
+	}
+
 	prefCopy := make([]string, len(preferredIngredients))
 	copy(prefCopy, preferredIngredients)
 
 	areasCopy := make([]WeeklyImprovementArea, len(improvementAreas))
 	copy(areasCopy, improvementAreas)
+
+	var summaryVal WeeklyMacroSummary
+	if weeklySummary != nil {
+		summaryVal = *weeklySummary
+	}
+
+	now := time.Now()
 
 	return &WeeklyInsight{
 		id:                    id,
@@ -70,10 +87,72 @@ func NewWeeklyInsight(
 		predictedCookingStyle: predictedCookingStyle,
 		preferredIngredients:  prefCopy,
 		improvementAreas:      areasCopy,
-		weeklySummary:         weeklySummary,
+		weeklySummary:         summaryVal,
+		createdAt:             now,
+		updatedAt:             now,
+	}, nil
+}
+
+// ReconstructWeeklyInsight tái tạo thực thể từ tầng lưu trữ (persistence/database).
+func ReconstructWeeklyInsight(
+	id string,
+	userID string,
+	startDate time.Time,
+	endDate time.Time,
+	overallScore int,
+	summary string,
+	predictedCookingStyle string,
+	preferredIngredients []string,
+	improvementAreas []WeeklyImprovementArea,
+	weeklySummary *WeeklyMacroSummary,
+	createdAt time.Time,
+	updatedAt time.Time,
+) (*WeeklyInsight, error) {
+	if err := validateInvariants(id, userID, startDate, endDate, overallScore); err != nil {
+		return nil, err
+	}
+
+	prefCopy := make([]string, len(preferredIngredients))
+	copy(prefCopy, preferredIngredients)
+
+	areasCopy := make([]WeeklyImprovementArea, len(improvementAreas))
+	copy(areasCopy, improvementAreas)
+
+	var summaryVal WeeklyMacroSummary
+	if weeklySummary != nil {
+		summaryVal = *weeklySummary
+	}
+
+	return &WeeklyInsight{
+		id:                    id,
+		userID:                userID,
+		startDate:             startDate,
+		endDate:               endDate,
+		overallScore:          overallScore,
+		summary:               summary,
+		predictedCookingStyle: predictedCookingStyle,
+		preferredIngredients:  prefCopy,
+		improvementAreas:      areasCopy,
+		weeklySummary:         summaryVal,
 		createdAt:             createdAt,
 		updatedAt:             updatedAt,
+	}, nil
+}
+
+func validateInvariants(id, userID string, startDate, endDate time.Time, overallScore int) error {
+	if id == "" {
+		return ErrEmptyWeeklyInsightID
 	}
+	if userID == "" {
+		return ErrEmptyWeeklyInsightUserID
+	}
+	if !startDate.Before(endDate) {
+		return ErrInvalidWeeklyInsightDateRange
+	}
+	if overallScore < 0 || overallScore > 100 {
+		return ErrInvalidWeeklyInsightScore
+	}
+	return nil
 }
 
 func (w *WeeklyInsight) ID() string                    { return w.id }

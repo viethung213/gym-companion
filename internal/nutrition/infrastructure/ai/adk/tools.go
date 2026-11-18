@@ -21,18 +21,17 @@ type SessionFilterContext struct {
 type NutritionTools struct {
 	foodRepo repository.FoodItemRepository
 	mu       sync.RWMutex
-	sessions map[string]SessionFilterContext
+	sessions map[string]*SessionFilterContext
 }
 
 func NewNutritionTools(foodRepo repository.FoodItemRepository) *NutritionTools {
 	return &NutritionTools{
 		foodRepo: foodRepo,
-		sessions: make(map[string]SessionFilterContext),
+		sessions: make(map[string]*SessionFilterContext),
 	}
 }
 
-//nolint:gocritic // hugeParam: sCtx value object mapping
-func (t *NutritionTools) RegisterSessionContext(sessionID string, sCtx SessionFilterContext) {
+func (t *NutritionTools) RegisterSessionContext(sessionID string, sCtx *SessionFilterContext) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.sessions[sessionID] = sCtx
@@ -44,7 +43,7 @@ func (t *NutritionTools) UnregisterSessionContext(sessionID string) {
 	delete(t.sessions, sessionID)
 }
 
-func (t *NutritionTools) GetSessionContext(sessionID string) (SessionFilterContext, bool) {
+func (t *NutritionTools) GetSessionContext(sessionID string) (*SessionFilterContext, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	sCtx, ok := t.sessions[sessionID]
@@ -72,13 +71,17 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, sessionID, 
 	}
 
 	sCtx, _ := t.GetSessionContext(sessionID)
-	planDate := sCtx.PlanDate
-	if planDate.IsZero() {
-		planDate = time.Now()
+	planDate := time.Now()
+	var userRestrictions []string
+	if sCtx != nil {
+		userRestrictions = sCtx.UserRestrictions
+		if !sCtx.PlanDate.IsZero() {
+			planDate = sCtx.PlanDate
+		}
 	}
 
 	// 1. Lọc dị ứng an toàn tuyệt đối
-	safeCatalog := service.FilterAllergensOnly(catalog, sCtx.UserRestrictions)
+	safeCatalog := service.FilterAllergensOnly(catalog, userRestrictions)
 	if len(safeCatalog) == 0 {
 		return nil, nil
 	}
@@ -149,7 +152,11 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, sessionID, 
 	}
 
 	// 4. Xáo trộn và lấy mẫu ngẫu nhiên tất định có phân trang
-	seedKey := fmt.Sprintf("%s_%s", sCtx.UserID, catUpper)
+	userID := "default_user"
+	if sCtx != nil && sCtx.UserID != "" {
+		userID = sCtx.UserID
+	}
+	seedKey := fmt.Sprintf("%s_%s", userID, catUpper)
 	rng := service.NewDeterministicRNG(seedKey, planDate)
 	sampled := service.SamplePaged(candidates, targetLimit, pageOpt, rng)
 

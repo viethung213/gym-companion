@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/entity"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
+	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
 )
 
 type mockPlanRepo struct {
@@ -142,7 +143,7 @@ func TestQueryHandlers(t *testing.T) {
 
 	// 4. GetNutritionInsightHandler (Đọc từ DB, không gọi LLM)
 	weeklyRepo := &mockWeeklyInsightRepo{insights: make(map[string]*entity.WeeklyInsight)}
-	seedInsight := entity.NewWeeklyInsight(
+	seedInsight := testutil.MustNewWeeklyInsight(
 		"insight-q-1",
 		"user-q-1",
 		now.AddDate(0, 0, -6),
@@ -154,12 +155,10 @@ func TestQueryHandlers(t *testing.T) {
 		[]entity.WeeklyImprovementArea{
 			{Nutrient: "PROTEIN", Action: "INCREASE", DeltaAmount: 15.0, Suggestion: "Tăng 15g đạm"},
 		},
-		entity.WeeklyMacroSummary{
+		&entity.WeeklyMacroSummary{
 			ConsumedCalories: 14000,
 			TargetCalories:   14000,
 		},
-		now,
-		now,
 	)
 	_ = weeklyRepo.Save(context.Background(), seedInsight)
 

@@ -62,7 +62,7 @@ func TestNutritionTools(t *testing.T) {
 
 	// 5. FetchActiveFoodCatalog với Session Context (Allergen restriction filtering)
 	sessionID := "sess-123"
-	tools.RegisterSessionContext(sessionID, SessionFilterContext{
+	tools.RegisterSessionContext(sessionID, &SessionFilterContext{
 		UserID:           "u1",
 		UserRestrictions: []string{"Ức gà"},
 		PlanDate:         time.Now(),

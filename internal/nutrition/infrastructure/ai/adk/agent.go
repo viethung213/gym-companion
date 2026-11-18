@@ -165,7 +165,7 @@ func (a *NutritionAgent) GenerateNutritionInsight(
 		return nil, fmt.Errorf("generate nutrition insight parse json: %w", err)
 	}
 
-	return mapInsightToResult(insight), nil
+	return mapInsightToResult(&insight), nil
 }
 
 // insightLLMResponse là schema JSON mà LLM trả về cho insight.
@@ -183,9 +183,7 @@ type insightLLMResponse struct {
 }
 
 // mapInsightToResult chuyển đổi insightLLMResponse sang repository.NutritionInsightResult.
-//
-//nolint:gocritic // r is an internal response struct
-func mapInsightToResult(r insightLLMResponse) *repository.NutritionInsightResult {
+func mapInsightToResult(r *insightLLMResponse) *repository.NutritionInsightResult {
 	areas := make([]repository.ImprovementArea, 0, len(r.ImprovementAreas))
 	for _, a := range r.ImprovementAreas {
 		areas = append(areas, repository.ImprovementArea{

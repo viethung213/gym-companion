@@ -191,7 +191,7 @@ func (h *GenerateWeeklyInsightHandler) Handle(
 		TotalMealsCount:  fixedDays * 4,
 	}
 
-	weeklyInsight := entity.NewWeeklyInsight(
+	weeklyInsight, err := entity.NewWeeklyInsight(
 		uuid.New().String(),
 		cmd.UserID,
 		startDate,
@@ -201,10 +201,11 @@ func (h *GenerateWeeklyInsightHandler) Handle(
 		aiResult.PredictedCookingStyle,
 		aiResult.PreferredIngredients,
 		areas,
-		summary,
-		now,
-		now,
+		&summary,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("generate weekly insight: validate entity: %w", err)
+	}
 
 	if err := h.insightRepo.Save(ctx, weeklyInsight); err != nil {
 		return nil, fmt.Errorf("generate weekly insight: save to db: %w", err)

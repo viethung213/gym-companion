@@ -375,7 +375,7 @@ func TestGetNutritionInsight_Handler(t *testing.T) {
 	// 3. Seed weekly insight
 	now := time.Now()
 	startDate := now.AddDate(0, 0, -6)
-	seedInsight := entity.NewWeeklyInsight(
+	seedInsight := testutil.MustNewWeeklyInsight(
 		"insight-test-1",
 		"insight-user-1",
 		startDate,
@@ -392,7 +392,7 @@ func TestGetNutritionInsight_Handler(t *testing.T) {
 				Suggestion:  "Bổ sung thêm đạm buổi sáng",
 			},
 		},
-		entity.WeeklyMacroSummary{
+		&entity.WeeklyMacroSummary{
 			ConsumedCalories: 14000,
 			TargetCalories:   14000,
 			ConsumedProtein:  800,
@@ -404,8 +404,6 @@ func TestGetNutritionInsight_Handler(t *testing.T) {
 			LoggedMealsCount: 28,
 			TotalMealsCount:  28,
 		},
-		now,
-		now,
 	)
 	if err := repos.WeeklyInsight.Save(ctx, seedInsight); err != nil {
 		t.Fatalf("failed to save seed insight: %v", err)

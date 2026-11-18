@@ -112,7 +112,7 @@ func TestSimulation_7Days_ScoringCandidateSelector(t *testing.T) {
 			TargetBudgetTier:   targetBudget,
 			RecentConsumptions: scoringHistory,
 		}
-		scoringCandidates := scoringSelector.SelectCandidates(scoringCriteria)
+		scoringCandidates := scoringSelector.SelectCandidates(&scoringCriteria)
 
 		hasScoringRice := containsFood(scoringCandidates, "Cơm trắng")
 		hasScoringChicken := containsFood(scoringCandidates, "Ức gà")

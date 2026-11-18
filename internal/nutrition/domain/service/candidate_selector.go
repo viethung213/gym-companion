@@ -53,10 +53,8 @@ func NewCandidateSelector() *CandidateSelector {
 }
 
 // SelectCandidates thực hiện chọn lọc nguyên liệu bằng công thức ưu tiên và phân tầng hạn mức.
-//
-//nolint:gocritic // criteria struct is passed by value per domain service signature
-func (s *CandidateSelector) SelectCandidates(criteria SelectionCriteria) []vo.FoodNutrient {
-	if len(criteria.Catalog) == 0 {
+func (s *CandidateSelector) SelectCandidates(criteria *SelectionCriteria) []vo.FoodNutrient {
+	if criteria == nil || len(criteria.Catalog) == 0 {
 		return nil
 	}
 
@@ -116,12 +114,10 @@ type scoredFoodItem struct {
 }
 
 // rankAndSelect tính điểm cho toàn bộ thực phẩm trong nhóm và chọn top K theo điểm cao nhất.
-//
-//nolint:gocritic // criteria struct is passed by value
 func (s *CandidateSelector) rankAndSelect(
 	items []vo.FoodNutrient,
 	targetCount int,
-	criteria SelectionCriteria,
+	criteria *SelectionCriteria,
 	consumptions []vo.HistoricalConsumption,
 	normalizedPrefs []string,
 	rng *rand.Rand,
@@ -159,11 +155,9 @@ func (s *CandidateSelector) rankAndSelect(
 
 // CalculatePriorityScore tính điểm ưu tiên tổng hợp:
 // S(i, u, t) = w_n*N_i + w_p*P_iu - w_r*R_it - w_c*C_i
-//
-//nolint:gocritic // criteria struct is passed by value
 func (s *CandidateSelector) CalculatePriorityScore(
 	item *vo.FoodNutrient,
-	criteria SelectionCriteria,
+	criteria *SelectionCriteria,
 	consumptions []vo.HistoricalConsumption,
 	normalizedPrefs []string,
 ) float64 {

@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
+	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
 )
 
 type mockPlanRepo struct {
@@ -247,7 +248,7 @@ func TestGenerateDailyPlanHandler_WithWeeklyInsightPersonalization(t *testing.T)
 
 	weeklyRepo := &mockWeeklyInsightRepoForDailyPlan{
 		insights: map[string]*entity.WeeklyInsight{
-			"user-pers-1": entity.NewWeeklyInsight(
+			"user-pers-1": testutil.MustNewWeeklyInsight(
 				"ins-1",
 				"user-pers-1",
 				time.Now().AddDate(0, 0, -7),
@@ -257,9 +258,7 @@ func TestGenerateDailyPlanHandler_WithWeeklyInsightPersonalization(t *testing.T)
 				"Hấp, luộc ít dầu mỡ",
 				[]string{"Ức gà tươi", "Cơm trắng"},
 				nil,
-				entity.WeeklyMacroSummary{},
-				time.Now(),
-				time.Now(),
+				nil,
 			),
 		},
 	}
@@ -362,7 +361,7 @@ func TestGenerateDailyPlanHandler_StaleWeeklyInsight_IgnoredWhenOlderThan1Week(t
 	oneMonthAgo := time.Now().AddDate(0, -1, 0)
 	weeklyRepo := &mockWeeklyInsightRepoForDailyPlan{
 		insights: map[string]*entity.WeeklyInsight{
-			"user-inactive-1month": entity.NewWeeklyInsight(
+			"user-inactive-1month": testutil.MustNewWeeklyInsight(
 				"ins-old",
 				"user-inactive-1month",
 				oneMonthAgo.AddDate(0, 0, -7),
@@ -372,9 +371,7 @@ func TestGenerateDailyPlanHandler_StaleWeeklyInsight_IgnoredWhenOlderThan1Week(t
 				"Chiên xào nhiều dầu",
 				[]string{"Thịt mỡ", "Mì tôm"},
 				nil,
-				entity.WeeklyMacroSummary{},
-				oneMonthAgo,
-				oneMonthAgo,
+				nil,
 			),
 		},
 	}

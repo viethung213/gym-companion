@@ -13,6 +13,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/entity"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
@@ -340,4 +341,24 @@ func NewTestNutritionPlan(id, userID string, planDate time.Time) *aggregate.Nutr
 // NewTestMealHistory tạo MealHistory rỗng cho userID.
 func NewTestMealHistory(id, userID string) *aggregate.MealHistory {
 	return aggregate.NewMealHistory(id, userID)
+}
+
+// MustNewWeeklyInsight tạo WeeklyInsight hợp lệ cho test; panic nếu invariants bị vi phạm.
+func MustNewWeeklyInsight(
+	id, userID string,
+	startDate, endDate time.Time,
+	overallScore int,
+	summary, style string,
+	preferredIngredients []string,
+	improvementAreas []entity.WeeklyImprovementArea,
+	macroSummary *entity.WeeklyMacroSummary,
+) *entity.WeeklyInsight {
+	ins, err := entity.NewWeeklyInsight(
+		id, userID, startDate, endDate, overallScore, summary, style,
+		preferredIngredients, improvementAreas, macroSummary,
+	)
+	if err != nil {
+		panic(err)
+	}
+	return ins
 }

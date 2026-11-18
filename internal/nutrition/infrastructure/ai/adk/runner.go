@@ -34,7 +34,7 @@ func (a *NutritionAgent) runWorkflow(
 	}()
 
 	if a.tools != nil {
-		a.tools.RegisterSessionContext(sessionID, SessionFilterContext{
+		a.tools.RegisterSessionContext(sessionID, &SessionFilterContext{
 			UserID:           pCtx.UserID,
 			UserRestrictions: pCtx.UserRestrictions,
 			PlanDate:         pCtx.PlanDate,

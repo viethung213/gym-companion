@@ -229,7 +229,7 @@ type jsonWeeklyImprovementAreaDTO struct {
 	Suggestion  string  `json:"suggestion"`
 }
 
-func (g *GormWeeklyInsight) ToDomain() *entity.WeeklyInsight {
+func (g *GormWeeklyInsight) ToDomain() (*entity.WeeklyInsight, error) {
 	var prefs []string
 	if len(g.PreferredIngredients) > 0 {
 		_ = json.Unmarshal(g.PreferredIngredients, &prefs)
@@ -262,7 +262,7 @@ func (g *GormWeeklyInsight) ToDomain() *entity.WeeklyInsight {
 		TotalMealsCount:  g.TotalMealsCount,
 	}
 
-	return entity.NewWeeklyInsight(
+	return entity.ReconstructWeeklyInsight(
 		g.ID,
 		g.UserID,
 		g.StartDate,
@@ -272,7 +272,7 @@ func (g *GormWeeklyInsight) ToDomain() *entity.WeeklyInsight {
 		g.PredictedCookingStyle,
 		prefs,
 		areas,
-		summary,
+		&summary,
 		g.CreatedAt,
 		g.UpdatedAt,
 	)

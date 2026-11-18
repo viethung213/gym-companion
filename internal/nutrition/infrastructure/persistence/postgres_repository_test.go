@@ -16,6 +16,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
+	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -533,7 +534,7 @@ func TestPostgresWeeklyInsightRepository_Integration(t *testing.T) {
 	}
 
 	// 2. Save new WeeklyInsight
-	insight := entity.NewWeeklyInsight(
+	insight := testutil.MustNewWeeklyInsight(
 		"wi-1",
 		"u-insight-1",
 		startDate,
@@ -550,7 +551,7 @@ func TestPostgresWeeklyInsightRepository_Integration(t *testing.T) {
 				Suggestion:  "Tăng lượng đạm vào bữa phụ",
 			},
 		},
-		entity.WeeklyMacroSummary{
+		&entity.WeeklyMacroSummary{
 			ConsumedCalories: 14000,
 			TargetCalories:   14500,
 			ConsumedProtein:  850,
@@ -562,8 +563,6 @@ func TestPostgresWeeklyInsightRepository_Integration(t *testing.T) {
 			LoggedMealsCount: 26,
 			TotalMealsCount:  28,
 		},
-		now,
-		now,
 	)
 
 	if err := repo.Save(ctx, insight); err != nil {
@@ -610,7 +609,7 @@ func TestPostgresWeeklyInsightRepository_Integration(t *testing.T) {
 	}
 
 	// 5. Upsert: Update score on same user and startDate
-	updatedInsight := entity.NewWeeklyInsight(
+	updatedInsight := testutil.MustNewWeeklyInsight(
 		"wi-2",
 		"u-insight-1",
 		startDate,
@@ -620,12 +619,10 @@ func TestPostgresWeeklyInsightRepository_Integration(t *testing.T) {
 		"Hấp, luộc thanh đạm",
 		[]string{"Ức gà"},
 		[]entity.WeeklyImprovementArea{},
-		entity.WeeklyMacroSummary{
+		&entity.WeeklyMacroSummary{
 			ConsumedCalories: 14500,
 			TargetCalories:   14500,
 		},
-		now,
-		now,
 	)
 	if err := repo.Save(ctx, updatedInsight); err != nil {
 		t.Fatalf("failed to update weekly insight: %v", err)

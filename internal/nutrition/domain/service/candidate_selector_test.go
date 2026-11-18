@@ -53,7 +53,7 @@ func TestCandidateSelector_HardAllergenFilter(t *testing.T) {
 		NutritionGoal:    vo.GoalMuscleGain,
 	}
 
-	candidates := selector.SelectCandidates(criteria)
+	candidates := selector.SelectCandidates(&criteria)
 	for _, c := range candidates {
 		if c.Name() == "Bánh mì nguyên cám" {
 			t.Errorf("Allergen violation: Bánh mì nguyên cám must be strictly excluded")
@@ -122,7 +122,7 @@ func TestCandidateSelector_BudgetPenalty(t *testing.T) {
 		TargetBudgetTier: "BUDGET",
 	}
 
-	selected := selector.SelectCandidates(criteriaBudget)
+	selected := selector.SelectCandidates(&criteriaBudget)
 
 	// Kiểm tra xem Ức gà (BUDGET) có được chọn không
 	var hasChicken bool
@@ -150,7 +150,7 @@ func TestCandidateSelector_PersonalizedPreference(t *testing.T) {
 		UserPreferences: []string{"Cơm trắng", "Ức gà"},
 	}
 
-	selected := selector.SelectCandidates(criteria)
+	selected := selector.SelectCandidates(&criteria)
 	var foundRice bool
 	for _, item := range selected {
 		if item.Name() == "Cơm trắng gạo tẻ" {
@@ -172,7 +172,7 @@ func TestCandidateSelector_MinimumEssentialThreshold(t *testing.T) {
 	v := vo.NewFoodNutrient("v1", "Bông cải", "VEGGIE", 34, 2.8, 7, 0.4, nil, "", "", false, 9000, "STANDARD")
 
 	// Case 1: Catalog chỉ có 1 nguyên liệu (Protein) -> Phải từ chối (nil)
-	res1 := selector.SelectCandidates(SelectionCriteria{
+	res1 := selector.SelectCandidates(&SelectionCriteria{
 		Catalog:  []vo.FoodNutrient{p},
 		UserID:   "u1",
 		PlanDate: now,
@@ -182,7 +182,7 @@ func TestCandidateSelector_MinimumEssentialThreshold(t *testing.T) {
 	}
 
 	// Case 2: Catalog chỉ có 2 nguyên liệu (Protein + Carb, thiếu Veggie) -> Phải từ chối (nil)
-	res2 := selector.SelectCandidates(SelectionCriteria{
+	res2 := selector.SelectCandidates(&SelectionCriteria{
 		Catalog:  []vo.FoodNutrient{p, c},
 		UserID:   "u1",
 		PlanDate: now,
@@ -192,7 +192,7 @@ func TestCandidateSelector_MinimumEssentialThreshold(t *testing.T) {
 	}
 
 	// Case 3: Catalog có đủ 3 nhóm thiết yếu (1 Protein + 1 Carb + 1 Veggie) -> Chấp nhận
-	res3 := selector.SelectCandidates(SelectionCriteria{
+	res3 := selector.SelectCandidates(&SelectionCriteria{
 		Catalog:  []vo.FoodNutrient{p, c, v},
 		UserID:   "u1",
 		PlanDate: now,

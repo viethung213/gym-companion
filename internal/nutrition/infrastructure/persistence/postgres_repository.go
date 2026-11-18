@@ -547,7 +547,11 @@ func (r *PostgresWeeklyInsightRepository) GetLatestByUserID(ctx context.Context,
 		}
 		return nil, fmt.Errorf("postgres weekly insight repo get latest: %w", err)
 	}
-	return gormModel.ToDomain(), nil
+	domainInsight, err := gormModel.ToDomain()
+	if err != nil {
+		return nil, fmt.Errorf("postgres weekly insight repo get latest: %w", err)
+	}
+	return domainInsight, nil
 }
 
 func (r *PostgresWeeklyInsightRepository) GetByUserIDAndStartDate(ctx context.Context, userID string, startDate time.Time) (*entity.WeeklyInsight, error) {
@@ -563,5 +567,9 @@ func (r *PostgresWeeklyInsightRepository) GetByUserIDAndStartDate(ctx context.Co
 		}
 		return nil, fmt.Errorf("postgres weekly insight repo get by user and date: %w", err)
 	}
-	return gormModel.ToDomain(), nil
+	domainInsight, err := gormModel.ToDomain()
+	if err != nil {
+		return nil, fmt.Errorf("postgres weekly insight repo get by user and date: %w", err)
+	}
+	return domainInsight, nil
 }

@@ -89,7 +89,7 @@ func (g *MenuGenerator) GenerateDailyPlan(
 		UserPreferences:    preferredIngredients,
 		RecentConsumptions: recentConsumptions,
 	}
-	selectedIngredients := g.candidateSelector.SelectCandidates(criteria)
+	selectedIngredients := g.candidateSelector.SelectCandidates(&criteria)
 
 	// Gọi AI 1 lần duy nhất để sinh toàn bộ các món ăn cho 4 bữa trong ngày (tiết kiệm 75% thời gian phản hồi)
 	promptCtx := repository.AIMenuPromptContext{
