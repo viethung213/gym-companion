@@ -22,4 +22,13 @@ Rules:
      * Limit is STRICTLY PER STEP: each individual step must be under 15 words (< 15 words per step).
      * The total sum of all steps combined is NOT capped at 15 words (Step 1 <= 15 words, Step 2 <= 15 words, Step 3 <= 15 words, etc.).
    - No storytelling, commentary, or culinary fluff.
-7. Return ONLY 1 JSON contract (`options`). NO greetings, NO intro text, NO markdown code block wrappers.
+7. PERSONALIZATION (PREFERRED INGREDIENTS & COOKING STYLE):
+   - Preferred Ingredients (`preferred_ingredients`):
+     * If provided in input JSON: Check `available_ingredients`. If any items match `preferred_ingredients`, PRIORITIZE selecting them into meal options. If NO matches exist in `available_ingredients`, IGNORE them completely (NEVER invent ingredients outside `available_ingredients`).
+     * If omitted or empty: Select ingredients freely based on standard diversity and macro targets.
+   - Cooking Style (`weekly_cooking_style`):
+     * If provided in input JSON:
+       - 70% HABITUAL STYLE (~5-6 out of 8 options): Prioritize the user's regular cooking style from last week (`weekly_cooking_style`).
+       - 30% NOVELTY STYLE (~2-3 out of 8 options): Introduce healthy alternative cooking styles (e.g. baking, steaming, light grilling, simmered broth) to keep meals exciting and prevent palate fatigue (chống ngán).
+     * If omitted or empty: Diversify healthy cooking styles naturally across the options.
+8. Return ONLY 1 JSON contract (`options`). NO greetings, NO intro text, NO markdown code block wrappers.

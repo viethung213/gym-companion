@@ -134,17 +134,16 @@
   - `CalorieAllocation.target >= 1200 kcal/ngày` (BR-NU-01).
 
 #### Aggregate Root: `MealHistory`
-- **Nhiệm vụ**: Theo dõi lịch sử ăn uống và kiểm soát chống lặp món.
+- **Nhiệm vụ**: Theo dõi lịch sử ăn uống của người dùng.
 - **Entities**:
   - `MealLog`: Món ăn thực tế đã ghi, có thể sửa/xóa (có lifecycle riêng).
 - **Value Objects**:
-  - `LockoutRegistry`: Nguyên liệu đang bị khóa và ngày mở khóa.
+  - `HistoricalConsumption`: Thông tin tiêu thụ món ăn và danh sách nguyên liệu thực tế (`Ingredients []string`).
 - **Repository**: `MealHistoryRepository`
 - **Domain Events**:
   - `MealLogged`: Ghi nhận bữa ăn thành công.
-  - `LockoutApplied`: Khóa nguyên liệu thành công.
 - **Invariants**:
-  - Thêm `MealLog` mới → tự động cập nhật `LockoutRegistry`: Protein 7 ngày, Carb 5 ngày, Chủ đề món 3 ngày (BR-NU-02).
+  - Thêm `MealLog` mới → lưu vết lịch sử ăn uống phục vụ thuật toán phân rã hàm mũ chấm điểm ứng viên (`CandidateSelector` - BR-NU-02).
 
 #### Aggregate Root: `FoodItem`
 - **Nhiệm vụ**: Thư viện thực phẩm chuẩn, quản lý vòng đời phê duyệt.

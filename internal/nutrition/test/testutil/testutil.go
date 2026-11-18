@@ -7,11 +7,13 @@ import (
 	"context"
 	"database/sql"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/entity"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
@@ -37,7 +39,16 @@ func NewSchemaStripPool(db *sql.DB) *SchemaStripPool {
 }
 
 func (p *SchemaStripPool) strip(query string) string {
-	return p.re.ReplaceAllString(query, "$1")
+	return p.re.ReplaceAllStringFunc(query, func(match string) string {
+		if strings.HasPrefix(match, "`excluded`.") {
+			return match
+		}
+		parts := strings.SplitN(match, ".", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+		return match
+	})
 }
 
 // ExecContext implements gorm.ConnPool.
@@ -77,7 +88,16 @@ type SchemaTxPool struct {
 }
 
 func (p *SchemaTxPool) strip(query string) string {
-	return p.re.ReplaceAllString(query, "$1")
+	return p.re.ReplaceAllStringFunc(query, func(match string) string {
+		if strings.HasPrefix(match, "`excluded`.") {
+			return match
+		}
+		parts := strings.SplitN(match, ".", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+		return match
+	})
 }
 
 // ExecContext implements gorm.ConnPool.
@@ -152,7 +172,7 @@ func CreateSchema(db *sql.DB) error {
 			id TEXT PRIMARY KEY, name TEXT COLLATE NOCASE, category TEXT,
 			calories_per_100g REAL, protein_per_100g REAL, carbs_per_100g REAL, fat_per_100g REAL,
 			allergen_tags TEXT, protein_source TEXT, carb_source TEXT,
-			is_nutifood_product NUMERIC DEFAULT 0, status TEXT,
+			is_nutifood_product NUMERIC DEFAULT 0, price_per_100g REAL DEFAULT 0, cost_tier TEXT DEFAULT 'STANDARD', status TEXT,
 			created_at DATETIME, updated_at DATETIME
 		)`,
 		`CREATE TABLE IF NOT EXISTS recipes (
@@ -189,6 +209,18 @@ func CreateSchema(db *sql.DB) error {
 			payload TEXT, partition_key TEXT, processed_at DATETIME,
 			status TEXT, error_message TEXT
 		)`,
+		`CREATE TABLE IF NOT EXISTS weekly_insights (
+			id TEXT PRIMARY KEY, user_id TEXT, start_date DATETIME, end_date DATETIME,
+			overall_score INTEGER, summary TEXT, predicted_cooking_style TEXT,
+			preferred_ingredients TEXT, improvement_areas TEXT,
+			consumed_calories REAL, target_calories REAL,
+			consumed_protein REAL, target_protein REAL,
+			consumed_carbs REAL, target_carbs REAL,
+			consumed_fat REAL, target_fat REAL,
+			logged_meals_count INTEGER, total_meals_count INTEGER,
+			created_at DATETIME, updated_at DATETIME,
+			UNIQUE(user_id, start_date)
+		)`,
 	}
 	for _, ddl := range ddls {
 		if _, err := db.Exec(ddl); err != nil {
@@ -208,6 +240,7 @@ type Repos struct {
 	NutritionPlan *persistence.PostgresNutritionPlanRepository
 	MealHistory   *persistence.PostgresMealHistoryRepository
 	RecipeCache   *persistence.PostgresRecipeCacheRepository
+	WeeklyInsight *persistence.PostgresWeeklyInsightRepository
 	Outbox        *persistence.PostgresOutboxRepository
 	OutboxLog     *persistence.PostgresOutboxLogRepository
 }
@@ -219,6 +252,7 @@ func NewRepos(db *gorm.DB) *Repos {
 		NutritionPlan: persistence.NewPostgresNutritionPlanRepository(db),
 		MealHistory:   persistence.NewPostgresMealHistoryRepository(db),
 		RecipeCache:   persistence.NewPostgresRecipeCacheRepository(db),
+		WeeklyInsight: persistence.NewPostgresWeeklyInsightRepository(db),
 		Outbox:        persistence.NewPostgresOutboxRepository(db),
 		OutboxLog:     persistence.NewPostgresOutboxLogRepository(db),
 	}
@@ -242,7 +276,6 @@ type MockAIService struct {
 func (m *MockAIService) SelectCreativeMealOptions(
 	_ context.Context,
 	_ repository.AIMenuPromptContext,
-	_ vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
 	if m.GenerateResults != nil {
 		return m.GenerateResults, nil
@@ -276,12 +309,14 @@ func (m *MockAIService) EstimateNutrient(
 }
 
 // GenerateNutritionInsight implements repository.AIService.
+//
+//nolint:gocritic // mock implements interface with value struct
 func (m *MockAIService) GenerateNutritionInsight(
 	_ context.Context, _ repository.InsightPromptContext,
 ) (*repository.NutritionInsightResult, error) {
 	return &repository.NutritionInsightResult{
-		Summary:     "stub insight",
-		WeeklyTrend: "STABLE",
+		OverallScore: 80,
+		Summary:      "stub insight",
 	}, nil
 }
 
@@ -291,7 +326,7 @@ func (m *MockAIService) GenerateNutritionInsight(
 
 // NewApprovedFoodItem tạo FoodItem đã được approve, sẵn sàng dùng trong test.
 func NewApprovedFoodItem(id, name, category string, cal, protein, carbs, fat float64) *aggregate.FoodItem {
-	item := aggregate.NewFoodItem(id, name, category, cal, protein, carbs, fat, nil, "", "", false)
+	item, _ := aggregate.NewFoodItem(id, name, category, cal, protein, carbs, fat, nil, "", "", false, 0, "STANDARD")
 	_ = item.SubmitForApproval()
 	_ = item.Approve()
 	return item
@@ -305,5 +340,25 @@ func NewTestNutritionPlan(id, userID string, planDate time.Time) *aggregate.Nutr
 
 // NewTestMealHistory tạo MealHistory rỗng cho userID.
 func NewTestMealHistory(id, userID string) *aggregate.MealHistory {
-	return aggregate.NewMealHistory(id, userID, vo.NewLockoutRegistry(nil))
+	return aggregate.NewMealHistory(id, userID)
+}
+
+// MustNewWeeklyInsight tạo WeeklyInsight hợp lệ cho test; panic nếu invariants bị vi phạm.
+func MustNewWeeklyInsight(
+	id, userID string,
+	startDate, endDate time.Time,
+	overallScore int,
+	summary, style string,
+	preferredIngredients []string,
+	improvementAreas []entity.WeeklyImprovementArea,
+	macroSummary *entity.WeeklyMacroSummary,
+) *entity.WeeklyInsight {
+	ins, err := entity.NewWeeklyInsight(
+		id, userID, startDate, endDate, overallScore, summary, style,
+		preferredIngredients, improvementAreas, macroSummary,
+	)
+	if err != nil {
+		panic(err)
+	}
+	return ins
 }

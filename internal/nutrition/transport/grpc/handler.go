@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/domainerror"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -174,6 +176,8 @@ func (h *GRPCHandler) CreateFoodItem(ctx context.Context, req *nutritionv1msg.Cr
 		ProteinSource:     req.GetProteinSource(),
 		CarbSource:        req.GetCarbSource(),
 		IsNutiFoodProduct: req.GetIsNutifoodProduct(),
+		PricePer100g:      float64(req.GetPricePer_100G()),
+		CostTier:          req.GetCostTier(),
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create food item: %v", err)
@@ -281,55 +285,6 @@ func (h *GRPCHandler) GetNutritionSummary(
 	}, nil
 }
 
-// GetNutritionInsight gọi AI để phân tích xu hướng dinh dưỡng và trả về hướng cải thiện.
-func (h *GRPCHandler) GetNutritionInsight(
-	ctx context.Context,
-	req *nutritionv1msg.GetNutritionInsightRequest,
-) (*nutritionv1msg.GetNutritionInsightResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
-	}
-
-	rangeDays := int(req.GetRangeDays())
-	if rangeDays <= 0 {
-		rangeDays = 7
-	}
-
-	insight, err := h.getNutritionInsightHdlr.Handle(ctx, query.GetNutritionInsightQuery{
-		UserID:    req.GetUserId(),
-		GoalType:  req.GetGoalType(),
-		RangeDays: rangeDays,
-	})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get nutrition insight: %v", err)
-	}
-
-	areas := make([]*nutritionv1msg.ImprovementAreaProto, 0, len(insight.ImprovementAreas))
-	for _, a := range insight.ImprovementAreas {
-		areas = append(areas, &nutritionv1msg.ImprovementAreaProto{
-			Area:       a.Area,
-			CurrentAvg: float32(a.CurrentAvg),
-			Target:     float32(a.Target),
-			Suggestion: a.Suggestion,
-			Priority:   a.Priority,
-		})
-	}
-
-	adj := insight.RecommendedAdjustments
-	return &nutritionv1msg.GetNutritionInsightResponse{
-		OverallScore:     int32(insight.OverallScore),
-		Summary:          insight.Summary,
-		Strengths:        insight.Strengths,
-		ImprovementAreas: areas,
-		WeeklyTrend:      insight.WeeklyTrend,
-		RecommendedAdjustments: &nutritionv1msg.RecommendedAdjustmentsProto{
-			CaloriesDelta:     float32(adj.CaloriesDelta),
-			ProteinRatioDelta: float32(adj.ProteinRatioDelta),
-			FocusFoods:        adj.FocusFoods,
-		},
-	}, nil
-}
-
 func (h *GRPCHandler) UpdateMealSchedule(
 	ctx context.Context, req *nutritionv1msg.UpdateMealScheduleRequest,
 ) (*nutritionv1msg.UpdateMealScheduleResponse, error) {
@@ -377,12 +332,16 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 	}
 
 	now := time.Now()
-	plan, err := h.recalPlanHdlr.Handle(ctx, command.RecalibratePlanWithPantryCommand{
+	plan, err := h.recalPlanHdlr.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
 		UserID:               req.GetUserId(),
 		PlanDate:             now,
 		AvailableIngredients: req.GetAvailableIngredients(),
+		UserRestrictions:     req.GetUserRestrictions(),
 	})
 	if err != nil {
+		if errors.Is(err, domainerror.ErrAllergenConflict) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to recalibrate plan with pantry: %v", err)
 	}
 
@@ -429,6 +388,62 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 			Snack:     snackOptions,
 		},
 		Message: "Recalibrated plan successfully with available pantry ingredients",
+	}, nil
+}
+
+func (h *GRPCHandler) GetNutritionInsight(
+	ctx context.Context,
+	req *nutritionv1msg.GetNutritionInsightRequest,
+) (*nutritionv1msg.GetNutritionInsightResponse, error) {
+	if req.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	insight, err := h.getNutritionInsightHdlr.Handle(ctx, query.GetNutritionInsightQuery{
+		UserID:        req.GetUserId(),
+		WeekStartDate: req.GetWeekStartDate(),
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get nutrition insight: %v", err)
+	}
+	if insight == nil {
+		return nil, status.Error(codes.NotFound, "weekly nutrition insight not found")
+	}
+
+	areas := make([]*nutritionv1msg.ImprovementAreaProto, 0, len(insight.ImprovementAreas()))
+	for _, a := range insight.ImprovementAreas() {
+		areas = append(areas, &nutritionv1msg.ImprovementAreaProto{
+			Nutrient:    a.Nutrient,
+			Action:      a.Action,
+			DeltaAmount: float32(a.DeltaAmount),
+			Suggestion:  a.Suggestion,
+		})
+	}
+
+	sum := insight.WeeklySummary()
+	weeklySummary := &nutritionv1msg.WeeklyMacroSummaryProto{
+		ConsumedCalories: float32(sum.ConsumedCalories),
+		TargetCalories:   float32(sum.TargetCalories),
+		ConsumedProtein:  float32(sum.ConsumedProtein),
+		TargetProtein:    float32(sum.TargetProtein),
+		ConsumedCarbs:    float32(sum.ConsumedCarbs),
+		TargetCarbs:      float32(sum.TargetCarbs),
+		ConsumedFat:      float32(sum.ConsumedFat),
+		TargetFat:        float32(sum.TargetFat),
+		LoggedMealsCount: int32(sum.LoggedMealsCount),
+		TotalMealsCount:  int32(sum.TotalMealsCount),
+	}
+
+	return &nutritionv1msg.GetNutritionInsightResponse{
+		OverallScore:          int32(insight.OverallScore()),
+		Summary:               insight.Summary(),
+		PredictedCookingStyle: insight.PredictedCookingStyle(),
+		PreferredIngredients:  insight.PreferredIngredients(),
+		ImprovementAreas:      areas,
+		StartDate:             insight.StartDate().Format("2006-01-02"),
+		EndDate:               insight.EndDate().Format("2006-01-02"),
+		EvaluatedAtUnix:       insight.UpdatedAt().Unix(),
+		WeeklySummary:         weeklySummary,
 	}, nil
 }
 

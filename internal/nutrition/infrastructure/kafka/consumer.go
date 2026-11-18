@@ -124,7 +124,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 
 	var processErr error
 	if c.recalibrateHandler != nil && payload.UserID != "" {
-		_, processErr = c.recalibrateHandler.Handle(ctx, command.RecalibratePlanWithPantryCommand{
+		_, processErr = c.recalibrateHandler.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
 			UserID:               payload.UserID,
 			PlanDate:             time.Now(),
 			AvailableIngredients: nil,

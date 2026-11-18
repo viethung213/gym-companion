@@ -6,17 +6,21 @@ import (
 	"testing"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
+
+func newTestFoodItem(id, name, category string, cal, pro, carb, fat float64, tags []string, proSrc, carbSrc string, isNuti bool) *aggregate.FoodItem {
+	item, _ := aggregate.NewFoodItem(id, name, category, cal, pro, carb, fat, tags, proSrc, carbSrc, isNuti, 10000, "STANDARD")
+	return item
+}
 
 func TestRunWithRetries_SuccessFirstAttempt(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
-	foodCarb := aggregate.NewFoodItem("f2", "Khoai lang", "CARB", 90, 2, 21, 0.1, nil, "", "", false)
+	foodChicken := newTestFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
+	foodCarb := newTestFoodItem("f2", "Khoai lang", "CARB", 90, 2, 21, 0.1, nil, "", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f1": foodChicken, "f2": foodCarb}}
 
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	attemptFn := func(_ int, _ *attemptFeedback) (*GeneratedMealPlan, error) {
 		return &GeneratedMealPlan{
@@ -50,10 +54,10 @@ func TestRunWithRetries_SuccessFirstAttempt(t *testing.T) {
 func TestRunWithRetries_SalvageDegradedOnFinalAttempt(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
+	foodChicken := newTestFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f1": foodChicken}}
 
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	attemptFn := func(attempt int, _ *attemptFeedback) (*GeneratedMealPlan, error) {
 		if attempt < 2 {
@@ -87,10 +91,10 @@ func TestRunWithRetries_SalvageDegradedOnFinalAttempt(t *testing.T) {
 func TestRunWithRetries_ReviewApproved(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
+	foodChicken := newTestFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f1": foodChicken}}
 
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	attemptFn := func(_ int, _ *attemptFeedback) (*GeneratedMealPlan, error) {
 		return &GeneratedMealPlan{
@@ -126,10 +130,10 @@ func TestRunWithRetries_ReviewApproved(t *testing.T) {
 func TestRunWithRetries_ReviewRejectionWithFeedbackAndCompliance(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
+	foodChicken := newTestFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f1": foodChicken}}
 
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	attempts := 0
 	attemptFn := func(attempt int, fb *attemptFeedback) (*GeneratedMealPlan, error) {
@@ -251,9 +255,9 @@ func TestValidateReview_Checks(t *testing.T) {
 func TestRunWithRetries_MaxTwoAttemptsEnforced(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
+	foodChicken := newTestFoodItem("f1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f1": foodChicken}}
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	totalAttempts := 0
 	attemptFn := func(attempt int, _ *attemptFeedback) (*GeneratedMealPlan, error) {

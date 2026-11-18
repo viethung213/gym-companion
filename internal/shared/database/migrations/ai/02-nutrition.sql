@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS nutrition.food_items (
     protein_source VARCHAR(100),
     carb_source VARCHAR(100),
     is_nutifood_product BOOLEAN DEFAULT FALSE,
+    price_per_100g NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    cost_tier VARCHAR(20) NOT NULL DEFAULT 'STANDARD',
     status VARCHAR(50) NOT NULL DEFAULT 'Active',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -57,6 +59,7 @@ CREATE TABLE IF NOT EXISTS nutrition.food_items (
 
 CREATE INDEX IF NOT EXISTS idx_food_items_category ON nutrition.food_items(category);
 CREATE INDEX IF NOT EXISTS idx_food_items_status ON nutrition.food_items(status);
+CREATE INDEX IF NOT EXISTS idx_food_items_cost_tier ON nutrition.food_items(cost_tier);
 
 -- 3. RECIPES (Recipe Cache from AI)
 CREATE TABLE IF NOT EXISTS nutrition.recipes (
@@ -112,18 +115,6 @@ CREATE TABLE IF NOT EXISTS nutrition.meal_logs (
 
 CREATE INDEX IF NOT EXISTS idx_meal_logs_user_logged ON nutrition.meal_logs(user_id, logged_at);
 
--- 6. LOCKOUT REGISTRIES
-CREATE TABLE IF NOT EXISTS nutrition.lockout_registries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    item_type VARCHAR(50) NOT NULL,
-    item_name VARCHAR(255) NOT NULL,
-    unlocked_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_lockout_user ON nutrition.lockout_registries(user_id, unlocked_at);
-
 -- 7. USER MEAL SCHEDULES
 CREATE TABLE IF NOT EXISTS nutrition.user_meal_schedules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -135,4 +126,32 @@ CREATE TABLE IF NOT EXISTS nutrition.user_meal_schedules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_meal_schedules_user ON nutrition.user_meal_schedules(user_id);
+
+-- 8. WEEKLY NUTRITION INSIGHTS
+CREATE TABLE IF NOT EXISTS nutrition.weekly_insights (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    overall_score INT NOT NULL,
+    summary TEXT NOT NULL,
+    predicted_cooking_style TEXT NOT NULL,
+    preferred_ingredients JSONB NOT NULL DEFAULT '[]'::jsonb,
+    improvement_areas JSONB NOT NULL DEFAULT '[]'::jsonb,
+    consumed_calories NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    target_calories   NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    consumed_protein  NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    target_protein    NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    consumed_carbs    NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    target_carbs      NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    consumed_fat      NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    target_fat        NUMERIC(8, 2) NOT NULL DEFAULT 0,
+    logged_meals_count INT NOT NULL DEFAULT 0,
+    total_meals_count  INT NOT NULL DEFAULT 28,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_week UNIQUE (user_id, start_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_insights_user_date ON nutrition.weekly_insights(user_id, start_date DESC);
 

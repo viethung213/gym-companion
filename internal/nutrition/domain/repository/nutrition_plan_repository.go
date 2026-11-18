@@ -9,10 +9,11 @@ import (
 
 type NutritionPlanRepository interface {
 	FindByUserIDAndDate(ctx context.Context, userID string, date time.Time) (*aggregate.NutritionPlan, error)
+	FindByUserIDAndDates(ctx context.Context, userID string, dates []time.Time) ([]*aggregate.NutritionPlan, error)
 	Save(ctx context.Context, plan *aggregate.NutritionPlan) error
 	Update(ctx context.Context, plan *aggregate.NutritionPlan) error
 	// FindActiveUserIDs trả về danh sách userID có hoạt động (log bữa ăn) trong N ngày gần nhất.
-	// Dùng bởi DailyMenuCronWorker để xác định user cần sinh thực đơn sáng.
+	// Dùng bởi DailyMenuCronWorker để xác định user cần sinh thực đơn sáng và WeeklyInsightCronWorker để sinh insight tuần.
 	FindActiveUserIDs(ctx context.Context, withinDays int) ([]string, error)
 	FindPlansForDate(ctx context.Context, targetDate time.Time) ([]*aggregate.NutritionPlan, error)
 	GetUserMealSchedules(ctx context.Context, userID string) (map[string]string, error)

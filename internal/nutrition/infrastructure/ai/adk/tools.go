@@ -14,7 +14,6 @@ import (
 
 type SessionFilterContext struct {
 	UserID           string
-	LockoutRegistry  vo.LockoutRegistry
 	UserRestrictions []string
 	PlanDate         time.Time
 }
@@ -22,18 +21,17 @@ type SessionFilterContext struct {
 type NutritionTools struct {
 	foodRepo repository.FoodItemRepository
 	mu       sync.RWMutex
-	sessions map[string]SessionFilterContext
+	sessions map[string]*SessionFilterContext
 }
 
 func NewNutritionTools(foodRepo repository.FoodItemRepository) *NutritionTools {
 	return &NutritionTools{
 		foodRepo: foodRepo,
-		sessions: make(map[string]SessionFilterContext),
+		sessions: make(map[string]*SessionFilterContext),
 	}
 }
 
-//nolint:gocritic // hugeParam: sCtx value object mapping
-func (t *NutritionTools) RegisterSessionContext(sessionID string, sCtx SessionFilterContext) {
+func (t *NutritionTools) RegisterSessionContext(sessionID string, sCtx *SessionFilterContext) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.sessions[sessionID] = sCtx
@@ -45,7 +43,7 @@ func (t *NutritionTools) UnregisterSessionContext(sessionID string) {
 	delete(t.sessions, sessionID)
 }
 
-func (t *NutritionTools) GetSessionContext(sessionID string) (SessionFilterContext, bool) {
+func (t *NutritionTools) GetSessionContext(sessionID string) (*SessionFilterContext, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	sCtx, ok := t.sessions[sessionID]
@@ -62,7 +60,7 @@ type FetchCatalogOptions struct {
 // FetchActiveFoodCatalog tải một nhóm nhỏ 5-8 nguyên liệu an toàn ngẫu nhiên/xoay vòng theo nhóm (PROTEIN, CARB, VEGGIE, SNACK).
 // Tự động chuẩn hóa:
 // 1. Loại bỏ 100% món chứa dị ứng của người dùng (UserRestrictions).
-// 2. Loại bỏ 100% món bị khóa lặp chu kỳ 7 ngày (LockoutRegistry).
+// 2. Ưu tiên và chấm điểm mềm theo lịch sử tiêu thụ và mục tiêu dinh dưỡng.
 // 3. Loại bỏ các món nằm trong ExcludeIDs (các món xung đột ẩm thực hoặc bị Reviewer phản biện).
 // 4. Hỗ trợ Page để lấy các đợt nguyên liệu tiếp theo khi đợt trước không hòa hợp với nguyên liệu tủ lạnh.
 // 5. Giới hạn trả về 5-8 nguyên liệu ngẫu nhiên thay vì gửi toàn bộ DB, giúp tiết kiệm >90% token.
@@ -73,13 +71,17 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, sessionID, 
 	}
 
 	sCtx, _ := t.GetSessionContext(sessionID)
-	planDate := sCtx.PlanDate
-	if planDate.IsZero() {
-		planDate = time.Now()
+	planDate := time.Now()
+	var userRestrictions []string
+	if sCtx != nil {
+		userRestrictions = sCtx.UserRestrictions
+		if !sCtx.PlanDate.IsZero() {
+			planDate = sCtx.PlanDate
+		}
 	}
 
-	// 1. Lọc an toàn chuẩn hóa: Dị ứng + Chu kỳ lặp 7 ngày
-	safeCatalog := service.FilterSafeFoods(catalog, sCtx.LockoutRegistry, sCtx.UserRestrictions, planDate)
+	// 1. Lọc dị ứng an toàn tuyệt đối
+	safeCatalog := service.FilterAllergensOnly(catalog, userRestrictions)
 	if len(safeCatalog) == 0 {
 		return nil, nil
 	}
@@ -150,19 +152,15 @@ func (t *NutritionTools) FetchActiveFoodCatalog(ctx context.Context, sessionID, 
 	}
 
 	// 4. Xáo trộn và lấy mẫu ngẫu nhiên tất định có phân trang
-	seedKey := fmt.Sprintf("%s_%s", sCtx.UserID, catUpper)
+	userID := "default_user"
+	if sCtx != nil && sCtx.UserID != "" {
+		userID = sCtx.UserID
+	}
+	seedKey := fmt.Sprintf("%s_%s", userID, catUpper)
 	rng := service.NewDeterministicRNG(seedKey, planDate)
 	sampled := service.SamplePaged(candidates, targetLimit, pageOpt, rng)
 
 	return ToFoodNutrientDTOs(sampled), nil
-}
-
-func (t *NutritionTools) CheckLockoutRules(
-	_ context.Context,
-	lockoutRegistry vo.LockoutRegistry,
-	ingredients []string,
-) (collisions, warnings []string) {
-	return lockoutRegistry.CheckCollisions(ingredients, time.Now())
 }
 
 func (t *NutritionTools) CalculateMacroGramRatio(

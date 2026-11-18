@@ -2,7 +2,7 @@
 
 Tài liệu đặc tả kỹ thuật chi tiết dành cho các kỹ sư triển khai tầng **Domain & Application** của module **Nutrition / NutiFood** (`internal/nutrition`). 
 
-Tài liệu tập trung vào kiến trúc **Server-Heavy Rule Engine** thuần Go, quy tắc tính toán ma trận tổ hợp nguyên liệu, lọc cách ly dị ứng/lockout, thuật toán căn chỉnh định lượng gram tự động và cơ chế Recipe Caching.
+Tài liệu tập trung vào kiến trúc **Server-Heavy Rule Engine** thuần Go, quy tắc tính toán ma trận tổ hợp nguyên liệu, lọc cách ly an toàn dị ứng, thuật toán chấm điểm ứng viên đa mục tiêu với phân rã hàm mũ (Soft Scoring & Exponential Decay), thuật toán căn chỉnh định lượng gram tự động và cơ chế Recipe Caching.
 
 ---
 
@@ -19,17 +19,20 @@ internal/nutrition/
 │   │   ├── ai_service.go          # Port Interface: AIService (SelectCreativeMealOptions, EstimateNutrient, GenerateNutritionInsight)
 │   │   ├── food_item_repository.go
 │   │   ├── meal_history_repository.go
-│   │   ├── nutrition_plan_repository.go
+│   │   ├── nutrition_plan_repository.go # Batch query FindByUserIDAndDates
 │   │   ├── recipe_cache_repository.go
 │   │   └── profile_client.go
 │   ├── service/
 │   │   ├── tdee_calculator.go      # Domain Service: Mifflin-St Jeor TDEE & Workout Surplus (BR-NU-01 & BR-NU-04)
-│   │   ├── combinatorial_matrix.go # Domain Service: Thuật toán Ma Trận Tổ Hợp Nguyên Liệu
-│   │   └── menu_generator.go       # Domain Service: MenuGenerator (Rule Engine Orchestrator + Recipe Cache)
+│   │   ├── food_filter.go          # Domain Service: FilterAllergensOnly (Lọc an toàn dị ứng tinh giản)
+│   │   ├── candidate_selector.go   # Domain Service: CandidateSelector (Chấm điểm đa mục tiêu, phân rã hàm mũ, tie-break RNG)
+│   │   ├── pantry_selector.go      # Domain Service: PantrySelector (Khớp nguyên liệu tủ lạnh & cờ Novel Cooking)
+│   │   ├── sampling.go             # Domain Service: DeterministicRNG & Reservoir Sampling
+│   │   └── menu_generator.go       # Domain Service: MenuGenerator (Rule Engine Orchestrator, AI Call & Recipe Cache)
 │   └── vo/
 │       ├── calorie_allocation.go   # Value Object: CalorieAllocation & Target Macros
-│       ├── lockout_registry.go     # Value Object: LockoutRegistry & Quy tắc cách ly (BR-NU-02)
-│       └── food_nutrient.go        # Value Object: FoodNutrient per 100g
+│       ├── historical_consumption.go # Value Object: HistoricalConsumption (MealName, Ingredients, ConsumedAt)
+│       └── food_nutrient.go        # Value Object: FoodNutrient per 100g (kèm PricePer100g, CostTier)
 └── infrastructure/ai/adk/
     ├── agent.go                   # ADKNutritionAgent implements repository.AIService
     ├── fallback_llm.go            # FallbackLLM (Auto Quota Failover GEMINI_MODEL & GEMINI_FALLBACK_MODELS)
@@ -64,91 +67,79 @@ $$\text{Target Calories Mới} = \text{Base TDEE} + \text{WorkoutCaloriesBurned}
 
 ---
 
-### 2.2. Thuật Toán Ma Trận Tổ Hợp Nguyên Liệu (`combinatorial_matrix.go`)
+### 2.2. Bộ Lọc An Toàn Dị Ứng & Chấm Điểm Ứng Viên Nguyên Liệu (`food_filter.go` & `candidate_selector.go`)
 
-#### 1. Nguyên lýMa trận 4 Chiều (4D Ingredient Matrix):
-Mỗi công thức món ăn được tạo thành từ 4 phần tử nguyên liệu độc lập:
-$$M = (P_i, C_j, V_k, S_l)$$
-Trong đó:
-- $P_i \in \text{Protein Catalog}$ (Ức gà, Thịt bò, Cá hồi, Tôm, Đậu phụ, Mực...)
-- $C_j \in \text{Carb Catalog}$ (Cơm gạo lứt, Khoai lang, Yến mạch, Bún lứt...)
-- $V_k \in \text{Veggie Catalog}$ (Bông cải xanh, Măng tây, Cà chua, Rau bina...)
-- $S_l \in \text{Style Catalog}$ (Áp chảo thảo mộc, Nướng giấy bạc, Xào tỏi oliu, Hấp gừng...)
-
-#### 2. Thuật toán Căn Chỉnh Định Lượng Gram Tự Động (Gram-Level Auto-Scaling):
-Cho trước Target Macros của bữa ăn: $T = (P_{\text{target}}, C_{\text{target}}, F_{\text{target}})$.
-Server tự động giải hệ phương trình tuyến tính để tính số gram chính xác của từng nguyên liệu:
-
-$$\text{Gram}_{\text{Protein Source}} = \frac{P_{\text{target}}}{P_{\text{per 100g}} / 100}$$
-$$\text{Gram}_{\text{Carb Source}} = \frac{C_{\text{target}}}{C_{\text{per 100g}} / 100}$$
-$$\text{Gram}_{\text{Veggie Source}} = \text{Cố định } 100\text{g} \ - \ 150\text{g (chứa xơ)}$$
-
-```go
-// Ví dụ logic Go căn chỉnh gram nguyên liệu
-func ScaleIngredientGrams(proteinFood FoodNutrient, targetProteinGrams float64) float64 {
-    if proteinFood.ProteinPer100g <= 0 {
-        return 100.0
-    }
-    return (targetProteinGrams / proteinFood.ProteinPer100g) * 100.0
-}
-```
-
----
-
-### 2.3. Bộ Lọc Cách Ly Dị Ứng & Lockout Chống Lặp (`lockout_registry.go`)
-
-#### 1. Quy tắc Khóa Thời Gian (BR-NU-02):
-Khi một bữa ăn được ghi nhận (`MealLog`), Server tự động thêm vào `LockoutRegistry`:
-- **Protein main source**: Khóa trong **7 ngày**.
-- **Carb main source**: Khóa trong **5 ngày**.
-- **Category / Dish Theme**: Khóa trong **3 ngày**.
-
-#### 2. Logic Lọc Ma Trận (Isolation Matrix Rules):
-- **BR-NU-02.1 (Strict Isolation khi không có input tủ lạnh)**:
+#### 1. Bộ Lọc Dị Ứng Tinh Giản (`FilterAllergensOnly`):
+- Để đảm bảo an toàn tuyệt đối nhưng không gây lọc nhầm (false-positive), hệ thống chỉ kiểm tra dị ứng trực tiếp trên tên nguyên liệu (`FoodNutrient.Name`):
   ```go
-  func (r *LockoutRegistry) FilterAvailableIngredients(catalog []FoodNutrient, activeLockouts []LockoutItem) []FoodNutrient {
-      var valid []FoodNutrient
-      for _, food := range catalog {
-          if !isLocked(food, activeLockouts) && !isAllergen(food, userRestrictions) {
-              valid = append(valid, food)
-          }
+  func FilterAllergensOnly(catalog []FoodNutrient, allergies []string) []FoodNutrient {
+      if len(allergies) == 0 {
+          return catalog
       }
-      return valid
+      var filtered []FoodNutrient
+  itemLoop:
+      for _, item := range catalog {
+          itemName := strings.ToLower(item.Name)
+          for _, allergy := range allergies {
+              cleanAllergy := strings.ToLower(strings.TrimSpace(allergy))
+              if cleanAllergy != "" && strings.Contains(itemName, cleanAllergy) {
+                  continue itemLoop // Loại bỏ ngay nếu tên nguyên liệu chứa chất gây dị ứng
+              }
+          }
+          filtered = append(filtered, item)
+      }
+      return filtered
   }
   ```
-- **BR-NU-02.2 (Novel Culinary Method khi có input tủ lạnh trùng Lockout)**:
-  - Nếu `userPantryItems` chứa nguyên liệu đang nằm trong `activeLockouts`:
-    - **Vẫn cho phép sử dụng nguyên liệu đó** (tránh lãng phí thực phẩm).
-    - **Flag**: Bật cờ `RequiresNovelCookingStyle = true` để bắt buộc chọn $S_l \in \text{Style Catalog}$ chưa từng sử dụng trong các ngày gần nhất.
+- Không quét lan sang `Category`, `ProteinSource`, `CarbSource` để tránh việc một quả trứng bị loại bỏ oan uổng chỉ vì phân loại chung.
+
+#### 2. Thuật Toán Chấm Điểm Ứng Viên Đa Mục Tiêu (Candidate Soft Scoring & Exponential Decay):
+Thay thế cơ chế khóa cứng (Hard Lockout 7/5/3 ngày) gây cạn kiệt nguyên liệu, hệ thống sử dụng thuật toán chấm điểm mềm đa tiêu chí:
+$$S(i, u, t) = w_n \cdot N_i + w_p \cdot P_{iu} - w_r \cdot R_{it} - w_c \cdot C_i + \text{jitter}$$
+
+Trong đó:
+- **$N_i$ (Nutrient Density Score)**: Tỷ trọng đạm/vi chất có lợi đối với calo.
+- **$P_{iu}$ (User Preference Score)**: Mức độ yêu thích của user với nguyên liệu $i$ (mặc định $0.5$, tăng nếu nằm trong `PreferredIngredients` từ insight tuần trước).
+- **$R_{it}$ (Recency Penalty - Phân rã hàm mũ theo thời gian)**:
+  $$R(i) = \sum_{k} s(i, i_k) \cdot e^{-\Delta t_k / \tau}$$
+  với $\tau = 48\text{h}$, $\Delta t_k$ là số giờ tính từ khi tiêu thụ nguyên liệu $i_k$ đến hiện tại.
+  - $s(i, i_k)$: Độ tương đồng giữa nguyên liệu $i$ và nguyên liệu đã ăn trong bữa ăn quá khứ.
+  - Dữ liệu `HistoricalConsumption` lưu danh sách nguyên liệu `Ingredients []string` được trích xuất từ các kế hoạch bữa ăn cũ (`NutritionPlan`) thông qua Batch Query `FindByUserIDAndDates`.
+- **$C_i$ (Cost / Budget Penalty)**: Phạt nếu nguyên liệu thuộc phân khúc vượt quá mức chi trả (`targetBudget`). Nếu user không cấu hình budget (`targetBudget == ""`), $C_i = 0.0$ (không phạt bất kỳ món nào).
+- **$\text{jitter}$**: Giá trị ngẫu nhiên nhỏ $\pm 0.05$ sinh ra từ `DeterministicRNG(UserID, PlanDate)` đóng vai trò phá vỡ thế cân bằng (tie-breaker) giữa các món có điểm số xấp xỉ nhau.
+
+#### 3. Tận Dụng Nguyên Liệu Tủ Lạnh (`PantrySelector`):
+- Khi người dùng gửi danh sách nguyên liệu có sẵn trong tủ lạnh:
+  - Nếu nguyên liệu đã ăn gần đây ($R_{it} > 0.5$): Hệ thống **vẫn cho phép sử dụng** nhằm chống lãng phí thực phẩm, nhưng gán cờ `RequiresNovelCookingStyle = true` để AI Creative Chef đổi mới phương pháp chế biến và nêm nếm gia vị.
+  - Nếu nguyên liệu chưa ăn gần đây: Được chấm điểm ưu tiên cao nhất để đưa vào các bữa ăn còn lại trong ngày.
 
 ---
 
-### 2.4. Subsystem Recipe Caching & AI Fallback Orchestrator (`menu_generator.go`)
+### 2.3. Điều Phối Sinh Thực Đơn & Recipe Cache (`menu_generator.go`)
 
 ```mermaid
 flowchart TD
-    Start[Yêu cầu sinh 3 Options cho bữa ăn] --> Matrix[CombinatorialMatrix: Sinh tổ hợp P + C + V + S]
-    Matrix --> Scale[Scale gram chuẩn từng Calo/Macros per 100g]
-    Scale --> CacheCheck{Tra cứu RecipeCacheRepository}
+    Start[Yêu cầu sinh thực đơn ngày] --> PrepContext[Chuẩn bị context: Target Calories, Macros, Available Candidates]
+    PrepContext --> CallAI[Gọi AI Agent 1 lần duy nhất DAILY_PLAN]
     
-    CacheCheck -->|HIT CACHE| ReturnCache[Lấy Tên Món & Cách Nấu từ CSDL DB]
-    CacheCheck -->|MISS CACHE| CallAI[Gọi External AI Creative Chef đặt tên món & bổ sung nguyên liệu phụ]
-    
-    CallAI --> AutoSync[Tự Động Đồng Bộ Nguyên Liệu Phụ Mới vào CSDL food_items]
-    AutoSync --> SaveCache[Lưu Công Thức Mới vào DB Recipe Cache]
-    SaveCache --> ReturnAI[Trả kết quả cho Client]
-    ReturnCache --> ReturnClient[Trả kết quả cho Client - <10ms / $0 AI]
+    CallAI --> Validate[planValidator: Chuẩn hóa ID/Name & Sync nguyên liệu mới vào DB]
+    Validate --> Distribute[MenuGenerator: Phân bổ 8 options vào 4 bữa Sáng/Trưa/Tối/Phụ]
+    Distribute --> CacheRecipe[Lưu công thức vào RecipeCache DB]
+    Distribute --> ReturnPlan[Trả về NutritionPlan hoàn chỉnh]
 ```
 
 #### Quy Trình Xử Lý Chi Tiết:
-1. **Bước 1 (Rule Engine)**: Sinh ma trận tổ hợp $(P_i, C_j, V_k, S_l)$ và tính gram chuẩn cho bữa ăn theo công thức $\Delta \text{Gram} = \frac{\Delta \text{Calo}}{\text{CaloriesPer100g}} \times 100$.
-2. **Bước 2 (Cache Lookup)**: Tìm kiếm trong bảng `nutrition.recipes` bằng key `Hash(P_i, C_j, V_k, S_l)`.
-   - **Nếu tìm thấy (Hit Cache)**: Lấy Tên món + Cách chế biến đã lưu trong DB. Chi phí AI = 0$, Phản hồi `<10ms`.
-   - **Nếu không tìm thấy (Miss Cache)**: Gọi External AI với prompt làm Creative Chef:
-     > *"Tôi có [130g Ức gà, 140g Khoai lang, 80g Bông cải xanh]. Phương pháp: Áp chảo. Bạn có thể tự do bổ sung các nguyên liệu/gia vị phụ trợ bên ngoài (tỏi, ớt, dầu oliu, nấm, sốt...). Hãy đặt 1 tên món ăn hấp dẫn và ghi hướng dẫn nấu 3 bước ngắn gọn."*
-3. **Bước 3 (Auto DB Catalog Sync & Cache Auto-Save)**: 
-   - Nếu AI bổ sung nguyên liệu/gia vị phụ mới chưa có trong CSDL, Server tự động chèn nguyên liệu mới này vào `nutrition.food_items`.
-   - Lưu toàn bộ tên món & hướng dẫn từ AI vào bảng `nutrition.recipes` để phục vụ vĩnh viễn cho tất cả các user khác sau này.
+1. **Bước 1 (Chuẩn Bị Ngữ Cảnh Dinh Dưỡng & Ứng Viên)**:
+   - Backend tính Target Calories & Macros ngày từ `TDEECalculator`.
+   - Lọc dị ứng và chấm điểm ứng viên (`CandidateSelector`) để chọn danh sách `available_ingredients`.
+   - Gắn thêm sở thích `preferred_ingredients` và phong cách nấu `weekly_cooking_style` từ `WeeklyInsight`.
+2. **Bước 2 (Ủy Thác AI Sinh Options)**:
+   - Gọi External AI Service 1 lần duy nhất cho toàn bộ 4 bữa ăn (`DAILY_PLAN`) để nhận về 8 options (mỗi bữa 2 options).
+   - AI chịu trách nhiệm chọn bộ 3 nguyên liệu, tính gram cụ thể, tính macro món và viết hướng dẫn nấu.
+3. **Bước 3 (Thẩm Định, Phân Bổ Bữa Ăn & Lưu Cache)**: 
+   - `planValidator` tự động khớp ID/tên nguyên liệu với catalog và lưu các nguyên liệu mới (`NewFoodCatalogItems`) vào DB `nutrition.food_items`.
+   - `MenuGenerator` phân bổ 8 options vào 4 bữa ăn (`Breakfast` 25%, `Lunch` 35%, `Dinner` 30%, `Snack` 10%).
+   - Lưu công thức chế biến vào `nutrition.recipes` (Recipe Cache DB).
 
 ---
 
@@ -166,9 +157,9 @@ Mỗi bữa ăn (Sáng, Trưa, Tối, Phụ) bắt buộc phải chứa **3 Lự
 | Mã Quy Tắc | Tên Quy Tắc | Tầng Xử Lý | Mô Tả Thuật Toán |
 | :--- | :--- | :--- | :--- |
 | **BR-NU-01** | Minimum Safety Calorie | Domain (`tdee_calculator.go`) | Target Calo luôn $\ge 1200\text{ kcal/ngày}$. |
-| **BR-NU-02** | Anti-Repetition Lockout | Domain (`lockout_registry.go`) | Khóa đạm 7 ngày, tinh bột 5 ngày, chủ đề 3 ngày sau khi LogMeal. |
-| **BR-NU-02.1** | Strict Lockout Isolation | Domain (`combinatorial_matrix.go`) | Không có input tủ lạnh -> Cấm 100% nguyên liệu trong Lockout. |
-| **BR-NU-02.2** | Novel Culinary Method | Domain (`menu_generator.go`) | Nguyên liệu tủ lạnh trùng Lockout -> Cho dùng nhưng bắt buộc đổi cách chế biến mới lạ. |
+| **BR-NU-02** | Candidate Soft Scoring & Recency Decay | Domain (`candidate_selector.go`) | Chấm điểm đa mục tiêu, phân rã hàm mũ $e^{-\Delta t/\tau}$ ($\tau=48\text{h}$) từ nguyên liệu bữa ăn cũ thay thế hard lockout. |
+| **BR-NU-02.1** | Allergen Safety Isolation | Domain (`food_filter.go`) | Lọc dị ứng nghiêm ngặt theo tên nguyên liệu (`FilterAllergensOnly`). |
+| **BR-NU-02.2** | Pantry Novel Cooking Recalibration | Domain (`pantry_selector.go`) | Tận dụng tối đa đồ tủ lạnh; gán cờ `RequiresNovelCookingStyle` nếu nguyên liệu đã ăn gần đây. |
 | **BR-NU-03** | NutiFood Partner Suggestion | Domain (`menu_generator.go`) | Đính kèm sản phẩm NutiFood làm Option C tiện lợi trong thực đơn. |
 | **BR-NU-04** | Event-Driven Workout Surplus | Application / Kafka Consumer | Buổi tập chiều phát event -> Tự động tính Calo tiêu hao bổ sung vào bữa tối/phụ. |
 | **BR-NU-05.1** | 3+ Options Per Meal | Domain (`menu_generator.go`) | Sinh tối thiểu 3 lựa chọn món ăn cho mỗi bữa. |

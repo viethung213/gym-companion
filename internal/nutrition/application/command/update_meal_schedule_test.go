@@ -16,6 +16,12 @@ type mockPlanRepoForUpdateSchedule struct {
 func (m *mockPlanRepoForUpdateSchedule) FindByUserIDAndDate(ctx context.Context, userID string, date time.Time) (*aggregate.NutritionPlan, error) {
 	return m.plan, nil
 }
+func (m *mockPlanRepoForUpdateSchedule) FindByUserIDAndDates(ctx context.Context, userID string, dates []time.Time) ([]*aggregate.NutritionPlan, error) {
+	if m.plan != nil {
+		return []*aggregate.NutritionPlan{m.plan}, nil
+	}
+	return nil, nil
+}
 func (m *mockPlanRepoForUpdateSchedule) Save(ctx context.Context, plan *aggregate.NutritionPlan) error {
 	m.plan = plan
 	return nil
@@ -27,6 +33,7 @@ func (m *mockPlanRepoForUpdateSchedule) Update(ctx context.Context, plan *aggreg
 func (m *mockPlanRepoForUpdateSchedule) FindActiveUserIDs(ctx context.Context, withinDays int) ([]string, error) {
 	return nil, nil
 }
+
 func (m *mockPlanRepoForUpdateSchedule) FindPlansForDate(ctx context.Context, targetDate time.Time) ([]*aggregate.NutritionPlan, error) {
 	return []*aggregate.NutritionPlan{m.plan}, nil
 }

@@ -24,7 +24,13 @@ func NewGetNutritionHistoryHandler(historyRepo repository.MealHistoryRepository)
 }
 
 func (h *GetNutritionHistoryHandler) Handle(ctx context.Context, q GetNutritionHistoryQuery) (*aggregate.MealHistory, error) {
-	history, err := h.historyRepo.FindByUserID(ctx, q.UserID)
+	from := q.StartDate
+	to := q.EndDate
+	if from.IsZero() || to.IsZero() {
+		to = time.Now()
+		from = to.AddDate(0, 0, -7)
+	}
+	history, err := h.historyRepo.FindByUserIDAndDateRange(ctx, q.UserID, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("get nutrition history query: %w", err)
 	}

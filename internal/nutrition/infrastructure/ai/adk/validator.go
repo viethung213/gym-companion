@@ -4,21 +4,23 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 type planValidator struct {
-	foodRepo        repository.FoodItemRepository
-	lockoutRegistry vo.LockoutRegistry
+	foodRepo             repository.FoodItemRepository
+	mandatoryIngredients []FoodNutrientDTO
 }
 
-func newPlanValidator(foodRepo repository.FoodItemRepository, lockoutRegistry vo.LockoutRegistry) *planValidator {
+func newPlanValidator(foodRepo repository.FoodItemRepository, mandatory ...[]FoodNutrientDTO) *planValidator {
+	var mand []FoodNutrientDTO
+	if len(mandatory) > 0 {
+		mand = mandatory[0]
+	}
 	return &planValidator{
-		foodRepo:        foodRepo,
-		lockoutRegistry: lockoutRegistry,
+		foodRepo:             foodRepo,
+		mandatoryIngredients: mand,
 	}
 }
 
@@ -105,16 +107,51 @@ func (v *planValidator) validate(
 			}
 		}
 
-		// 4. Verify Lockout Rules
-		_, lockedCollisions := v.lockoutRegistry.CheckCollisions([]string{opt.ProteinFoodName, opt.CarbFoodName}, time.Now())
-		if len(lockedCollisions) > 0 {
-			optIssues = append(optIssues, fmt.Sprintf("option %d: ingredients %v are locked under 7/5/3 day repetition rules", idx+1, lockedCollisions))
-		}
-
 		if len(optIssues) > 0 {
 			issues = append(issues, optIssues...)
 		} else {
 			validOptions = append(validOptions, *opt)
+		}
+	}
+
+	// 4. Verify Mandatory Pantry Ingredients
+	if len(v.mandatoryIngredients) > 0 {
+		for i := range v.mandatoryIngredients {
+			m := &v.mandatoryIngredients[i]
+			mNameLower := strings.ToLower(strings.TrimSpace(m.Name))
+			if mNameLower == "" {
+				continue
+			}
+			foundInPlan := false
+			for optIdx := range plan.Options {
+				opt := &plan.Options[optIdx]
+				recipeLower := strings.ToLower(opt.RecipeName)
+				proteinLower := strings.ToLower(opt.ProteinFoodName)
+				carbLower := strings.ToLower(opt.CarbFoodName)
+				veggieLower := strings.ToLower(opt.VeggieFoodName)
+
+				if matchesMandatoryName(recipeLower, mNameLower) ||
+					matchesMandatoryName(proteinLower, mNameLower) ||
+					matchesMandatoryName(carbLower, mNameLower) ||
+					matchesMandatoryName(veggieLower, mNameLower) ||
+					(m.ID != "" && (opt.ProteinFoodID == m.ID || opt.CarbFoodID == m.ID || opt.VeggieFoodID == m.ID)) {
+					foundInPlan = true
+					break
+				}
+				for _, sup := range opt.SupplementaryIngredients {
+					if matchesMandatoryName(strings.ToLower(sup.Name), mNameLower) {
+						foundInPlan = true
+						break
+					}
+				}
+				if foundInPlan {
+					break
+				}
+			}
+			if !foundInPlan {
+				issues = append(issues, fmt.Sprintf("plan is missing mandatory user pantry ingredient '%s'", m.Name))
+				validOptions = nil
+			}
 		}
 	}
 
@@ -211,4 +248,39 @@ func (v *planValidator) resolveFoodItem(
 	}
 
 	return nil
+}
+
+// matchesMandatoryName kiểm tra tên món có chứa nguyên liệu bắt buộc hay không,
+// hỗ trợ đối chiếu linh hoạt giữa tên tiếng Việt và tên tiếng Anh (ví dụ thịt cóc -> toad, thịt nai -> venison).
+func matchesMandatoryName(text, mNameLower string) bool {
+	if text == "" || mNameLower == "" {
+		return false
+	}
+	if strings.Contains(text, mNameLower) {
+		return true
+	}
+	aliases := map[string][]string{
+		"thịt cóc":      {"toad", "cóc"},
+		"cóc":           {"toad"},
+		"thịt nai":      {"venison", "deer", "nai"},
+		"nai":           {"venison", "deer"},
+		"thịt ếch":      {"frog", "ếch"},
+		"ếch":           {"frog"},
+		"thịt lươn":     {"eel", "lươn"},
+		"lươn":          {"eel"},
+		"thịt đà điểu":  {"ostrich", "đà điểu"},
+		"thịt chim cút": {"quail", "chim cút"},
+		"thịt cừu":      {"lamb", "mutton", "cừu"},
+		"thịt dê":       {"goat", "dê"},
+	}
+	for key, words := range aliases {
+		if strings.Contains(mNameLower, key) {
+			for _, w := range words {
+				if strings.Contains(text, w) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

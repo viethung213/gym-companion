@@ -19,13 +19,13 @@ func (m *mockFoodRepoForTools) FindByName(_ context.Context, _ string) (*aggrega
 }
 func (m *mockFoodRepoForTools) FindActiveCatalog(_ context.Context) ([]vo.FoodNutrient, error) {
 	return []vo.FoodNutrient{
-		vo.NewFoodNutrient("1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false),
-		vo.NewFoodNutrient("2", "Khoai lang", "CARB", 90, 2, 21, 0.1, nil, "", "", false),
+		vo.NewFoodNutrient("1", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, nil, "", "", false, 13000, "BUDGET"),
+		vo.NewFoodNutrient("2", "Khoai lang", "CARB", 90, 2, 21, 0.1, nil, "", "", false, 4500, "BUDGET"),
 	}, nil
 }
 func (m *mockFoodRepoForTools) FindNutiFoodProducts(_ context.Context) ([]vo.FoodNutrient, error) {
 	return []vo.FoodNutrient{
-		vo.NewFoodNutrient("3", "Sữa NutiFood Varna", "NUTIFOOD", 80, 4, 10, 2.5, nil, "", "", true),
+		vo.NewFoodNutrient("3", "Sữa NutiFood Varna", "NUTIFOOD", 80, 4, 10, 2.5, nil, "", "", true, 28000, "PREMIUM"),
 	}, nil
 }
 func (m *mockFoodRepoForTools) Save(_ context.Context, _ *aggregate.FoodItem) error   { return nil }
@@ -51,14 +51,7 @@ func TestNutritionTools(t *testing.T) {
 		t.Fatalf("got p %f, c %f, f %f; want 150, 200, 66.67", p, c, f)
 	}
 
-	// 3. CheckLockoutRules
-	lockout := vo.NewLockoutRegistry(nil).ApplyLockout(vo.LockoutTypeProtein, "Ức gà", 7*24*time.Hour, time.Now())
-	_, locked := tools.CheckLockoutRules(context.Background(), lockout, []string{"Ức gà", "Khoai lang"})
-	if len(locked) != 1 || locked[0] != "Ức gà" {
-		t.Fatalf("got locked %v, want ['Ức gà']", locked)
-	}
-
-	// 4. SuggestNutiFoodSupplement
+	// 3. SuggestNutiFoodSupplement
 	nuti, err := tools.SuggestNutiFoodSupplement(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error suggesting nutifood: %v", err)
@@ -67,22 +60,22 @@ func TestNutritionTools(t *testing.T) {
 		t.Fatalf("got nutifood products len %d, want 1", len(nuti))
 	}
 
-	// 5. FetchActiveFoodCatalog với Session Context (Lockout filtering)
+	// 5. FetchActiveFoodCatalog với Session Context (Allergen restriction filtering)
 	sessionID := "sess-123"
-	tools.RegisterSessionContext(sessionID, SessionFilterContext{
-		UserID:          "u1",
-		LockoutRegistry: lockout,
-		PlanDate:        time.Now(),
+	tools.RegisterSessionContext(sessionID, &SessionFilterContext{
+		UserID:           "u1",
+		UserRestrictions: []string{"Ức gà"},
+		PlanDate:         time.Now(),
 	})
 	defer tools.UnregisterSessionContext(sessionID)
 
-	lockedCatalog, err := tools.FetchActiveFoodCatalog(context.Background(), sessionID, "PROTEIN")
+	restrictedCatalog, err := tools.FetchActiveFoodCatalog(context.Background(), sessionID, "PROTEIN")
 	if err != nil {
 		t.Fatalf("unexpected error fetching catalog with session: %v", err)
 	}
-	// "Ức gà" bị khóa bởi lockout -> kết quả phải rỗng
-	if len(lockedCatalog) != 0 {
-		t.Fatalf("expected locked item to be filtered out, got %d items", len(lockedCatalog))
+	// "Ức gà" bị loại bởi dị ứng -> kết quả phải rỗng
+	if len(restrictedCatalog) != 0 {
+		t.Fatalf("expected restricted allergen item to be filtered out, got %d items", len(restrictedCatalog))
 	}
 
 	// 6. FetchActiveFoodCatalog với ExcludeIDs

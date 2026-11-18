@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 const (
@@ -30,6 +32,8 @@ type FoodItem struct {
 	proteinSource     string
 	carbSource        string
 	isNutiFoodProduct bool
+	pricePer100g      float64
+	costTier          string
 	status            string
 	createdAt         time.Time
 	updatedAt         time.Time
@@ -41,7 +45,14 @@ func NewFoodItem(
 	allergenTags []string,
 	proteinSource, carbSource string,
 	isNutiFoodProduct bool,
-) *FoodItem {
+	pricePer100g float64,
+	costTier string,
+) (*FoodItem, error) {
+	validTier, err := vo.ValidateFoodItem(name, category, pricePer100g, costTier)
+	if err != nil {
+		return nil, err
+	}
+
 	copiedTags := make([]string, len(allergenTags))
 	copy(copiedTags, allergenTags)
 	now := time.Now()
@@ -58,10 +69,12 @@ func NewFoodItem(
 		proteinSource:     proteinSource,
 		carbSource:        carbSource,
 		isNutiFoodProduct: isNutiFoodProduct,
+		pricePer100g:      pricePer100g,
+		costTier:          validTier,
 		status:            FoodStatusDraft,
 		createdAt:         now,
 		updatedAt:         now,
-	}
+	}, nil
 }
 
 func ReconstructFoodItem(
@@ -70,6 +83,8 @@ func ReconstructFoodItem(
 	allergenTags []string,
 	proteinSource, carbSource string,
 	isNutiFoodProduct bool,
+	pricePer100g float64,
+	costTier string,
 	status string,
 	createdAt, updatedAt time.Time,
 ) *FoodItem {
@@ -88,6 +103,8 @@ func ReconstructFoodItem(
 		proteinSource:     proteinSource,
 		carbSource:        carbSource,
 		isNutiFoodProduct: isNutiFoodProduct,
+		pricePer100g:      pricePer100g,
+		costTier:          vo.NormalizeCostTier(costTier),
 		status:            status,
 		createdAt:         createdAt,
 		updatedAt:         updatedAt,
@@ -105,6 +122,18 @@ func (f *FoodItem) Status() string           { return f.status }
 func (f *FoodItem) IsNutiFoodProduct() bool  { return f.isNutiFoodProduct }
 func (f *FoodItem) ProteinSource() string    { return f.proteinSource }
 func (f *FoodItem) CarbSource() string       { return f.carbSource }
+func (f *FoodItem) PricePer100g() float64    { return f.pricePer100g }
+func (f *FoodItem) CostTier() string         { return f.costTier }
+func (f *FoodItem) SetPricing(pricePer100g float64, costTier string) error {
+	validTier, err := vo.ValidateFoodItem(f.name, f.category, pricePer100g, costTier)
+	if err != nil {
+		return err
+	}
+	f.pricePer100g = pricePer100g
+	f.costTier = validTier
+	f.updatedAt = time.Now()
+	return nil
+}
 func (f *FoodItem) AllergenTags() []string {
 	copied := make([]string, len(f.allergenTags))
 	copy(copied, f.allergenTags)

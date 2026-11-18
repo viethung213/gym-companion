@@ -13,8 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
@@ -137,6 +135,8 @@ func (a *NutritionAgent) EstimateNutrient(
 
 // GenerateNutritionInsight implements repository.AIService.
 // Gọi LLM để phân tích lịch sử dinh dưỡng và sinh insight cải tiến.
+//
+//nolint:gocritic // promptCtx parameter struct is passed by value per port interface
 func (a *NutritionAgent) GenerateNutritionInsight(
 	ctx context.Context,
 	promptCtx repository.InsightPromptContext,
@@ -151,7 +151,9 @@ func (a *NutritionAgent) GenerateNutritionInsight(
 		return nil, fmt.Errorf("generate nutrition insight marshal context: %w", err)
 	}
 
-	userMsg := "Phân tích dữ liệu dinh dưỡng sau và trả về JSON insight:\n" + string(historyJSON)
+	userMsg := "Phân tích dữ liệu dinh dưỡng sau và chỉ trả về duy nhất 1 JSON hợp lệ " +
+		"(bắt đầu bằng { và kết thúc ngay sau }, không kèm giải thích hay ghi chú nào bên ngoài JSON):\n" +
+		string(historyJSON)
 
 	rawJSON, err := runSingleTurnLLM(ctx, a.insightAgent, userMsg)
 	if err != nil {
@@ -163,61 +165,44 @@ func (a *NutritionAgent) GenerateNutritionInsight(
 		return nil, fmt.Errorf("generate nutrition insight parse json: %w", err)
 	}
 
-	return mapInsightToResult(insight), nil
+	return mapInsightToResult(&insight), nil
 }
 
 // insightLLMResponse là schema JSON mà LLM trả về cho insight.
 type insightLLMResponse struct {
-	OverallScore     int      `json:"overall_score"`
-	Summary          string   `json:"summary"`
-	Strengths        []string `json:"strengths"`
+	OverallScore     int    `json:"overall_score"`
+	Summary          string `json:"summary"`
 	ImprovementAreas []struct {
-		Area       string  `json:"area"`
-		CurrentAvg float64 `json:"current_avg"`
-		Target     float64 `json:"target"`
-		Suggestion string  `json:"suggestion"`
-		Priority   string  `json:"priority"`
+		Nutrient    string  `json:"nutrient"`
+		Action      string  `json:"action"`
+		DeltaAmount float64 `json:"delta_amount"`
+		Suggestion  string  `json:"suggestion"`
 	} `json:"improvement_areas"`
-	WeeklyTrend            string `json:"weekly_trend"`
-	RecommendedAdjustments struct {
-		CaloriesDelta     float64  `json:"calories_delta"`
-		ProteinRatioDelta float64  `json:"protein_ratio_delta"`
-		FocusFoods        []string `json:"focus_foods"`
-	} `json:"recommended_adjustments"`
+	PredictedCookingStyle string   `json:"predicted_cooking_style"`
+	PreferredIngredients  []string `json:"preferred_ingredients"`
 }
 
 // mapInsightToResult chuyển đổi insightLLMResponse sang repository.NutritionInsightResult.
-//
-//nolint:gocritic // r is an internal response struct
-func mapInsightToResult(r insightLLMResponse) *repository.NutritionInsightResult {
+func mapInsightToResult(r *insightLLMResponse) *repository.NutritionInsightResult {
 	areas := make([]repository.ImprovementArea, 0, len(r.ImprovementAreas))
 	for _, a := range r.ImprovementAreas {
 		areas = append(areas, repository.ImprovementArea{
-			Area:       a.Area,
-			CurrentAvg: a.CurrentAvg,
-			Target:     a.Target,
-			Suggestion: a.Suggestion,
-			Priority:   a.Priority,
+			Nutrient:    a.Nutrient,
+			Action:      a.Action,
+			DeltaAmount: a.DeltaAmount,
+			Suggestion:  a.Suggestion,
 		})
 	}
 
-	focusFoods := make([]string, len(r.RecommendedAdjustments.FocusFoods))
-	copy(focusFoods, r.RecommendedAdjustments.FocusFoods)
-
-	strengths := make([]string, len(r.Strengths))
-	copy(strengths, r.Strengths)
+	preferredIngs := make([]string, len(r.PreferredIngredients))
+	copy(preferredIngs, r.PreferredIngredients)
 
 	return &repository.NutritionInsightResult{
-		OverallScore:     r.OverallScore,
-		Summary:          r.Summary,
-		Strengths:        strengths,
-		ImprovementAreas: areas,
-		WeeklyTrend:      r.WeeklyTrend,
-		RecommendedAdjustments: repository.RecommendedAdjustments{
-			CaloriesDelta:     r.RecommendedAdjustments.CaloriesDelta,
-			ProteinRatioDelta: r.RecommendedAdjustments.ProteinRatioDelta,
-			FocusFoods:        focusFoods,
-		},
+		OverallScore:          r.OverallScore,
+		Summary:               r.Summary,
+		ImprovementAreas:      areas,
+		PredictedCookingStyle: r.PredictedCookingStyle,
+		PreferredIngredients:  preferredIngs,
 	}
 }
 
@@ -229,9 +214,8 @@ func mapInsightToResult(r insightLLMResponse) *repository.NutritionInsightResult
 func (a *NutritionAgent) SelectCreativeMealOptions(
 	ctx context.Context,
 	promptCtx repository.AIMenuPromptContext,
-	lockoutRegistry vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
-	recipes, _, err := a.SelectCreativeMealOptionsWithDetails(ctx, promptCtx, lockoutRegistry)
+	recipes, _, err := a.SelectCreativeMealOptionsWithDetails(ctx, promptCtx)
 	return recipes, err
 }
 
@@ -242,20 +226,8 @@ func (a *NutritionAgent) SelectCreativeMealOptions(
 func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 	ctx context.Context,
 	promptCtx repository.AIMenuPromptContext,
-	lockoutRegistry vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, *PlanResult, error) {
-	filteredFoods := lockoutRegistry.FilterAvailableIngredients(promptCtx.AvailableIngredients, promptCtx.PlanDate)
-	if len(filteredFoods) > 21 {
-		filteredFoods = service.SelectDiverseCandidates(
-			filteredFoods,
-			lockoutRegistry,
-			promptCtx.UserRestrictions,
-			promptCtx.UserID,
-			promptCtx.PlanDate,
-			service.DefaultCandidateConfig(),
-		)
-	}
-	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
+	availableDTOs := ToFoodNutrientDTOs(promptCtx.AvailableIngredients)
 
 	internal := NutritionPromptContext{
 		UserID:                   promptCtx.UserID,
@@ -271,7 +243,8 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 		MandatoryUserIngredients: ToFoodNutrientDTOs(promptCtx.MandatoryUserIngredients),
 		SupplementaryIngredients: ToFoodNutrientDTOs(promptCtx.SupplementaryIngredients),
 		AvailableIngredients:     availableDTOs,
-		LockoutRegistry:          lockoutRegistry,
+		PreferredIngredients:     promptCtx.PreferredIngredients,
+		WeeklyCookingStyle:       promptCtx.WeeklyCookingStyle,
 	}
 
 	var (
@@ -294,16 +267,15 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 		flow = FlowDaily
 	}
 
-	validator := newPlanValidator(a.foodRepo, lockoutRegistry)
+	validator := newPlanValidator(a.foodRepo, internal.MandatoryUserIngredients)
 
 	attemptFn := func(round int, fb *attemptFeedback) (*GeneratedMealPlan, error) {
-		if round > 1 && fb != nil && fb.PreviousPlan != nil && len(fb.PreviousPlan.Options) > 0 {
+		if round > 1 && fb != nil && fb.PreviousPlan != nil && len(fb.PreviousPlan.Options) > 0 && internal.MealType == FlowDaily {
 			repairedPlan, repairErr := a.repairFlawedMeals(ctx, internal, fb)
 			if repairErr == nil && repairedPlan != nil && len(repairedPlan.Options) == len(fb.PreviousPlan.Options) {
 				return repairedPlan, nil
 			}
-			slog.WarnContext(ctx, "Single-meal repair failed, retaining previous plan to enforce token limit", slog.Any("error", repairErr))
-			return fb.PreviousPlan, nil
+			slog.WarnContext(ctx, "Single-meal repair failed, falling back to full workflow generation", slog.Any("error", repairErr))
 		}
 
 		plan, err := a.runWorkflow(ctx, wfAgent, internal, fb)
@@ -387,7 +359,7 @@ func (a *NutritionAgent) persistNewFoodItemsAndMap(
 		opt := &plan.Options[i]
 		suppIngredients := make([]aggregate.IngredientGram, 0, len(opt.SupplementaryIngredients))
 		for _, supp := range opt.SupplementaryIngredients {
-			suppIngredients = append(suppIngredients, aggregate.NewIngredientGram(supp.Name, supp.AmountGram, supp.IsNutiFoodProduct))
+			suppIngredients = append(suppIngredients, aggregate.NewIngredientGram(supp.Name, supp.AmountGram, true))
 		}
 
 		recipeResults = append(recipeResults, repository.GeneratedRecipeResult{
@@ -568,6 +540,15 @@ func (a *NutritionAgent) repairFlawedMeals(
 					Area:        "validator_issue",
 					Detail:      issue,
 					Fix:         "Replace invalid or conflicting ingredient with active catalog items",
+				}
+			}
+		} else if strings.Contains(issue, "plan is missing mandatory user pantry ingredient") {
+			for idx := range fb.PreviousPlan.Options {
+				flawedMap[idx] = ReviewNote{
+					OptionIndex: idx + 1,
+					Area:        "missing_mandatory_pantry_ingredient",
+					Detail:      issue,
+					Fix:         "Feature and cook with the mandatory user pantry ingredient",
 				}
 			}
 		}

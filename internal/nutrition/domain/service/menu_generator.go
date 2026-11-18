@@ -15,9 +15,10 @@ import (
 
 // MenuGenerator orchestrates thực đơn: check Recipe Cache trước, nếu miss thì gọi AI Agent.
 type MenuGenerator struct {
-	recipeCache repository.RecipeCacheRepository
-	foodRepo    repository.FoodItemRepository
-	aiService   repository.AIService
+	recipeCache       repository.RecipeCacheRepository
+	foodRepo          repository.FoodItemRepository
+	aiService         repository.AIService
+	candidateSelector *CandidateSelector
 }
 
 func NewMenuGenerator(
@@ -26,9 +27,10 @@ func NewMenuGenerator(
 	aiService repository.AIService,
 ) *MenuGenerator {
 	return &MenuGenerator{
-		recipeCache: recipeCache,
-		foodRepo:    foodRepo,
-		aiService:   aiService,
+		recipeCache:       recipeCache,
+		foodRepo:          foodRepo,
+		aiService:         aiService,
+		candidateSelector: NewCandidateSelector(),
 	}
 }
 
@@ -47,28 +49,47 @@ func getDailyMealSlots() []mealSlot {
 	}
 }
 
+// DailyPlanPersonalization chứa thông tin cá nhân hóa từ insight tuần trước và lịch sử tiêu thụ 7 ngày gần nhất.
+type DailyPlanPersonalization struct {
+	PreferredIngredients []string
+	WeeklyCookingStyle   string
+	RecentConsumptions   []vo.HistoricalConsumption
+}
+
 // GenerateDailyPlan sinh thực đơn 4 bữa cho userID trong 1 lần gọi AI duy nhất (tiết kiệm thời gian và số lượng request).
 func (g *MenuGenerator) GenerateDailyPlan(
 	ctx context.Context,
 	userID string,
 	planDate time.Time,
 	allocation vo.CalorieAllocation,
-	lockoutRegistry vo.LockoutRegistry,
 	userRestrictions []string,
 	nutritionGoal vo.NutritionGoal,
+	personalization ...DailyPlanPersonalization,
 ) (*aggregate.NutritionPlan, error) {
 	activeCatalog, err := g.foodRepo.FindActiveCatalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
 	}
 
-	selectedIngredients := SelectDiverseCandidates(
-		activeCatalog,
-		lockoutRegistry,
-		userRestrictions,
-		userID,
-		planDate,
-	)
+	var preferredIngredients []string
+	var weeklyCookingStyle string
+	var recentConsumptions []vo.HistoricalConsumption
+	if len(personalization) > 0 {
+		preferredIngredients = personalization[0].PreferredIngredients
+		weeklyCookingStyle = personalization[0].WeeklyCookingStyle
+		recentConsumptions = personalization[0].RecentConsumptions
+	}
+
+	criteria := SelectionCriteria{
+		Catalog:            activeCatalog,
+		UserRestrictions:   userRestrictions,
+		UserID:             userID,
+		PlanDate:           planDate,
+		NutritionGoal:      nutritionGoal,
+		UserPreferences:    preferredIngredients,
+		RecentConsumptions: recentConsumptions,
+	}
+	selectedIngredients := g.candidateSelector.SelectCandidates(&criteria)
 
 	// Gọi AI 1 lần duy nhất để sinh toàn bộ các món ăn cho 4 bữa trong ngày (tiết kiệm 75% thời gian phản hồi)
 	promptCtx := repository.AIMenuPromptContext{
@@ -83,9 +104,11 @@ func (g *MenuGenerator) GenerateDailyPlan(
 		AvailableIngredients: selectedIngredients,
 		UserRestrictions:     userRestrictions,
 		PlanDate:             planDate,
+		PreferredIngredients: preferredIngredients,
+		WeeklyCookingStyle:   weeklyCookingStyle,
 	}
 
-	allOptions, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, allocation.TargetCalories())
+	allOptions, optErr := g.resolveOptionsViaAI(ctx, promptCtx, allocation.TargetCalories())
 	if optErr != nil {
 		return nil, fmt.Errorf("menu generator daily plan AI call: %w", optErr)
 	}
@@ -154,13 +177,24 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 	userID string,
 	planDate time.Time,
 	allocation vo.CalorieAllocation,
-	lockoutRegistry vo.LockoutRegistry,
 	userIngredients []string,
 	userRestrictions ...[]string,
 ) (*aggregate.NutritionPlan, error) {
 	activeCatalog, err := g.foodRepo.FindActiveCatalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
+	}
+
+	var restrictions []string
+	if len(userRestrictions) > 0 {
+		restrictions = userRestrictions[0]
+	}
+
+	// 1. Kiểm tra dị ứng đối với nguyên liệu người dùng gửi lên
+	if len(restrictions) > 0 {
+		if err := ValidatePantryIngredientsAgainstAllergens(userIngredients, activeCatalog, restrictions); err != nil {
+			return nil, err
+		}
 	}
 
 	pantryCatalog := make([]vo.FoodNutrient, 0, len(userIngredients))
@@ -184,27 +218,23 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		}
 
 		if !isFound {
-			// Nguyên liệu mới -> Tạo đối tượng gửi sang để AI tự nhận diện 100% nhóm thực phẩm (PROTEIN/CARB/VEGGIE) và khai báo new_food_catalog_items
+			// Nguyên liệu chưa có trong DB được gán nhãn "UNKNOWN" để AI tự nhận diện nhóm chất và chọn các nhóm còn thiếu
+			category := "UNKNOWN"
 			foundItem = vo.NewFoodNutrient(
 				uuid.New().String(),
 				trimmed,
-				"INGREDIENT",
+				category,
 				0.0, 0.0, 0.0, 0.0,
 				nil, "", "", false,
+				0.0, "BUDGET",
 			)
 		}
 		pantryCatalog = append(pantryCatalog, foundItem)
 	}
 
-	var restrictions []string
-	if len(userRestrictions) > 0 {
-		restrictions = userRestrictions[0]
-	}
-
 	mandatory, supplementary := SelectPantryCandidates(
 		pantryCatalog,
 		activeCatalog,
-		lockoutRegistry,
 		restrictions,
 		userID,
 		planDate,
@@ -226,7 +256,7 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		PlanDate:                 planDate,
 	}
 
-	options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, lockoutRegistry, targetCalo)
+	options, optErr := g.resolveOptionsViaAI(ctx, promptCtx, targetCalo)
 	if optErr != nil {
 		return nil, fmt.Errorf("menu generator pantry: %w", optErr)
 	}
@@ -261,14 +291,13 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 func (g *MenuGenerator) resolveOptionsViaAI(
 	ctx context.Context,
 	promptCtx repository.AIMenuPromptContext,
-	lockoutRegistry vo.LockoutRegistry,
 	targetMealCalo float64,
 ) ([]aggregate.MealOption, error) {
 	if g.aiService == nil {
 		return nil, errors.New("ai service is not configured")
 	}
 
-	aiResults, err := g.aiService.SelectCreativeMealOptions(ctx, promptCtx, lockoutRegistry)
+	aiResults, err := g.aiService.SelectCreativeMealOptions(ctx, promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("ai select meal options: %w", err)
 	}

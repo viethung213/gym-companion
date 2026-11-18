@@ -2,9 +2,9 @@
 
 Tài liệu kế hoạch kỹ thuật tổng thể dành cho Bounded Context **Nutrition / NutiFood** (`internal/nutrition`) chuẩn kiến trúc **Domain-Driven Design (DDD)**, **Hexagonal Architecture (Ports & Adapters)**, và các quy ước lập trình Go trong `AGENTS.md`.
 
-Tài liệu được cập nhật chính xác theo nguyên lý **Server-Heavy Rule Engine + AI Creative Chef** (đã thiết kế tại các file **06, 07, 08**):
-- **Server Go Backend**: Gánh **90% khối lượng công việc** — tính toán TDEE, phân bổ calo, tính chính xác từng gram nguyên liệu per 100g, lọc dị ứng, check `LockoutRegistry` (7/5/3 ngày) và ghép ma trận tổ hợp ($180,000+$ món).
-- **External AI (Gemini/OpenAI)**: Đóng vai trò là **"Đầu bếp chế biến & Sáng tạo" (Creative Chef)** — chỉ làm nhiệm vụ đặt tên món ăn hấp dẫn, gợi ý phong cách nêm nếm gia vị và thời gian nấu từ các khối nguyên liệu chuẩn do Server tính sẵn.
+Tài liệu được cập nhật chính xác theo phân định kỹ thuật thực tế trong codebase:
+- **Server Go Backend**: Đóng vai trò Bộ Điều Phối & Lọc Quy Tắc Nghiệp Vụ — tính toán TDEE và Target Macros ngày (`TDEECalculator`), trích xuất lịch sử tiêu thụ 7 ngày qua (`FindByUserIDAndDates`), lọc an toàn dị ứng (`FilterAllergensOnly`), chấm điểm ứng viên đa mục tiêu với phân rã hàm mũ (`CandidateSelector`), đóng gói context gọi AI, thẩm định kết quả (`planValidator`), phân bổ vào 4 bữa ăn và lưu trữ CSDL/Outbox.
+- **External AI (Google ADK v2)**: Đóng vai trò sáng tạo ẩm thực và cân bằng dinh dưỡng món ăn — nhận danh sách ứng viên từ Backend, chọn bộ 3 nguyên liệu (Protein + Carb + Veggie), tính gram từng nguyên liệu và macro món ăn, đặt tên món ngắn gọn (< 5 từ) và hướng dẫn nấu (< 15 từ/bước).
 
 ---
 
@@ -12,11 +12,11 @@ Tài liệu được cập nhật chính xác theo nguyên lý **Server-Heavy Ru
 
 > [!IMPORTANT]
 > **Khẳng định kiến trúc cốt lõi**:
-> 1. **Phạm vi tính năng**: Triển khai đầy đủ 3 Aggregates (`NutritionPlan`, `MealHistory`, `FoodItem`), `TDEECalculator`, `CombinatorialMatrix` (Server Rule Engine), `RecipeCacheRepository` ($0$ AI Cost cho lượt tái sử dụng), cơ chế chống lặp món Lockout (BR-NU-02), đề xuất sản phẩm NutiFood (BR-NU-03), tái hiệu chỉnh động khi tập luyện (BR-NU-04) / tủ lạnh (BR-NU-06), và Outbox CDC phát sự kiện lên Kafka.
-> 2. **Cơ sở dữ liệu**: Sử dụng PostgreSQL schema riêng `nutrition` với các bảng `nutrition_plans`, `meal_histories`, `meal_logs`, `lockout_registries`, `food_items` (lưu các trường `calories_per_100g`, `protein_per_100g`, `carbs_per_100g`, `fat_per_100g`), `recipes` (Recipe Cache), bảng `outbox` & `outbox_log` (đã khởi tạo tại `01-init-schemas.sql`).
+> 1. **Phạm vi tính năng**: Triển khai đầy đủ 3 Aggregates (`NutritionPlan`, `MealHistory`, `FoodItem`), `TDEECalculator`, `CandidateSelector` (Soft Scoring & Exponential Decay - BR-NU-02), `PantrySelector` (BR-NU-06), `RecipeCacheRepository`, đề xuất sản phẩm NutiFood (BR-NU-03), tái hiệu chỉnh động khi tập luyện (BR-NU-04), và Outbox CDC phát sự kiện lên Kafka.
+> 2. **Cơ sở dữ liệu**: Sử dụng PostgreSQL schema riêng `nutrition` với các bảng `nutrition_plans`, `meal_histories`, `meal_logs`, `food_items` (lưu các trường `calories_per_100g`, `protein_per_100g`, `carbs_per_100g`, `fat_per_100g`, `price_per_100g`, `cost_tier`), `recipes` (Recipe Cache), `weekly_insights`, bảng `outbox` & `outbox_log` (đã khởi tạo tại `01-init-schemas.sql`).
 > 3. **Phân định ranh giới Server vs AI**: 
->    - **Server**: Quyết định lượng gram, món ăn, chỉ tiêu Calo/Macros, check lockout.
->    - **External AI**: Chỉ đóng vai trò Đầu bếp chế biến — đặt tên món, tinh chỉnh lượng gia vị/thời gian nấu khi tăng định lượng hoặc yêu cầu chế biến mới lạ.
+>    - **Server**: Quyết định chỉ tiêu Calo/Macros tổng ngày, lọc dị ứng, chấm điểm ứng viên nguyên liệu và lưu trữ kế hoạch.
+>    - **External AI**: Chọn bộ 3 nguyên liệu, tính gram chi tiết, tính macro từng món, đặt tên món và các bước nấu.
 
 ---
 
@@ -24,14 +24,14 @@ Tài liệu được cập nhật chính xác theo nguyên lý **Server-Heavy Ru
 
 ### Database & Migrations
 
-#### [NEW] [07-create-nutrition-tables.sql](file:///e:/LEAN/TTTN/internal/shared/database/migrations/07-create-nutrition-tables.sql)
+#### [NEW] [02-nutrition.sql](../../../shared/database/migrations/ai/02-nutrition.sql)
 - Tạo các bảng nghiệp vụ trong PostgreSQL schema `nutrition` (schema `nutrition`, `outbox` và `outbox_log` đã được tạo từ `01-init-schemas.sql`):
   - `nutrition.nutrition_plans`: Lưu kế hoạch calo/macros theo ngày, target calories, phân bổ protein/carb/fat, danh sách bữa ăn gợi ý dưới dạng JSONB.
   - `nutrition.meal_histories`: Quản lý lịch sử ăn uống của user.
   - `nutrition.meal_logs`: Các món ăn thực tế đã ghi nhận (`meal_log_id`, `meal_name`, `meal_type`, `calories`, `protein`, `carbs`, `fat`, `logged_at`).
-  - `nutrition.lockout_registries`: Lưu vết khóa nguyên liệu (Protein khóa 7 ngày, Carb khóa 5 ngày, Dish Theme khóa 3 ngày - BR-NU-02).
-  - `nutrition.food_items`: Danh mục thực phẩm chuẩn per 100g (`calories_per_100g`, `protein_per_100g`, `carbs_per_100g`, `fat_per_100g`), nhãn dị ứng/chay/Halal, nhãn sản phẩm NutiFood, trạng thái vòng đời (`Draft`, `PendingApproval`, `Active`).
+  - `nutrition.food_items`: Danh mục thực phẩm chuẩn per 100g (`calories_per_100g`, `protein_per_100g`, `carbs_per_100g`, `fat_per_100g`, `price_per_100g`, `cost_tier`), nhãn dị ứng/chay/Halal, nhãn sản phẩm NutiFood, trạng thái vòng đời (`Draft`, `PendingApproval`, `Active`).
   - `nutrition.recipes`: Thư viện Recipe Cache tự động tích lũy từ External AI để tái sử dụng $0$ AI Cost.
+  - `nutrition.weekly_insights`: Lưu trữ báo cáo phân tích dinh dưỡng tuần của AI.
 - Seed dữ liệu ban đầu duy nhất cho bảng `nutrition.food_items` (danh mục thực phẩm chuẩn & sản phẩm NutiFood như NutiFood Varna, NutiFood LeanMax).
 
 ---
@@ -40,20 +40,18 @@ Tài liệu được cập nhật chính xác theo nguyên lý **Server-Heavy Ru
 
 Không import thư viện ngoài (không GORM, không Gin/REST, không ORM tags). Định nghĩa đầy đủ Aggregate Roots, Entities, Value Objects, Domain Events và Interfaces (Ports).
 
-#### [NEW] [calorie_allocation.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/calorie_allocation.go)
+#### [NEW] [calorie_allocation.go](../domain/vo/calorie_allocation.go)
 - **Value Object**: `CalorieAllocation` (Target calories, Protein grams, Carb grams, Fat grams).
 - **Invariant**: Target calories >= 1200 kcal/ngày (BR-NU-01).
 
-#### [NEW] [lockout_registry.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/lockout_registry.go)
-- **Value Object**: `LockoutRegistry` quản lý danh sách nguyên liệu/loại món bị khóa kèm thời hạn mở khóa.
-- **BR-NU-02**: Tự động khóa Protein chính 7 ngày, Carb chính 5 ngày, Chủ đề món 3 ngày sau khi log bữa ăn.
-- **BR-NU-02.1**: Cấm tuyệt đối nguyên liệu bị khóa nếu không có input tủ lạnh.
-- **BR-NU-02.2**: Nếu nguyên liệu tủ lạnh trùng Lockout -> Cho dùng nhưng yêu cầu AI đổi phương pháp chế biến mới lạ.
+#### [NEW] [historical_consumption.go](../domain/vo/historical_consumption.go)
+- **Value Object**: `HistoricalConsumption` lưu vết món ăn và mảng nguyên liệu thực tế: `MealName string`, `Ingredients []string`, `ConsumedAt time.Time`.
+- Phục vụ tính toán hàm phân rã thời gian $R(i) = \sum s(i, i_k) e^{-\Delta t_k / \tau}$ ($\tau=48\text{h}$) trong `CandidateSelector`.
 
-#### [NEW] [food_nutrient.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/food_nutrient.go)
-- **Value Object**: `FoodNutrient` chứa calo, macro per 100g (`CaloriesPer100g`, `ProteinPer100g`, `CarbsPer100g`, `FatPer100g`), allergen tags, partner tags (NutiFood).
+#### [NEW] [food_nutrient.go](../domain/vo/food_nutrient.go)
+- **Value Object**: `FoodNutrient` chứa calo, macro per 100g (`CaloriesPer100g`, `ProteinPer100g`, `CarbsPer100g`, `FatPer100g`, `PricePer100g`, `CostTier`), allergen tags, partner tags (NutiFood).
 
-#### [NEW] [nutrition_plan.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/nutrition_plan.go)
+#### [NEW] [nutrition_plan.go](../domain/aggregate/nutrition_plan.go)
 - **Aggregate Root**: `NutritionPlan`
 - Chứa `PlanID`, `UserID`, `Date`, `CalorieAllocation`, `DailyMealOptions` (Sáng, Trưa, Tối, Phụ).
 - **BR-NU-05 (Chuyển đổi Thực đơn Kế hoạch -> Lịch sử Ăn uống & Nhắc nhở theo bữa)**:
@@ -61,76 +59,81 @@ Không import thư viện ngoài (không GORM, không Gin/REST, không ORM tags)
   - **BR-NU-05.2**: Nhắc nhở đẩy sau mỗi bữa ăn (8:30, 13:00, 19:30, 21:00).
   - **BR-NU-05.3**: Quick-log 1-tap 1/3 options | Custom log có calo | Custom log KHÔNG calo -> AI tự động ước tính & cache DB.
 
-#### [NEW] [meal_history.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/meal_history.go)
+#### [NEW] [meal_history.go](../domain/aggregate/meal_history.go)
 - **Aggregate Root**: `MealHistory`
-- Chứa `HistoryID`, `UserID`, danh sách `MealLog` entities và `LockoutRegistry`.
-- Business Method: `LogMeal(...)`, `LogMealFromPlan(...)`, `LogCustomMealWithAIEstimation(...)`, `ApplyLockout(...)`.
+- Chứa `HistoryID`, `UserID`, danh sách `MealLog` entities.
+- Business Method: `LogMeal(...)`, `LogMealFromPlan(...)`, `LogCustomMealWithAIEstimation(...)`.
 
-#### [NEW] [food_item.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/food_item.go)
+#### [NEW] [food_item.go](../domain/aggregate/food_item.go)
 - **Aggregate Root**: `FoodItem`
 - State Lifecycle: `Draft` -> `SubmitForApproval()` -> `Approve()` (`Active`) / `Reject()`.
 
-#### [NEW] [tdee_calculator.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/tdee_calculator.go)
+#### [NEW] [tdee_calculator.go](../domain/service/tdee_calculator.go)
 - **Domain Service**: Tính TDEE theo Mifflin-St Jeor và tự động điều chỉnh Calo/Macro linh hoạt.
 - **BR-NU-04**: Tái hiệu chỉnh thực đơn động khi có sự kiện tập luyện `WorkoutSessionCompleted`.
 
-#### [NEW] [combinatorial_matrix.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/combinatorial_matrix.go)
-- **Domain Service (Rule-Based Matrix Engine)**: Thuật toán ma trận tổ hợp nguyên liệu ($N_1 \text{ Protein} \times N_2 \text{ Carb} \times N_3 \text{ Veggie} \times N_4 \text{ Style} = 180,000+$ món) + Tự động căn chỉnh gram nguyên liệu chuẩn theo công thức:
-  $$\Delta \text{Gram} = \frac{\Delta \text{Calo}}{\text{CaloriesPer100g}} \times 100$$
+#### [NEW] [candidate_selector.go](../domain/service/candidate_selector.go)
+- **Domain Service**: Chấm điểm đa tiêu chí $S(i, u, t)$, phân rã hàm mũ theo thời gian $R(i)$ và tie-breaker bằng `DeterministicRNG`.
 
-#### [NEW] [menu_generator.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/menu_generator.go)
+#### [NEW] [food_filter.go](../domain/service/food_filter.go)
+- **Domain Service**: `FilterAllergensOnly` sàng lọc nguyên liệu theo tên, loại bỏ nguy cơ phản ứng dị ứng của người dùng.
+
+#### [NEW] [pantry_selector.go](../domain/service/pantry_selector.go)
+- **Domain Service**: Đánh giá nguyên liệu tủ lạnh, ưu tiên đưa vào bữa ăn và gán cờ `RequiresNovelCookingStyle` khi nguyên liệu đã ăn gần đây.
+
+#### [NEW] [sampling.go](../domain/service/sampling.go)
+- **Domain Service**: Cung cấp `DeterministicRNG(userID, planDate)` sinh jitter $\pm 0.05$ và thuật toán Reservoir Sampling.
+
+#### [NEW] [menu_generator.go](../domain/service/menu_generator.go)
 - **Domain Service Orchestrator**: 
-  1. Sử dụng `CombinatorialMatrix` trên Server để sinh tổ hợp nguyên liệu chuẩn Calo/Macros.
-  2. Tra cứu `RecipeCacheRepository`: Nếu đã có công thức -> Lấy DB ($0$ AI Cost).
-  3. Nếu chưa có -> Gọi `AIService` làm **Đầu bếp chế biến** (đặt tên món & hướng dẫn chế biến từ nguyên liệu chuẩn của Server).
-  4. **Quy tắc Bổ Sung Nguyên Liệu Phụ & Tự Động Đồng Bộ CSDL (Auto DB Catalog Sync)**:
-     - Prompt cho External AI cho phép AI **tự do bổ sung thêm nguyên liệu/gia vị phụ trợ bên ngoài** (như tỏi, ớt, dầu oliu, nấm, sốt...) để món ăn chế biến tròn vị.
-     - Khi AI trả về công thức có chứa nguyên liệu phụ mới chưa có trong CSDL `nutrition.food_items`, Server **tự động chèn nguyên liệu mới này vào CSDL `nutrition.food_items`** (với thông số dinh dưỡng per 100g do AI ước tính) để tái sử dụng cho tất cả người dùng khác lần sau.
-     - Lưu toàn bộ công thức vào `nutrition.recipes` (Recipe Cache DB).
+  1. Sử dụng `CandidateSelector` để tuyển chọn danh sách nguyên liệu ứng viên khả thi theo chỉ tiêu dinh dưỡng.
+  2. Ủy thác cho `AIService` làm việc sáng tạo công thức, ghép bộ 3 nguyên liệu, tính gram cụ thể và đặt tên món.
+  3. Phân bổ 8 options do AI trả về vào 4 bữa ăn trong ngày (`Breakfast` 25%, `Lunch` 35%, `Dinner` 30%, `Snack` 10%).
+  4. Lưu công thức vào `nutrition.recipes` (Recipe Cache DB).
 
-#### [NEW] [ai_service.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/ai_service.go)
+#### [NEW] [ai_service.go](../domain/repository/ai_service.go)
 - **Port / Interface**: `AIService` hợp đồng gọi External AI làm **Creative Chef (Đầu bếp chế biến & nêm nếm)** và **Nutrient Estimator**, tích hợp Prompt Rule cho phép bổ sung nguyên liệu phụ trợ và trích xuất nguyên liệu mới để đồng bộ CSDL.
 
-#### [NEW] [events.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/events.go)
-- Domain Events: `NutritionPlanGenerated`, `NutritionPlanRecalibrated`, `MealLogged`, `LockoutApplied`, `FoodItemCreated`, `FoodItemApproved`.
+#### [NEW] [events.go](../domain/event/events.go)
+- Domain Events: `NutritionPlanGenerated`, `NutritionPlanRecalibrated`, `MealLogged`, `FoodItemCreated`, `FoodItemApproved`.
 
-#### [NEW] [repository.go](file:///e:/LEAN/TTTN/internal/nutrition/domain/repository.go)
-- Interfaces: `NutritionPlanRepository`, `MealHistoryRepository`, `FoodItemRepository`, `RecipeCacheRepository`.
+#### [NEW] [repository.go](../domain/repository/nutrition_plan_repository.go)
+- Interfaces: `NutritionPlanRepository` (với batch query `FindByUserIDAndDates`), `MealHistoryRepository`, `FoodItemRepository`, `RecipeCacheRepository`.
 
 ---
 
 ### Application Layer (`internal/nutrition/application`)
 
 #### Commands:
-- [NEW] [generate_daily_plan.go](file:///e:/LEAN/TTTN/internal/nutrition/application/command/generate_daily_plan.go): UC-05.1 Base TDEE plan generation.
-- [NEW] [recalibrate_plan_with_pantry.go](file:///e:/LEAN/TTTN/internal/nutrition/application/command/recalibrate_plan_with_pantry.go): **BR-NU-06** API tái hiệu chỉnh bữa ăn theo nguyên liệu tủ lạnh.
-- [NEW] [log_meal.go](file:///e:/LEAN/TTTN/internal/nutrition/application/command/log_meal.go): UC-05.2 & **BR-NU-05** Log meal (1-tap quick log / custom log với AI auto estimation).
-- [NEW] [create_food_item.go](file:///e:/LEAN/TTTN/internal/nutrition/application/command/create_food_item.go)
-- [NEW] [approve_food_item.go](file:///e:/LEAN/TTTN/internal/nutrition/application/command/approve_food_item.go)
+- [NEW] [generate_daily_plan.go](../application/command/generate_daily_plan.go): UC-05.1 Base TDEE plan generation với batch lookup lịch sử tiêu thụ theo ngày.
+- [NEW] [recalibrate_plan_with_pantry.go](../application/command/recalibrate_plan_with_pantry.go): **BR-NU-06** API tái hiệu chỉnh bữa ăn theo nguyên liệu tủ lạnh.
+- [NEW] [log_meal.go](../application/command/log_meal.go): UC-05.2 & **BR-NU-05** Log meal (1-tap quick log / custom log với AI auto estimation).
+- [NEW] [create_food_item.go](../application/command/create_food_item.go)
+- [NEW] [approve_food_item.go](../application/command/approve_food_item.go)
 
 #### Queries:
-- [NEW] [get_today_menu.go](file:///e:/LEAN/TTTN/internal/nutrition/application/query/get_today_menu.go)
-- [NEW] [get_nutrition_history.go](file:///e:/LEAN/TTTN/internal/nutrition/application/query/get_nutrition_history.go)
-- [NEW] [get_nutrition_summary.go](file:///e:/LEAN/TTTN/internal/nutrition/application/query/get_nutrition_summary.go)
+- [NEW] [get_today_menu.go](../application/query/get_today_menu.go)
+- [NEW] [get_nutrition_history.go](../application/query/get_nutrition_history.go)
+- [NEW] [get_nutrition_summary.go](../application/query/get_nutrition_summary.go)
 
 ---
 
 ### Infrastructure Layer (`internal/nutrition/infrastructure`)
 
 #### AI Integration (Google ADK v2 & FallbackLLM) & Persistence:
-- [NEW] [agent.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/ai/adk/agent.go): `ADKNutritionAgent` triển khai `repository.AIService`.
-- [NEW] [fallback_llm.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/ai/adk/fallback_llm.go): `FallbackLLM` bọc `model.LLM`, tự động failover sang model dự phòng khi hết quota/429 (`GEMINI_MODEL` & `GEMINI_FALLBACK_MODELS`).
-- [NEW] [build_agents.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/ai/adk/build_agents.go): Khởi tạo LLM nodes & workflow agents với file prompt nhúng tĩnh (`//go:embed prompts/*.txt`).
-- [NEW] [tools.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/ai/adk/tools.go): ADK Function Tools (`fetch_food_catalog`, `calculate_macro_gram`, `suggest_nutifood_supplement`).
-- [NEW] [retry.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/ai/adk/retry.go): Retry mechanism & plan validation.
-- [NEW] [gorm_models.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/persistence/gorm_models.go): Mapping `ToDomain()` / `ToPersistence()`.
-- [NEW] [postgres_repository.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/persistence/postgres_repository.go)
-- [NEW] [outbox_repository.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/persistence/outbox_repository.go)
-- [NEW] [grpc_handler.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/transport/grpc_handler.go): gRPC Adapter `NutritionServiceServer`.
+- [NEW] [agent.go](../infrastructure/ai/adk/agent.go): `ADKNutritionAgent` triển khai `repository.AIService`.
+- [NEW] [fallback_llm.go](../infrastructure/ai/adk/fallback_llm.go): `FallbackLLM` bọc `model.LLM`, tự động failover sang model dự phòng khi hết quota/429 (`GEMINI_MODEL` & `GEMINI_FALLBACK_MODELS`).
+- [NEW] [build_agents.go](../infrastructure/ai/adk/build_agents.go): Khởi tạo LLM nodes & workflow agents với file prompt nhúng tĩnh (`//go:embed prompts/*.txt`).
+- [NEW] [tools.go](../infrastructure/ai/adk/tools.go): ADK Function Tools (`fetch_food_catalog`, `calculate_macro_gram`, `suggest_nutifood_supplement`).
+- [NEW] [retry.go](../infrastructure/ai/adk/retry.go): Retry mechanism & plan validation.
+- [NEW] [gorm_models.go](../infrastructure/persistence/models.go): Mapping `ToDomain()` / `ToPersistence()`.
+- [NEW] [postgres_repository.go](../infrastructure/persistence/postgres_repository.go)
+- [NEW] [outbox_repository.go](../infrastructure/persistence/outbox_repository.go)
+- [NEW] [grpc_handler.go](../../transport/grpc/handler.go): gRPC Adapter `NutritionServiceServer`.
 
 #### Workers:
-- [NEW] [outbox_worker.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/worker/outbox_worker.go): CDC Outbox Worker sang Kafka.
-- [NEW] [daily_menu_cron_worker.go](file:///e:/LEAN/TTTN/internal/nutrition/infrastructure/worker/daily_menu_cron_worker.go): Cron Job 5:00 AM (`0 5 * * *`) pre-generate Base TDEE plan.
+- [NEW] [outbox_worker.go](../infrastructure/worker/outbox_worker.go): CDC Outbox Worker sang Kafka.
+- [NEW] [daily_menu_cron_worker.go](../infrastructure/worker/daily_menu_cron_worker.go): Cron Job 5:00 AM (`0 5 * * *`) pre-generate Base TDEE plan.
 
 ---
 
@@ -144,9 +147,9 @@ sequenceDiagram
     participant Cron as Cron Scheduler (5:00 AM)
     participant Worker as DailyMenuCronWorker
     participant ProfileClient as Profile Module (BiologicalMetrics)
-    participant ServerEngine as Server Rule Engine (CombinatorialMatrix)
+    participant ServerEngine as MenuGenerator & CandidateSelector
+    participant CreativeAI as External AI (Google ADK v2)
     participant Cache as Recipe Cache DB (nutrition.recipes)
-    participant CreativeAI as External AI (Creative Chef)
     participant Repo as NutritionPlanRepository
     actor User
     participant Client as Mobile App
@@ -160,18 +163,13 @@ sequenceDiagram
         loop Mỗi Active User
             Worker->>ProfileClient: GetBiologicalMetrics & FoodRestrictions(userID)
             ProfileClient-->>Worker: Cân nặng, Chiều cao, Dị ứng, Mục tiêu
-            Worker->>ServerEngine: CalculateBaseTDEE & GenerateIngredientMatrix(metrics, lockouts)
-            Note over ServerEngine: 1. Server tính Base TDEE (>=1200 kcal - BR-NU-01)<br/>2. Server ghép ma trận P + C + V + S<br/>3. Server tính chính xác gram từng nguyên liệu
-            ServerEngine->>Cache: LookupRecipeByMatrixKey(ingredientHash)
-            alt HIT CACHE (Đã có công thức chế biến)
-                Cache-->>ServerEngine: Return Recipe Name & Cooking Steps ($0 AI Cost)
-            else MISS CACHE (Chưa có công thức)
-                ServerEngine->>CreativeAI: GenerateRecipeDetails(ingredientGrams, cookingStyle)
-                Note over CreativeAI: AI đóng vai Đầu bếp chế biến:<br/>- Đặt tên món ăn hấp dẫn<br/>- Nêm nếm gia vị & các bước nấu 
-                CreativeAI-->>ServerEngine: Recipe Name & Cooking Steps
-                ServerEngine->>Cache: SaveNewRecipeToDB(ingredientHash, recipe)
-            end
-            ServerEngine-->>Worker: Complete Daily Meals (3 Options Per Meal)
+            Worker->>ServerEngine: GenerateDailyPlan(userID, metrics, restrictions, goal)
+            Note over ServerEngine: 1. Server tính Base TDEE & Target Macros (>=1200 kcal - BR-NU-01)<br/>2. Lấy lịch sử tiêu thụ 7 ngày qua FindByUserIDAndDates<br/>3. Lọc dị ứng (FilterAllergensOnly)<br/>4. Tuyển chọn ứng viên nguyên liệu (CandidateSelector)
+            ServerEngine->>CreativeAI: SelectCreativeMealOptions (DAILY_PLAN 1 lần duy nhất)
+            Note over CreativeAI: AI chọn bộ 3 nguyên liệu,<br/>tự tính số gram, macro từng món,<br/>đặt tên món & các bước nấu (8 options)
+            CreativeAI-->>ServerEngine: Trả về JSON Contract: 8 Meal Options
+            ServerEngine->>Cache: Lưu công thức vào RecipeCache DB
+            ServerEngine-->>Worker: NutritionPlan (4 bữa ăn: Sáng/Trưa/Tối/Phụ)
             Worker->>Repo: Save(NutritionPlan) [In Transaction]
         end
     end
@@ -201,7 +199,7 @@ sequenceDiagram
     participant CreativeAI as External AI (Nutrient Estimator)
     participant Cache as Nutrient Cache DB (nutrition.food_items)
     participant HistoryRepo as MealHistoryRepository
-    participant Domain as MealHistory Aggregate & LockoutRegistry
+    participant Domain as MealHistory Aggregate
 
     Note over User,Client: Nhắc nhở sau mỗi bữa ăn (Post-Meal Push Notification: 8:30, 13:00, 19:30, 21:00)
 
@@ -232,7 +230,6 @@ sequenceDiagram
     Handler->>HistoryRepo: GetOrCreate(userID)
     HistoryRepo-->>Handler: MealHistory Aggregate
     Handler->>Domain: LogMeal(mealLog)
-    Handler->>Domain: ApplyLockout(proteinSource: 7d, carbSource: 5d, category: 3d) (BR-NU-02)
     Handler->>HistoryRepo: Save(MealHistory) [Transaction]
     gRPC-->>Client: Trả về kết quả thành công, cập nhật Vòng Calo & Đánh dấu đã ăn bữa này
 ```
@@ -295,7 +292,7 @@ sequenceDiagram
 
     loop Polling Mới Bút Toán Mới (Mỗi 1s)
         Worker->>DB: SELECT * FROM nutrition.outbox WHERE published = false ORDER BY created_at LIMIT 50 FOR UPDATE SKIP LOCKED
-        DB-->>Worker: List Outbox Events (MealLogged, LockoutApplied)
+        DB-->>Worker: List Outbox Events (MealLogged, NutritionPlanGenerated)
         alt Có Events
             Worker->>Kafka: Publish Event to Topic "contracts.core.nutrition.v1.mealLogged" (Partition Key = UserID)
             Kafka-->>Worker: ACK Success
@@ -354,24 +351,24 @@ sequenceDiagram
     participant gRPC as Nutrition gRPC Server
     participant Handler as RecalibratePlanWithPantry Command
     participant HistoryRepo as MealHistoryRepository
-    participant ServerEngine as Server Rule Engine (CombinatorialMatrix)
-    participant CreativeAI as External AI (Creative Chef)
+    participant ServerEngine as Server Rule Engine (PantrySelector)
+    participant CreativeAI as External AI (Google ADK v2)
     participant PlanRepo as NutritionPlanRepository
 
     User->>Client: Nhập nguyên liệu sẵn có trong tủ lạnh (VD: trứng, ức gà...) -> Bấm "Cập nhật thực đơn"
     Client->>gRPC: RecalibratePlanWithPantry(user_id, available_ingredients[])
     gRPC->>Handler: Execute(RecalibratePlanWithPantryCommand)
     Handler->>PlanRepo: FindByUserIDAndDate(userID, today)
-    Handler->>HistoryRepo: GetTodayLoggedMeals(userID, today) & GetActiveLockouts(userID)
+    Handler->>HistoryRepo: GetTodayLoggedMeals(userID, today) & GetRecentConsumptionHistory(userID)
 
-    Handler->>ServerEngine: FilterAndMatchPantryIngredients(availableIngredients, lockouts, unconsumedMeals)
-    Note over ServerEngine: 1. Server giữ nguyên bữa đã ăn/log<br/>2. Kiểm tra available_ingredients với LockoutRegistry:<br/>- Nếu trùng khóa -> Gán flag RequiresNovelCookingStyle (BR-NU-02.2)<br/>- Server ghép ma trận P + C + V + S cho các bữa chưa ăn
+    Handler->>ServerEngine: SelectPantryCandidates(availableIngredients, catalog, restrictions)
+    Note over ServerEngine: 1. Server giữ nguyên bữa đã ăn/log<br/>2. PantrySelector phân tách mandatory & supplementary<br/>- Nếu ăn gần đây (Recency Penalty cao) -> Gán flag RequiresNovelCookingStyle (BR-NU-02.2)
     
-    ServerEngine->>CreativeAI: GenerateNovelRecipes(ingredientGrams, lockedMatchList)
-    Note over CreativeAI: AI đóng vai Đầu bếp chế biến:<br/>Tạo hướng dẫn chế biến mới lạ cho nguyên liệu tủ lạnh trùng lockout
-    CreativeAI-->>ServerEngine: Recipe Names & Cooking Steps
+    ServerEngine->>CreativeAI: SelectCreativeMealOptions (PANTRY_RECIPE)
+    Note over CreativeAI: AI chọn nguyên liệu, tự tính số gram/macros,<br/>tạo hướng dẫn chế biến mới lạ cho 2 options từ tủ lạnh
+    CreativeAI-->>ServerEngine: 2 Pantry Meal Options
 
-    ServerEngine-->>Handler: Updated Remaining Meals (3 Options Per Meal)
+    ServerEngine-->>Handler: Updated Remaining Meals (2 Options)
     Handler->>PlanRepo: UpdateRemainingMeals(NutritionPlan) [In Transaction]
     Handler-->>gRPC: RecalibratePlanWithPantryResponse (Success, Updated Plan)
     gRPC-->>Client: Trả về thực đơn các bữa còn lại đã được làm mới theo tủ lạnh!
@@ -385,17 +382,18 @@ sequenceDiagram
 1. **Domain Tests**:
    - `go test -v ./internal/nutrition/domain/...`
    - Test `CalorieAllocation`: Kiểm tra Invariant `target >= 1200 kcal` (BR-NU-01).
-   - Test `CombinatorialMatrix`: Kiểm tra ghép tổ hợp ma trận $180k+$ món và tính gram chuẩn theo công thức $\Delta \text{Gram} = \frac{\Delta \text{Calo}}{\text{CaloriesPer100g}} \times 100$.
-   - Test `LockoutRegistry`: Kiểm tra nguyên tắc khóa 7 ngày đạm, 5 ngày tinh bột, 3 ngày chủ đề món (BR-NU-02, BR-NU-02.1, BR-NU-02.2).
-   - Test `MenuGenerator`: Tra cứu Recipe Cache HIT/MISS và đính kèm sản phẩm NutiFood (BR-NU-03).
+   - Test `CandidateSelector` & `HistoricalConsumption`: Kiểm tra cơ chế chấm điểm mềm đa mục tiêu, phân rã hàm mũ $e^{-\Delta t/\tau}$ ($\tau=48\text{h}$) từ nguyên liệu bữa ăn cũ, tie-breaker deterministic RNG.
+   - Test `FoodFilter`: Kiểm tra lọc an toàn dị ứng tinh giản (`FilterAllergensOnly`).
+   - Test `PantrySelector`: Kiểm tra phân tách nguyên liệu tủ lạnh mandatory/supplementary và cờ `RequiresNovelCookingStyle`.
+   - Test `MenuGenerator`: Kiểm tra điều phối sinh thực đơn và Recipe Cache.
 2. **Application CQRS Tests**:
    - `go test -v ./internal/nutrition/application/...`
    - Mock repositories để kiểm tra logic `GenerateDailyPlan`, `RecalibratePlanWithPantry`, `LogMeal`.
 
 ### Automated Integration Tests
 1. **Repository & Outbox Integration Tests**:
-   - `go test -v ./internal/nutrition/tests/integration/...`
-   - Chạy với Postgres container / test DB để kiểm tra transaction lưu Aggregate và Outbox event nguyên khối.
+   - `go test -v ./internal/nutrition/infrastructure/persistence/...`
+   - Chạy với Postgres/SQLite test DB để kiểm tra transaction lưu Aggregate và Outbox event nguyên khối.
 
 ### Code Quality & Contract Validation
 1. **Go Code Style Rules**: `golangci-lint run ./internal/nutrition/...`

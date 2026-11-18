@@ -82,7 +82,7 @@ Dịch vụ áp dụng mô hình **Transactional Outbox Pattern** để đảm b
 
 ### C. Quản Lý Kết Nối Database Tập Trung (Database Connection Registry)
 - Để cô lập hoàn toàn giữa các module (schema isolation) nhưng vẫn đảm bảo tính quản lý tập trung và hiệu quả tài nguyên:
-  - File [db.go](file:///e:/LEAN/TTTN/internal/shared/database/db.go) ở tầng `internal/shared/database` đóng gói một Singleton **`Registry`** an toàn đa luồng (`sync.RWMutex`).
+  - File [db.go](../../shared/database/db.go) ở tầng `internal/shared/database` đóng gói một Singleton **`Registry`** an toàn đa luồng (`sync.RWMutex`).
   - Mỗi module sẽ gọi `Registry.GetPool("module_name")` (ví dụ `GetPool("auth")`).
   - Hệ thống sử dụng cơ chế **Lazy Loading** (Khởi tạo theo nhu cầu). Registry sẽ đọc biến môi trường dành riêng cho module đó (ví dụ: `AUTH_DATABASE_URL`), nếu không có sẽ tự động fallback về `DATABASE_URL` chung kèm tham số `search_path=auth` để tự động điều hướng schema.
   - Cơ chế này cho phép các Connection Pools (`*sql.DB`) của các module được khởi tạo một lần duy nhất (Singleton) trong suốt vòng đời của ứng dụng API, đồng thời giúp việc dọn dẹp (Close tất cả các pool khi tắt ứng dụng) thông qua hàm `dbRegistry.CloseAll()` diễn ra an toàn.
@@ -136,5 +136,5 @@ Bảng trung gian lưu trữ các sự kiện cần gửi (Outbox Pattern):
 
 ## 5. Cơ Chế Mock Để Kiểm Thử
 Để đảm bảo các bài viết kiểm thử tự động (Unit Test / Integration Test) có thể chạy ổn định mà không bị phụ thuộc vào mạng internet hoặc API thật của Google/Facebook:
-- Trong [provider.go](file:///e:/LEAN/TTTN/internal/auth/infrastructure/oauth/provider.go), nếu tham số `code` gửi lên Endpoint callback bắt đầu bằng tiền tố `"mock_"`, OAuthProvider sẽ tự động bỏ qua việc gửi request HTTPS ra bên ngoài.
+- Trong [provider.go](../infrastructure/oauth/provider.go), nếu tham số `code` gửi lên Endpoint callback bắt đầu bằng tiền tố `"mock_"`, OAuthProvider sẽ tự động bỏ qua việc gửi request HTTPS ra bên ngoài.
 - Hệ thống sẽ trả về một Mock Profile có `email` và `id` được trích xuất từ chính chuỗi `code` đó (ví dụ: code `"mock_testuser"` sẽ ánh xạ thành email `"mock_google_testuser@example.com"`).

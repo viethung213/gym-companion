@@ -2,8 +2,8 @@ package adk
 
 import (
 	"context"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
@@ -36,11 +36,10 @@ func (m *mockFoodRepoForValidator) Update(_ context.Context, _ *aggregate.FoodIt
 func TestPlanValidator_Validate(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("f-chicken", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, []string{"Poultry"}, "CHICKEN", "", false)
+	foodChicken := newTestFoodItem("f-chicken", "Ức gà", "PROTEIN", 165, 31, 0, 3.6, []string{"Poultry"}, "CHICKEN", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{"f-chicken": foodChicken}}
 
-	lockout := vo.NewLockoutRegistry(nil).ApplyLockout(vo.LockoutTypeProtein, "Ức gà", 7*24*time.Hour, time.Now())
-	validator := newPlanValidator(repo, lockout)
+	validator := newPlanValidator(repo)
 
 	plan := &GeneratedMealPlan{
 		Options: []GeneratedMealOption{
@@ -72,13 +71,13 @@ func TestPlanValidator_Validate(t *testing.T) {
 func TestPlanValidator_AutoHealing(t *testing.T) {
 	t.Parallel()
 
-	foodChicken := aggregate.NewFoodItem("real-uuid-chicken", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false)
-	foodFish := aggregate.NewFoodItem("real-uuid-fish", "Cá hồi", "PROTEIN", 200, 20, 0, 12, nil, "FISH", "", false)
+	foodChicken := newTestFoodItem("real-uuid-chicken", "Ức gà tươi", "PROTEIN", 165, 31, 0, 3.6, nil, "CHICKEN", "", false)
+	foodFish := newTestFoodItem("real-uuid-fish", "Cá hồi", "PROTEIN", 200, 20, 0, 12, nil, "FISH", "", false)
 	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{
 		"real-uuid-chicken": foodChicken,
 		"real-uuid-fish":    foodFish,
 	}}
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	plan := &GeneratedMealPlan{
 		Options: []GeneratedMealOption{
@@ -111,7 +110,7 @@ func TestPlanValidator_PantryAndNewFoodCatalogItems(t *testing.T) {
 	t.Parallel()
 
 	repo := &mockFoodRepoForValidator{items: make(map[string]*aggregate.FoodItem)}
-	validator := newPlanValidator(repo, vo.NewLockoutRegistry(nil))
+	validator := newPlanValidator(repo)
 
 	availablePantry := []FoodNutrientDTO{
 		{
@@ -162,4 +161,77 @@ func TestPlanValidator_PantryAndNewFoodCatalogItems(t *testing.T) {
 	if plan.Options[0].VeggieFoodID != "pantry-bitter-melon-uuid" {
 		t.Fatalf("expected VeggieFoodID to match pantry UUID, got '%s'", plan.Options[0].VeggieFoodID)
 	}
+}
+
+func TestPlanValidator_MandatoryPantryIngredients(t *testing.T) {
+	t.Parallel()
+
+	repo := &mockFoodRepoForValidator{items: map[string]*aggregate.FoodItem{}}
+	mandatory := []FoodNutrientDTO{
+		{ID: "venison-1", Name: "Thịt nai"},
+	}
+	validator := newPlanValidator(repo, mandatory)
+
+	t.Run("plan missing mandatory venison is flagged with issue", func(t *testing.T) {
+		flawedPlan := &GeneratedMealPlan{
+			Options: []GeneratedMealOption{
+				{
+					RecipeName:      "Pan-seared mackerel red rice",
+					ProteinFoodName: "Cá thu",
+					CarbFoodName:    "Gạo đỏ",
+					VeggieFoodName:  "Măng tây",
+				},
+				{
+					RecipeName:      "Grilled pork belly corn",
+					ProteinFoodName: "Thịt ba chỉ",
+					CarbFoodName:    "Ngô",
+					VeggieFoodName:  "Súp lơ",
+				},
+			},
+		}
+
+		outcome, err := validator.validate(context.Background(), flawedPlan, nil, nil, false)
+		if err != nil {
+			t.Fatalf("unexpected validate error: %v", err)
+		}
+		foundVenisonIssue := false
+		for _, issue := range outcome.Issues {
+			if strings.Contains(issue, "Thịt nai") {
+				foundVenisonIssue = true
+				break
+			}
+		}
+		if !foundVenisonIssue {
+			t.Fatalf("expected issue flagging missing mandatory 'Thịt nai', got issues: %v", outcome.Issues)
+		}
+	})
+
+	t.Run("plan featuring venison passes validation", func(t *testing.T) {
+		validPlan := &GeneratedMealPlan{
+			Options: []GeneratedMealOption{
+				{
+					RecipeName:      "Pan-seared venison red rice",
+					ProteinFoodName: "Thịt nai",
+					CarbFoodName:    "Gạo đỏ",
+					VeggieFoodName:  "Măng tây",
+				},
+				{
+					RecipeName:      "Grilled venison with corn",
+					ProteinFoodName: "Thịt nai",
+					CarbFoodName:    "Ngô",
+					VeggieFoodName:  "Súp lơ",
+				},
+			},
+		}
+
+		outcome, err := validator.validate(context.Background(), validPlan, nil, nil, false)
+		if err != nil {
+			t.Fatalf("unexpected validate error: %v", err)
+		}
+		for _, issue := range outcome.Issues {
+			if strings.Contains(issue, "Thịt nai") {
+				t.Fatalf("did not expect missing venison issue, got: %s", issue)
+			}
+		}
+	})
 }

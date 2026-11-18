@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 // ExecuteAdhocMealSuggestionWorkflow runs the quick standalone meal suggestion workflow.
@@ -13,15 +12,10 @@ import (
 func (a *NutritionAgent) ExecuteAdhocMealSuggestionWorkflow(
 	ctx context.Context,
 	promptCtx NutritionPromptContext,
-	lockoutRegistry vo.LockoutRegistry,
 ) ([]repository.GeneratedRecipeResult, error) {
-	domainFoods := ToFoodNutrientDomains(promptCtx.AvailableIngredients)
-	filteredFoods := lockoutRegistry.FilterAvailableIngredients(domainFoods, promptCtx.PlanDate)
-	availableDTOs := ToFoodNutrientDTOs(filteredFoods)
-	promptCtx.AvailableIngredients = availableDTOs
 	plan, err := a.runAdhocWorkflow(ctx, promptCtx)
 	if err != nil {
 		return nil, err
 	}
-	return a.persistNewFoodItemsAndMap(ctx, plan, availableDTOs)
+	return a.persistNewFoodItemsAndMap(ctx, plan, promptCtx.AvailableIngredients)
 }

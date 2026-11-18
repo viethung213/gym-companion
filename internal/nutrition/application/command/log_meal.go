@@ -10,7 +10,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	domainEvent "github.com/viethung213/gym-companion/internal/nutrition/domain/event"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 type LogMealCommand struct {
@@ -103,7 +102,7 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 
 	history, histErr := h.historyRepo.FindByUserID(ctx, cmd.UserID)
 	if histErr != nil || history == nil {
-		history = aggregate.NewMealHistory(uuid.New().String(), cmd.UserID, vo.NewLockoutRegistry(nil))
+		history = aggregate.NewMealHistory(uuid.New().String(), cmd.UserID)
 	}
 
 	mealLog := aggregate.NewMealLog(
@@ -121,8 +120,6 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 	)
 
 	history.AddMealLog(mealLog)
-	history.ApplyLockoutRule(vo.LockoutTypeProtein, mealName, vo.DurationProtein, now)
-	history.ApplyLockoutRule(vo.LockoutTypeCategory, mealType, vo.DurationCategory, now)
 
 	// Wrap local DB persistence and outbox event recording in an atomic transaction
 	saveFunc := func(txCtx context.Context) error {
@@ -145,13 +142,7 @@ func (h *LogMealHandler) Handle(ctx context.Context, cmd LogMealCommand) (*aggre
 				calories,
 				now,
 			)
-			ev2 := domainEvent.NewLockoutAppliedEvent(
-				cmd.UserID,
-				vo.LockoutTypeProtein,
-				mealName,
-				now.Add(vo.DurationProtein),
-			)
-			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev1, ev2}); err != nil {
+			if err := h.eventRecorder.RecordEvents(txCtx, []any{ev1}); err != nil {
 				return fmt.Errorf("record meal logged outbox events: %w", err)
 			}
 		}

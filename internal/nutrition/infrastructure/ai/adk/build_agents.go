@@ -64,7 +64,6 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, llmModel model.LLM) er
 		maxTokens = 8192
 	}
 
-	zero := int32(0)
 	generatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "NutritionGeneratorAgent",
 		Description: "Chuyên gia dinh dưỡng AI: chọn thực phẩm sáng tạo, cân bằng Macro theo TDEE.",
@@ -74,9 +73,9 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, llmModel model.LLM) er
 		OutputKey:   "generated_meal_plan_json",
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxTokens,
-			ThinkingConfig: &genai.ThinkingConfig{
-				ThinkingBudget: &zero,
-			},
+			// ThinkingConfig: &genai.ThinkingConfig{
+			// 	ThinkingBudget: &zero,
+			// },
 		},
 	})
 	if err != nil {
@@ -280,38 +279,38 @@ func (a *NutritionAgent) buildWorkflowAgents(ctx context.Context) error {
 // cleanJSONResponse extracts the JSON payload from LLM output by locating
 // the first '{' or '[' and the last '}' or ']'. This safely removes markdown backticks
 // (e.g. ```json), leading text, or trailing prose emitted by LLM models.
-//
-//nolint:gocritic // ifElseChain is readable for index finding
 func cleanJSONResponse(raw string) string {
 	s := strings.TrimSpace(raw)
 
 	startObj := strings.Index(s, "{")
 	startArr := strings.Index(s, "[")
 	start := -1
-	if startObj != -1 && startArr != -1 {
+	switch {
+	case startObj != -1 && startArr != -1:
 		if startObj < startArr {
 			start = startObj
 		} else {
 			start = startArr
 		}
-	} else if startObj != -1 {
+	case startObj != -1:
 		start = startObj
-	} else if startArr != -1 {
+	case startArr != -1:
 		start = startArr
 	}
 
 	endObj := strings.LastIndex(s, "}")
 	endArr := strings.LastIndex(s, "]")
 	end := -1
-	if endObj != -1 && endArr != -1 {
+	switch {
+	case endObj != -1 && endArr != -1:
 		if endObj > endArr {
 			end = endObj
 		} else {
 			end = endArr
 		}
-	} else if endObj != -1 {
+	case endObj != -1:
 		end = endObj
-	} else if endArr != -1 {
+	case endArr != -1:
 		end = endArr
 	}
 

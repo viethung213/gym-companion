@@ -44,54 +44,56 @@ type AIMenuPromptContext struct {
 	AvailableIngredients     []vo.FoodNutrient
 	UserRestrictions         []string
 	PlanDate                 time.Time
+	PreferredIngredients     []string // Nguyên liệu ưa chuộng từ đánh giá tuần trước (nếu có)
+	WeeklyCookingStyle       string   // Phong cách nấu ăn thường xuyên từ tuần trước (nếu có)
 }
 
-// DailyNutritionData chứa dữ liệu dinh dưỡng tổng hợp của một ngày.
-type DailyNutritionData struct {
-	Date             time.Time
-	ConsumedCalories float64
-	ConsumedProtein  float64
-	ConsumedCarbs    float64
-	ConsumedFat      float64
-	TargetCalories   float64
-	TargetProtein    float64
-	TargetCarbs      float64
-	TargetFat        float64
-	MealCount        int
+// WeeklyMacroSummary thống kê dinh dưỡng tinh gọn tổng hợp của 7 ngày.
+type WeeklyMacroSummary struct {
+	TotalConsumedCalories float64 `json:"total_consumed_calories"`
+	TotalTargetCalories   float64 `json:"total_target_calories"`
+	TotalConsumedProtein  float64 `json:"total_consumed_protein"`
+	TotalTargetProtein    float64 `json:"total_target_protein"`
+	TotalConsumedCarbs    float64 `json:"total_consumed_carbs"`
+	TotalTargetCarbs      float64 `json:"total_target_carbs"`
+	TotalConsumedFat      float64 `json:"total_consumed_fat"`
+	TotalTargetFat        float64 `json:"total_target_fat"`
+	LoggedMealsCount      int     `json:"logged_meals_count"`
+	TotalExpectedMeals    int     `json:"total_expected_meals"`
 }
 
-// ImprovementArea mô tả một khu vực cần cải thiện do AI phân tích.
+// DailyMealSlotRecord ghi nhận các món ăn trong 1 ngày theo 4 bữa. Bữa nào không ghi để trống "".
+type DailyMealSlotRecord struct {
+	Date      string `json:"date"`
+	Breakfast string `json:"breakfast"`
+	Lunch     string `json:"lunch"`
+	Dinner    string `json:"dinner"`
+	Snack     string `json:"snack"`
+}
+
+// ImprovementArea mô tả khu vực cần tăng hoặc giảm lượng chất trong tuần do AI phân tích.
 type ImprovementArea struct {
-	Area       string  // ví dụ: "Protein Intake", "Meal Timing", "Hydration"
-	CurrentAvg float64 // giá trị trung bình hiện tại
-	Target     float64 // giá trị mục tiêu
-	Suggestion string  // gợi ý hành động cụ thể
-	Priority   string  // HIGH, MEDIUM, LOW
-}
-
-// RecommendedAdjustments là các điều chỉnh AI đề xuất cho kế hoạch dinh dưỡng.
-type RecommendedAdjustments struct {
-	CaloriesDelta     float64 // dương = tăng, âm = giảm
-	ProteinRatioDelta float64
-	FocusFoods        []string
+	Nutrient    string  `json:"nutrient"`     // "CALORIES", "PROTEIN", "CARBS", "FAT"
+	Action      string  `json:"action"`       // "INCREASE", "DECREASE", "MAINTAIN"
+	DeltaAmount float64 `json:"delta_amount"` // Lượng tăng/giảm cần điều chỉnh
+	Suggestion  string  `json:"suggestion"`   // Hướng dẫn cụ thể
 }
 
 // NutritionInsightResult là kết quả phân tích insight từ AI.
 type NutritionInsightResult struct {
-	OverallScore           int
-	Summary                string
-	Strengths              []string
-	ImprovementAreas       []ImprovementArea
-	WeeklyTrend            string // "IMPROVING", "DECLINING", "STABLE"
-	RecommendedAdjustments RecommendedAdjustments
+	OverallScore          int               `json:"overall_score"`
+	Summary               string            `json:"summary"`
+	ImprovementAreas      []ImprovementArea `json:"improvement_areas"`
+	PredictedCookingStyle string            `json:"predicted_cooking_style"`
+	PreferredIngredients  []string          `json:"preferred_ingredients"`
 }
 
-// InsightPromptContext là ngữ cảnh đầu vào cho AI khi phân tích insight dinh dưỡng.
+// InsightPromptContext là ngữ cảnh đầu vào cho AI khi phân tích insight dinh dưỡng 7 ngày.
 type InsightPromptContext struct {
-	UserID    string
-	GoalType  string // "WEIGHT_LOSS", "MUSCLE_GAIN", "MAINTENANCE"
-	DailyData []DailyNutritionData
-	RangeDays int
+	UserID             string                `json:"user_id"`
+	GoalType           string                `json:"goal_type"` // "WEIGHT_LOSS", "MUSCLE_GAIN", "MAINTENANCE"
+	WeeklyMacroSummary WeeklyMacroSummary    `json:"weekly_macro_summary"`
+	WeeklyMealSlots    []DailyMealSlotRecord `json:"weekly_meal_slots"`
 }
 
 // AIService là port interface cho AI Agent trong module Nutrition.
@@ -101,7 +103,6 @@ type AIService interface {
 	SelectCreativeMealOptions(
 		ctx context.Context,
 		promptCtx AIMenuPromptContext,
-		lockoutRegistry vo.LockoutRegistry,
 	) ([]GeneratedRecipeResult, error)
 
 	// EstimateNutrient ước tính dinh dưỡng khi người dùng nhập thủ công tên món.
