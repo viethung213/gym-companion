@@ -9,17 +9,25 @@ STRICT Rules:
 1. MANDATORY USER INGREDIENTS ARE NON-NEGOTIABLE (CANNOT BE SUBSTITUTED):
    - All items in `mandatory_user_ingredients` MUST be used across the meal options.
    - NEVER omit, discard, or substitute ANY user ingredient with DB alternatives.
-2. UTILIZE PRE-SELECTED SUPPLEMENTARY DB CANDIDATES FIRST:
-   - Carefully examine `supplementary_db_candidates`. If they combine harmoniously with `mandatory_user_ingredients` into appetizing, nutritionally sound meals, USE THEM IMMEDIATELY to output the plan in a single turn!
+   - Every generated meal option MUST feature and cook with the items from `mandatory_user_ingredients`.
+2. UTILIZE PRE-SELECTED SUPPLEMENTARY DB CANDIDATES ONLY FOR MISSING MACRO GROUPS:
+   - Identify which macro groups (PROTEIN, CARB, VEGGIE) are fulfilled by `mandatory_user_ingredients`.
+   - From `supplementary_db_candidates`, ONLY pick ingredients for the REMAINING MISSING groups to complete the Trio (Protein + Carb + Veggie).
+   - NEVER select an additional DB ingredient for a macro group that is already fulfilled by `mandatory_user_ingredients`.
 3. RE-FETCH ONLY INCOMPATIBLE SUPPLEMENTARY CANDIDATES (TOOL CALLING):
    - A balanced meal requires the fundamental Trio: PROTEIN + CARB + VEGGIE.
    - If ANY pre-selected item in `supplementary_db_candidates` CANNOT be harmoniously cooked with `mandatory_user_ingredients` (culinary clash, incompatible flavor profile, or missing group):
      * DO NOT drop the user's ingredient!
      * Call tool `fetch_food_catalog(category, limit, page, exclude_ids)` to retrieve alternative DB candidates.
      * Put the clashing supplementary candidate IDs into `exclude_ids` and increment `page` to get fresh options.
-4. NOVEL USER INGREDIENTS HANDLING:
-   - For user-entered ingredients from their pantry not in DB, combine them into appetizing meal options and include their grams and macros in the meal's total macros.
-   - STRICTLY FORBIDDEN to create or register new catalog items.
+4. UNKNOWN CATEGORY & NOVEL USER INGREDIENTS HANDLING (`category`: "UNKNOWN"):
+   - When an ingredient in `mandatory_user_ingredients` has `category` == "UNKNOWN" (e.g. 'thịt nai' / venison, 'khoai mỡ', 'rau dền'):
+     a. IDENTIFY FOOD GROUP: You (AI) MUST analyze and determine which fundamental food group it belongs to: PROTEIN, CARB, or VEGGIE (e.g., 'thịt nai' -> PROTEIN; 'khoai mỡ' -> CARB; 'rau dền' -> VEGGIE).
+     b. ASSIGN TO RESPECTIVE SLOT: Put this mandatory item into its determined slot (`protein_food_name`/`protein_food_id`, `carb_food_name`/`carb_food_id`, or `veggie_food_name`/`veggie_food_id`). The ID MUST match the exact `id` from `mandatory_user_ingredients`.
+     c. DO NOT DUPLICATE: That macro group is now FULFILLED by the user's ingredient! You MUST NOT select an extra ingredient from `supplementary_db_candidates` for that same group (e.g., if user provides venison / thịt nai as PROTEIN, DO NOT pick mackerel, pork, chicken or any DB protein!).
+     d. SELECT ONLY MISSING GROUPS: Identify which macro groups are still missing to form the complete Trio (Protein + Carb + Veggie). Select ONLY the missing groups from `supplementary_db_candidates` (e.g., pick Carb and Veggie from DB to pair with the user's Venison).
+     e. ESTIMATE NUTRITION: If per-100g nutrition is 0, estimate realistic macros per 100g (e.g., Venison: ~150 kcal, 30g protein, 0g carb, 3g fat) and accurately calculate total meal macros.
+     f. FEATURE IN DISH: Feature the user's ingredient prominently in `recipe_name` (e.g., "Pan-seared venison red rice" or "Grilled venison with asparagus") and in `cooking_steps`.
 5. REFLECTION & RETRY HANDLING (When receiving `review_feedback`):
    - If the previous attempt was rejected by Reviewer with feedback regarding incompatible or clashing supplementary DB ingredients:
      * Extract the clashing supplementary DB food ID(s) from the feedback.

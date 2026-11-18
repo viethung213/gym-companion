@@ -47,4 +47,27 @@ func TestSelectPantryCandidates(t *testing.T) {
 	if len(mandFull) != 3 || len(suppFull) != 0 {
 		t.Errorf("expected 3 mandatory and 0 supplementary, got %d and %d", len(mandFull), len(suppFull))
 	}
+
+	// Case 3: Nguyên liệu chưa biết (UNKNOWN) -> giữ nguyên UNKNOWN, cung cấp pool DB an toàn để AI tự chọn nhóm thiếu
+	unknownItems := []vo.FoodNutrient{
+		vo.NewFoodNutrient("p-unknown", "Thịt nai", "UNKNOWN", 0, 0, 0, 0, nil, "", "", false, 0, "BUDGET"),
+	}
+	mandUnknown, suppUnknown := SelectPantryCandidates(unknownItems, catalog, nil, userID, planDate)
+	if len(mandUnknown) != 1 || mandUnknown[0].Category() != "UNKNOWN" {
+		t.Errorf("expected category to remain UNKNOWN without backend hardcoded assumption, got %v", mandUnknown)
+	}
+	var hasSuppProtein, hasSuppCarb, hasSuppVeggie bool
+	for _, item := range suppUnknown {
+		switch item.Category() {
+		case "PROTEIN":
+			hasSuppProtein = true
+		case "CARB":
+			hasSuppCarb = true
+		case "VEGGIE":
+			hasSuppVeggie = true
+		}
+	}
+	if !hasSuppProtein || !hasSuppCarb || !hasSuppVeggie {
+		t.Errorf("expected supplementary to contain candidates across groups for AI to pick missing ones")
+	}
 }

@@ -218,11 +218,8 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		}
 
 		if !isFound {
-			// Nhận diện nhóm chất sơ bộ (PROTEIN/CARB/VEGGIE) dựa trên tên nguyên liệu
-			category := InferIngredientCategory(trimmed)
-			if category == "OTHER" {
-				category = "INGREDIENT"
-			}
+			// Nguyên liệu chưa có trong DB được gán nhãn "UNKNOWN" để AI tự nhận diện nhóm chất và chọn các nhóm còn thiếu
+			category := "UNKNOWN"
 			foundItem = vo.NewFoodNutrient(
 				uuid.New().String(),
 				trimmed,

@@ -59,8 +59,14 @@ func (a *NutritionAgent) runWorkflow(
 		"available_ingredients":       pCtx.AvailableIngredients,
 	}
 	if pCtx.MealType == FlowPantry || len(pCtx.MandatoryUserIngredients) > 0 {
-		inputMap["critical_pantry_instruction"] = "MANDATORY: You MUST use and feature all user ingredients in " +
-			"'mandatory_user_ingredients'. NEVER drop or replace them with DB items. Every option must cook with these mandatory user ingredients."
+		inputMap["critical_pantry_instruction"] = "CRITICAL MANDATORY PANTRY RULES:\n" +
+			"1. All items in 'mandatory_user_ingredients' MUST be used in EVERY meal option and featured in the recipe name.\n" +
+			"2. For any item with category 'UNKNOWN': You (AI) MUST analyze and determine its food group (PROTEIN, CARB, or VEGGIE).\n" +
+			"   For example, 'thịt nai' is PROTEIN.\n" +
+			"3. Once determined, that group is ALREADY FULFILLED! You MUST use it in that role and MUST NOT pick a duplicate from DB for that group.\n" +
+			"   (e.g. DO NOT pick Mackerel or Pork Belly from DB if user provided Venison / Thịt nai).\n" +
+			"4. Only select DB candidates from 'supplementary_db_candidates' for the REMAINING MISSING groups to complete the Trio.\n" +
+			"5. Estimate realistic macros per 100g for UNKNOWN ingredients and calculate accurate meal totals."
 	}
 	if len(pCtx.PreferredIngredients) > 0 {
 		inputMap["preferred_ingredients"] = pCtx.PreferredIngredients

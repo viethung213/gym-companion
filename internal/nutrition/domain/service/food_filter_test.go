@@ -88,32 +88,3 @@ func TestValidatePantryIngredientsAgainstAllergens(t *testing.T) {
 		}
 	})
 }
-
-func TestInferIngredientCategory(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name     string
-		expected string
-	}{
-		{"Thịt nai", "PROTEIN"},
-		{"Ức gà tươi phi lê", "PROTEIN"},
-		{"Cá hồi Na Uy", "PROTEIN"},
-		{"Tôm càng xanh", "PROTEIN"},
-		{"Venison steak", "PROTEIN"},
-		{"Cơm gạo lứt", "CARB"},
-		{"Khoai lang mật", "CARB"},
-		{"Brown rice", "CARB"},
-		{"Bông cải xanh", "VEGGIE"},
-		{"Rau muống non", "VEGGIE"},
-		{"Fresh asparagus", "VEGGIE"},
-		{"Dầu mè", "OTHER"},
-	}
-
-	for _, tc := range testCases {
-		res := InferIngredientCategory(tc.name)
-		if res != tc.expected {
-			t.Errorf("InferIngredientCategory(%q) = %q; want %q", tc.name, res, tc.expected)
-		}
-	}
-}
