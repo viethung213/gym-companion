@@ -270,13 +270,12 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 	validator := newPlanValidator(a.foodRepo, internal.MandatoryUserIngredients)
 
 	attemptFn := func(round int, fb *attemptFeedback) (*GeneratedMealPlan, error) {
-		if round > 1 && fb != nil && fb.PreviousPlan != nil && len(fb.PreviousPlan.Options) > 0 {
+		if round > 1 && fb != nil && fb.PreviousPlan != nil && len(fb.PreviousPlan.Options) > 0 && internal.MealType == FlowDaily {
 			repairedPlan, repairErr := a.repairFlawedMeals(ctx, internal, fb)
 			if repairErr == nil && repairedPlan != nil && len(repairedPlan.Options) == len(fb.PreviousPlan.Options) {
 				return repairedPlan, nil
 			}
-			slog.WarnContext(ctx, "Single-meal repair failed, retaining previous plan to enforce token limit", slog.Any("error", repairErr))
-			return fb.PreviousPlan, nil
+			slog.WarnContext(ctx, "Single-meal repair failed, falling back to full workflow generation", slog.Any("error", repairErr))
 		}
 
 		plan, err := a.runWorkflow(ctx, wfAgent, internal, fb)
@@ -541,6 +540,15 @@ func (a *NutritionAgent) repairFlawedMeals(
 					Area:        "validator_issue",
 					Detail:      issue,
 					Fix:         "Replace invalid or conflicting ingredient with active catalog items",
+				}
+			}
+		} else if strings.Contains(issue, "plan is missing mandatory user pantry ingredient") {
+			for idx := range fb.PreviousPlan.Options {
+				flawedMap[idx] = ReviewNote{
+					OptionIndex: idx + 1,
+					Area:        "missing_mandatory_pantry_ingredient",
+					Detail:      issue,
+					Fix:         "Feature and cook with the mandatory user pantry ingredient",
 				}
 			}
 		}

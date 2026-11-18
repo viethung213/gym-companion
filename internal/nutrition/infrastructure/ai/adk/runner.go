@@ -60,13 +60,18 @@ func (a *NutritionAgent) runWorkflow(
 	}
 	if pCtx.MealType == FlowPantry || len(pCtx.MandatoryUserIngredients) > 0 {
 		inputMap["critical_pantry_instruction"] = "CRITICAL MANDATORY PANTRY RULES:\n" +
-			"1. All items in 'mandatory_user_ingredients' MUST be used in EVERY meal option and featured in the recipe name.\n" +
-			"2. For any item with category 'UNKNOWN': You (AI) MUST analyze and determine its food group (PROTEIN, CARB, or VEGGIE).\n" +
-			"   For example, 'thịt nai' is PROTEIN.\n" +
-			"3. Once determined, that group is ALREADY FULFILLED! You MUST use it in that role and MUST NOT pick a duplicate from DB for that group.\n" +
-			"   (e.g. DO NOT pick Mackerel or Pork Belly from DB if user provided Venison / Thịt nai).\n" +
-			"4. Only select DB candidates from 'supplementary_db_candidates' for the REMAINING MISSING groups to complete the Trio.\n" +
-			"5. Estimate realistic macros per 100g for UNKNOWN ingredients and calculate accurate meal totals."
+			"1. You MUST feature and cook with all items from 'mandatory_user_ingredients' in EVERY meal option (Option 1 AND Option 2).\n" +
+			"2. For any item with category 'UNKNOWN': You (AI) MUST analyze and determine its food group (e.g. 'thịt cóc' / 'thịt nai' / 'ếch' is PROTEIN; " +
+			"'khoai mỡ' is CARB; 'rau dền' is VEGGIE).\n" +
+			"3. Once determined, that group is ALREADY FULFILLED! You MUST use it in that role (protein_food_name and protein_food_id) in ALL options. " +
+			"STRICTLY FORBIDDEN to pick duplicate foods from DB for that group (e.g. DO NOT pick Pork, Chicken, Beef, Fish, or Eggs from DB when user provided " +
+			"'thịt cóc' or 'thịt nai').\n" +
+			"4. NOVEL & EXOTIC INGREDIENTS (e.g. 'thịt cóc' / toad meat): You MUST treat it as a valid protein source and cook with it. " +
+			"NEVER drop, omit, or replace it with DB items!\n" +
+			"5. Set the respective food ID (protein_food_id) to the EXACT 'id' string given in 'mandatory_user_ingredients'.\n" +
+			"6. Diversity across Option 1 and Option 2 must come from pairing with DIFFERENT Carbs, DIFFERENT Veggies, and DIFFERENT cooking methods, " +
+			"NOT from swapping the user's mandatory ingredient.\n" +
+			"7. Estimate realistic macros per 100g for UNKNOWN ingredients and calculate accurate meal totals."
 	}
 	if len(pCtx.PreferredIngredients) > 0 {
 		inputMap["preferred_ingredients"] = pCtx.PreferredIngredients

@@ -130,16 +130,16 @@ func (v *planValidator) validate(
 				carbLower := strings.ToLower(opt.CarbFoodName)
 				veggieLower := strings.ToLower(opt.VeggieFoodName)
 
-				if strings.Contains(recipeLower, mNameLower) ||
-					strings.Contains(proteinLower, mNameLower) ||
-					strings.Contains(carbLower, mNameLower) ||
-					strings.Contains(veggieLower, mNameLower) ||
+				if matchesMandatoryName(recipeLower, mNameLower) ||
+					matchesMandatoryName(proteinLower, mNameLower) ||
+					matchesMandatoryName(carbLower, mNameLower) ||
+					matchesMandatoryName(veggieLower, mNameLower) ||
 					(m.ID != "" && (opt.ProteinFoodID == m.ID || opt.CarbFoodID == m.ID || opt.VeggieFoodID == m.ID)) {
 					foundInPlan = true
 					break
 				}
 				for _, sup := range opt.SupplementaryIngredients {
-					if strings.Contains(strings.ToLower(sup.Name), mNameLower) {
+					if matchesMandatoryName(strings.ToLower(sup.Name), mNameLower) {
 						foundInPlan = true
 						break
 					}
@@ -150,6 +150,7 @@ func (v *planValidator) validate(
 			}
 			if !foundInPlan {
 				issues = append(issues, fmt.Sprintf("plan is missing mandatory user pantry ingredient '%s'", m.Name))
+				validOptions = nil
 			}
 		}
 	}
@@ -247,4 +248,39 @@ func (v *planValidator) resolveFoodItem(
 	}
 
 	return nil
+}
+
+// matchesMandatoryName kiểm tra tên món có chứa nguyên liệu bắt buộc hay không,
+// hỗ trợ đối chiếu linh hoạt giữa tên tiếng Việt và tên tiếng Anh (ví dụ thịt cóc -> toad, thịt nai -> venison).
+func matchesMandatoryName(text, mNameLower string) bool {
+	if text == "" || mNameLower == "" {
+		return false
+	}
+	if strings.Contains(text, mNameLower) {
+		return true
+	}
+	aliases := map[string][]string{
+		"thịt cóc":      {"toad", "cóc"},
+		"cóc":           {"toad"},
+		"thịt nai":      {"venison", "deer", "nai"},
+		"nai":           {"venison", "deer"},
+		"thịt ếch":      {"frog", "ếch"},
+		"ếch":           {"frog"},
+		"thịt lươn":     {"eel", "lươn"},
+		"lươn":          {"eel"},
+		"thịt đà điểu":  {"ostrich", "đà điểu"},
+		"thịt chim cút": {"quail", "chim cút"},
+		"thịt cừu":      {"lamb", "mutton", "cừu"},
+		"thịt dê":       {"goat", "dê"},
+	}
+	for key, words := range aliases {
+		if strings.Contains(mNameLower, key) {
+			for _, w := range words {
+				if strings.Contains(text, w) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

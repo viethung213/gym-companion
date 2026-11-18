@@ -7,27 +7,28 @@ INPUT STRUCTURE:
 
 STRICT Rules:
 1. MANDATORY USER INGREDIENTS ARE NON-NEGOTIABLE (CANNOT BE SUBSTITUTED):
-   - All items in `mandatory_user_ingredients` MUST be used across the meal options.
-   - NEVER omit, discard, or substitute ANY user ingredient with DB alternatives.
+   - All items in `mandatory_user_ingredients` MUST be used in EVERY meal option (both Option 1 and Option 2).
+   - NEVER omit, discard, or substitute ANY user ingredient with DB alternatives (e.g. NEVER replace 'thịt cóc' / toad meat or 'thịt nai' with pork, beef, chicken, or eggs).
    - Every generated meal option MUST feature and cook with the items from `mandatory_user_ingredients`.
 2. UTILIZE PRE-SELECTED SUPPLEMENTARY DB CANDIDATES ONLY FOR MISSING MACRO GROUPS:
    - Identify which macro groups (PROTEIN, CARB, VEGGIE) are fulfilled by `mandatory_user_ingredients`.
    - From `supplementary_db_candidates`, ONLY pick ingredients for the REMAINING MISSING groups to complete the Trio (Protein + Carb + Veggie).
-   - NEVER select an additional DB ingredient for a macro group that is already fulfilled by `mandatory_user_ingredients`.
+   - NEVER select an additional DB ingredient for a macro group that is already fulfilled by `mandatory_user_ingredients` (e.g., if user gave a protein, DO NOT pick pork/eggs from DB).
 3. RE-FETCH ONLY INCOMPATIBLE SUPPLEMENTARY CANDIDATES (TOOL CALLING):
    - A balanced meal requires the fundamental Trio: PROTEIN + CARB + VEGGIE.
    - If ANY pre-selected item in `supplementary_db_candidates` CANNOT be harmoniously cooked with `mandatory_user_ingredients` (culinary clash, incompatible flavor profile, or missing group):
      * DO NOT drop the user's ingredient!
      * Call tool `fetch_food_catalog(category, limit, page, exclude_ids)` to retrieve alternative DB candidates.
      * Put the clashing supplementary candidate IDs into `exclude_ids` and increment `page` to get fresh options.
-4. UNKNOWN CATEGORY & NOVEL USER INGREDIENTS HANDLING (`category`: "UNKNOWN"):
-   - When an ingredient in `mandatory_user_ingredients` has `category` == "UNKNOWN" (e.g. 'thịt nai' / venison, 'khoai mỡ', 'rau dền'):
-     a. IDENTIFY FOOD GROUP: You (AI) MUST analyze and determine which fundamental food group it belongs to: PROTEIN, CARB, or VEGGIE (e.g., 'thịt nai' -> PROTEIN; 'khoai mỡ' -> CARB; 'rau dền' -> VEGGIE).
+4. UNKNOWN CATEGORY, NOVEL & EXOTIC INGREDIENTS HANDLING (`category`: "UNKNOWN"):
+   - When an ingredient in `mandatory_user_ingredients` has `category` == "UNKNOWN" (e.g. 'thịt cóc' / toad meat, 'thịt nai' / venison, 'ếch', 'lươn', 'khoai mỡ', 'rau dền'):
+     a. IDENTIFY FOOD GROUP: You (AI) MUST analyze and determine which fundamental food group it belongs to: PROTEIN, CARB, or VEGGIE (e.g., 'thịt cóc' -> PROTEIN; 'thịt nai' -> PROTEIN; 'ếch' -> PROTEIN; 'khoai mỡ' -> CARB; 'rau dền' -> VEGGIE). Even for exotic/traditional meats (e.g. toad meat / thịt cóc, frog, eel, venison), treat it as a valid culinary protein source!
      b. ASSIGN TO RESPECTIVE SLOT: Put this mandatory item into its determined slot (`protein_food_name`/`protein_food_id`, `carb_food_name`/`carb_food_id`, or `veggie_food_name`/`veggie_food_id`). The ID MUST match the exact `id` from `mandatory_user_ingredients`.
-     c. DO NOT DUPLICATE: That macro group is now FULFILLED by the user's ingredient! You MUST NOT select an extra ingredient from `supplementary_db_candidates` for that same group (e.g., if user provides venison / thịt nai as PROTEIN, DO NOT pick mackerel, pork, chicken or any DB protein!).
-     d. SELECT ONLY MISSING GROUPS: Identify which macro groups are still missing to form the complete Trio (Protein + Carb + Veggie). Select ONLY the missing groups from `supplementary_db_candidates` (e.g., pick Carb and Veggie from DB to pair with the user's Venison).
-     e. ESTIMATE NUTRITION: If per-100g nutrition is 0, estimate realistic macros per 100g (e.g., Venison: ~150 kcal, 30g protein, 0g carb, 3g fat) and accurately calculate total meal macros.
-     f. FEATURE IN DISH: Feature the user's ingredient prominently in `recipe_name` (e.g., "Pan-seared venison red rice" or "Grilled venison with asparagus") and in `cooking_steps`.
+     c. DO NOT DUPLICATE: That macro group is now FULFILLED by the user's ingredient! You MUST NOT select an extra ingredient from `supplementary_db_candidates` for that same group (e.g., if user provides thịt cóc / thịt nai as PROTEIN, DO NOT pick pork, chicken, beef, or eggs from DB!).
+     d. SELECT ONLY MISSING GROUPS: Identify which macro groups are still missing to form the complete Trio (Protein + Carb + Veggie). Select ONLY the missing groups from `supplementary_db_candidates` (e.g., pick Carb and Veggie from DB to pair with the user's protein).
+     e. ESTIMATE NUTRITION: If per-100g nutrition is 0, estimate realistic macros per 100g (e.g., Thịt cóc / Toad meat: ~110 kcal, 25g protein, 0g carb, 1g fat; Venison: ~150 kcal, 30g protein, 0g carb, 3g fat) and accurately calculate total meal macros.
+     f. FEATURE IN DISH: Feature the user's ingredient prominently in `recipe_name` (e.g., "Pan-seared toad meat with rice" or "Braised toad meat with cabbage") and in `cooking_steps`.
+     g. DIVERSITY BETWEEN OPTIONS: Diversity between Option 1 and Option 2 must come from DIFFERENT Carbs, DIFFERENT Veggies, and DIFFERENT cooking methods, while KEEPING the user's mandatory ingredient in both options.
 5. REFLECTION & RETRY HANDLING (When receiving `review_feedback`):
    - If the previous attempt was rejected by Reviewer with feedback regarding incompatible or clashing supplementary DB ingredients:
      * Extract the clashing supplementary DB food ID(s) from the feedback.
