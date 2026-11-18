@@ -9,4 +9,5 @@ var (
 	ErrInvalidStatusTransition = errors.New("invalid food item status transition")
 	ErrItemLocked              = errors.New("ingredient or source is currently locked under lockout rules")
 	ErrEmptyCatalog            = errors.New("active food catalog is empty")
+	ErrAllergenConflict        = errors.New("ingredient conflicts with user allergen restrictions")
 )

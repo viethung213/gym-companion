@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,7 @@ type RecalibratePlanWithPantryCommand struct {
 	UserID               string
 	PlanDate             time.Time
 	AvailableIngredients []string
+	UserRestrictions     []string
 }
 
 type RecalibratePlanWithPantryHandler struct {
@@ -46,7 +48,10 @@ func NewRecalibratePlanWithPantryHandler(
 	}
 }
 
-func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd RecalibratePlanWithPantryCommand) (*aggregate.NutritionPlan, error) {
+func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd *RecalibratePlanWithPantryCommand) (*aggregate.NutritionPlan, error) {
+	if cmd == nil {
+		return nil, errors.New("recalibrate pantry: command cannot be nil")
+	}
 	plan, err := h.planRepo.FindByUserIDAndDate(ctx, cmd.UserID, cmd.PlanDate)
 	if err != nil || plan == nil {
 		return nil, fmt.Errorf("recalibrate pantry: plan not found for date %s: %w", cmd.PlanDate.Format("2006-01-02"), err)
@@ -59,6 +64,7 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd Recal
 		cmd.PlanDate,
 		plan.CalorieAllocation(),
 		cmd.AvailableIngredients,
+		cmd.UserRestrictions,
 	)
 	if genErr != nil {
 		return nil, fmt.Errorf("recalibrate pantry generate: %w", genErr)

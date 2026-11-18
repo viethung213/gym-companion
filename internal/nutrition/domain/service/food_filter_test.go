@@ -49,3 +49,71 @@ func TestCategorizeFoods(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePantryIngredientsAgainstAllergens(t *testing.T) {
+	t.Parallel()
+
+	catalog := makeTestCatalog()
+
+	t.Run("safe ingredients pass without error", func(t *testing.T) {
+		err := ValidatePantryIngredientsAgainstAllergens(
+			[]string{"Ức gà", "Bông cải xanh", "Thịt nai"},
+			catalog,
+			[]string{"SHELLFISH", "EGG"},
+		)
+		if err != nil {
+			t.Errorf("expected no error for safe ingredients, got %v", err)
+		}
+	})
+
+	t.Run("conflict with allergen tag in catalog", func(t *testing.T) {
+		err := ValidatePantryIngredientsAgainstAllergens(
+			[]string{"Tôm sú tươi", "Cơm trắng"},
+			catalog,
+			[]string{"SHELLFISH"},
+		)
+		if err == nil {
+			t.Errorf("expected error when user sends shellfish, got nil")
+		}
+	})
+
+	t.Run("conflict directly by name matching", func(t *testing.T) {
+		err := ValidatePantryIngredientsAgainstAllergens(
+			[]string{"Đậu phộng rang", "Thịt bò"},
+			catalog,
+			[]string{"ĐẬU PHỘNG"},
+		)
+		if err == nil {
+			t.Errorf("expected error when user sends ingredient directly matching restriction, got nil")
+		}
+	})
+}
+
+func TestInferIngredientCategory(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		expected string
+	}{
+		{"Thịt nai", "PROTEIN"},
+		{"Ức gà tươi phi lê", "PROTEIN"},
+		{"Cá hồi Na Uy", "PROTEIN"},
+		{"Tôm càng xanh", "PROTEIN"},
+		{"Venison steak", "PROTEIN"},
+		{"Cơm gạo lứt", "CARB"},
+		{"Khoai lang mật", "CARB"},
+		{"Brown rice", "CARB"},
+		{"Bông cải xanh", "VEGGIE"},
+		{"Rau muống non", "VEGGIE"},
+		{"Fresh asparagus", "VEGGIE"},
+		{"Dầu mè", "OTHER"},
+	}
+
+	for _, tc := range testCases {
+		res := InferIngredientCategory(tc.name)
+		if res != tc.expected {
+			t.Errorf("InferIngredientCategory(%q) = %q; want %q", tc.name, res, tc.expected)
+		}
+	}
+}

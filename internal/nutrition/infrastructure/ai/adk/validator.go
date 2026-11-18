@@ -9,12 +9,18 @@ import (
 )
 
 type planValidator struct {
-	foodRepo repository.FoodItemRepository
+	foodRepo             repository.FoodItemRepository
+	mandatoryIngredients []FoodNutrientDTO
 }
 
-func newPlanValidator(foodRepo repository.FoodItemRepository) *planValidator {
+func newPlanValidator(foodRepo repository.FoodItemRepository, mandatory ...[]FoodNutrientDTO) *planValidator {
+	var mand []FoodNutrientDTO
+	if len(mandatory) > 0 {
+		mand = mandatory[0]
+	}
 	return &planValidator{
-		foodRepo: foodRepo,
+		foodRepo:             foodRepo,
+		mandatoryIngredients: mand,
 	}
 }
 
@@ -105,6 +111,46 @@ func (v *planValidator) validate(
 			issues = append(issues, optIssues...)
 		} else {
 			validOptions = append(validOptions, *opt)
+		}
+	}
+
+	// 4. Verify Mandatory Pantry Ingredients
+	if len(v.mandatoryIngredients) > 0 {
+		for i := range v.mandatoryIngredients {
+			m := &v.mandatoryIngredients[i]
+			mNameLower := strings.ToLower(strings.TrimSpace(m.Name))
+			if mNameLower == "" {
+				continue
+			}
+			foundInPlan := false
+			for optIdx := range plan.Options {
+				opt := &plan.Options[optIdx]
+				recipeLower := strings.ToLower(opt.RecipeName)
+				proteinLower := strings.ToLower(opt.ProteinFoodName)
+				carbLower := strings.ToLower(opt.CarbFoodName)
+				veggieLower := strings.ToLower(opt.VeggieFoodName)
+
+				if strings.Contains(recipeLower, mNameLower) ||
+					strings.Contains(proteinLower, mNameLower) ||
+					strings.Contains(carbLower, mNameLower) ||
+					strings.Contains(veggieLower, mNameLower) ||
+					(m.ID != "" && (opt.ProteinFoodID == m.ID || opt.CarbFoodID == m.ID || opt.VeggieFoodID == m.ID)) {
+					foundInPlan = true
+					break
+				}
+				for _, sup := range opt.SupplementaryIngredients {
+					if strings.Contains(strings.ToLower(sup.Name), mNameLower) {
+						foundInPlan = true
+						break
+					}
+				}
+				if foundInPlan {
+					break
+				}
+			}
+			if !foundInPlan {
+				issues = append(issues, fmt.Sprintf("plan is missing mandatory user pantry ingredient '%s'", m.Name))
+			}
 		}
 	}
 

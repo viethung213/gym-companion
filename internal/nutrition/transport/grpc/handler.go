@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/domainerror"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -330,12 +332,16 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 	}
 
 	now := time.Now()
-	plan, err := h.recalPlanHdlr.Handle(ctx, command.RecalibratePlanWithPantryCommand{
+	plan, err := h.recalPlanHdlr.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
 		UserID:               req.GetUserId(),
 		PlanDate:             now,
 		AvailableIngredients: req.GetAvailableIngredients(),
+		UserRestrictions:     req.GetUserRestrictions(),
 	})
 	if err != nil {
+		if errors.Is(err, domainerror.ErrAllergenConflict) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to recalibrate plan with pantry: %v", err)
 	}
 

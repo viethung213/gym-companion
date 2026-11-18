@@ -430,3 +430,68 @@ func TestGetNutritionInsight_Handler(t *testing.T) {
 		t.Errorf("got consumed calories %f, want 14000", resp.GetWeeklySummary().GetConsumedCalories())
 	}
 }
+
+func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	planRepo := &mockPlanRepoForTransport{plans: make(map[string]*aggregate.NutritionPlan)}
+	historyRepo := &mockHistoryRepoForTransport{}
+	foodRepo := &mockFoodRepoForTransport{items: make(map[string]*aggregate.FoodItem)}
+	cacheRepo := &mockRecipeCacheRepoForTransport{}
+	aiStub := &mockAIServiceForTransport{}
+
+	tdeeCalc := service.NewTDEECalculator()
+	menuGen := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
+
+	handler := grpc.NewGRPCHandler(
+		command.NewGenerateDailyPlanHandler(planRepo, historyRepo, nil, tdeeCalc, menuGen),
+		command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, nil, menuGen),
+		command.NewLogMealHandler(planRepo, historyRepo, nil, aiStub),
+		command.NewCreateFoodItemHandler(foodRepo),
+		command.NewApproveFoodItemHandler(foodRepo),
+		command.NewUpdateMealScheduleHandler(planRepo),
+		query.NewGetTodayMenuHandler(planRepo),
+		query.NewGetNutritionHistoryHandler(historyRepo),
+		query.NewGetNutritionSummaryHandler(planRepo, historyRepo),
+		query.NewGetNutritionInsightHandler(nil),
+	)
+
+	// 1. Validation: empty user_id
+	_, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
+		UserId:               "",
+		AvailableIngredients: []string{"Ức gà"},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	}
+
+	// 2. Setup existing plan
+	now := time.Now()
+	alloc, _ := vo.NewCalorieAllocation(2000, 150, 200, 66)
+	existingPlan := aggregate.NewNutritionPlan("plan-pantry-grpc-1", "user-pantry-grpc", now, alloc, nil)
+	_ = planRepo.Save(ctx, existingPlan)
+
+	// 3. Allergen conflict: user sends shrimp while having restriction on TÔM
+	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
+		UserId:               "user-pantry-grpc",
+		AvailableIngredients: []string{"Tôm sú", "Cơm trắng"},
+		UserRestrictions:     []string{"TÔM"},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument on allergen conflict, got code %v, err: %v", status.Code(err), err)
+	}
+
+	// 4. Happy path: safe ingredients
+	resp, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
+		UserId:               "user-pantry-grpc",
+		AvailableIngredients: []string{"Thịt nai", "Cơm gạo lứt"},
+		UserRestrictions:     []string{"SEAFOOD"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on safe recalibrate: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+}

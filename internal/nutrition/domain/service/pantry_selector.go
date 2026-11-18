@@ -37,7 +37,12 @@ func SelectPantryCandidates(
 			existingNames[nameLower] = true
 		}
 
-		switch strings.ToUpper(strings.TrimSpace(pantryItems[i].Category())) {
+		cat := strings.ToUpper(strings.TrimSpace(pantryItems[i].Category()))
+		if cat == "INGREDIENT" || cat == "" || cat == "OTHER" {
+			cat = InferIngredientCategory(pantryItems[i].Name())
+		}
+
+		switch cat {
 		case "PROTEIN":
 			hasProtein = true
 		case "CARB":

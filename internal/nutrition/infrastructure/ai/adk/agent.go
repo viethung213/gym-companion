@@ -267,7 +267,7 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 		flow = FlowDaily
 	}
 
-	validator := newPlanValidator(a.foodRepo)
+	validator := newPlanValidator(a.foodRepo, internal.MandatoryUserIngredients)
 
 	attemptFn := func(round int, fb *attemptFeedback) (*GeneratedMealPlan, error) {
 		if round > 1 && fb != nil && fb.PreviousPlan != nil && len(fb.PreviousPlan.Options) > 0 {

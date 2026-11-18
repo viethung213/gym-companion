@@ -58,6 +58,10 @@ func (a *NutritionAgent) runWorkflow(
 		"supplementary_db_candidates": pCtx.SupplementaryIngredients,
 		"available_ingredients":       pCtx.AvailableIngredients,
 	}
+	if pCtx.MealType == FlowPantry || len(pCtx.MandatoryUserIngredients) > 0 {
+		inputMap["critical_pantry_instruction"] = "MANDATORY: You MUST use and feature all user ingredients in " +
+			"'mandatory_user_ingredients'. NEVER drop or replace them with DB items. Every option must cook with these mandatory user ingredients."
+	}
 	if len(pCtx.PreferredIngredients) > 0 {
 		inputMap["preferred_ingredients"] = pCtx.PreferredIngredients
 	}

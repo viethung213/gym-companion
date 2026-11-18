@@ -185,6 +185,18 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
 	}
 
+	var restrictions []string
+	if len(userRestrictions) > 0 {
+		restrictions = userRestrictions[0]
+	}
+
+	// 1. Kiểm tra dị ứng đối với nguyên liệu người dùng gửi lên
+	if len(restrictions) > 0 {
+		if err := ValidatePantryIngredientsAgainstAllergens(userIngredients, activeCatalog, restrictions); err != nil {
+			return nil, err
+		}
+	}
+
 	pantryCatalog := make([]vo.FoodNutrient, 0, len(userIngredients))
 
 	for _, ingName := range userIngredients {
@@ -206,22 +218,21 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 		}
 
 		if !isFound {
-			// Nguyên liệu mới -> Tạo đối tượng gửi sang để AI tự nhận diện 100% nhóm thực phẩm (PROTEIN/CARB/VEGGIE) và khai báo new_food_catalog_items
+			// Nhận diện nhóm chất sơ bộ (PROTEIN/CARB/VEGGIE) dựa trên tên nguyên liệu
+			category := InferIngredientCategory(trimmed)
+			if category == "OTHER" {
+				category = "INGREDIENT"
+			}
 			foundItem = vo.NewFoodNutrient(
 				uuid.New().String(),
 				trimmed,
-				"INGREDIENT",
+				category,
 				0.0, 0.0, 0.0, 0.0,
 				nil, "", "", false,
 				0.0, "BUDGET",
 			)
 		}
 		pantryCatalog = append(pantryCatalog, foundItem)
-	}
-
-	var restrictions []string
-	if len(userRestrictions) > 0 {
-		restrictions = userRestrictions[0]
 	}
 
 	mandatory, supplementary := SelectPantryCandidates(

@@ -10,5 +10,6 @@ var (
 	ErrEventPublishFailed    = errors.New("failed to publish outbox event to message broker")
 	ErrTransactionFailed     = errors.New("database transaction failed")
 	ErrAIServiceUnavailable  = errors.New("external AI creative chef service unavailable")
+	ErrAllergenConflict      = errors.New("ingredient conflicts with user allergen restrictions")
 	ErrInternal              = errors.New("internal server error")
 )
