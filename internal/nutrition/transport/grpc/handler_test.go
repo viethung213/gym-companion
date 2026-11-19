@@ -15,7 +15,9 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
 	"github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -47,6 +49,39 @@ func (m *mockPlanRepoForTransport) Save(_ context.Context, plan *aggregate.Nutri
 
 func (m *mockPlanRepoForTransport) Update(_ context.Context, plan *aggregate.NutritionPlan) error {
 	return m.Save(context.Background(), plan)
+}
+
+type mockUserAllergyRepoForTransport struct {
+	allergies map[string][]*entity.UserAllergy
+}
+
+func (m *mockUserAllergyRepoForTransport) FindAllergiesByUserID(_ context.Context, userID string) ([]*entity.UserAllergy, error) {
+	if m.allergies == nil {
+		return nil, nil
+	}
+	return m.allergies[userID], nil
+}
+
+func (m *mockUserAllergyRepoForTransport) BatchFindAllergiesByUserIDs(_ context.Context, userIDs []string) (map[string][]string, error) {
+	res := make(map[string][]string, len(userIDs))
+	for _, uid := range userIDs {
+		if m.allergies != nil {
+			names := make([]string, 0, len(m.allergies[uid]))
+			for _, a := range m.allergies[uid] {
+				names = append(names, a.AllergenName())
+			}
+			res[uid] = names
+		}
+	}
+	return res, nil
+}
+
+func (m *mockUserAllergyRepoForTransport) SetAllergies(_ context.Context, userID string, allergies []*entity.UserAllergy) error {
+	if m.allergies == nil {
+		m.allergies = make(map[string][]*entity.UserAllergy)
+	}
+	m.allergies[userID] = allergies
+	return nil
 }
 
 func (m *mockPlanRepoForTransport) FindActiveUserIDs(_ context.Context, _ int) ([]string, error) {
@@ -444,6 +479,13 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	tdeeCalc := service.NewTDEECalculator()
 	menuGen := service.NewMenuGenerator(cacheRepo, foodRepo, aiStub)
 
+	eTom, _ := entity.NewUserAllergy("tom-id", "user-pantry-grpc", "TÔM", time.Now())
+	allergyRepo := &mockUserAllergyRepoForTransport{
+		allergies: map[string][]*entity.UserAllergy{
+			"user-pantry-grpc": {eTom},
+		},
+	}
+
 	handler := grpc.NewGRPCHandler(
 		command.NewGenerateDailyPlanHandler(planRepo, historyRepo, nil, tdeeCalc, menuGen),
 		command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, nil, menuGen),
@@ -455,6 +497,9 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 		query.NewGetNutritionHistoryHandler(historyRepo),
 		query.NewGetNutritionSummaryHandler(planRepo, historyRepo),
 		query.NewGetNutritionInsightHandler(nil),
+	).WithAllergyHandlers(
+		query.NewGetUserAllergiesHandler(allergyRepo),
+		command.NewUpdateUserAllergiesHandler(allergyRepo),
 	)
 
 	// 1. Validation: empty user_id
@@ -487,23 +532,23 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	existingPlan := aggregate.NewNutritionPlan("plan-pantry-grpc-1", "user-pantry-grpc", now, alloc, []aggregate.DailyMeal{mealBf, mealLunch})
 	_ = planRepo.Save(ctx, existingPlan)
 
-	// 3. Allergen conflict: user sends shrimp while having restriction on TÔM
+	// 3. Allergen conflict: user sends shrimp while having restriction on TÔM in profile
 	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		UserId:               "user-pantry-grpc",
 		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Tôm sú", "Cơm trắng"},
-		UserRestrictions:     []string{"TÔM"},
 	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("expected InvalidArgument on allergen conflict, got code %v, err: %v", status.Code(err), err)
 	}
 
-	// 4. Happy path: safe ingredients
+	// 4. Happy path: user changes allergy to SEAFOOD, sends deer meat and brown rice (safe)
+	eSeafood, _ := entity.NewUserAllergy("seafood-id", "user-pantry-grpc", "SEAFOOD", time.Now())
+	_ = allergyRepo.SetAllergies(ctx, "user-pantry-grpc", []*entity.UserAllergy{eSeafood})
 	resp, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		UserId:               "user-pantry-grpc",
 		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Thịt nai", "Cơm gạo lứt"},
-		UserRestrictions:     []string{"SEAFOOD"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on safe recalibrate: %v", err)
@@ -525,5 +570,79 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("expected FailedPrecondition on already logged meal, got code %v, err: %v", status.Code(err), err)
+	}
+}
+
+func TestGRPCHandler_UserAllergiesCRUD(t *testing.T) {
+	ctx := context.Background()
+	allergyRepo := &mockUserAllergyRepoForTransport{
+		allergies: make(map[string][]*entity.UserAllergy),
+	}
+
+	handler := grpc.NewGRPCHandler(
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	).WithAllergyHandlers(
+		query.NewGetUserAllergiesHandler(allergyRepo),
+		command.NewUpdateUserAllergiesHandler(allergyRepo),
+	)
+
+	userID := "test-allergy-user"
+	ctx = middleware.WithActor(ctx, userID, "User")
+
+	// 1. Initial Get should be empty
+	getResp, err := handler.GetUserAllergies(ctx, &nutritionv1msg.GetUserAllergiesRequest{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(getResp.GetAllergies()) != 0 {
+		t.Fatalf("expected 0 allergies, got %d", len(getResp.GetAllergies()))
+	}
+
+	// 2. Update allergies (Set) with deduplication & normalization
+	updResp, err := handler.UpdateUserAllergies(ctx, &nutritionv1msg.UpdateUserAllergiesRequest{
+		Allergies: []string{"dairy", "SEAFOOD", " dairy ", "  peanut  "},
+	})
+	if err != nil {
+		t.Fatalf("expected no error on Update, got %v", err)
+	}
+	if len(updResp.GetAllergies()) != 3 {
+		t.Fatalf("expected 3 deduplicated allergies, got %v", updResp.GetAllergies())
+	}
+
+	// 3. Get allergies again to verify updated state
+	getResp2, err := handler.GetUserAllergies(ctx, &nutritionv1msg.GetUserAllergiesRequest{})
+	if err != nil {
+		t.Fatalf("expected no error on Get, got %v", err)
+	}
+	if len(getResp2.GetAllergies()) != 3 {
+		t.Fatalf("expected 3 allergies, got %d", len(getResp2.GetAllergies()))
+	}
+
+	// 4. Update with empty list (clearing all allergies)
+	updResp2, err := handler.UpdateUserAllergies(ctx, &nutritionv1msg.UpdateUserAllergiesRequest{
+		Allergies: []string{},
+	})
+	if err != nil {
+		t.Fatalf("expected no error on clear, got %v", err)
+	}
+	if len(updResp2.GetAllergies()) != 0 {
+		t.Fatalf("expected 0 allergies after clear, got %v", updResp2.GetAllergies())
+	}
+
+	// 5. Unauthenticated request should return codes.Unauthenticated
+	unauthCtx := context.Background()
+	_, err = handler.GetUserAllergies(unauthCtx, &nutritionv1msg.GetUserAllergiesRequest{})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated, got %v", err)
+	}
+
+	// 6. Test extracting user_id directly from incoming metadata header (attached by API gateway)
+	mdCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "gateway-user-123"))
+	getRespMD, err := handler.GetUserAllergies(mdCtx, &nutritionv1msg.GetUserAllergiesRequest{})
+	if err != nil {
+		t.Fatalf("expected no error when reading from gateway metadata header, got %v", err)
+	}
+	if len(getRespMD.GetAllergies()) != 0 {
+		t.Fatalf("expected 0 allergies for new gateway user, got %d", len(getRespMD.GetAllergies()))
 	}
 }

@@ -155,3 +155,14 @@ CREATE TABLE IF NOT EXISTS nutrition.weekly_insights (
 
 CREATE INDEX IF NOT EXISTS idx_weekly_insights_user_date ON nutrition.weekly_insights(user_id, start_date DESC);
 
+-- 9. USER ALLERGIES & DIETARY RESTRICTIONS
+CREATE TABLE IF NOT EXISTS nutrition.user_allergies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    allergen_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_nutrition_user_allergen UNIQUE (user_id, allergen_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_nutrition_user_allergies_user_id ON nutrition.user_allergies(user_id);
+

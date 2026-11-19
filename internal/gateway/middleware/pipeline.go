@@ -106,8 +106,10 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 			return
 		}
 
-		// Attach Zero-Trust internal token and strip raw user bearer authorization
+		// Attach Zero-Trust internal token, Gateway user headers, and strip raw user bearer authorization
 		r.Header.Set(HeaderInternalToken, internalToken)
+		r.Header.Set("X-User-Id", userID)
+		r.Header.Set("X-User-Role", role)
 		r.Header.Del("Authorization")
 
 		next.ServeHTTP(w, r)

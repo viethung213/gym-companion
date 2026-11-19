@@ -17,8 +17,8 @@
 **Main Flow**
 1. System đọc `BiologicalMetrics` (cân nặng, mục tiêu, mức vận động từ `WorkoutSession` hôm nay) từ `User`.
 2. System tính TDEE theo công thức Mifflin-St Jeor, tính `CalorieAllocation` (Protein/Carb/Fat).
-3. System đọc `ChatbotContext.food_restrictions` của `User` để lọc bỏ các thực phẩm gây dị ứng (`FilterAllergensOnly`), đồng thời truy vấn lịch sử tiêu thụ gần đây (`FindByUserIDAndDates`) để tính điểm mềm phân rã hàm mũ (`CandidateSelector` - BR-NU-02).
-4. System sinh `DailyMealOption` cho 3 bữa chính + 1 bữa phụ theo `BudgetTier` user đã chọn. Đối với mỗi bữa ăn, System ưu tiên đính kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có sẵn trong cơ sở dữ liệu; nếu không có, hệ thống hiển thị hướng dẫn định lượng để người dùng tự chuẩn bị hoặc mua ngoài tiệm bình thường (BR-NU-03).
+3. System truy vấn danh sách nguyên liệu dị ứng của người dùng trực tiếp từ cơ sở dữ liệu `nutrition.user_allergies`, áp dụng bộ lọc dị ứng nghiêm ngặt (`ValidatePantryIngredientsAgainstAllergens` và `FilterAllergensOnly` - BR-NU-04), đồng thời truy vấn lịch sử tiêu thụ gần đây (`FindByUserIDAndDates`) để tính điểm mềm phân rã hàm mũ (`CandidateSelector` - BR-NU-02).
+4. System sinh `DailyMealOption` cho 3 bữa chính + 1 bữa phụ theo `BudgetTier` user đã chọn. Đối với mỗi bữa ăn, System ưu tiên đính kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có sẵn trong cơ sở dữ liệu; nếu không có, hệ thống hiển thị hướng dẫn định lượng để người dùng tự chuẩn bị hoặc mua ngoài tiệm bình thường (BR-NU-03). Client không cần truyền tham số dị ứng thủ công trong request.
 5. System phát `NutritionPlanGenerated`.
 
 **Alternative Flow**
@@ -32,7 +32,7 @@
 - E4: User có nhiều dị ứng nghiêm ngặt → System giữ nguyên việc lọc dị ứng bắt buộc, nếu danh mục an toàn còn ít vẫn sinh thực đơn từ các nguồn đạm an toàn khả dụng kèm cảnh báo.
 
 **Postcondition**: `NutritionPlan` với `DailyMealOption` đầy đủ sẵn sàng hiển thị.  
-> *`NutritionService.GenerateDailyPlan()` gọi `NutritionPlanRepository.Save()`, `UserRepository.GetChatbotContext()`, và `NutritionPlanRepository.FindByUserIDAndDates()`.*
+> *`NutritionService.GenerateDailyPlan()` gọi `NutritionPlanRepository.Save()`, `UserAllergyRepository.FindAllergiesByUserID()`, và `NutritionPlanRepository.FindByUserIDAndDates()`.*
 
 **Domain Events**: `NutritionPlanGenerated`
 

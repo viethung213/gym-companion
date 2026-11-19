@@ -40,9 +40,15 @@ type DailyMenuCronWorker struct {
 	generatePlanHandler *command.GenerateDailyPlanHandler
 	planRepo            repository.NutritionPlanRepository
 	profileClient       repository.ProfileClient
+	allergyRepo         repository.UserAllergyRepository
 	coordinator         repository.CronTaskCoordinator
 	targetHour          int
 	targetMinute        int
+}
+
+func (w *DailyMenuCronWorker) WithUserAllergyRepository(repo repository.UserAllergyRepository) *DailyMenuCronWorker {
+	w.allergyRepo = repo
+	return w
 }
 
 // NewDailyMenuCronWorker khởi tạo DailyMenuCronWorker.
@@ -156,6 +162,16 @@ func (w *DailyMenuCronWorker) RunOnce(ctx context.Context) (successCount, failur
 		slog.Int("max_concurrent", maxConcurrentAICalls),
 	)
 
+	var userAllergiesMap map[string][]string
+	if w.allergyRepo != nil {
+		allergies, aErr := w.allergyRepo.BatchFindAllergiesByUserIDs(ctx, activeUserIDs)
+		if aErr != nil {
+			slog.WarnContext(ctx, "Failed to batch query user allergies, continuing with empty", slog.Any("error", aErr))
+		} else {
+			userAllergiesMap = allergies
+		}
+	}
+
 	semaphore := make(chan struct{}, maxConcurrentAICalls)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -184,10 +200,16 @@ func (w *DailyMenuCronWorker) RunOnce(ctx context.Context) (successCount, failur
 
 			metrics := w.fetchBiologicalMetrics(ctx, uid)
 
+			var restrictions []string
+			if userAllergiesMap != nil {
+				restrictions = userAllergiesMap[uid]
+			}
+
 			_, genErr := w.generatePlanHandler.Handle(ctx, command.GenerateDailyPlanCommand{
 				UserID:            uid,
 				PlanDate:          time.Now(),
 				BiologicalMetrics: metrics,
+				UserRestrictions:  restrictions,
 			})
 
 			mu.Lock()

@@ -324,3 +324,25 @@ func ToGormWeeklyInsight(domain *entity.WeeklyInsight) (*GormWeeklyInsight, erro
 		UpdatedAt:             domain.UpdatedAt(),
 	}, nil
 }
+
+// ToDomain converts GormUserAllergy to domain UserAllergy entity.
+func (g *GormUserAllergy) ToDomain() *entity.UserAllergy {
+	if g == nil {
+		return nil
+	}
+	e, _ := entity.NewUserAllergy(g.ID, g.UserID, g.AllergenName, g.CreatedAt)
+	return e
+}
+
+// FromDomainUserAllergy converts domain UserAllergy entity to GormUserAllergy.
+func FromDomainUserAllergy(e *entity.UserAllergy) GormUserAllergy {
+	if e == nil {
+		return GormUserAllergy{}
+	}
+	return GormUserAllergy{
+		ID:           e.ID(),
+		UserID:       e.UserID(),
+		AllergenName: e.AllergenName(),
+		CreatedAt:    e.CreatedAt(),
+	}
+}

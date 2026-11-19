@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	nutritionv1msg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/message"
 	nutritionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
@@ -14,7 +15,9 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/domainerror"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -31,6 +34,8 @@ type GRPCHandler struct {
 	getNutritionHistoryHdlr *query.GetNutritionHistoryHandler
 	getNutritionSummaryHdlr *query.GetNutritionSummaryHandler
 	getNutritionInsightHdlr *query.GetNutritionInsightHandler
+	getUserAllergiesHdlr    *query.GetUserAllergiesHandler
+	updateUserAllergiesHdlr *command.UpdateUserAllergiesHandler
 }
 
 func NewGRPCHandler(
@@ -59,6 +64,44 @@ func NewGRPCHandler(
 	}
 }
 
+func (h *GRPCHandler) WithAllergyHandlers(
+	getUserAllergiesHdlr *query.GetUserAllergiesHandler,
+	updateUserAllergiesHdlr *command.UpdateUserAllergiesHandler,
+) *GRPCHandler {
+	h.getUserAllergiesHdlr = getUserAllergiesHdlr
+	h.updateUserAllergiesHdlr = updateUserAllergiesHdlr
+	return h
+}
+
+func resolveActorUserID(ctx context.Context) (string, error) {
+	// 1. Read from gRPC metadata (x-user-id) attached by API Gateway
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vals := md.Get("x-user-id"); len(vals) > 0 && strings.TrimSpace(vals[0]) != "" {
+			return strings.TrimSpace(vals[0]), nil
+		}
+		if vals := md.Get("X-User-Id"); len(vals) > 0 && strings.TrimSpace(vals[0]) != "" {
+			return strings.TrimSpace(vals[0]), nil
+		}
+	}
+
+	// 2. Read from ConnectRPC Request Header (X-User-Id) attached by API Gateway
+	if info, ok := connect.CallInfoForServerContext(ctx); ok && info.RequestHeader() != nil {
+		if uid := info.RequestHeader().Get("X-User-Id"); strings.TrimSpace(uid) != "" {
+			return strings.TrimSpace(uid), nil
+		}
+		if uid := info.RequestHeader().Get("x-user-id"); strings.TrimSpace(uid) != "" {
+			return strings.TrimSpace(uid), nil
+		}
+	}
+
+	// 3. Fallback to Authenticated Actor from context (injected by AuthInterceptor / ContextKey)
+	if actor, err := middleware.RequireAuthenticated(ctx); err == nil && strings.TrimSpace(actor.UserID) != "" {
+		return strings.TrimSpace(actor.UserID), nil
+	}
+
+	return "", status.Error(codes.Unauthenticated, "authentication required: missing user id from gateway header")
+}
+
 func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetTodayMenuRequest) (*nutritionv1msg.GetTodayMenuResponse, error) {
 	if req.GetUserId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
@@ -77,11 +120,19 @@ func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetT
 			Gender:   "MALE",
 		}
 
+		var userRestrictions []string
+		if h.getUserAllergiesHdlr != nil {
+			allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: req.GetUserId()})
+			if aErr == nil {
+				userRestrictions = allergies
+			}
+		}
+
 		genPlan, genErr := h.genPlanHdlr.Handle(ctx, command.GenerateDailyPlanCommand{
 			UserID:            req.GetUserId(),
 			PlanDate:          now,
 			BiologicalMetrics: bio,
-			UserRestrictions:  nil,
+			UserRestrictions:  userRestrictions,
 		})
 		if genErr != nil {
 			return nil, status.Errorf(codes.Internal, "failed to generate daily menu: %v", genErr)
@@ -334,13 +385,21 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 		return nil, status.Error(codes.InvalidArgument, "meal_type is required")
 	}
 
+	var userRestrictions []string
+	if h.getUserAllergiesHdlr != nil {
+		allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: req.GetUserId()})
+		if aErr == nil {
+			userRestrictions = allergies
+		}
+	}
+
 	now := time.Now()
 	plan, err := h.recalPlanHdlr.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
 		UserID:               req.GetUserId(),
 		PlanDate:             now,
 		MealType:             req.GetMealType(),
 		AvailableIngredients: req.GetAvailableIngredients(),
-		UserRestrictions:     req.GetUserRestrictions(),
+		UserRestrictions:     userRestrictions,
 	})
 	if err != nil {
 		if errors.Is(err, domainerror.ErrAllergenConflict) {
@@ -558,4 +617,69 @@ func (c *ConnectNutritionHandler) UpdateMealSchedule(
 		return nil, err
 	}
 	return res, nil
+}
+
+func (h *GRPCHandler) GetUserAllergies(
+	ctx context.Context,
+	_ *nutritionv1msg.GetUserAllergiesRequest,
+) (*nutritionv1msg.GetUserAllergiesResponse, error) {
+	if h.getUserAllergiesHdlr == nil {
+		return nil, status.Error(codes.Unimplemented, "user allergy handler is not configured")
+	}
+	targetUserID, err := resolveActorUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	allergies, err := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: targetUserID})
+	if err != nil {
+		if errors.Is(err, domainerror.ErrUserIDRequired) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get user allergies: %v", err)
+	}
+	return &nutritionv1msg.GetUserAllergiesResponse{
+		Allergies: allergies,
+	}, nil
+}
+
+func (h *GRPCHandler) UpdateUserAllergies(
+	ctx context.Context,
+	req *nutritionv1msg.UpdateUserAllergiesRequest,
+) (*nutritionv1msg.UpdateUserAllergiesResponse, error) {
+	if h.updateUserAllergiesHdlr == nil {
+		return nil, status.Error(codes.Unimplemented, "user allergy handler is not configured")
+	}
+	targetUserID, err := resolveActorUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	allergies, err := h.updateUserAllergiesHdlr.Handle(ctx, command.UpdateUserAllergiesCommand{
+		UserID:    targetUserID,
+		Allergies: req.GetAllergies(),
+	})
+	if err != nil {
+		if errors.Is(err, domainerror.ErrUserIDRequired) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to update user allergies: %v", err)
+	}
+	return &nutritionv1msg.UpdateUserAllergiesResponse{
+		Allergies: allergies,
+	}, nil
+}
+
+func (c *ConnectNutritionHandler) GetUserAllergies(
+	ctx context.Context,
+	req *nutritionv1msg.GetUserAllergiesRequest,
+) (*nutritionv1msg.GetUserAllergiesResponse, error) {
+	return c.grpcHandler.GetUserAllergies(ctx, req)
+}
+
+func (c *ConnectNutritionHandler) UpdateUserAllergies(
+	ctx context.Context,
+	req *nutritionv1msg.UpdateUserAllergiesRequest,
+) (*nutritionv1msg.UpdateUserAllergiesResponse, error) {
+	return c.grpcHandler.UpdateUserAllergies(ctx, req)
 }
