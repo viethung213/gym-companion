@@ -62,10 +62,11 @@ func (h *Handler) handleJoinQueue(
 	_ *solomatchv1message.JoinQueueRequest,
 	send func(*solomatchv1message.JoinQueueResponse) error,
 ) error {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok || userID == "" {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
 		return status.Error(codes.Unauthenticated, "user authentication required")
 	}
+	userID := actor.UserID
 
 	result, err := h.joinQueueHandler.Handle(ctx, command.JoinMatchmakingQueueCommand{
 		UserID: userID,
@@ -164,12 +165,13 @@ func (h *Handler) CancelQueue(
 	ctx context.Context,
 	req *solomatchv1message.CancelQueueRequest,
 ) (*solomatchv1message.CancelQueueResponse, error) {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok || userID == "" {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "user authentication required")
 	}
+	userID := actor.UserID
 
-	err := h.cancelQueueHandler.Handle(ctx, command.CancelMatchmakingCommand{
+	err = h.cancelQueueHandler.Handle(ctx, command.CancelMatchmakingCommand{
 		TicketID: req.TicketId,
 		UserID:   userID,
 	})
@@ -184,10 +186,11 @@ func (h *Handler) GetActiveMatch(
 	ctx context.Context,
 	_ *solomatchv1message.GetActiveMatchRequest,
 ) (*solomatchv1message.GetActiveMatchResponse, error) {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok || userID == "" {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "user authentication required")
 	}
+	userID := actor.UserID
 
 	if h.getActiveMatchHandler == nil {
 		return nil, status.Error(codes.Unimplemented, "get active match handler not configured")
@@ -233,10 +236,11 @@ func (h *Handler) GetMatchHistory(
 	ctx context.Context,
 	req *solomatchv1message.GetMatchHistoryRequest,
 ) (*solomatchv1message.GetMatchHistoryResponse, error) {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok || userID == "" {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "user authentication required")
 	}
+	userID := actor.UserID
 
 	historyDTOs, err := h.getHistoryHandler.Handle(ctx, query.GetUserMatchHistoryQuery{
 		UserID:   userID,

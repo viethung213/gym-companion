@@ -21,6 +21,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"github.com/viethung213/gym-companion/internal/nutrition/test/testutil"
 	"github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -62,14 +63,12 @@ func newE2EHandler(t *testing.T) (*grpc.GRPCHandler, *testutil.Repos) {
 func TestE2E_FullUserJourney(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	handler, _ := newE2EHandler(t)
 	userID := "e2e-user-1"
+	ctx := middleware.WithActor(context.Background(), userID, "User")
+	handler, _ := newE2EHandler(t)
 
 	// ── Step 1: GetTodayMenu (auto-generate plan cho user mới) ────────────────
-	menuResp, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{
-		UserId: userID,
-	})
+	menuResp, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{})
 	if err != nil {
 		t.Fatalf("[Step 1] GetTodayMenu: %v", err)
 	}
@@ -106,7 +105,6 @@ func TestE2E_FullUserJourney(t *testing.T) {
 
 	// ── Step 4: LogMeal ───────────────────────────────────────────────────────
 	logResp, err := handler.LogMeal(ctx, &nutritionv1msg.LogMealRequest{
-		UserId:   userID,
 		MealType: "Dinner",
 		MealName: "Cá hồi áp chảo",
 		Calories: 350,
@@ -122,9 +120,7 @@ func TestE2E_FullUserJourney(t *testing.T) {
 	}
 
 	// ── Step 5: GetNutritionHistory ───────────────────────────────────────────
-	histResp, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{
-		UserId: userID,
-	})
+	histResp, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{})
 	if err != nil {
 		t.Fatalf("[Step 5] GetNutritionHistory: %v", err)
 	}
@@ -136,9 +132,7 @@ func TestE2E_FullUserJourney(t *testing.T) {
 	}
 
 	// ── Step 6: GetNutritionSummary ───────────────────────────────────────────
-	summaryResp, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{
-		UserId: userID,
-	})
+	summaryResp, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{})
 	if err != nil {
 		t.Fatalf("[Step 6] GetNutritionSummary: %v", err)
 	}
@@ -150,8 +144,8 @@ func TestE2E_FullUserJourney(t *testing.T) {
 	}
 }
 
-// TestE2E_Validation_AllEndpoints kiểm tra tất cả endpoint trả về
-// codes.InvalidArgument khi thiếu tham số bắt buộc.
+// TestE2E_Validation_AllEndpoints kiểm tra các endpoint trả về
+// codes.Unauthenticated hoặc codes.InvalidArgument khi thiếu thông tin bắt buộc.
 func TestE2E_Validation_AllEndpoints(t *testing.T) {
 	t.Parallel()
 
@@ -159,22 +153,25 @@ func TestE2E_Validation_AllEndpoints(t *testing.T) {
 	handler, _ := newE2EHandler(t)
 
 	tests := []struct {
-		name string
-		fn   func() error
+		name     string
+		fn       func() error
+		wantCode codes.Code
 	}{
 		{
-			"GetTodayMenu empty user_id",
+			"GetTodayMenu unauthenticated",
 			func() error {
-				_, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{UserId: ""})
+				_, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{})
 				return err
 			},
+			codes.Unauthenticated,
 		},
 		{
-			"LogMeal empty user_id",
+			"LogMeal unauthenticated",
 			func() error {
-				_, err := handler.LogMeal(ctx, &nutritionv1msg.LogMealRequest{UserId: ""})
+				_, err := handler.LogMeal(ctx, &nutritionv1msg.LogMealRequest{})
 				return err
 			},
+			codes.Unauthenticated,
 		},
 		{
 			"ApproveFoodItem empty food_item_id",
@@ -182,20 +179,23 @@ func TestE2E_Validation_AllEndpoints(t *testing.T) {
 				_, err := handler.ApproveFoodItem(ctx, &nutritionv1msg.ApproveFoodItemRequest{FoodItemId: ""})
 				return err
 			},
+			codes.InvalidArgument,
 		},
 		{
-			"GetNutritionHistory empty user_id",
+			"GetNutritionHistory unauthenticated",
 			func() error {
-				_, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{UserId: ""})
+				_, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{})
 				return err
 			},
+			codes.Unauthenticated,
 		},
 		{
-			"GetNutritionSummary empty user_id",
+			"GetNutritionSummary unauthenticated",
 			func() error {
-				_, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{UserId: ""})
+				_, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{})
 				return err
 			},
+			codes.Unauthenticated,
 		},
 	}
 
@@ -204,8 +204,8 @@ func TestE2E_Validation_AllEndpoints(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			err := tt.fn()
-			if grpcstatus.Code(err) != codes.InvalidArgument {
-				t.Fatalf("%s: got code %v, want InvalidArgument", tt.name, grpcstatus.Code(err))
+			if grpcstatus.Code(err) != tt.wantCode {
+				t.Fatalf("%s: got code %v, want %v", tt.name, grpcstatus.Code(err), tt.wantCode)
 			}
 		})
 	}
@@ -216,18 +216,18 @@ func TestE2E_Validation_AllEndpoints(t *testing.T) {
 func TestE2E_GetTodayMenu_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	handler, repos := newE2EHandler(t)
 	userID := "e2e-idem-user"
+	ctx := middleware.WithActor(context.Background(), userID, "User")
+	handler, repos := newE2EHandler(t)
 
 	// Gọi lần 1 — auto-generate plan
-	resp1, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{UserId: userID})
+	resp1, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{})
 	if err != nil {
 		t.Fatalf("GetTodayMenu [1]: %v", err)
 	}
 
 	// Gọi lần 2 — plan đã tồn tại, không nên tạo mới
-	resp2, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{UserId: userID})
+	resp2, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{})
 	if err != nil {
 		t.Fatalf("GetTodayMenu [2]: %v", err)
 	}
@@ -249,20 +249,17 @@ func TestE2E_GetTodayMenu_Idempotent(t *testing.T) {
 func TestE2E_RecalibratePlan(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	handler, _ := newE2EHandler(t)
 	userID := "e2e-recal-user"
+	ctx := middleware.WithActor(context.Background(), userID, "User")
+	handler, _ := newE2EHandler(t)
 
 	// Bước 1: Generate plan ban đầu
-	if _, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{
-		UserId: userID,
-	}); err != nil {
+	if _, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{}); err != nil {
 		t.Fatalf("GetTodayMenu (seed): %v", err)
 	}
 
 	// Bước 2: Log một bữa ăn để có dữ liệu lịch sử
 	if _, err := handler.LogMeal(ctx, &nutritionv1msg.LogMealRequest{
-		UserId:   userID,
 		MealType: "Lunch",
 		MealName: "Bún bò",
 		Calories: 600,
@@ -275,7 +272,6 @@ func TestE2E_RecalibratePlan(t *testing.T) {
 
 	// Bước 3: RecalibratePlanWithPantry — chỉ định bữa Dinner (chưa ăn)
 	recalResp, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
-		UserId:               userID,
 		MealType:             "Dinner",
 		AvailableIngredients: []string{"Ức gà", "Khoai lang", "Cải bó xôi"},
 	})

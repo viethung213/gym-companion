@@ -12,6 +12,7 @@ import (
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
 	pbsvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service/coachingv1serviceconnect"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -45,13 +46,13 @@ func (s *Server) WithSuggestAdHoc(suggestAdHoc *query.SuggestAdHocSessionHandler
 }
 
 // InitiateRoadmap implements UC-02.1.
-func (s *Server) InitiateRoadmap(ctx context.Context, req *pbmsg.InitiateRoadmapRequest) (*pbmsg.InitiateRoadmapResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+func (s *Server) InitiateRoadmap(ctx context.Context, _ *pbmsg.InitiateRoadmapRequest) (*pbmsg.InitiateRoadmapResponse, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
-	res, err := s.initiate.Handle(ctx, command.InitiateRoadmapCommand{UserID: req.GetUserId()})
-
+	res, err := s.initiate.Handle(ctx, command.InitiateRoadmapCommand{UserID: actor.UserID})
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -60,13 +61,13 @@ func (s *Server) InitiateRoadmap(ctx context.Context, req *pbmsg.InitiateRoadmap
 }
 
 // GetActiveRoadmap returns the active roadmap for a user.
-func (s *Server) GetActiveRoadmap(ctx context.Context, req *pbmsg.GetActiveRoadmapRequest) (*pbmsg.GetActiveRoadmapResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+func (s *Server) GetActiveRoadmap(ctx context.Context, _ *pbmsg.GetActiveRoadmapRequest) (*pbmsg.GetActiveRoadmapResponse, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
-	rm, err := s.queries.GetActiveRoadmap(ctx, query.GetActiveRoadmapQuery{UserID: req.GetUserId()})
-
+	rm, err := s.queries.GetActiveRoadmap(ctx, query.GetActiveRoadmapQuery{UserID: actor.UserID})
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -76,14 +77,17 @@ func (s *Server) GetActiveRoadmap(ctx context.Context, req *pbmsg.GetActiveRoadm
 
 // GetRoadmap returns a specific roadmap.
 func (s *Server) GetRoadmap(ctx context.Context, req *pbmsg.GetRoadmapRequest) (*pbmsg.GetRoadmapResponse, error) {
-	if req.GetUserId() == "" || req.GetRoadmapId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id and roadmap_id required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+	if req.GetRoadmapId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "roadmap_id required")
 	}
 
 	rm, err := s.queries.GetRoadmap(ctx, query.GetRoadmapQuery{
-		UserID: req.GetUserId(), RoadmapID: req.GetRoadmapId(),
+		UserID: actor.UserID, RoadmapID: req.GetRoadmapId(),
 	})
-
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -93,24 +97,21 @@ func (s *Server) GetRoadmap(ctx context.Context, req *pbmsg.GetRoadmapRequest) (
 
 // ListRoadmaps returns paginated roadmaps.
 func (s *Server) ListRoadmaps(ctx context.Context, req *pbmsg.ListRoadmapsRequest) (*pbmsg.ListRoadmapsResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
 	rms, err := s.queries.ListRoadmaps(ctx, query.ListRoadmapsQuery{
-		UserID: req.GetUserId(),
-
+		UserID: actor.UserID,
 		Status: pbStatusToDomain(req.GetStatus()),
-
-		Limit: int(req.GetPageSize()),
+		Limit:  int(req.GetPageSize()),
 	})
-
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
 
 	resp := &pbmsg.ListRoadmapsResponse{Roadmaps: make([]*pbmsg.Roadmap, 0, len(rms))}
-
 	for _, rm := range rms {
 		resp.Roadmaps = append(resp.Roadmaps, toPBRoadmap(rm))
 	}
@@ -120,14 +121,17 @@ func (s *Server) ListRoadmaps(ctx context.Context, req *pbmsg.ListRoadmapsReques
 
 // GetSessionPlan returns a specific session plan.
 func (s *Server) GetSessionPlan(ctx context.Context, req *pbmsg.GetSessionPlanRequest) (*pbmsg.GetSessionPlanResponse, error) {
-	if req.GetUserId() == "" || req.GetSessionPlanId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id and session_plan_id required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+	if req.GetSessionPlanId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_plan_id required")
 	}
 
 	sp, err := s.queries.GetSessionPlan(ctx, query.GetSessionPlanQuery{
-		UserID: req.GetUserId(), SessionPlanID: req.GetSessionPlanId(),
+		UserID: actor.UserID, SessionPlanID: req.GetSessionPlanId(),
 	})
-
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -137,16 +141,15 @@ func (s *Server) GetSessionPlan(ctx context.Context, req *pbmsg.GetSessionPlanRe
 
 // RegenerateSchedule triggers UC-02.3.
 func (s *Server) RegenerateSchedule(ctx context.Context, req *pbmsg.RegenerateScheduleRequest) (*pbmsg.RegenerateScheduleResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
 	res, err := s.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
-		UserID: req.GetUserId(),
-
+		UserID: actor.UserID,
 		Reason: req.GetReason(),
 	})
-
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -159,15 +162,15 @@ func (s *Server) CreateAdhocSessionPlan(
 	ctx context.Context,
 	req *pbmsg.CreateAdhocSessionPlanRequest,
 ) (*pbmsg.CreateAdhocSessionPlanResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
 	res, err := s.createAdhoc.Handle(ctx, command.CreateAdhocSessionCommand{
-		UserID:      req.GetUserId(),
+		UserID:      actor.UserID,
 		ExerciseIDs: req.GetExerciseIds(),
 	})
-
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -180,8 +183,9 @@ func (s *Server) SuggestAdHocSession(
 	ctx context.Context,
 	req *pbmsg.SuggestAdHocSessionRequest,
 ) (*pbmsg.SuggestAdHocSessionResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
 	if s.suggestAdHoc == nil {
@@ -198,10 +202,9 @@ func (s *Server) SuggestAdHocSession(
 	}
 
 	res, err := s.suggestAdHoc.Handle(ctx, &query.SuggestAdHocSessionQuery{
-		UserID: req.GetUserId(),
+		UserID: actor.UserID,
 		Hint:   hint,
 	})
-
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}

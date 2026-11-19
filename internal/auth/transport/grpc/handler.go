@@ -738,8 +738,11 @@ func toProtoUserInfo(u *aggregate.User) *authv1message.UserInfo {
 }
 
 func extractUserID(ctx context.Context) string {
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
-	return userID
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return ""
+	}
+	return actor.UserID
 }
 
 func extractActor(ctx context.Context) (middleware.Actor, error) {

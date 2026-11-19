@@ -42,14 +42,14 @@ service NutritionService {
   // Lấy thực đơn gợi ý trong ngày dựa theo TDEE và mục tiêu người dùng
   rpc GetTodayMenu (contracts.core.nutrition.v1.message.GetTodayMenuRequest) returns (contracts.core.nutrition.v1.message.GetTodayMenuResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/nutrition/today"
+      get: "/api/v1/nutrition/today"
     };
   }
 
   // Ghi chép bữa ăn thực tế đã tiêu thụ
   rpc LogMeal (contracts.core.nutrition.v1.message.LogMealRequest) returns (contracts.core.nutrition.v1.message.LogMealResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/nutrition/meals"
+      post: "/api/v1/nutrition/meals"
       body: "*"
     };
   }
@@ -57,21 +57,21 @@ service NutritionService {
   // Lấy lịch sử log bữa ăn theo dải ngày
   rpc GetNutritionHistory (contracts.core.nutrition.v1.message.GetNutritionHistoryRequest) returns (contracts.core.nutrition.v1.message.GetNutritionHistoryResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/nutrition/history"
+      get: "/api/v1/nutrition/history"
     };
   }
 
   // Lấy tổng quan lượng Calo/Macros hấp thụ trong ngày hôm nay so với chỉ tiêu
   rpc GetNutritionSummary (contracts.core.nutrition.v1.message.GetNutritionSummaryRequest) returns (contracts.core.nutrition.v1.message.GetNutritionSummaryResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/nutrition/summary"
+      get: "/api/v1/nutrition/summary"
     };
   }
 
   // Tái hiệu chỉnh thực đơn động theo nguyên liệu có sẵn trong tủ lạnh (BR-NU-06)
   rpc RecalibratePlanWithPantry (contracts.core.nutrition.v1.message.RecalibratePlanWithPantryRequest) returns (contracts.core.nutrition.v1.message.RecalibratePlanWithPantryResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/nutrition/recalibrate-pantry"
+      post: "/api/v1/nutrition/recalibrate-pantry"
       body: "*"
     };
   }
@@ -87,7 +87,7 @@ service NutritionService {
   // Lấy insight AI phân tích xu hướng dinh dưỡng và hướng cải thiện cá nhân hóa
   rpc GetNutritionInsight (contracts.core.nutrition.v1.message.GetNutritionInsightRequest) returns (contracts.core.nutrition.v1.message.GetNutritionInsightResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/nutrition/insight"
+      get: "/api/v1/nutrition/insight"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       summary: "AI Nutrition Insight"
@@ -98,7 +98,7 @@ service NutritionService {
   // Cập nhật lịch trình/thời gian các bữa ăn theo tùy chỉnh cá nhân
   rpc UpdateMealSchedule (contracts.core.nutrition.v1.message.UpdateMealScheduleRequest) returns (contracts.core.nutrition.v1.message.UpdateMealScheduleResponse) {
     option (google.api.http) = {
-      put: "/api/v1/users/{user_id}/nutrition/meal-schedule"
+      put: "/api/v1/nutrition/meal-schedule"
       body: "*"
     };
   }

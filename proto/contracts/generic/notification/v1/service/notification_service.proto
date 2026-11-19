@@ -64,14 +64,14 @@ service NotificationService {
   // Lấy cấu hình nhận thông báo (Bật/tắt các kênh)
   rpc GetNotificationSettings (contracts.generic.notification.v1.message.GetNotificationSettingsRequest) returns (contracts.generic.notification.v1.message.GetNotificationSettingsResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/notifications/settings"
+      get: "/api/v1/notifications/settings"
     };
   }
 
   // Cập nhật cấu hình nhận thông báo
   rpc UpdateNotificationSettings (contracts.generic.notification.v1.message.UpdateNotificationSettingsRequest) returns (contracts.generic.notification.v1.message.UpdateNotificationSettingsResponse) {
     option (google.api.http) = {
-      put: "/api/v1/users/{user_id}/notifications/settings"
+      put: "/api/v1/notifications/settings"
       body: "*"
     };
   }
@@ -79,14 +79,14 @@ service NotificationService {
   // Lấy danh sách lịch sử thông báo in-app của người dùng
   rpc ListNotifications (contracts.generic.notification.v1.message.ListNotificationsRequest) returns (contracts.generic.notification.v1.message.ListNotificationsResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/notifications"
+      get: "/api/v1/notifications"
     };
   }
 
   // Đánh dấu thông báo là đã đọc
   rpc MarkNotificationAsRead (contracts.generic.notification.v1.message.MarkNotificationAsReadRequest) returns (contracts.generic.notification.v1.message.MarkNotificationAsReadResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/notifications/{notification_id}/read"
+      post: "/api/v1/notifications/{notification_id}/read"
       body: "*"
     };
   }

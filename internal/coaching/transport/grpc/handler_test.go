@@ -10,6 +10,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
 func TestServer_CreateAdhocSessionPlan(t *testing.T) {
@@ -74,8 +75,8 @@ func TestServer_CreateAdhocSessionPlan(t *testing.T) {
 
 	server := NewServer(nil, nil, createAdhocHandler, nil)
 
+	ctx = middleware.WithActor(ctx, userID, "User")
 	req := &pbmsg.CreateAdhocSessionPlanRequest{
-		UserId:      userID,
 		ExerciseIds: []string{"ex-1"},
 	}
 
@@ -129,8 +130,8 @@ func TestServer_SuggestAdHocSession(t *testing.T) {
 	suggestHandler := query.NewSuggestAdHocSessionHandler(nil, mockAgent, &testClock{now: time.Now()})
 	server := NewServer(nil, nil, nil, nil).WithSuggestAdHoc(suggestHandler)
 
+	ctx = middleware.WithActor(ctx, userID, "User")
 	req := &pbmsg.SuggestAdHocSessionRequest{
-		UserId: userID,
 		Hint: &pbmsg.AdHocHint{
 			MuscleGroups:    []string{"Chest"},
 			DurationMinutes: 45,
@@ -159,6 +160,72 @@ func TestServer_SuggestAdHocSession(t *testing.T) {
 func TestServer_SuggestAdHocSession_MissingUserId(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil)
 	_, err := server.SuggestAdHocSession(context.Background(), &pbmsg.SuggestAdHocSessionRequest{})
+	if err == nil {
+		t.Fatal("expected error for missing user_id")
+	}
+}
+
+func TestServer_InitiateRoadmap_MissingUserId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	_, err := server.InitiateRoadmap(context.Background(), &pbmsg.InitiateRoadmapRequest{})
+	if err == nil {
+		t.Fatal("expected error for missing user_id")
+	}
+}
+
+func TestServer_GetActiveRoadmap_MissingUserId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	_, err := server.GetActiveRoadmap(context.Background(), &pbmsg.GetActiveRoadmapRequest{})
+	if err == nil {
+		t.Fatal("expected error for missing user_id")
+	}
+}
+
+func TestServer_GetRoadmap_MissingUserId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	_, err := server.GetRoadmap(context.Background(), &pbmsg.GetRoadmapRequest{RoadmapId: "rm-1"})
+	if err == nil {
+		t.Fatal("expected error for missing user_id")
+	}
+}
+
+func TestServer_GetRoadmap_MissingRoadmapId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	ctx := middleware.WithActor(context.Background(), "user-1", "User")
+	_, err := server.GetRoadmap(ctx, &pbmsg.GetRoadmapRequest{})
+	if err == nil {
+		t.Fatal("expected error for missing roadmap_id")
+	}
+}
+
+func TestServer_ListRoadmaps_MissingUserId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	_, err := server.ListRoadmaps(context.Background(), &pbmsg.ListRoadmapsRequest{})
+	if err == nil {
+		t.Fatal("expected error for missing user_id")
+	}
+}
+
+func TestServer_GetSessionPlan_MissingUserId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	_, err := server.GetSessionPlan(context.Background(), &pbmsg.GetSessionPlanRequest{SessionPlanId: "sp-1"})
+	if err == nil {
+		t.Fatal("expected error for missing user_id")
+	}
+}
+
+func TestServer_GetSessionPlan_MissingSessionPlanId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	ctx := middleware.WithActor(context.Background(), "user-1", "User")
+	_, err := server.GetSessionPlan(ctx, &pbmsg.GetSessionPlanRequest{})
+	if err == nil {
+		t.Fatal("expected error for missing session_plan_id")
+	}
+}
+
+func TestServer_RegenerateSchedule_MissingUserId(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil)
+	_, err := server.RegenerateSchedule(context.Background(), &pbmsg.RegenerateScheduleRequest{RoadmapId: "rm-1"})
 	if err == nil {
 		t.Fatal("expected error for missing user_id")
 	}

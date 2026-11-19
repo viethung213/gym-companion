@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestCoaching_FullLifecycle_E2E(t *testing.T) {
@@ -15,12 +16,10 @@ func TestCoaching_FullLifecycle_E2E(t *testing.T) {
 	defer suite.StopServer()
 
 	userID := uuid.NewString()
-	ctx := context.Background()
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "x-user-id", userID)
 
 	// 1. Initiate Roadmap
-	initResp, err := suite.Client.InitiateRoadmap(ctx, &pbmsg.InitiateRoadmapRequest{
-		UserId: userID,
-	})
+	initResp, err := suite.Client.InitiateRoadmap(ctx, &pbmsg.InitiateRoadmapRequest{})
 	if err != nil {
 		t.Fatalf("InitiateRoadmap API failed: %v", err)
 	}
@@ -40,9 +39,7 @@ func TestCoaching_FullLifecycle_E2E(t *testing.T) {
 	}
 
 	// 2. Fetch Active Roadmap
-	activeResp, err := suite.Client.GetActiveRoadmap(ctx, &pbmsg.GetActiveRoadmapRequest{
-		UserId: userID,
-	})
+	activeResp, err := suite.Client.GetActiveRoadmap(ctx, &pbmsg.GetActiveRoadmapRequest{})
 	if err != nil {
 		t.Fatalf("GetActiveRoadmap API failed: %v", err)
 	}
@@ -53,7 +50,6 @@ func TestCoaching_FullLifecycle_E2E(t *testing.T) {
 
 	// 3. Fetch Roadmap by ID
 	getResp, err := suite.Client.GetRoadmap(ctx, &pbmsg.GetRoadmapRequest{
-		UserId:    userID,
 		RoadmapId: roadmapID,
 	})
 	if err != nil {
@@ -65,9 +61,7 @@ func TestCoaching_FullLifecycle_E2E(t *testing.T) {
 	}
 
 	// 4. List Roadmaps for User
-	listResp, err := suite.Client.ListRoadmaps(ctx, &pbmsg.ListRoadmapsRequest{
-		UserId: userID,
-	})
+	listResp, err := suite.Client.ListRoadmaps(ctx, &pbmsg.ListRoadmapsRequest{})
 	if err != nil {
 		t.Fatalf("ListRoadmaps API failed: %v", err)
 	}

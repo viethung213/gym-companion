@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect/v2"
 	nutritionv1msg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/message"
 	nutritionv1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
@@ -17,7 +16,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -73,43 +71,16 @@ func (h *GRPCHandler) WithAllergyHandlers(
 	return h
 }
 
-func resolveActorUserID(ctx context.Context) (string, error) {
-	// 1. Read from gRPC metadata (x-user-id) attached by API Gateway
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if vals := md.Get("x-user-id"); len(vals) > 0 && strings.TrimSpace(vals[0]) != "" {
-			return strings.TrimSpace(vals[0]), nil
-		}
-		if vals := md.Get("X-User-Id"); len(vals) > 0 && strings.TrimSpace(vals[0]) != "" {
-			return strings.TrimSpace(vals[0]), nil
-		}
+func (h *GRPCHandler) GetTodayMenu(ctx context.Context, _ *nutritionv1msg.GetTodayMenuRequest) (*nutritionv1msg.GetTodayMenuResponse, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
-
-	// 2. Read from ConnectRPC Request Header (X-User-Id) attached by API Gateway
-	if info, ok := connect.CallInfoForServerContext(ctx); ok && info.RequestHeader() != nil {
-		if uid := info.RequestHeader().Get("X-User-Id"); strings.TrimSpace(uid) != "" {
-			return strings.TrimSpace(uid), nil
-		}
-		if uid := info.RequestHeader().Get("x-user-id"); strings.TrimSpace(uid) != "" {
-			return strings.TrimSpace(uid), nil
-		}
-	}
-
-	// 3. Fallback to Authenticated Actor from context (injected by AuthInterceptor / ContextKey)
-	if actor, err := middleware.RequireAuthenticated(ctx); err == nil && strings.TrimSpace(actor.UserID) != "" {
-		return strings.TrimSpace(actor.UserID), nil
-	}
-
-	return "", status.Error(codes.Unauthenticated, "authentication required: missing user id from gateway header")
-}
-
-func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetTodayMenuRequest) (*nutritionv1msg.GetTodayMenuResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
-	}
+	userID := actor.UserID
 
 	now := time.Now()
 	plan, err := h.getTodayMenuHdlr.Handle(ctx, query.GetTodayMenuQuery{
-		UserID:   req.GetUserId(),
+		UserID:   userID,
 		PlanDate: now,
 	})
 	if err != nil || plan == nil {
@@ -122,14 +93,14 @@ func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetT
 
 		var userRestrictions []string
 		if h.getUserAllergiesHdlr != nil {
-			allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: req.GetUserId()})
+			allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: userID})
 			if aErr == nil {
 				userRestrictions = allergies
 			}
 		}
 
 		genPlan, genErr := h.genPlanHdlr.Handle(ctx, command.GenerateDailyPlanCommand{
-			UserID:            req.GetUserId(),
+			UserID:            userID,
 			PlanDate:          now,
 			BiologicalMetrics: bio,
 			UserRestrictions:  userRestrictions,
@@ -186,12 +157,14 @@ func (h *GRPCHandler) GetTodayMenu(ctx context.Context, req *nutritionv1msg.GetT
 }
 
 func (h *GRPCHandler) LogMeal(ctx context.Context, req *nutritionv1msg.LogMealRequest) (*nutritionv1msg.LogMealResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	userID := actor.UserID
 
 	mealLog, err := h.logMealHdlr.Handle(ctx, command.LogMealCommand{
-		UserID:   req.GetUserId(),
+		UserID:   userID,
 		PlanDate: time.Now(),
 		MealType: req.GetMealType(),
 		MealName: req.GetMealName(),
@@ -263,17 +236,19 @@ func (h *GRPCHandler) ApproveFoodItem(ctx context.Context, req *nutritionv1msg.A
 
 func (h *GRPCHandler) GetNutritionHistory(
 	ctx context.Context,
-	req *nutritionv1msg.GetNutritionHistoryRequest,
+	_ *nutritionv1msg.GetNutritionHistoryRequest,
 ) (*nutritionv1msg.GetNutritionHistoryResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	userID := actor.UserID
 
 	start := time.Now().AddDate(0, 0, -7)
 	end := time.Now()
 
 	history, err := h.getNutritionHistoryHdlr.Handle(ctx, query.GetNutritionHistoryQuery{
-		UserID:    req.GetUserId(),
+		UserID:    userID,
 		StartDate: start,
 		EndDate:   end,
 	})
@@ -306,14 +281,16 @@ func (h *GRPCHandler) GetNutritionHistory(
 
 func (h *GRPCHandler) GetNutritionSummary(
 	ctx context.Context,
-	req *nutritionv1msg.GetNutritionSummaryRequest,
+	_ *nutritionv1msg.GetNutritionSummaryRequest,
 ) (*nutritionv1msg.GetNutritionSummaryResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	userID := actor.UserID
 
 	summary, err := h.getNutritionSummaryHdlr.Handle(ctx, query.GetNutritionSummaryQuery{
-		UserID:   req.GetUserId(),
+		UserID:   userID,
 		PlanDate: time.Now(),
 	})
 	if err != nil {
@@ -339,9 +316,11 @@ func (h *GRPCHandler) GetNutritionSummary(
 func (h *GRPCHandler) UpdateMealSchedule(
 	ctx context.Context, req *nutritionv1msg.UpdateMealScheduleRequest,
 ) (*nutritionv1msg.UpdateMealScheduleResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	userID := actor.UserID
 
 	inputs := make([]command.MealScheduleItemInput, 0, len(req.GetSchedules()))
 	for _, item := range req.GetSchedules() {
@@ -352,7 +331,7 @@ func (h *GRPCHandler) UpdateMealSchedule(
 	}
 
 	res, err := h.updateMealScheduleHdlr.Handle(ctx, command.UpdateMealScheduleCommand{
-		UserID:    req.GetUserId(),
+		UserID:    userID,
 		Schedules: inputs,
 	})
 	if err != nil {
@@ -378,16 +357,18 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 	ctx context.Context,
 	req *nutritionv1msg.RecalibratePlanWithPantryRequest,
 ) (*nutritionv1msg.RecalibratePlanWithPantryResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	userID := actor.UserID
 	if strings.TrimSpace(req.GetMealType()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "meal_type is required")
 	}
 
 	var userRestrictions []string
 	if h.getUserAllergiesHdlr != nil {
-		allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: req.GetUserId()})
+		allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: userID})
 		if aErr == nil {
 			userRestrictions = allergies
 		}
@@ -395,7 +376,7 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 
 	now := time.Now()
 	plan, err := h.recalPlanHdlr.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
-		UserID:               req.GetUserId(),
+		UserID:               userID,
 		PlanDate:             now,
 		MealType:             req.GetMealType(),
 		AvailableIngredients: req.GetAvailableIngredients(),
@@ -467,12 +448,14 @@ func (h *GRPCHandler) GetNutritionInsight(
 	ctx context.Context,
 	req *nutritionv1msg.GetNutritionInsightRequest,
 ) (*nutritionv1msg.GetNutritionInsightResponse, error) {
-	if req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	userID := actor.UserID
 
 	insight, err := h.getNutritionInsightHdlr.Handle(ctx, query.GetNutritionInsightQuery{
-		UserID:        req.GetUserId(),
+		UserID:        userID,
 		WeekStartDate: req.GetWeekStartDate(),
 	})
 	if err != nil {
@@ -626,10 +609,11 @@ func (h *GRPCHandler) GetUserAllergies(
 	if h.getUserAllergiesHdlr == nil {
 		return nil, status.Error(codes.Unimplemented, "user allergy handler is not configured")
 	}
-	targetUserID, err := resolveActorUserID(ctx)
+	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	targetUserID := actor.UserID
 
 	allergies, err := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: targetUserID})
 	if err != nil {
@@ -650,10 +634,11 @@ func (h *GRPCHandler) UpdateUserAllergies(
 	if h.updateUserAllergiesHdlr == nil {
 		return nil, status.Error(codes.Unimplemented, "user allergy handler is not configured")
 	}
-	targetUserID, err := resolveActorUserID(ctx)
+	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
+	targetUserID := actor.UserID
 
 	allergies, err := h.updateUserAllergiesHdlr.Handle(ctx, command.UpdateUserAllergiesCommand{
 		UserID:    targetUserID,

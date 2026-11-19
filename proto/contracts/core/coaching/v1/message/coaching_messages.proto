@@ -36,19 +36,16 @@ enum RoadmapPhase {
   ROADMAP_PHASE_DELOAD = 4;       // Giảm tải phục hồi
 }
 
-message InitiateRoadmapRequest {
-  string user_id = 1;
-}
+message InitiateRoadmapRequest {}
 
 message InitiateRoadmapResponse {
   Roadmap roadmap = 1;
 }
 
 message ListRoadmapsRequest {
-  string user_id = 1;
-  RoadmapStatus status = 2;
-  int32 page_size = 3;
-  string page_token = 4;
+  RoadmapStatus status = 1;
+  int32 page_size = 2;
+  string page_token = 3;
 }
 
 message ListRoadmapsResponse {
@@ -57,25 +54,21 @@ message ListRoadmapsResponse {
 }
 
 message GetRoadmapRequest {
-  string user_id = 1;
-  string roadmap_id = 2;
+  string roadmap_id = 1;
 }
 
 message GetRoadmapResponse {
   Roadmap roadmap = 1;
 }
 
-message GetActiveRoadmapRequest {
-  string user_id = 1;
-}
+message GetActiveRoadmapRequest {}
 
 message GetActiveRoadmapResponse {
   Roadmap roadmap = 1;
 }
 
 message GetSessionPlanRequest {
-  string user_id = 1;
-  string session_plan_id = 2;
+  string session_plan_id = 1;
 }
 
 message GetSessionPlanResponse {
@@ -83,9 +76,8 @@ message GetSessionPlanResponse {
 }
 
 message RegenerateScheduleRequest {
-  string user_id = 1;
-  string roadmap_id = 2;
-  string reason = 3;
+  string roadmap_id = 1;
+  string reason = 2;
 }
 
 message RegenerateScheduleResponse {
@@ -160,8 +152,7 @@ message PrescribedExercise {
 }
 
 message CreateAdhocSessionPlanRequest {
-  string user_id = 1;
-  repeated string exercise_ids = 2;
+  repeated string exercise_ids = 1;
 }
 
 message CreateAdhocSessionPlanResponse {
@@ -177,8 +168,7 @@ message AdHocHint {
 }
 
 message SuggestAdHocSessionRequest {
-  string user_id = 1;
-  AdHocHint hint = 2;
+  AdHocHint hint = 1;
 }
 
 message SuggestAdHocSessionResponse {

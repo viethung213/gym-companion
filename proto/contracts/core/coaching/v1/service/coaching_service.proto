@@ -37,42 +37,43 @@ service CoachingService {
   // Create the complete 4-week roadmap with initial session plans.
   rpc InitiateRoadmap (contracts.core.coaching.v1.message.InitiateRoadmapRequest) returns (contracts.core.coaching.v1.message.InitiateRoadmapResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/roadmaps"
+      post: "/api/v1/coaching/roadmaps"
+      body: "*"
     };
   }
 
   // List roadmaps for a user, optionally filtered by status.
   rpc ListRoadmaps (contracts.core.coaching.v1.message.ListRoadmapsRequest) returns (contracts.core.coaching.v1.message.ListRoadmapsResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/roadmaps"
+      get: "/api/v1/coaching/roadmaps"
     };
   }
 
   // Get one roadmap by id.
   rpc GetRoadmap (contracts.core.coaching.v1.message.GetRoadmapRequest) returns (contracts.core.coaching.v1.message.GetRoadmapResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/roadmaps/{roadmap_id}"
+      get: "/api/v1/coaching/roadmaps/{roadmap_id}"
     };
   }
 
   // Get the single active roadmap for a user.
   rpc GetActiveRoadmap (contracts.core.coaching.v1.message.GetActiveRoadmapRequest) returns (contracts.core.coaching.v1.message.GetActiveRoadmapResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/roadmaps/active"
+      get: "/api/v1/coaching/roadmaps/active"
     };
   }
 
   // Get a specific session plan by id.
   rpc GetSessionPlan (contracts.core.coaching.v1.message.GetSessionPlanRequest) returns (contracts.core.coaching.v1.message.GetSessionPlanResponse) {
     option (google.api.http) = {
-      get: "/api/v1/users/{user_id}/session-plans/{session_plan_id}"
+      get: "/api/v1/coaching/session-plans/{session_plan_id}"
     };
   }
 
   // Re-generate future unexecuted session plans when profile/adaptation rules trigger (FR-AC-06).
   rpc RegenerateSchedule (contracts.core.coaching.v1.message.RegenerateScheduleRequest) returns (contracts.core.coaching.v1.message.RegenerateScheduleResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/roadmaps/{roadmap_id}:regenerate"
+      post: "/api/v1/coaching/roadmaps/{roadmap_id}:regenerate"
       body: "*"
     };
   }
@@ -80,7 +81,7 @@ service CoachingService {
   // Create an ad-hoc session plan (Flow 2.1).
   rpc CreateAdhocSessionPlan (contracts.core.coaching.v1.message.CreateAdhocSessionPlanRequest) returns (contracts.core.coaching.v1.message.CreateAdhocSessionPlanResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/session-plans/adhoc"
+      post: "/api/v1/coaching/session-plans/adhoc"
       body: "*"
     };
   }
@@ -88,7 +89,7 @@ service CoachingService {
   // Suggest an ad-hoc session plan prescription (read-only advisory function).
   rpc SuggestAdHocSession (contracts.core.coaching.v1.message.SuggestAdHocSessionRequest) returns (contracts.core.coaching.v1.message.SuggestAdHocSessionResponse) {
     option (google.api.http) = {
-      post: "/api/v1/users/{user_id}/session-plans/adhoc/suggest"
+      post: "/api/v1/coaching/session-plans/adhoc/suggest"
       body: "*"
     };
   }

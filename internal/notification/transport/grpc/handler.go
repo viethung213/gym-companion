@@ -93,13 +93,13 @@ func (h *GRPCHandler) RegisterDeviceToken(
 	ctx context.Context,
 	req *notificationv1message.RegisterDeviceTokenRequest,
 ) (*notificationv1message.RegisterDeviceTokenResponse, error) {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok || userID == "" {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
-	err := h.registerDeviceHandler.Handle(ctx, command.RegisterDeviceTokenCommand{
-		UserID:      userID,
+	err = h.registerDeviceHandler.Handle(ctx, command.RegisterDeviceTokenCommand{
+		UserID:      actor.UserID,
 		DeviceToken: req.GetDeviceToken(),
 		DeviceType:  req.GetDeviceType(),
 	})
@@ -115,10 +115,15 @@ func (h *GRPCHandler) RegisterDeviceToken(
 
 func (h *GRPCHandler) GetNotificationSettings(
 	ctx context.Context,
-	req *notificationv1message.GetNotificationSettingsRequest,
+	_ *notificationv1message.GetNotificationSettingsRequest,
 ) (*notificationv1message.GetNotificationSettingsResponse, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+
 	setting, err := h.getSettingsHandler.Handle(ctx, query.GetNotificationSettingsQuery{
-		UserID: req.GetUserId(),
+		UserID: actor.UserID,
 	})
 	if err != nil {
 		return nil, toGRPCError(err)
@@ -138,8 +143,13 @@ func (h *GRPCHandler) UpdateNotificationSettings(
 	ctx context.Context,
 	req *notificationv1message.UpdateNotificationSettingsRequest,
 ) (*notificationv1message.UpdateNotificationSettingsResponse, error) {
-	err := h.updateSettingsHandler.Handle(ctx, command.UpdateNotificationSettingsCommand{
-		UserID:          req.GetUserId(),
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+
+	err = h.updateSettingsHandler.Handle(ctx, command.UpdateNotificationSettingsCommand{
+		UserID:          actor.UserID,
 		EnablePush:      req.GetEnablePush(),
 		EnableEmail:     req.GetEnableEmail(),
 		EnableSMS:       req.GetEnableSms(),
@@ -160,8 +170,13 @@ func (h *GRPCHandler) ListNotifications(
 	ctx context.Context,
 	req *notificationv1message.ListNotificationsRequest,
 ) (*notificationv1message.ListNotificationsResponse, error) {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+
 	result, err := h.listNotifsHandler.Handle(ctx, query.ListNotificationsQuery{
-		UserID: req.GetUserId(),
+		UserID: actor.UserID,
 		Limit:  req.GetLimit(),
 		Offset: req.GetOffset(),
 	})
@@ -191,8 +206,13 @@ func (h *GRPCHandler) MarkNotificationAsRead(
 	ctx context.Context,
 	req *notificationv1message.MarkNotificationAsReadRequest,
 ) (*notificationv1message.MarkNotificationAsReadResponse, error) {
-	err := h.markAsReadHandler.Handle(ctx, command.MarkNotificationAsReadCommand{
-		UserID:         req.GetUserId(),
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+
+	err = h.markAsReadHandler.Handle(ctx, command.MarkNotificationAsReadCommand{
+		UserID:         actor.UserID,
 		NotificationID: req.GetNotificationId(),
 	})
 	if err != nil {
