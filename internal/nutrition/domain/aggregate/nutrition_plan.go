@@ -3,14 +3,19 @@ package aggregate
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/domainerror"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
 var (
 	ErrMealOptionNotFound = errors.New("meal option not found in plan")
 	ErrPlanAlreadyLogged  = errors.New("meal option has already been logged")
+	ErrMealAlreadyLogged  = domainerror.ErrMealAlreadyLogged
+	ErrMealTypeNotFound   = domainerror.ErrMealTypeNotFound
+	ErrMealTypeRequired   = domainerror.ErrMealTypeRequired
 )
 
 type IngredientGram struct {
@@ -258,4 +263,107 @@ func (p *NutritionPlan) UpdateMealSchedule(schedules map[string]string) {
 		}
 	}
 	p.updatedAt = time.Now()
+}
+
+// IsMealLogged kiểm tra xem bữa ăn targetMealType đã có option nào được log hay chưa.
+func (p *NutritionPlan) IsMealLogged(targetMealType string) (bool, error) {
+	trimmedType := strings.TrimSpace(targetMealType)
+	if trimmedType == "" {
+		return false, ErrMealTypeRequired
+	}
+	for _, m := range p.dailyMeals {
+		if strings.EqualFold(strings.TrimSpace(m.mealType), trimmedType) {
+			for _, opt := range m.options {
+				if opt.isLogged {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+	}
+	return false, fmt.Errorf("%w: %s", ErrMealTypeNotFound, targetMealType)
+}
+
+// UpdateMealOptions thay thế danh sách MealOption của DUY NHẤT một bữa ăn (targetMealType),
+// bảo toàn toàn bộ các bữa ăn khác và giữ nguyên lịch ăn (scheduledTime) của bữa đó.
+func (p *NutritionPlan) UpdateMealOptions(targetMealType string, newOptions []MealOption) error {
+	trimmedType := strings.TrimSpace(targetMealType)
+	if trimmedType == "" {
+		return ErrMealTypeRequired
+	}
+
+	for i, m := range p.dailyMeals {
+		if strings.EqualFold(strings.TrimSpace(m.mealType), trimmedType) {
+			for _, opt := range m.options {
+				if opt.isLogged {
+					return ErrMealAlreadyLogged
+				}
+			}
+			optCopy := make([]MealOption, len(newOptions))
+			copy(optCopy, newOptions)
+			p.dailyMeals[i].options = optCopy
+			p.updatedAt = time.Now()
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrMealTypeNotFound, targetMealType)
+}
+
+// AdjustWorkoutSurplus cập nhật CalorieAllocation với lượng calo tiêu hao sau buổi tập (BR-NU-04)
+// và điều chỉnh tăng định lượng calo/macros theo tỷ lệ cho TẤT CẢ các bữa ăn CHƯA TIÊU THỤ trong ngày.
+// Các bữa đã ăn (isLogged == true) hoàn toàn được bảo toàn nguyên vẹn.
+func (p *NutritionPlan) AdjustWorkoutSurplus(surplusCalories float64) error {
+	if surplusCalories <= 0 {
+		return nil
+	}
+
+	oldAlloc := p.calorieAllocation
+	if oldAlloc.TargetCalories() <= 0 {
+		return errors.New("cannot adjust surplus on unallocated plan")
+	}
+
+	newAlloc := oldAlloc.RebalanceWithSurplus(surplusCalories)
+	p.calorieAllocation = newAlloc
+
+	scaleFactor := newAlloc.TargetCalories() / oldAlloc.TargetCalories()
+	if scaleFactor <= 1.0 {
+		scaleFactor = 1.0
+	}
+
+	for i, meal := range p.dailyMeals {
+		var hasLoggedOption bool
+		for _, opt := range meal.options {
+			if opt.isLogged {
+				hasLoggedOption = true
+				break
+			}
+		}
+
+		if !hasLoggedOption {
+			for j, opt := range meal.options {
+				newGrams := make([]IngredientGram, len(opt.ingredients))
+				for k, ing := range opt.ingredients {
+					newGrams[k] = IngredientGram{
+						ingredientName:  ing.ingredientName,
+						grams:           ing.grams * scaleFactor,
+						isSupplementary: ing.isSupplementary,
+					}
+				}
+				p.dailyMeals[i].options[j] = MealOption{
+					optionID:      opt.optionID,
+					mealName:      opt.mealName,
+					calories:      opt.calories * scaleFactor,
+					proteinGrams:  opt.proteinGrams * scaleFactor,
+					carbGrams:     opt.carbGrams * scaleFactor,
+					fatGrams:      opt.fatGrams * scaleFactor,
+					ingredients:   newGrams,
+					cookingSteps:  opt.cookingSteps,
+					isLogged:      false,
+				}
+			}
+		}
+	}
+
+	p.updatedAt = time.Now()
+	return nil
 }

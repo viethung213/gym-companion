@@ -122,26 +122,10 @@ func (a *NutritionAgent) runInitWorkflow(ctx context.Context, pCtx NutritionProm
 	return a.runWorkflow(ctx, a.dailyWorkflowAgent, pCtx)
 }
 
-// runPostWorkoutWorkflow là helper cho luồng bù Calo sau buổi tập.
-//
-//nolint:gocritic // hugeParam: pCtx holds prompt context
-func (a *NutritionAgent) runPostWorkoutWorkflow(ctx context.Context, pCtx NutritionPromptContext) (*GeneratedMealPlan, error) {
-	pCtx.MealType = FlowPostWorkout
-	return a.runWorkflow(ctx, a.postWorkoutWorkflowAgent, pCtx)
-}
-
 // runPantryWorkflow là helper cho luồng chế biến từ tủ lạnh.
 //
 //nolint:gocritic // hugeParam: pCtx holds prompt context
 func (a *NutritionAgent) runPantryWorkflow(ctx context.Context, pCtx NutritionPromptContext) (*GeneratedMealPlan, error) {
 	pCtx.MealType = FlowPantry
 	return a.runWorkflow(ctx, a.pantryWorkflowAgent, pCtx)
-}
-
-// runAdhocWorkflow là helper cho luồng gợi ý bữa nhanh.
-//
-//nolint:gocritic // hugeParam: pCtx holds prompt context
-func (a *NutritionAgent) runAdhocWorkflow(ctx context.Context, pCtx NutritionPromptContext) (*GeneratedMealPlan, error) {
-	pCtx.MealType = FlowAdhoc
-	return a.runWorkflow(ctx, a.adhocWorkflowAgent, pCtx)
 }

@@ -82,6 +82,7 @@ func NewModule(
 	genPlanHdlr := command.NewGenerateDailyPlanHandler(planRepo, historyRepo, outboxWriter, tdeeCalc, menuGen, txManager).
 		WithWeeklyInsightRepo(weeklyInsightRepo)
 	recalPlanHdlr := command.NewRecalibratePlanWithPantryHandler(planRepo, historyRepo, outboxWriter, menuGen, txManager)
+	rebalanceWorkoutHdlr := command.NewRebalanceWorkoutNutritionHandler(planRepo, outboxWriter, txManager)
 	logMealHdlr := command.NewLogMealHandler(planRepo, historyRepo, outboxWriter, aiAgent, txManager)
 	createFoodItemHdlr := command.NewCreateFoodItemHandler(foodRepo)
 	approveFoodItemHdlr := command.NewApproveFoodItemHandler(foodRepo)
@@ -121,7 +122,7 @@ func NewModule(
 
 		reader, rErr := kafkaRegistry.GetReader("nutrition-workout-completed-group", "workout_execution.events", brokers)
 		if rErr == nil && reader != nil {
-			kafkaConsumer = nutritionKafka.NewConsumer(reader, recalPlanHdlr, outboxLogRepo)
+			kafkaConsumer = nutritionKafka.NewConsumer(reader, rebalanceWorkoutHdlr, outboxLogRepo)
 		}
 
 		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events", brokers)

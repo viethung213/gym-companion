@@ -24,12 +24,8 @@ import (
 const (
 	// FlowDaily là luồng sinh thực đơn 4 bữa lúc 5:00 AM.
 	FlowDaily = "DAILY_4_MEALS"
-	// FlowPostWorkout là luồng bù Calo sau buổi tập.
-	FlowPostWorkout = "POST_WORKOUT_RECALIBRATION"
 	// FlowPantry là luồng chế biến từ tủ lạnh.
 	FlowPantry = "PANTRY_RECIPE"
-	// FlowAdhoc là luồng gợi ý bữa ăn nhanh.
-	FlowAdhoc = "ADHOC_SUGGESTION"
 )
 
 // compile-time interface check.
@@ -41,10 +37,8 @@ type NutritionAgent struct {
 	generatorNode  *workflow.AgentNode
 	generatorAgent agent.Agent
 
-	dailyWorkflowAgent       agent.Agent
-	postWorkoutWorkflowAgent agent.Agent
-	pantryWorkflowAgent      agent.Agent
-	adhocWorkflowAgent       agent.Agent
+	dailyWorkflowAgent  agent.Agent
+	pantryWorkflowAgent agent.Agent
 
 	// estimatorAgent dùng cho EstimateNutrient (single-turn runner call).
 	estimatorAgent agent.Agent
@@ -247,24 +241,13 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 		WeeklyCookingStyle:       promptCtx.WeeklyCookingStyle,
 	}
 
-	var (
-		wfAgent agent.Agent
-		flow    string
-	)
+	var wfAgent agent.Agent
 
 	switch internal.MealType {
-	case FlowPostWorkout:
-		wfAgent = a.postWorkoutWorkflowAgent
-		flow = FlowPostWorkout
 	case FlowPantry:
 		wfAgent = a.pantryWorkflowAgent
-		flow = FlowPantry
-	case FlowAdhoc:
-		wfAgent = a.adhocWorkflowAgent
-		flow = FlowAdhoc
 	default:
 		wfAgent = a.dailyWorkflowAgent
-		flow = FlowDaily
 	}
 
 	validator := newPlanValidator(a.foodRepo, internal.MandatoryUserIngredients)
@@ -285,10 +268,7 @@ func (a *NutritionAgent) SelectCreativeMealOptionsWithDetails(
 		return plan, nil
 	}
 
-	var reviewFn planReviewFunc
-	if flow != FlowAdhoc && flow != FlowPostWorkout {
-		reviewFn = a.reviewMealPlan(ctx, internal)
-	}
+	reviewFn := a.reviewMealPlan(ctx, internal)
 
 	result, err := runWithRetries(ctx, validator, availableDTOs, internal.UserRestrictions, attemptFn, reviewFn)
 	if err != nil {

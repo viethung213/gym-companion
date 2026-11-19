@@ -45,9 +45,7 @@ func TestADKAI_PromptAndWorkflowIntegrity(t *testing.T) {
 		"prompts/generator.txt",
 		"prompts/evaluator.txt",
 		"prompts/daily.txt",
-		"prompts/post_workout.txt",
 		"prompts/pantry.txt",
-		"prompts/adhoc.txt",
 	}
 
 	for _, file := range promptFiles {
@@ -99,9 +97,7 @@ func TestADKAI_MultiIterationEvaluation(t *testing.T) {
 		mealType string
 	}{
 		{"Luồng 5h Sáng (Daily 4 Meals)", nutritionAdk.FlowDaily},
-		{"Luồng Bù Calo Sau Tập (Post Workout)", nutritionAdk.FlowPostWorkout},
 		{"Luồng Chế Biến Tủ Lạnh (Pantry)", nutritionAdk.FlowPantry},
-		{"Luồng Gợi Ý Nhanh (Adhoc)", nutritionAdk.FlowAdhoc},
 	}
 
 	const iterations = 3 // Số lần chạy lặp lại để đánh giá độ ổn định

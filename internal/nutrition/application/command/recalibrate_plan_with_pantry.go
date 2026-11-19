@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/domainerror"
 	domainEvent "github.com/viethung213/gym-companion/internal/nutrition/domain/event"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
@@ -16,6 +18,7 @@ import (
 type RecalibratePlanWithPantryCommand struct {
 	UserID               string
 	PlanDate             time.Time
+	MealType             string
 	AvailableIngredients []string
 	UserRestrictions     []string
 }
@@ -52,16 +55,30 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd *Reca
 	if cmd == nil {
 		return nil, errors.New("recalibrate pantry: command cannot be nil")
 	}
+	if strings.TrimSpace(cmd.MealType) == "" {
+		return nil, domainerror.ErrMealTypeRequired
+	}
+
 	plan, err := h.planRepo.FindByUserIDAndDate(ctx, cmd.UserID, cmd.PlanDate)
 	if err != nil || plan == nil {
 		return nil, fmt.Errorf("recalibrate pantry: plan not found for date %s: %w", cmd.PlanDate.Format("2006-01-02"), err)
 	}
 
+	// Kiểm tra trạng thái bữa ăn trên Aggregate trước khi gọi AI để tránh lãng phí request
+	isLogged, checkErr := plan.IsMealLogged(cmd.MealType)
+	if checkErr != nil {
+		return nil, fmt.Errorf("recalibrate pantry check meal: %w", checkErr)
+	}
+	if isLogged {
+		return nil, domainerror.ErrMealAlreadyLogged
+	}
+
 	// External AI Generation is intentionally executed outside the DB transaction to prevent connection bottleneck
-	recalibratedPlan, genErr := h.menuGenerator.GeneratePlanWithPantry(
+	options, genErr := h.menuGenerator.GenerateMealOptionsWithPantry(
 		ctx,
 		cmd.UserID,
 		cmd.PlanDate,
+		cmd.MealType,
 		plan.CalorieAllocation(),
 		cmd.AvailableIngredients,
 		cmd.UserRestrictions,
@@ -70,7 +87,9 @@ func (h *RecalibratePlanWithPantryHandler) Handle(ctx context.Context, cmd *Reca
 		return nil, fmt.Errorf("recalibrate pantry generate: %w", genErr)
 	}
 
-	plan.UpdateRemainingUnconsumedMeals(recalibratedPlan.DailyMeals(), plan.CalorieAllocation())
+	if err := plan.UpdateMealOptions(cmd.MealType, options); err != nil {
+		return nil, fmt.Errorf("recalibrate pantry update meal options: %w", err)
+	}
 
 	// Wrap local DB update and outbox event recording in an atomic transaction
 	saveFunc := func(txCtx context.Context) error {

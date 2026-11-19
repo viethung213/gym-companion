@@ -19,6 +19,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/stretchr/testify v1.12.1
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.34.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
@@ -34,6 +35,7 @@ require (
 	google.golang.org/protobuf v1.36.12
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.2
+	gorm.io/plugin/opentelemetry v0.1.16
 )
 
 require (
@@ -102,7 +104,6 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.44.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.68.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/otel/log v0.19.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
@@ -115,7 +116,6 @@ require (
 	google.golang.org/appengine/v2 v2.0.6 // indirect
 	gorm.io/driver/clickhouse v0.7.0 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
-	gorm.io/plugin/opentelemetry v0.1.16 // indirect
 	rsc.io/omap v1.2.0 // indirect
 	rsc.io/ordered v1.1.1 // indirect
 )

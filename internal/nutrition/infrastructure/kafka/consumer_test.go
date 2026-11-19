@@ -55,8 +55,8 @@ func (m *mockPlanRepo) SaveUserMealSchedules(ctx context.Context, userID string,
 func TestConsumer_HandleMessage(t *testing.T) {
 	t.Run("CloudEvent envelope with WorkoutSessionCompleted payload", func(t *testing.T) {
 		mockRepo := &mockPlanRepo{}
-		recalHandler := command.NewRecalibratePlanWithPantryHandler(mockRepo, nil, nil, nil)
-		c := NewConsumer(nil, recalHandler, nil)
+		rebalHandler := command.NewRebalanceWorkoutNutritionHandler(mockRepo, nil)
+		c := NewConsumer(nil, rebalHandler, nil)
 
 		innerPayload := map[string]any{
 			"sessionId":   "sess-101",
@@ -86,8 +86,8 @@ func TestConsumer_HandleMessage(t *testing.T) {
 
 	t.Run("Non-workout event is ignored", func(t *testing.T) {
 		mockRepo := &mockPlanRepo{}
-		recalHandler := command.NewRecalibratePlanWithPantryHandler(mockRepo, nil, nil, nil)
-		c := NewConsumer(nil, recalHandler, nil)
+		rebalHandler := command.NewRebalanceWorkoutNutritionHandler(mockRepo, nil)
+		c := NewConsumer(nil, rebalHandler, nil)
 
 		ce := map[string]any{
 			"specversion": "1.0",

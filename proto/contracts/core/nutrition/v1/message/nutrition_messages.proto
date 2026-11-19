@@ -91,6 +91,7 @@ message RecalibratePlanWithPantryRequest {
   string user_id = 1;
   repeated string available_ingredients = 2;
   repeated string user_restrictions = 3;
+  string meal_type = 4; // "BREAKFAST", "LUNCH", "DINNER", "SNACK"
 }
 
 message RecalibratePlanWithPantryResponse {

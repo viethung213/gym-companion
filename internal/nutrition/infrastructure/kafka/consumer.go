@@ -29,20 +29,20 @@ type WorkoutSessionCompletedPayload struct {
 }
 
 type Consumer struct {
-	reader             *segmentio.Reader
-	recalibrateHandler *command.RecalibratePlanWithPantryHandler
-	outboxLogRepo      port.OutboxLogRepository
+	reader                *segmentio.Reader
+	workoutSurplusHandler *command.RebalanceWorkoutNutritionHandler
+	outboxLogRepo         port.OutboxLogRepository
 }
 
 func NewConsumer(
 	reader *segmentio.Reader,
-	recalibrateHandler *command.RecalibratePlanWithPantryHandler,
+	workoutSurplusHandler *command.RebalanceWorkoutNutritionHandler,
 	outboxLogRepo port.OutboxLogRepository,
 ) *Consumer {
 	return &Consumer{
-		reader:             reader,
-		recalibrateHandler: recalibrateHandler,
-		outboxLogRepo:      outboxLogRepo,
+		reader:                reader,
+		workoutSurplusHandler: workoutSurplusHandler,
+		outboxLogRepo:         outboxLogRepo,
 	}
 }
 
@@ -123,16 +123,19 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 		slog.Float64("volume", payload.TotalVolume))
 
 	var processErr error
-	if c.recalibrateHandler != nil && payload.UserID != "" {
-		_, processErr = c.recalibrateHandler.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
-			UserID:               payload.UserID,
-			PlanDate:             time.Now(),
-			AvailableIngredients: nil,
+	if c.workoutSurplusHandler != nil && payload.UserID != "" {
+		_, processErr = c.workoutSurplusHandler.Handle(ctx, &command.RebalanceWorkoutNutritionCommand{
+			UserID:      payload.UserID,
+			PlanDate:    time.Now(),
+			SessionID:   payload.SessionID,
+			TotalVolume: payload.TotalVolume,
 		})
 		if processErr != nil {
-			slog.ErrorContext(ctx, "Failed to recalibrate plan on workout event", slog.Any("error", processErr))
+			slog.ErrorContext(ctx, "Failed to rebalance nutrition plan on workout event", slog.Any("error", processErr))
 		} else {
-			slog.InfoContext(ctx, "Successfully rebalanced nutrition plan for user", slog.String("user_id", payload.UserID))
+			slog.InfoContext(ctx, "Successfully rebalanced nutrition plan with workout surplus",
+				slog.String("user_id", payload.UserID),
+				slog.String("session_id", payload.SessionID))
 		}
 	}
 

@@ -460,21 +460,37 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	// 1. Validation: empty user_id
 	_, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		UserId:               "",
+		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Ức gà"},
 	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
 	}
 
-	// 2. Setup existing plan
+	// 1b. Validation: empty meal_type
+	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
+		UserId:               "user-pantry-grpc",
+		MealType:             "",
+		AvailableIngredients: []string{"Ức gà"},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument on empty meal_type, got code %v, err: %v", status.Code(err), err)
+	}
+
+	// 2. Setup existing plan với các bữa ăn
 	now := time.Now()
 	alloc, _ := vo.NewCalorieAllocation(2000, 150, 200, 66)
-	existingPlan := aggregate.NewNutritionPlan("plan-pantry-grpc-1", "user-pantry-grpc", now, alloc, nil)
+	optBf := aggregate.NewMealOption("opt-bf-grpc", "Bánh mì", 400, 20, 50, 10, nil, nil, false)
+	mealBf := aggregate.NewDailyMeal("Breakfast", []aggregate.MealOption{optBf})
+	optLunch := aggregate.NewMealOption("opt-lunch-grpc", "Cơm sườn", 700, 40, 70, 20, nil, nil, false)
+	mealLunch := aggregate.NewDailyMeal("Lunch", []aggregate.MealOption{optLunch})
+	existingPlan := aggregate.NewNutritionPlan("plan-pantry-grpc-1", "user-pantry-grpc", now, alloc, []aggregate.DailyMeal{mealBf, mealLunch})
 	_ = planRepo.Save(ctx, existingPlan)
 
 	// 3. Allergen conflict: user sends shrimp while having restriction on TÔM
 	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		UserId:               "user-pantry-grpc",
+		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Tôm sú", "Cơm trắng"},
 		UserRestrictions:     []string{"TÔM"},
 	})
@@ -485,6 +501,7 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	// 4. Happy path: safe ingredients
 	resp, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		UserId:               "user-pantry-grpc",
+		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Thịt nai", "Cơm gạo lứt"},
 		UserRestrictions:     []string{"SEAFOOD"},
 	})
@@ -493,5 +510,20 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	}
 	if resp == nil {
 		t.Fatal("expected non-nil response")
+	}
+
+	// 5. Invariant: Meal already logged -> FailedPrecondition
+	updatedPlan, _ := planRepo.FindByUserIDAndDate(ctx, "user-pantry-grpc", now)
+	lunchMeal := updatedPlan.DailyMeals()[1]
+	_, _ = updatedPlan.MarkOptionLogged(lunchMeal.Options()[0].OptionID())
+	_ = planRepo.Update(ctx, updatedPlan)
+
+	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
+		UserId:               "user-pantry-grpc",
+		MealType:             "LUNCH",
+		AvailableIngredients: []string{"Thịt nai"},
+	})
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("expected FailedPrecondition on already logged meal, got code %v, err: %v", status.Code(err), err)
 	}
 }
