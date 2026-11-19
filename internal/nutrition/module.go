@@ -94,6 +94,10 @@ func NewModule(
 	getNutritionSummHdlr := query.NewGetNutritionSummaryHandler(planRepo, historyRepo)
 	getNutritionInsightHdlr := query.NewGetNutritionInsightHandler(weeklyInsightRepo)
 
+	allergyRepo := persistence.NewPostgresUserAllergyRepository(db)
+	getUserAllergiesHdlr := query.NewGetUserAllergiesHandler(allergyRepo)
+	updateUserAllergiesHdlr := command.NewUpdateUserAllergiesHandler(allergyRepo)
+
 	grpcHdlr := nutritionGRPC.NewGRPCHandler(
 		genPlanHdlr,
 		recalPlanHdlr,
@@ -105,6 +109,9 @@ func NewModule(
 		getNutritionHistHdlr,
 		getNutritionSummHdlr,
 		getNutritionInsightHdlr,
+	).WithAllergyHandlers(
+		getUserAllergiesHdlr,
+		updateUserAllergiesHdlr,
 	)
 
 	var kafkaPub *nutritionKafka.Publisher
@@ -127,12 +134,14 @@ func NewModule(
 
 		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events", brokers)
 		if pErr == nil && profileEventReader != nil {
-			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, outboxLogRepo, genPlanHdlr)
+			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, outboxLogRepo, genPlanHdlr).
+				WithUserAllergyRepository(allergyRepo)
 		}
 	}
 
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
-	cronWorker := worker.NewDailyMenuCronWorker(genPlanHdlr, planRepo, profileCli, cronCoordinator, 5, 0)
+	cronWorker := worker.NewDailyMenuCronWorker(genPlanHdlr, planRepo, profileCli, cronCoordinator, 5, 0).
+		WithUserAllergyRepository(allergyRepo)
 	weeklyInsightWorker := worker.NewWeeklyInsightCronWorker(generateWeeklyInsightHdlr, planRepo, cronCoordinator, 23, 0)
 	mealReminderWorker := worker.NewUpcomingMealReminderWorker(planRepo, outboxWriter, 5*time.Minute)
 

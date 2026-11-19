@@ -34,6 +34,12 @@ type ProfileEventConsumer struct {
 	planRepo            repository.NutritionPlanRepository
 	outboxLogRepo       port.OutboxLogRepository
 	generatePlanHandler *command.GenerateDailyPlanHandler
+	allergyRepo         repository.UserAllergyRepository
+}
+
+func (c *ProfileEventConsumer) WithUserAllergyRepository(repo repository.UserAllergyRepository) *ProfileEventConsumer {
+	c.allergyRepo = repo
+	return c
 }
 
 func NewProfileEventConsumer(
@@ -174,12 +180,24 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			bioMetrics.HeightCm = 170.0
 		}
 
+		var userRestrictions []string
+		if c.allergyRepo != nil {
+			allergies, aErr := c.allergyRepo.FindAllergiesByUserID(ctx, userID)
+			if aErr == nil {
+				for _, a := range allergies {
+					if a != nil {
+						userRestrictions = append(userRestrictions, a.AllergenName())
+					}
+				}
+			}
+		}
+
 		if c.generatePlanHandler != nil {
 			_, genErr := c.generatePlanHandler.Handle(ctx, command.GenerateDailyPlanCommand{
 				UserID:            userID,
 				PlanDate:          time.Now(),
 				BiologicalMetrics: bioMetrics,
-				UserRestrictions:  data.GetGoals(),
+				UserRestrictions:  userRestrictions,
 			})
 			if genErr != nil {
 				slog.ErrorContext(ctx, "GenerateDailyPlan error", slog.String("user_id", userID), slog.Any("error", genErr))
@@ -233,12 +251,24 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			}
 		}
 
+		var userRestrictions []string
+		if c.allergyRepo != nil {
+			allergies, aErr := c.allergyRepo.FindAllergiesByUserID(ctx, userID)
+			if aErr == nil {
+				for _, a := range allergies {
+					if a != nil {
+						userRestrictions = append(userRestrictions, a.AllergenName())
+					}
+				}
+			}
+		}
+
 		if c.generatePlanHandler != nil {
 			_, genErr := c.generatePlanHandler.Handle(ctx, command.GenerateDailyPlanCommand{
 				UserID:            userID,
 				PlanDate:          time.Now(),
 				BiologicalMetrics: bioMetrics,
-				UserRestrictions:  data.GetGoals(),
+				UserRestrictions:  userRestrictions,
 			})
 			if genErr != nil {
 				slog.ErrorContext(ctx, "GenerateDailyPlan error", slog.String("user_id", userID), slog.Any("error", genErr))

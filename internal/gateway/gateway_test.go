@@ -279,7 +279,9 @@ func TestGateway_TelemetryAndAdminIntegration(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recTraces.Code)
 	traces := inspector.QueryTraces(telemetry.TraceFilter{})
 	assert.GreaterOrEqual(t, len(traces), 2)
-	assert.Equal(t, http.StatusUnauthorized, traces[0].StatusCode)
+	statusCodes := []int{traces[0].StatusCode, traces[1].StatusCode}
+	assert.Contains(t, statusCodes, http.StatusUnauthorized)
+	assert.Contains(t, statusCodes, http.StatusOK)
 
 	// 6. Test /metrics
 	reqMetrics := httptest.NewRequest(http.MethodGet, "/metrics", nil)

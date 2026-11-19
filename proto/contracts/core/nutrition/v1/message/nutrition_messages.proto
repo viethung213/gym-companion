@@ -90,7 +90,6 @@ message GetNutritionSummaryResponse {
 message RecalibratePlanWithPantryRequest {
   string user_id = 1;
   repeated string available_ingredients = 2;
-  repeated string user_restrictions = 3;
   string meal_type = 4; // "BREAKFAST", "LUNCH", "DINNER", "SNACK"
 }
 
@@ -185,4 +184,19 @@ message UpdateMealScheduleResponse {
   string message = 2;
   repeated MealScheduleItem schedules = 3;
 }
+
+message GetUserAllergiesRequest {}
+
+message GetUserAllergiesResponse {
+  repeated string allergies = 1;
+}
+
+message UpdateUserAllergiesRequest {
+  repeated string allergies = 1;
+}
+
+message UpdateUserAllergiesResponse {
+  repeated string allergies = 1;
+}
+
 

@@ -209,6 +209,11 @@ func createTestTables(db *sql.DB) error {
 			created_at DATETIME, updated_at DATETIME,
 			UNIQUE(user_id, start_date)
 		)`,
+		`CREATE TABLE IF NOT EXISTS user_allergies (
+			id TEXT PRIMARY KEY, user_id TEXT, allergen_name TEXT,
+			created_at DATETIME,
+			UNIQUE(user_id, allergen_name)
+		)`,
 	}
 	for _, ddl := range ddls {
 		if _, err := db.Exec(ddl); err != nil {
@@ -634,5 +639,95 @@ func TestPostgresWeeklyInsightRepository_Integration(t *testing.T) {
 	}
 	if fetchedUpdated.OverallScore() != 95 {
 		t.Errorf("got updated score %d, want 95", fetchedUpdated.OverallScore())
+	}
+}
+
+func TestPostgresUserAllergyRepository(t *testing.T) {
+	db := setupTestDB(t)
+	repo := persistence.NewPostgresUserAllergyRepository(db)
+	ctx := context.Background()
+
+	userID1 := "user-allergy-1"
+	userID2 := "user-allergy-2"
+
+	makeEntities := func(uid string, names ...string) []*entity.UserAllergy {
+		list := make([]*entity.UserAllergy, 0, len(names))
+		for _, n := range names {
+			e, _ := entity.NewUserAllergy(n+"-id", uid, n, time.Now())
+			list = append(list, e)
+		}
+		return list
+	}
+
+	// 1. Initially empty
+	allergies, err := repo.FindAllergiesByUserID(ctx, userID1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(allergies) != 0 {
+		t.Fatalf("expected 0 allergies, got %d", len(allergies))
+	}
+
+	// 2. SetAllergies for userID1
+	err = repo.SetAllergies(ctx, userID1, makeEntities(userID1, "PEANUT", "SHRIMP"))
+	if err != nil {
+		t.Fatalf("unexpected error on SetAllergies: %v", err)
+	}
+
+	allergies, err = repo.FindAllergiesByUserID(ctx, userID1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(allergies) != 2 {
+		t.Fatalf("expected 2 allergies, got %d", len(allergies))
+	}
+
+	// 3. SetAllergies smart merge (add dairy, remove shrimp)
+	err = repo.SetAllergies(ctx, userID1, makeEntities(userID1, "PEANUT", "DAIRY"))
+	if err != nil {
+		t.Fatalf("unexpected error on SetAllergies update: %v", err)
+	}
+
+	allergies, err = repo.FindAllergiesByUserID(ctx, userID1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(allergies) != 2 || allergies[0].AllergenName() != "DAIRY" || allergies[1].AllergenName() != "PEANUT" {
+		t.Fatalf("expected [DAIRY PEANUT], got [%s %s]", allergies[0].AllergenName(), allergies[1].AllergenName())
+	}
+
+	// 4. BatchFindAllergiesByUserIDs
+	_ = repo.SetAllergies(ctx, userID2, makeEntities(userID2, "GLUTEN", "SOY"))
+	batchRes, err := repo.BatchFindAllergiesByUserIDs(ctx, []string{userID1, userID2, "user-no-allergies"})
+	if err != nil {
+		t.Fatalf("unexpected error on BatchFind: %v", err)
+	}
+	if len(batchRes[userID1]) != 2 {
+		t.Fatalf("expected 2 allergies for user1, got %d", len(batchRes[userID1]))
+	}
+	if len(batchRes[userID2]) != 2 {
+		t.Fatalf("expected 2 allergies for user2, got %d", len(batchRes[userID2]))
+	}
+	if len(batchRes["user-no-allergies"]) != 0 {
+		t.Fatalf("expected 0 allergies for non-existent user, got %d", len(batchRes["user-no-allergies"]))
+	}
+
+	// 5. SetAllergies idempotent update with identical data (should be a no-op)
+	err = repo.SetAllergies(ctx, userID1, makeEntities(userID1, "DAIRY", "PEANUT"))
+	if err != nil {
+		t.Fatalf("unexpected error on idempotent SetAllergies: %v", err)
+	}
+
+	// 6. Clear allergies by passing empty slice
+	err = repo.SetAllergies(ctx, userID1, []*entity.UserAllergy{})
+	if err != nil {
+		t.Fatalf("unexpected error on clearing SetAllergies: %v", err)
+	}
+	allergies, err = repo.FindAllergiesByUserID(ctx, userID1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(allergies) != 0 {
+		t.Fatalf("expected 0 allergies after clear, got %d", len(allergies))
 	}
 }

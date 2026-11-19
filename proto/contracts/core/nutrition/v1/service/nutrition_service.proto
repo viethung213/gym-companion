@@ -102,6 +102,29 @@ service NutritionService {
       body: "*"
     };
   }
+
+  // Lấy danh sách nguyên liệu dị ứng của người dùng
+  rpc GetUserAllergies (contracts.core.nutrition.v1.message.GetUserAllergiesRequest) returns (contracts.core.nutrition.v1.message.GetUserAllergiesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/nutrition/allergies"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Get User Allergies"
+      description: "Lấy danh sách các nguyên liệu/thực phẩm dị ứng của người dùng từ token xác thực"
+    };
+  }
+
+  // Cập nhật / ghi đè toàn bộ danh sách nguyên liệu dị ứng của người dùng
+  rpc UpdateUserAllergies (contracts.core.nutrition.v1.message.UpdateUserAllergiesRequest) returns (contracts.core.nutrition.v1.message.UpdateUserAllergiesResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/nutrition/allergies"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Update User Allergies"
+      description: "Ghi đè danh sách các nguyên liệu dị ứng của người dùng từ token xác thực"
+    };
+  }
 }
 
 // Service dành riêng cho Admin quản lý danh mục thực phẩm

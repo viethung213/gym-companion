@@ -12,6 +12,7 @@
   * v1.6 (02/07/2026): Thêm Warm-up/Cool-down, xử lý bỏ tập, Onboarding tối giản (hỏi thiết bị/dị ứng theo ngữ cảnh), Module Admin và Tái cấu trúc quy trình 3.4 thành các Quy tắc nghiệp vụ BR-AC-04 -> BR-AC-08 (CR & Signals B1-B4), tổng quát hóa BR-WL-02.
   * v1.7 (03/07/2026): Bổ sung luồng tập phi AI (timer/nhạc/hướng dẫn) và tư vấn món ăn ngoài.
   * v1.18 (28/07/2026): Chuẩn hóa Lộ trình cố định 4 tuần, mô hình 4 tầng (Roadmap -> WeekPlan -> DayPlan -> SessionPlan), quy tắc thích ứng SCR & ΔRPE, Signal B1-B4, thích ứng sau chấn thương, và loại bỏ hoàn toàn fitness_level, Pause, Cancel.
+  * v1.19 (19/11/2026): Tinh chỉnh ranh giới Bounded Context theo DDD: Chuyển 100% việc quản lý danh mục dị ứng thực phẩm (`user_allergies`) sang module Nutrition (`nutrition.user_allergies`); bổ sung API cá nhân CRUD dị ứng tại Nutrition; loại bỏ hoàn toàn tham số dị ứng thủ công ở các API gen bữa ăn, tự động truy vấn cục bộ trong schema Nutrition để tối ưu hiệu năng và độ tự trị tuyệt đối.
 
 ---
 
@@ -103,6 +104,8 @@
 | **FR-NU-02** | **Đa lựa chọn**: Gợi ý bữa ăn linh hoạt (tự chuẩn bị, ăn ngoài) chia theo 3 mức giá; ưu tiên đề xuất sản phẩm/gói ăn sẵn có hoặc đối tác. | S |
 | **FR-NU-03** | **Anti-Repetition**: Không lặp lại nguồn protein chính trong 7 ngày, tinh bột 5 ngày, chủ đề món 3 ngày. | M |
 | **FR-NU-04** | **Nhật ký ăn uống**: Log bữa ăn thực tế bằng cách tìm kiếm món ăn hoặc quét mã vạch sản phẩm. | S |
+| **FR-NU-05** | **Quản lý Dị ứng cá nhân**: Lưu trữ danh mục nguyên liệu/thực phẩm gây dị ứng hoặc kiêng cữ trong bảng riêng (`nutrition.user_allergies`). Cung cấp API cá nhân cho phép xem danh sách dị ứng của bản thân (`GET /api/v1/nutrition/allergies`) và đồng bộ/cập nhật toàn bộ danh sách (`PUT /api/v1/nutrition/allergies`) với cơ chế Differential Sync tối ưu I/O và chuẩn hóa UPPERCASE/trim. | M |
+| **FR-NU-06** | **Tự động cách ly dị ứng cục bộ**: Loại bỏ các tham số dị ứng thủ công khỏi các API sinh thực đơn (`GetTodayMenu`, `RecalibratePlanWithPantry`). Khi kích hoạt sinh thực đơn (cả luồng Cron hàng loạt 5:00 AM và On-demand), hệ thống tự động truy vấn danh sách dị ứng trực tiếp từ DB của Nutrition, áp dụng bộ lọc an toàn trước và trong quá trình AI đề xuất (0 network call sang module khác). | M |
 
 ### Module 6: Theo dõi Tiến trình
 | Mã | Nghiệp vụ chi tiết | MoSCoW |
@@ -142,12 +145,14 @@
 | **BR-WL-02** | Buổi tập | **Phát hiện tải lượng luyện tập (Training Load) bất thường**: Tải lượng buổi tập > 250% trung bình 5 buổi gần nhất có cùng nhóm cơ/mục tiêu → Yêu cầu xác nhận trước khi lưu; bắt buộc chèn $\ge 1$ ngày nghỉ hoàn toàn cho nhóm cơ đó. |
 | **BR-WL-03** | Buổi tập | **Ghi nhận bài tập phi AI**: Đảm bảo tính liên tục của dữ liệu hiệu suất tổng thể. Các bài tập phi AI không ghi nhận điểm Form Score (báo N/A/Trống), chỉ ghi nhận số set, rep/thời gian thực tế và mức tạ (do người dùng tự nhập) để làm cơ sở tính Tải lượng tập luyện (Training Load) và Overload. |
 | **BR-NU-03** | Dinh dưỡng | **Tư vấn Dinh dưỡng**: AI Coach hỗ trợ tư vấn chi tiết định lượng cho đồ ăn tự chuẩn bị hoặc quán ngoài tiệm, nhưng luôn kèm đề xuất sản phẩm đối tác tiện lợi tương đương nếu có. |
+| **BR-NU-04** | Dinh dưỡng | **Cách ly Dị ứng Cục bộ**: AI Nutrition bắt buộc phải loại bỏ 100%  danh sách dị ứng của người dùng. Danh sách dị ứng được quản lý và truy vấn trực tiếp trong module Nutrition (`nutrition.user_allergies`); loại bỏ hoàn toàn việc bắt Client truyền thủ công tham số dị ứng khi gọi các API sinh thực đơn. |
 
 ---
 
 ## 6. YÊU CẦU DỮ LIỆU NGHIỆP VỤ (DATA)
 - **Đầu vào (Inputs)**:
-  * Profile: Chỉ số cơ thể, mục tiêu, chấn thương/bệnh lý, khung giờ cố định, danh sách dụng cụ khả dụng (`available_equipment`). (`food_restrictions` thu thập dần qua chatbot).
+  * Profile: Chỉ số cơ thể, mục tiêu, chấn thương/bệnh lý, khung giờ cố định, danh sách dụng cụ khả dụng (`available_equipment`).
+  * Dinh dưỡng: Danh mục nguyên liệu dị ứng/kiêng cữ (`nutrition.user_allergies`), Nhật ký ăn uống (Meal Logs).
   * Video: Luồng video $\ge 720\text{p}$, $30\text{fps}$.
   * RPE: Đánh giá gắng sức (1-10) sau set/buổi.
   * Nhật ký ăn uống (Meal Logs).

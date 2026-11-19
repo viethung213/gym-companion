@@ -13,4 +13,6 @@ var (
 	ErrMealAlreadyLogged       = errors.New("cannot recalibrate a meal that has already been logged")
 	ErrMealTypeNotFound        = errors.New("specified meal type does not exist in daily plan")
 	ErrMealTypeRequired        = errors.New("meal type is required")
+	ErrInvalidAllergenName     = errors.New("allergen name cannot be empty")
+	ErrUserIDRequired          = errors.New("user_id is required")
 )
