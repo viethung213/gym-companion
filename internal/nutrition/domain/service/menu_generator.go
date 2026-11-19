@@ -168,18 +168,32 @@ func (g *MenuGenerator) GenerateDailyPlan(
 	return aggregate.NewNutritionPlan(planID, userID, planDate, allocation, dailyMeals), nil
 }
 
-// GeneratePlanWithPantry orchestrates việc sinh thực đơn từ nguyên liệu tủ lạnh:
-// 1. Chuyển đổi tên nguyên liệu người dùng thành Value Object (tra DB hoặc gán INGREDIENT tự do).
-// 2. Ủy thác cho SelectPantryCandidates phân tách mandatory (người dùng) và supplementary (bổ sung từ DB).
-// 3. Truyền ngữ cảnh phân định rõ ràng cho AI Agent để sinh công thức và bảo toàn nguyên liệu người dùng.
-func (g *MenuGenerator) GeneratePlanWithPantry(
+// MealSlotCalorieRatio trả về tỷ lệ calorie cho từng loại bữa ăn.
+func MealSlotCalorieRatio(mealType string) float64 {
+	switch strings.ToUpper(strings.TrimSpace(mealType)) {
+	case "BREAKFAST":
+		return 0.25
+	case "LUNCH":
+		return 0.35
+	case "DINNER":
+		return 0.30
+	case "SNACK":
+		return 0.10
+	default:
+		return 0.35
+	}
+}
+
+// GenerateMealOptionsWithPantry sinh đúng 2 công thức món ăn từ nguyên liệu tủ lạnh cho DUY NHẤT một bữa chỉ định (targetMealType).
+func (g *MenuGenerator) GenerateMealOptionsWithPantry(
 	ctx context.Context,
 	userID string,
 	planDate time.Time,
+	targetMealType string,
 	allocation vo.CalorieAllocation,
 	userIngredients []string,
 	userRestrictions ...[]string,
-) (*aggregate.NutritionPlan, error) {
+) ([]aggregate.MealOption, error) {
 	activeCatalog, err := g.foodRepo.FindActiveCatalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("menu generator fetch catalog: %w", err)
@@ -243,8 +257,8 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 	enrichedPantry = append(enrichedPantry, mandatory...)
 	enrichedPantry = append(enrichedPantry, supplementary...)
 
-	// Gọi AI để sinh đúng 2 công thức món ăn từ tủ lạnh
-	targetCalo := allocation.TargetCalories() * 0.35
+	ratio := MealSlotCalorieRatio(targetMealType)
+	targetCalo := allocation.TargetCalories() * ratio
 	promptCtx := repository.AIMenuPromptContext{
 		UserID:                   userID,
 		MealType:                 "PANTRY_RECIPE",
@@ -264,6 +278,34 @@ func (g *MenuGenerator) GeneratePlanWithPantry(
 	// Giới hạn đúng 2 công thức món ăn duy nhất
 	if len(options) > 2 {
 		options = options[:2]
+	}
+
+	return options, nil
+}
+
+// GeneratePlanWithPantry orchestrates việc sinh thực đơn từ nguyên liệu tủ lạnh:
+// 1. Chuyển đổi tên nguyên liệu người dùng thành Value Object (tra DB hoặc gán INGREDIENT tự do).
+// 2. Ủy thác cho SelectPantryCandidates phân tách mandatory (người dùng) và supplementary (bổ sung từ DB).
+// 3. Truyền ngữ cảnh phân định rõ ràng cho AI Agent để sinh công thức và bảo toàn nguyên liệu người dùng.
+func (g *MenuGenerator) GeneratePlanWithPantry(
+	ctx context.Context,
+	userID string,
+	planDate time.Time,
+	allocation vo.CalorieAllocation,
+	userIngredients []string,
+	userRestrictions ...[]string,
+) (*aggregate.NutritionPlan, error) {
+	options, err := g.GenerateMealOptionsWithPantry(
+		ctx,
+		userID,
+		planDate,
+		"LUNCH",
+		allocation,
+		userIngredients,
+		userRestrictions...,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	slots := getDailyMealSlots()

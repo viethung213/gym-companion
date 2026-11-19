@@ -273,9 +273,10 @@ func TestE2E_RecalibratePlan(t *testing.T) {
 		t.Fatalf("LogMeal: %v", err)
 	}
 
-	// Bước 3: RecalibratePlanWithPantry — chỉ cần user_id theo contract thực tế
+	// Bước 3: RecalibratePlanWithPantry — chỉ định bữa Dinner (chưa ăn)
 	recalResp, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		UserId:               userID,
+		MealType:             "Dinner",
 		AvailableIngredients: []string{"Ức gà", "Khoai lang", "Cải bó xôi"},
 	})
 	if grpcstatus.Code(err) == codes.Unimplemented {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -73,9 +72,6 @@ func (a *NutritionAgent) buildLLMNodes(_ context.Context, llmModel model.LLM) er
 		OutputKey:   "generated_meal_plan_json",
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxTokens,
-			// ThinkingConfig: &genai.ThinkingConfig{
-			// 	ThinkingBudget: &zero,
-			// },
 		},
 	})
 	if err != nil {
@@ -249,7 +245,7 @@ func (a *NutritionAgent) buildADKTools() ([]tool.Tool, error) {
 	return []tool.Tool{fetchTool, macroTool}, nil
 }
 
-// buildWorkflowAgents tạo 4 workflow agents cho 4 luồng dinh dưỡng.
+// buildWorkflowAgents tạo 2 workflow agents cho 2 luồng dinh dưỡng cốt lõi: Daily và Pantry.
 func (a *NutritionAgent) buildWorkflowAgents(ctx context.Context) error {
 	var err error
 
@@ -258,19 +254,9 @@ func (a *NutritionAgent) buildWorkflowAgents(ctx context.Context) error {
 		return fmt.Errorf("build daily workflow agent: %w", err)
 	}
 
-	a.postWorkoutWorkflowAgent, err = a.buildPostWorkoutWorkflowAgent(ctx)
-	if err != nil {
-		return fmt.Errorf("build post-workout workflow agent: %w", err)
-	}
-
 	a.pantryWorkflowAgent, err = a.buildPantryWorkflowAgent(ctx)
 	if err != nil {
 		return fmt.Errorf("build pantry workflow agent: %w", err)
-	}
-
-	a.adhocWorkflowAgent, err = a.buildAdhocWorkflowAgent(ctx)
-	if err != nil {
-		return fmt.Errorf("build adhoc workflow agent: %w", err)
 	}
 
 	return nil
@@ -383,51 +369,6 @@ func (a *NutritionAgent) buildDailyWorkflowAgent(_ context.Context) (agent.Agent
 	})
 }
 
-// buildPostWorkoutWorkflowAgent tạo workflow agent cho luồng bù Calo sau buổi tập.
-func (a *NutritionAgent) buildPostWorkoutWorkflowAgent(_ context.Context) (agent.Agent, error) {
-	systemPrompt, err := readPromptFile("prompts/post_workout.txt")
-	if err != nil {
-		return nil, fmt.Errorf("read post_workout prompt: %w", err)
-	}
-
-	node := workflow.NewDynamicNode(
-		"post_workout_workflow",
-		func(nodeCtx agent.Context, userID string, _ func(*session.Event) error) (*GeneratedMealPlan, error) {
-			if setErr := nodeCtx.State().Set("system_context", string(systemPrompt)); setErr != nil {
-				return nil, fmt.Errorf("set post_workout system context: %w", setErr)
-			}
-
-			planJSON, genErr := workflow.RunNode[string](nodeCtx, a.generatorNode, userID)
-			if genErr != nil {
-				return nil, fmt.Errorf("post_workout generator: %w", genErr)
-			}
-
-			plan, parseErr := parseMealPlanFromNode(planJSON)
-			if parseErr != nil {
-				return nil, parseErr
-			}
-
-			a.putResult(nodeCtx.SessionID(), plan)
-			slog.Info("Post-workout recalibration plan generated", slog.String("session_id", nodeCtx.SessionID()))
-			return plan, nil
-		},
-		workflow.NodeConfig{},
-	)
-
-	wf, err := workflow.New("post_workout_wf", workflow.Chain(workflow.Start, node))
-	if err != nil {
-		return nil, fmt.Errorf("new post_workout workflow: %w", err)
-	}
-
-	return agent.New(agent.Config{
-		Name:        "PostWorkoutWorkflowAgent",
-		Description: "Bù Calo và Protein phục hồi cơ bắp ngay sau khi hoàn thành buổi tập.",
-		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
-			return wf.Run(ic)
-		},
-	})
-}
-
 // buildPantryWorkflowAgent tạo workflow agent cho luồng chế biến từ tủ lạnh.
 func (a *NutritionAgent) buildPantryWorkflowAgent(_ context.Context) (agent.Agent, error) {
 	systemPrompt, err := readPromptFile("prompts/pantry.txt")
@@ -466,50 +407,6 @@ func (a *NutritionAgent) buildPantryWorkflowAgent(_ context.Context) (agent.Agen
 	return agent.New(agent.Config{
 		Name:        "PantryRecipeWorkflowAgent",
 		Description: "Sáng tạo món ăn từ nguyên liệu có sẵn trong tủ lạnh của người dùng.",
-		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
-			return wf.Run(ic)
-		},
-	})
-}
-
-// buildAdhocWorkflowAgent tạo workflow agent cho luồng gợi ý bữa ăn nhanh độc lập.
-func (a *NutritionAgent) buildAdhocWorkflowAgent(_ context.Context) (agent.Agent, error) {
-	systemPrompt, err := readPromptFile("prompts/adhoc.txt")
-	if err != nil {
-		return nil, fmt.Errorf("read adhoc prompt: %w", err)
-	}
-
-	node := workflow.NewDynamicNode(
-		"adhoc_suggestion_workflow",
-		func(nodeCtx agent.Context, userID string, _ func(*session.Event) error) (*GeneratedMealPlan, error) {
-			if setErr := nodeCtx.State().Set("system_context", string(systemPrompt)); setErr != nil {
-				return nil, fmt.Errorf("set adhoc system context: %w", setErr)
-			}
-
-			planJSON, genErr := workflow.RunNode[string](nodeCtx, a.generatorNode, userID)
-			if genErr != nil {
-				return nil, fmt.Errorf("adhoc generator: %w", genErr)
-			}
-
-			plan, parseErr := parseMealPlanFromNode(planJSON)
-			if parseErr != nil {
-				return nil, parseErr
-			}
-
-			a.putResult(nodeCtx.SessionID(), plan)
-			return plan, nil
-		},
-		workflow.NodeConfig{},
-	)
-
-	wf, err := workflow.New("adhoc_suggestion_wf", workflow.Chain(workflow.Start, node))
-	if err != nil {
-		return nil, fmt.Errorf("new adhoc workflow: %w", err)
-	}
-
-	return agent.New(agent.Config{
-		Name:        "AdhocSuggestionWorkflowAgent",
-		Description: "Gợi ý nhanh 1-3 bữa ăn linh hoạt theo yêu cầu tức thời của người dùng.",
 		Run: func(ic agent.InvocationContext) iter.Seq2[*session.Event, error] {
 			return wf.Run(ic)
 		},

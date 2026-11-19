@@ -330,17 +330,30 @@ func (h *GRPCHandler) RecalibratePlanWithPantry(
 	if req.GetUserId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
+	if strings.TrimSpace(req.GetMealType()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "meal_type is required")
+	}
 
 	now := time.Now()
 	plan, err := h.recalPlanHdlr.Handle(ctx, &command.RecalibratePlanWithPantryCommand{
 		UserID:               req.GetUserId(),
 		PlanDate:             now,
+		MealType:             req.GetMealType(),
 		AvailableIngredients: req.GetAvailableIngredients(),
 		UserRestrictions:     req.GetUserRestrictions(),
 	})
 	if err != nil {
 		if errors.Is(err, domainerror.ErrAllergenConflict) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if errors.Is(err, domainerror.ErrMealTypeRequired) {
+			return nil, status.Error(codes.InvalidArgument, "meal_type is required")
+		}
+		if errors.Is(err, domainerror.ErrMealTypeNotFound) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if errors.Is(err, domainerror.ErrMealAlreadyLogged) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, "failed to recalibrate plan with pantry: %v", err)
 	}
