@@ -293,18 +293,19 @@ func (p *NutritionPlan) UpdateMealOptions(targetMealType string, newOptions []Me
 	}
 
 	for i, m := range p.dailyMeals {
-		if strings.EqualFold(strings.TrimSpace(m.mealType), trimmedType) {
-			for _, opt := range m.options {
-				if opt.isLogged {
-					return ErrMealAlreadyLogged
-				}
-			}
-			optCopy := make([]MealOption, len(newOptions))
-			copy(optCopy, newOptions)
-			p.dailyMeals[i].options = optCopy
-			p.updatedAt = time.Now()
-			return nil
+		if !strings.EqualFold(strings.TrimSpace(m.mealType), trimmedType) {
+			continue
 		}
+		for _, opt := range m.options {
+			if opt.isLogged {
+				return ErrMealAlreadyLogged
+			}
+		}
+		optCopy := make([]MealOption, len(newOptions))
+		copy(optCopy, newOptions)
+		p.dailyMeals[i].options = optCopy
+		p.updatedAt = time.Now()
+		return nil
 	}
 	return fmt.Errorf("%w: %s", ErrMealTypeNotFound, targetMealType)
 }
@@ -350,15 +351,15 @@ func (p *NutritionPlan) AdjustWorkoutSurplus(surplusCalories float64) error {
 					}
 				}
 				p.dailyMeals[i].options[j] = MealOption{
-					optionID:      opt.optionID,
-					mealName:      opt.mealName,
-					calories:      opt.calories * scaleFactor,
-					proteinGrams:  opt.proteinGrams * scaleFactor,
-					carbGrams:     opt.carbGrams * scaleFactor,
-					fatGrams:      opt.fatGrams * scaleFactor,
-					ingredients:   newGrams,
-					cookingSteps:  opt.cookingSteps,
-					isLogged:      false,
+					optionID:     opt.optionID,
+					mealName:     opt.mealName,
+					calories:     opt.calories * scaleFactor,
+					proteinGrams: opt.proteinGrams * scaleFactor,
+					carbGrams:    opt.carbGrams * scaleFactor,
+					fatGrams:     opt.fatGrams * scaleFactor,
+					ingredients:  newGrams,
+					cookingSteps: opt.cookingSteps,
+					isLogged:     false,
 				}
 			}
 		}
