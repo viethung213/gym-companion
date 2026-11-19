@@ -244,8 +244,8 @@ func (h *Handler) GetGlobalLeaderboard(
 	req *gamificationv1message.GetGlobalLeaderboardRequest,
 ) (*gamificationv1message.GetGlobalLeaderboardResponse, error) {
 	var callerID string
-	if id, ok := ctx.Value(middleware.UserIDKey).(string); ok {
-		callerID = id
+	if actor, err := middleware.RequireAuthenticated(ctx); err == nil {
+		callerID = actor.UserID
 	}
 
 	limit := int(req.Limit)
@@ -554,9 +554,9 @@ func resolveWalletTargetUserID(ctx context.Context, requestedUserID string) (str
 }
 
 func getUserIDFromContext(ctx context.Context) (string, error) {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok || userID == "" {
+	actor, err := middleware.RequireAuthenticated(ctx)
+	if err != nil {
 		return "", connect.NewError(connect.CodeUnauthenticated, middleware.ErrUnauthorized.Error()).WithCause(middleware.ErrUnauthorized)
 	}
-	return userID, nil
+	return actor.UserID, nil
 }

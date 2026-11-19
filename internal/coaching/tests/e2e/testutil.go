@@ -18,8 +18,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
 	pbsvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type TestSuite struct {
@@ -175,7 +177,21 @@ func SetupCoachingE2ESuite(t *testing.T) *TestSuite {
 	createAdhocHandler := command.NewCreateAdhocSessionHandler(fakeTx{}, repo, nil, nil, clock)
 	queriesHandler := query.NewHandlers(repo)
 
-	grpcServer := grpc.NewServer()
+	testAuthInterceptor := func(
+		ctx context.Context,
+		req any,
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get("x-user-id"); len(vals) > 0 && vals[0] != "" {
+				ctx = middleware.WithActor(ctx, vals[0], "User")
+			}
+		}
+		return handler(ctx, req)
+	}
+
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(testAuthInterceptor))
 	srv := coachingGrpc.NewServer(initiateHandler, regenerateHandler, createAdhocHandler, queriesHandler)
 	pbsvc.RegisterCoachingServiceServer(grpcServer, srv)
 

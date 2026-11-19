@@ -17,7 +17,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/transport/grpc"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -217,14 +216,16 @@ func TestGRPCHandler_Integration(t *testing.T) {
 		query.NewGetNutritionInsightHandler(nil),
 	)
 
-	// 1. Validation error test
-	_, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{UserId: ""})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	// 1. Validation error test (Unauthenticated)
+	_, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.Unauthenticated)
 	}
 
+	userCtx := middleware.WithActor(ctx, "grpc-user-1", "User")
+
 	// 2. GetTodayMenu (Auto-generates daily plan)
-	menuResp, err := handler.GetTodayMenu(ctx, &nutritionv1msg.GetTodayMenuRequest{UserId: "grpc-user-1"})
+	menuResp, err := handler.GetTodayMenu(userCtx, &nutritionv1msg.GetTodayMenuRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error GetTodayMenu: %v", err)
 	}
@@ -259,8 +260,7 @@ func TestGRPCHandler_Integration(t *testing.T) {
 	}
 
 	// 5. LogMeal
-	logResp, err := handler.LogMeal(ctx, &nutritionv1msg.LogMealRequest{
-		UserId:   "grpc-user-1",
+	logResp, err := handler.LogMeal(userCtx, &nutritionv1msg.LogMealRequest{
 		MealType: "Lunch",
 		MealName: "Ức gà áp chảo",
 		Calories: 450,
@@ -302,14 +302,16 @@ func TestGRPCHandler_GetNutritionHistory(t *testing.T) {
 		query.NewGetNutritionInsightHandler(nil),
 	)
 
-	// Validation: empty user_id
-	_, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{UserId: ""})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	// Validation: unauthenticated
+	_, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.Unauthenticated)
 	}
 
+	userCtx := middleware.WithActor(ctx, "hist-user-1", "User")
+
 	// Happy path: no history yet → returns empty meals list
-	resp, err := handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{UserId: "hist-user-1"})
+	resp, err := handler.GetNutritionHistory(userCtx, &nutritionv1msg.GetNutritionHistoryRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error GetNutritionHistory: %v", err)
 	}
@@ -323,7 +325,7 @@ func TestGRPCHandler_GetNutritionHistory(t *testing.T) {
 	history.AddMealLog(aggregate.NewMealLog("ml-1", "h-1", "hist-user-1", "Lunch", "Cơm gà", "1 dĩa", 500, 30, 60, 10, now))
 	historyRepo.history = history
 
-	resp, err = handler.GetNutritionHistory(ctx, &nutritionv1msg.GetNutritionHistoryRequest{UserId: "hist-user-1"})
+	resp, err = handler.GetNutritionHistory(userCtx, &nutritionv1msg.GetNutritionHistoryRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error GetNutritionHistory with meals: %v", err)
 	}
@@ -362,11 +364,13 @@ func TestGRPCHandler_GetNutritionSummary(t *testing.T) {
 		query.NewGetNutritionInsightHandler(nil),
 	)
 
-	// Validation: empty user_id
-	_, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{UserId: ""})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	// Validation: unauthenticated
+	_, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.Unauthenticated)
 	}
+
+	userCtx := middleware.WithActor(ctx, "summary-user-1", "User")
 
 	// Seed a plan so the summary handler can find it
 	alloc, _ := vo.NewCalorieAllocation(2000, 150, 200, 66)
@@ -374,7 +378,7 @@ func TestGRPCHandler_GetNutritionSummary(t *testing.T) {
 	_ = planRepo.Save(ctx, plan)
 
 	// Happy path
-	resp, err := handler.GetNutritionSummary(ctx, &nutritionv1msg.GetNutritionSummaryRequest{UserId: "summary-user-1"})
+	resp, err := handler.GetNutritionSummary(userCtx, &nutritionv1msg.GetNutritionSummaryRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error GetNutritionSummary: %v", err)
 	}
@@ -395,14 +399,16 @@ func TestGetNutritionInsight_Handler(t *testing.T) {
 		insightHdlr,
 	)
 
-	// 1. Validation error: empty user_id
-	_, err := handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{UserId: ""})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	// 1. Validation error: unauthenticated
+	_, err := handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.Unauthenticated)
 	}
 
+	unknownCtx := middleware.WithActor(ctx, "unknown-user", "User")
+
 	// 2. Not found
-	_, err = handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{UserId: "unknown-user"})
+	_, err = handler.GetNutritionInsight(unknownCtx, &nutritionv1msg.GetNutritionInsightRequest{})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("got status code %v, want %v", status.Code(err), codes.NotFound)
 	}
@@ -444,8 +450,10 @@ func TestGetNutritionInsight_Handler(t *testing.T) {
 		t.Fatalf("failed to save seed insight: %v", err)
 	}
 
+	userCtx := middleware.WithActor(ctx, "insight-user-1", "User")
+
 	// 4. Successful retrieval without LLM call
-	resp, err := handler.GetNutritionInsight(ctx, &nutritionv1msg.GetNutritionInsightRequest{UserId: "insight-user-1"})
+	resp, err := handler.GetNutritionInsight(userCtx, &nutritionv1msg.GetNutritionInsightRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -502,19 +510,19 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 		command.NewUpdateUserAllergiesHandler(allergyRepo),
 	)
 
-	// 1. Validation: empty user_id
+	// 1. Validation: unauthenticated
 	_, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
-		UserId:               "",
 		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Ức gà"},
 	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("got status code %v, want %v", status.Code(err), codes.InvalidArgument)
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("got status code %v, want %v", status.Code(err), codes.Unauthenticated)
 	}
 
+	userCtx := middleware.WithActor(ctx, "user-pantry-grpc", "User")
+
 	// 1b. Validation: empty meal_type
-	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
-		UserId:               "user-pantry-grpc",
+	_, err = handler.RecalibratePlanWithPantry(userCtx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		MealType:             "",
 		AvailableIngredients: []string{"Ức gà"},
 	})
@@ -533,8 +541,7 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	_ = planRepo.Save(ctx, existingPlan)
 
 	// 3. Allergen conflict: user sends shrimp while having restriction on TÔM in profile
-	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
-		UserId:               "user-pantry-grpc",
+	_, err = handler.RecalibratePlanWithPantry(userCtx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Tôm sú", "Cơm trắng"},
 	})
@@ -545,8 +552,7 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	// 4. Happy path: user changes allergy to SEAFOOD, sends deer meat and brown rice (safe)
 	eSeafood, _ := entity.NewUserAllergy("seafood-id", "user-pantry-grpc", "SEAFOOD", time.Now())
 	_ = allergyRepo.SetAllergies(ctx, "user-pantry-grpc", []*entity.UserAllergy{eSeafood})
-	resp, err := handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
-		UserId:               "user-pantry-grpc",
+	resp, err := handler.RecalibratePlanWithPantry(userCtx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Thịt nai", "Cơm gạo lứt"},
 	})
@@ -563,8 +569,7 @@ func TestGRPCHandler_RecalibratePlanWithPantry(t *testing.T) {
 	_, _ = updatedPlan.MarkOptionLogged(lunchMeal.Options()[0].OptionID())
 	_ = planRepo.Update(ctx, updatedPlan)
 
-	_, err = handler.RecalibratePlanWithPantry(ctx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
-		UserId:               "user-pantry-grpc",
+	_, err = handler.RecalibratePlanWithPantry(userCtx, &nutritionv1msg.RecalibratePlanWithPantryRequest{
 		MealType:             "LUNCH",
 		AvailableIngredients: []string{"Thịt nai"},
 	})
@@ -636,9 +641,9 @@ func TestGRPCHandler_UserAllergiesCRUD(t *testing.T) {
 		t.Fatalf("expected Unauthenticated, got %v", err)
 	}
 
-	// 6. Test extracting user_id directly from incoming metadata header (attached by API gateway)
-	mdCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-user-id", "gateway-user-123"))
-	getRespMD, err := handler.GetUserAllergies(mdCtx, &nutritionv1msg.GetUserAllergiesRequest{})
+	// 6. Test extracting user_id directly from authenticated context (injected by internal auth interceptor)
+	authCtx := middleware.WithActor(context.Background(), "gateway-user-123", "User")
+	getRespMD, err := handler.GetUserAllergies(authCtx, &nutritionv1msg.GetUserAllergiesRequest{})
 	if err != nil {
 		t.Fatalf("expected no error when reading from gateway metadata header, got %v", err)
 	}

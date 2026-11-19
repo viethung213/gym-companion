@@ -188,8 +188,9 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 	})
 
 	t.Run("Get & Update Notification Settings gRPC & Connect", func(t *testing.T) {
-		getReq := &notificationv1message.GetNotificationSettingsRequest{UserId: "usr-set-1"}
-		getRes, err := grpcHandler.GetNotificationSettings(ctx, getReq)
+		setCtx := context.WithValue(ctx, middleware.UserIDKey, "usr-set-1")
+		getReq := &notificationv1message.GetNotificationSettingsRequest{}
+		getRes, err := grpcHandler.GetNotificationSettings(setCtx, getReq)
 		if err != nil {
 			t.Fatalf("gRPC GetNotificationSettings error: %v", err)
 		}
@@ -198,7 +199,6 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 		}
 
 		upReq := &notificationv1message.UpdateNotificationSettingsRequest{
-			UserId:          "usr-set-1",
 			EnablePush:      false,
 			EnableEmail:     true,
 			EnableSms:       false,
@@ -206,7 +206,7 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			QuietHoursEnd:   "07:00",
 		}
 
-		upRes, err := grpcHandler.UpdateNotificationSettings(ctx, upReq)
+		upRes, err := grpcHandler.UpdateNotificationSettings(setCtx, upReq)
 		if err != nil {
 			t.Fatalf("gRPC UpdateNotificationSettings error: %v", err)
 		}
@@ -214,7 +214,7 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got Update success = false, want true")
 		}
 
-		connGetRes, err := connectHandler.GetNotificationSettings(ctx, getReq)
+		connGetRes, err := connectHandler.GetNotificationSettings(setCtx, getReq)
 		if err != nil {
 			t.Fatalf("Connect GetNotificationSettings error: %v", err)
 		}
@@ -225,12 +225,11 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 
 	t.Run("ListNotifications & MarkNotificationAsRead gRPC & Connect", func(t *testing.T) {
 		listReq := &notificationv1message.ListNotificationsRequest{
-			UserId: "usr-grpc-1",
 			Limit:  10,
 			Offset: 0,
 		}
 
-		listRes, err := grpcHandler.ListNotifications(ctx, listReq)
+		listRes, err := grpcHandler.ListNotifications(authCtx, listReq)
 		if err != nil {
 			t.Fatalf("gRPC ListNotifications error: %v", err)
 		}
@@ -239,11 +238,10 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 		}
 
 		markReq := &notificationv1message.MarkNotificationAsReadRequest{
-			UserId:         "usr-grpc-1",
 			NotificationId: "all",
 		}
 
-		markRes, err := grpcHandler.MarkNotificationAsRead(ctx, markReq)
+		markRes, err := grpcHandler.MarkNotificationAsRead(authCtx, markReq)
 		if err != nil {
 			t.Fatalf("gRPC MarkNotificationAsRead error: %v", err)
 		}
@@ -251,12 +249,27 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 			t.Errorf("got Mark success = false, want true")
 		}
 
-		connListRes, err := connectHandler.ListNotifications(ctx, listReq)
+		connListRes, err := connectHandler.ListNotifications(authCtx, listReq)
 		if err != nil {
 			t.Fatalf("Connect ListNotifications error: %v", err)
 		}
 		if connListRes.GetTotalCount() < 1 {
 			t.Errorf("got Connect TotalCount = %d, want >= 1", connListRes.GetTotalCount())
+		}
+	})
+
+	t.Run("Unauthenticated requests fail when gateway header missing", func(t *testing.T) {
+		if _, err := grpcHandler.GetNotificationSettings(ctx, &notificationv1message.GetNotificationSettingsRequest{}); err == nil {
+			t.Errorf("expected error for unauthenticated GetNotificationSettings")
+		}
+		if _, err := grpcHandler.UpdateNotificationSettings(ctx, &notificationv1message.UpdateNotificationSettingsRequest{}); err == nil {
+			t.Errorf("expected error for unauthenticated UpdateNotificationSettings")
+		}
+		if _, err := grpcHandler.ListNotifications(ctx, &notificationv1message.ListNotificationsRequest{}); err == nil {
+			t.Errorf("expected error for unauthenticated ListNotifications")
+		}
+		if _, err := grpcHandler.MarkNotificationAsRead(ctx, &notificationv1message.MarkNotificationAsReadRequest{}); err == nil {
+			t.Errorf("expected error for unauthenticated MarkNotificationAsRead")
 		}
 	})
 }
