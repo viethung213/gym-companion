@@ -11,6 +11,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/workflow"
 )
 
@@ -51,6 +52,7 @@ type CoachingContextAgent struct {
 	roadmaps      port.RoadmapRepository
 	idgen         port.IDGenerator
 	validator     *planValidator
+	llm           model.LLM
 
 	metaMu         sync.RWMutex
 	equipmentNames map[string]string

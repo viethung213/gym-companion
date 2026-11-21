@@ -7,6 +7,7 @@ import (
 	"iter"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/model"
@@ -136,6 +137,10 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 
 			var lastErr error
 			var receivedAny bool
+			callStart := time.Now()
+			slog.InfoContext(ctx, "[llm_trace] calling model",
+				slog.String("model", m.Name()),
+				slog.Int("attempt_idx", idx))
 
 			for resp, err := range m.GenerateContent(ctx, modelReq, stream) {
 				if err != nil {
@@ -147,6 +152,11 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 					return
 				}
 			}
+
+			slog.InfoContext(ctx, "[llm_trace] model call finished",
+				slog.String("model", m.Name()),
+				slog.Int64("duration_ms", time.Since(callStart).Milliseconds()),
+				slog.Bool("ok", lastErr == nil))
 
 			if lastErr == nil {
 				return
@@ -180,6 +190,10 @@ func isQuotaOrRateLimitErr(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "429") ||
 		strings.Contains(msg, "413") ||
+		strings.Contains(msg, "503") ||
+		strings.Contains(msg, "unavailable") ||
+		strings.Contains(msg, "overloaded") ||
+		strings.Contains(msg, "high demand") ||
 		strings.Contains(msg, "resource_exhausted") ||
 		strings.Contains(msg, "quota") ||
 		strings.Contains(msg, "rate limit") ||
