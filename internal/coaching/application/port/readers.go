@@ -99,12 +99,24 @@ type Exercise struct {
 	Difficulty       string
 	IsBodyweight     bool
 	IsMachineOrCable bool
+	MeasurementType  string // "REPS" | "DURATION"
 }
 
 // ExerciseCatalogReader is the port for querying the Exercise catalog.
 type ExerciseCatalogReader interface {
 	SearchByFilter(ctx context.Context, f *ExerciseFilter) ([]Exercise, error)
 	GetByID(ctx context.Context, exerciseID string) (Exercise, error)
+}
+
+// CatalogMetadata represents the in-memory snapshot of exercise catalog dimensions.
+type CatalogMetadata struct {
+	EquipmentNames map[string]string // ID -> Name
+	MuscleNames    map[string]string // ID -> Name
+}
+
+// CatalogMetadataReader is an optional capability for readers that can fetch reference dimension metadata.
+type CatalogMetadataReader interface {
+	GetMetadata(ctx context.Context) (CatalogMetadata, error)
 }
 
 // Notifier delivers personality-styled messages to the user. Phase-1 uses a

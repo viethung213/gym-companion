@@ -16,7 +16,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
-var _ port.ExerciseCatalogReader = (*ConnectExerciseCatalogReader)(nil)
+var (
+	_ port.ExerciseCatalogReader = (*ConnectExerciseCatalogReader)(nil)
+	_ port.CatalogMetadataReader = (*ConnectExerciseCatalogReader)(nil)
+)
 
 // ConnectExerciseCatalogReader queries exercise catalog via API Gateway over ConnectRPC.
 type ConnectExerciseCatalogReader struct {
@@ -140,6 +143,50 @@ func (c *ConnectExerciseCatalogReader) GetByID(ctx context.Context, exerciseID s
 	return mapExerciseInfoToPort(res.GetExercise()), nil
 }
 
+// GetMetadata fetches all equipment and muscle group metadata from ExerciseService.
+func (c *ConnectExerciseCatalogReader) GetMetadata(ctx context.Context) (port.CatalogMetadata, error) {
+	tokenStr, err := internaltoken.Generate("system", "Admin", "ai-coaching", time.Minute, c.internalSecret)
+	if err != nil {
+		return port.CatalogMetadata{}, fmt.Errorf("generate internal token: %w", err)
+	}
+
+	reqMsg := &exercisemsg.GetCatalogMetadataRequest{}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
+
+	res, err := c.client.GetCatalogMetadata(ctx, reqMsg)
+	if err != nil {
+		return port.CatalogMetadata{}, fmt.Errorf("gateway get catalog metadata: %w", err)
+	}
+
+	eqMap := make(map[string]string, len(res.GetEquipments()))
+	for _, eq := range res.GetEquipments() {
+		if eq != nil && eq.GetId() != "" {
+			eqMap[eq.GetId()] = eq.GetName()
+		}
+	}
+
+	muscleMap := make(map[string]string, len(res.GetMuscles()))
+	for _, m := range res.GetMuscles() {
+		if m != nil && m.GetId() != "" {
+			muscleMap[m.GetId()] = m.GetName()
+		}
+	}
+
+	for _, bp := range res.GetBodyParts() {
+		if bp != nil && bp.GetId() != "" {
+			if _, exists := muscleMap[bp.GetId()]; !exists {
+				muscleMap[bp.GetId()] = bp.GetName()
+			}
+		}
+	}
+
+	return port.CatalogMetadata{
+		EquipmentNames: eqMap,
+		MuscleNames:    muscleMap,
+	}, nil
+}
+
 func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {
 	muscleGroup := info.GetTargetMuscleId()
 	if muscleGroup == "" {
@@ -157,6 +204,11 @@ func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {
 		strings.Contains(eqLower, "pulldown") ||
 		strings.Contains(eqLower, "lever")
 
+	measurementType := "REPS"
+	if info.GetMeasurementType() == exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION {
+		measurementType = "DURATION"
+	}
+
 	return port.Exercise{
 		ExerciseID:       info.GetId(),
 		Name:             info.GetName(),
@@ -165,5 +217,6 @@ func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {
 		Difficulty:       info.GetDifficulty(),
 		IsBodyweight:     isBodyweight,
 		IsMachineOrCable: isMachineOrCable,
+		MeasurementType:  measurementType,
 	}
 }

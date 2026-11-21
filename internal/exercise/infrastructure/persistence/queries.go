@@ -217,8 +217,8 @@ func (r *PostgresRepository) searchActiveRecords(
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 2000 {
+		limit = 2000
 	}
 
 	dataQuery := r.buildSearchQuery(ctx, filters).
