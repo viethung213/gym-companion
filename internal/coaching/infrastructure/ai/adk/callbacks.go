@@ -2,6 +2,7 @@ package adk
 
 import (
 	"fmt"
+	"log/slog"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
@@ -54,6 +55,9 @@ func validateInputSafety(ctx agent.Context, _ *model.LLMRequest) (*model.LLMResp
 
 // validateToolExecution intercepts search_exercises to block severely injured muscle queries.
 func validateToolExecution(ctx agent.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
+	slog.InfoContext(ctx, "[tool_trace] executing tool",
+		slog.String("tool", t.Name()),
+		slog.Any("args", args))
 	if t.Name() != "search_exercises" {
 		return nil, nil
 	}
