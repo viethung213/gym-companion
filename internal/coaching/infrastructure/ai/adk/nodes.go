@@ -168,7 +168,8 @@ func (c *CoachingContextAgent) buildNodes() {
 						}
 
 						// 1. If bodyweight, always add to WarmUp_CoolDown category for warm-up/cool-down selection
-						if (ex.IsBodyweight || strings.EqualFold(eqResolved, "Body Weight") || strings.EqualFold(eqResolved, "bodyweight")) && len(candidates["WarmUp_CoolDown"]) < 8 {
+						isBW := ex.IsBodyweight || strings.EqualFold(eqResolved, "Body Weight") || strings.EqualFold(eqResolved, "bodyweight")
+						if isBW && len(candidates["WarmUp_CoolDown"]) < 8 {
 							warmupType := "Accessory"
 							if measType == "DURATION" {
 								warmupType = "Cardio"

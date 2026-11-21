@@ -74,7 +74,7 @@ func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessi
 	}, nil
 }
 
-func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM, deps *adkDeps) error {
+func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM, _ *adkDeps) error {
 	generatorInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/generator.txt")
 	if err != nil {
 		return fmt.Errorf("read generator prompt: %w", err)
@@ -123,9 +123,11 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 	const adhocToolInstruction = `
 
 AD-HOC SESSION TOOL GUIDANCE (Flow = SUGGEST_AD_HOC_SESSION):
-- Prioritize adhoc_hint.muscle_groups over recent-session muscle-group avoidance: if the user explicitly requests a muscle group trained recently, still program that muscle group but reduce volume/intensity or pick lower-joint-stress variations.
+- Prioritize adhoc_hint.muscle_groups over recent-session avoidance: if the user explicitly requests a recently trained muscle group,
+  still program it but reduce volume/intensity or pick lower-joint-stress variations.
 - You have access to tools: search_exercises and get_exercise_pr.
-- Prefer using the pre-fetched available_exercises already provided in context. Only call search_exercises when available_exercises genuinely lacks suitable exercises for adhoc_hint, to save latency and tokens. Always respect active injuries and available equipment.
+- Prefer using the pre-fetched available_exercises in context. Only call search_exercises when available_exercises genuinely lacks
+  suitable exercises for adhoc_hint, to save latency and tokens. Always respect active injuries and available equipment.
 - Use get_exercise_pr when calibrating target_weight_kg for key compound or strength movements if PR history is relevant.
 - Still return the final output strictly in the required JSON schema.`
 

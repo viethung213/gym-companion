@@ -211,7 +211,8 @@ func (c *CoachingContextAgent) mapExercisesToDomain(
 		if measType == "DURATION" {
 			// Bài tập tính theo thời gian (Cardio, Isometric, Planks...)
 			if durationSec <= 0 {
-				if e.TargetReps > 0 {
+				switch {
+				case e.TargetReps > 0:
 					// Quy đổi nếu AI lỡ điền reps (ví dụ 15 reps * 3 -> ~45s)
 					scaled := int32(e.TargetReps * 3)
 					if scaled < 30 {
@@ -220,13 +221,13 @@ func (c *CoachingContextAgent) mapExercisesToDomain(
 						scaled = 60
 					}
 					durationSec = scaled
-				} else if isWarmupCoolDown {
+				case isWarmupCoolDown:
 					durationSec = 30 // Fallback mặc định cho khởi động/hạ nhiệt
-				} else {
+				default:
 					durationSec = 45 // Fallback mặc định cho bài chính
 				}
 			}
-			targetReps = 0 // Triệt tiêu reps thừa
+			targetReps = 0   // Triệt tiêu reps thừa
 			targetWeight = 0 // Bodyweight cardio không mang tạ
 		} else {
 			// Bài tập tính theo số lần (REPS)
@@ -254,8 +255,8 @@ func (c *CoachingContextAgent) mapExercisesToDomain(
 // resolveExerciseDetails returns the catalog name and measurement type ("REPS" | "DURATION").
 func (c *CoachingContextAgent) resolveExerciseDetails(
 	ctx context.Context, exerciseID string, names map[string]string,
-) (string, string) {
-	name := names[exerciseID]
+) (name, measurementType string) {
+	name = names[exerciseID]
 	if c.catalog == nil {
 		return name, "REPS"
 	}
@@ -297,7 +298,7 @@ func exercisesToDTO(exs []roadmap.PrescribedExercise) []PrescribedExercise {
 			TargetSets:      int(e.TargetSets),
 			TargetReps:      int(e.TargetReps),
 			DurationSeconds: int(e.DurationSeconds),
-			TargetWeightKg: float64(e.TargetWeight),
+			TargetWeightKg:  float64(e.TargetWeight),
 			TargetRPE:       float64(e.TargetRPE),
 			RestSetSec:      int(e.RestSetSec),
 		}

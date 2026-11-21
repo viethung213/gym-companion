@@ -36,9 +36,9 @@ type CoachingContextAgent struct {
 	generatorNode      *workflow.AgentNode
 	adhocGeneratorNode *workflow.AgentNode
 	reviewerNode       *workflow.AgentNode
-	fetchNode     workflow.Node
-	pendingNode   workflow.Node
-	parseNode     workflow.Node
+	fetchNode          workflow.Node
+	pendingNode        workflow.Node
+	parseNode          workflow.Node
 
 	initRoadmapWorkflowAgent agent.Agent
 	suggestAdHocAgent        agent.Agent
@@ -77,14 +77,14 @@ func NewCoachingContextAgent(
 	}
 
 	cca := &CoachingContextAgent{
-		profileReader: profileReader,
-		sessionReader: sessionReader,
-		catalog:       catalogReader,
-		roadmaps:      roadmaps,
-		idgen:         idgen,
-		validator:     newPlanValidator(catalogReader),
-		results:       make(map[string]*PlanResult),
-		reasons:       make(map[string]string),
+		profileReader:  profileReader,
+		sessionReader:  sessionReader,
+		catalog:        catalogReader,
+		roadmaps:       roadmaps,
+		idgen:          idgen,
+		validator:      newPlanValidator(catalogReader),
+		results:        make(map[string]*PlanResult),
+		reasons:        make(map[string]string),
 		hints:          make(map[string]*port.AdHocHint),
 		equipmentNames: make(map[string]string),
 		muscleNames:    make(map[string]string),
