@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"os"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
@@ -24,7 +25,8 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 			}
 			coachInput.Flow = FlowInitiate4Week
 
-			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, true)
+			enableReview := os.Getenv("COACHING_ENABLE_REVIEW") == "true"
+			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, enableReview)
 			if genErr != nil {
 				return nil, genErr
 			}

@@ -47,11 +47,14 @@ type RoadmapSnapshot struct {
 
 // CoachInput represents the full typed input context sent to the agent.
 type CoachInput struct {
-	Flow           string           `json:"flow"`
-	CurrentTime    string           `json:"current_time"` // ISO-8601 string
-	Profile        UserProfile      `json:"profile"`
-	RecentSessions []WorkoutSession `json:"recent_sessions"`
-	CurrentRoadmap *RoadmapSnapshot `json:"current_roadmap,omitempty"`
+	Flow               string                `json:"flow"`
+	CurrentTime        string                `json:"current_time"` // ISO-8601 string
+	Profile            UserProfile           `json:"profile"`
+	RecentSessions     []WorkoutSession      `json:"recent_sessions"`
+	CurrentRoadmap     *RoadmapSnapshot      `json:"current_roadmap,omitempty"`
+	// AvailableExercises groups compact 5-element exercise tuples by muscle group:
+	// [exercise_id, name, equipment, difficulty, movement_type].
+	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
 
 	// 1-based; >1 means the previous plan was rejected. omitempty keeps a first
 	// attempt's payload identical to one with no retry support.
@@ -97,12 +100,13 @@ type SessionToRevise struct {
 // PrescribedExercise instructs one exercise. No exercise_name: a hallucinated
 // name would persist beside the ID with nothing to reconcile it against.
 type PrescribedExercise struct {
-	ExerciseID     string  `json:"exercise_id"`
-	TargetSets     int     `json:"target_sets"`
-	TargetReps     int     `json:"target_reps"`
-	TargetWeightKg float64 `json:"target_weight_kg"`
-	TargetRPE      float64 `json:"target_rpe"`
-	RestSetSec     int     `json:"rest_set_sec"`
+	ExerciseID      string  `json:"exercise_id"`
+	TargetSets      int     `json:"target_sets"`
+	TargetReps      int     `json:"target_reps,omitempty"`
+	DurationSeconds int     `json:"duration_seconds,omitempty"`
+	TargetWeightKg  float64 `json:"target_weight_kg"`
+	TargetRPE       float64 `json:"target_rpe"`
+	RestSetSec      int     `json:"rest_set_sec"`
 }
 
 // WorkoutPrescription represents the structure of one session prescription.
@@ -120,7 +124,7 @@ type SessionPlan struct {
 	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
 	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
 	Prescription             WorkoutPrescription `json:"prescription"`
-	Reasoning                string              `json:"reasoning"`
+	Reasoning                string              `json:"reasoning,omitempty"`
 }
 
 // WeekPlan defines a single week inside the 4-week block.

@@ -33,8 +33,9 @@ const (
 var _ port.CoachAgent = (*CoachingContextAgent)(nil)
 
 type CoachingContextAgent struct {
-	generatorNode *workflow.AgentNode
-	reviewerNode  *workflow.AgentNode
+	generatorNode      *workflow.AgentNode
+	adhocGeneratorNode *workflow.AgentNode
+	reviewerNode       *workflow.AgentNode
 	fetchNode     workflow.Node
 	pendingNode   workflow.Node
 	parseNode     workflow.Node
@@ -50,6 +51,10 @@ type CoachingContextAgent struct {
 	roadmaps      port.RoadmapRepository
 	idgen         port.IDGenerator
 	validator     *planValidator
+
+	metaMu         sync.RWMutex
+	equipmentNames map[string]string
+	muscleNames    map[string]string
 
 	// runner.Run yields only events, so this is the sole channel out of a node.
 	mu      sync.Mutex
@@ -80,7 +85,9 @@ func NewCoachingContextAgent(
 		validator:     newPlanValidator(catalogReader),
 		results:       make(map[string]*PlanResult),
 		reasons:       make(map[string]string),
-		hints:         make(map[string]*port.AdHocHint),
+		hints:          make(map[string]*port.AdHocHint),
+		equipmentNames: make(map[string]string),
+		muscleNames:    make(map[string]string),
 	}
 
 	if err := cca.build(ctx); err != nil {

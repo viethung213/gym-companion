@@ -183,27 +183,66 @@ func (c *CoachingContextAgent) mapPrescriptionToDomain(
 	ctx context.Context, p WorkoutPrescription, names map[string]string,
 ) roadmap.WorkoutPrescription {
 	return roadmap.WorkoutPrescription{
-		WarmUps:       c.mapExercisesToDomain(ctx, p.WarmUps, names),
-		MainExercises: c.mapExercisesToDomain(ctx, p.MainExercises, names),
-		CoolDowns:     c.mapExercisesToDomain(ctx, p.CoolDowns, names),
+		WarmUps:       c.mapExercisesToDomain(ctx, p.WarmUps, names, true),
+		MainExercises: c.mapExercisesToDomain(ctx, p.MainExercises, names, false),
+		CoolDowns:     c.mapExercisesToDomain(ctx, p.CoolDowns, names, true),
 	}
 }
 
 func (c *CoachingContextAgent) mapExercisesToDomain(
-	ctx context.Context, exs []PrescribedExercise, names map[string]string,
+	ctx context.Context, exs []PrescribedExercise, names map[string]string, isWarmup ...bool,
 ) []roadmap.PrescribedExercise {
 	if len(exs) == 0 {
 		return nil
 	}
 
+	isWarmupCoolDown := false
+	if len(isWarmup) > 0 {
+		isWarmupCoolDown = isWarmup[0]
+	}
+
 	out := make([]roadmap.PrescribedExercise, len(exs))
 	for i, e := range exs {
+		name, measType := c.resolveExerciseDetails(ctx, e.ExerciseID, names)
+		targetReps := int32(e.TargetReps)
+		durationSec := int32(e.DurationSeconds)
+		targetWeight := float32(e.TargetWeightKg)
+
+		if measType == "DURATION" {
+			// Bài tập tính theo thời gian (Cardio, Isometric, Planks...)
+			if durationSec <= 0 {
+				if e.TargetReps > 0 {
+					// Quy đổi nếu AI lỡ điền reps (ví dụ 15 reps * 3 -> ~45s)
+					scaled := int32(e.TargetReps * 3)
+					if scaled < 30 {
+						scaled = 30
+					} else if scaled > 60 {
+						scaled = 60
+					}
+					durationSec = scaled
+				} else if isWarmupCoolDown {
+					durationSec = 30 // Fallback mặc định cho khởi động/hạ nhiệt
+				} else {
+					durationSec = 45 // Fallback mặc định cho bài chính
+				}
+			}
+			targetReps = 0 // Triệt tiêu reps thừa
+			targetWeight = 0 // Bodyweight cardio không mang tạ
+		} else {
+			// Bài tập tính theo số lần (REPS)
+			if targetReps <= 0 {
+				targetReps = 10 // Fallback mặc định
+			}
+			durationSec = 0 // Triệt tiêu duration thừa
+		}
+
 		out[i] = roadmap.PrescribedExercise{
 			ExerciseID:      e.ExerciseID,
-			ExerciseName:    c.resolveExerciseName(ctx, e.ExerciseID, names),
+			ExerciseName:    name,
 			TargetSets:      int32(e.TargetSets),
-			TargetReps:      int32(e.TargetReps),
-			TargetWeight:    float32(e.TargetWeightKg),
+			TargetReps:      targetReps,
+			TargetWeight:    targetWeight,
+			DurationSeconds: durationSec,
 			TargetRPE:       float32(e.TargetRPE),
 			RestSetSec:      int32(e.RestSetSec),
 			RestExerciseSec: defaultRestExerciseSec,
@@ -212,20 +251,29 @@ func (c *CoachingContextAgent) mapExercisesToDomain(
 	return out
 }
 
-// resolveExerciseName prefers the validated name; a catalog miss is logged, not swallowed.
-func (c *CoachingContextAgent) resolveExerciseName(
+// resolveExerciseDetails returns the catalog name and measurement type ("REPS" | "DURATION").
+func (c *CoachingContextAgent) resolveExerciseDetails(
 	ctx context.Context, exerciseID string, names map[string]string,
-) string {
-	if name, ok := names[exerciseID]; ok {
-		return name
+) (string, string) {
+	name := names[exerciseID]
+	if c.catalog == nil {
+		return name, "REPS"
 	}
-
 	ex, err := c.catalog.GetByID(ctx, exerciseID)
 	if err != nil {
-		slog.WarnContext(ctx, "No catalog name for exercise", slog.String("exercise_id", exerciseID), slog.Any("error", err))
-		return ""
+		if name == "" {
+			slog.WarnContext(ctx, "No catalog entry for exercise", slog.String("exercise_id", exerciseID), slog.Any("error", err))
+		}
+		return name, "REPS"
 	}
-	return ex.Name
+	if name == "" {
+		name = ex.Name
+	}
+	measType := ex.MeasurementType
+	if measType == "" {
+		measType = "REPS"
+	}
+	return name, measType
 }
 
 // prescriptionToDTO converts a stored prescription back into the agent's shape.
@@ -245,12 +293,13 @@ func exercisesToDTO(exs []roadmap.PrescribedExercise) []PrescribedExercise {
 	out := make([]PrescribedExercise, len(exs))
 	for i, e := range exs {
 		out[i] = PrescribedExercise{
-			ExerciseID:     e.ExerciseID,
-			TargetSets:     int(e.TargetSets),
-			TargetReps:     int(e.TargetReps),
+			ExerciseID:      e.ExerciseID,
+			TargetSets:      int(e.TargetSets),
+			TargetReps:      int(e.TargetReps),
+			DurationSeconds: int(e.DurationSeconds),
 			TargetWeightKg: float64(e.TargetWeight),
-			TargetRPE:      float64(e.TargetRPE),
-			RestSetSec:     int(e.RestSetSec),
+			TargetRPE:       float64(e.TargetRPE),
+			RestSetSec:      int(e.RestSetSec),
 		}
 	}
 	return out
