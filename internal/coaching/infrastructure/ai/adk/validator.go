@@ -291,6 +291,7 @@ func (v *planValidator) validateSession(
 	}
 
 	if len(cleanedSlots[1]) == 0 {
+		// Unsalvageable: every main exercise was invalid.
 		return issues, nil, nil
 	}
 

@@ -1,6 +1,7 @@
 package adk
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,10 +9,64 @@ import (
 	"strings"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/workflow"
 )
+
+func (c *CoachingContextAgent) ensureMetadataLoaded(ctx context.Context) {
+	c.metaMu.RLock()
+	if len(c.equipmentNames) > 0 && len(c.muscleNames) > 0 {
+		c.metaMu.RUnlock()
+		return
+	}
+	c.metaMu.RUnlock()
+
+	reader, ok := c.catalog.(port.CatalogMetadataReader)
+	if !ok || reader == nil {
+		return
+	}
+
+	// Fetch metadata over network without holding the mutex lock.
+	meta, err := reader.GetMetadata(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to load in-memory catalog metadata snapshot", slog.String("error", err.Error()))
+		return
+	}
+
+	c.metaMu.Lock()
+	defer c.metaMu.Unlock()
+	if len(c.equipmentNames) > 0 && len(c.muscleNames) > 0 {
+		return
+	}
+
+	c.equipmentNames = meta.EquipmentNames
+	c.muscleNames = meta.MuscleNames
+	slog.InfoContext(ctx, "Successfully captured in-memory catalog metadata snapshot",
+		slog.Int("equipments", len(c.equipmentNames)),
+		slog.Int("muscles", len(c.muscleNames)))
+}
+
+func (c *CoachingContextAgent) resolveEquipmentName(ctx context.Context, idOrName string) string {
+	c.ensureMetadataLoaded(ctx)
+	c.metaMu.RLock()
+	defer c.metaMu.RUnlock()
+	if name, ok := c.equipmentNames[idOrName]; ok {
+		return name
+	}
+	return idOrName
+}
+
+func (c *CoachingContextAgent) resolveMuscleName(ctx context.Context, idOrName string) string {
+	c.ensureMetadataLoaded(ctx)
+	c.metaMu.RLock()
+	defer c.metaMu.RUnlock()
+	if name, ok := c.muscleNames[idOrName]; ok {
+		return name
+	}
+	return idOrName
+}
 
 func (c *CoachingContextAgent) buildNodes() {
 	c.fetchNode = workflow.NewFunctionNode(
@@ -74,6 +129,143 @@ func (c *CoachingContextAgent) buildNodes() {
 				}
 			}
 
+			// Pre-fetch candidate exercises deterministically with hard injury exclusion
+			candidates := make(map[string][][]string)
+			if c.catalog != nil {
+				avoidInjuries := make([]string, 0, len(profile.ActiveInjuries))
+				for _, inj := range profile.ActiveInjuries {
+					if inj.MuscleGroup != "" {
+						avoidInjuries = append(avoidInjuries, inj.MuscleGroup)
+					}
+				}
+
+				filter := &port.ExerciseFilter{
+					Limit: 1000,
+				}
+
+				exList, err := c.catalog.SearchByFilter(nodeCtx, filter)
+				if err == nil {
+					for _, ex := range exList {
+						// Defense-in-depth: Backend hard excludes any exercise touching injured muscle groups
+						conflict := false
+						exMuscleResolved := c.resolveMuscleName(nodeCtx, ex.MuscleGroup)
+						for _, inj := range avoidInjuries {
+							injResolved := c.resolveMuscleName(nodeCtx, inj)
+							if strings.EqualFold(ex.MuscleGroup, inj) || strings.EqualFold(exMuscleResolved, injResolved) {
+								conflict = true
+								break
+							}
+						}
+						if conflict {
+							continue
+						}
+
+						eqResolved := c.resolveEquipmentName(nodeCtx, ex.Equipment)
+
+						measType := ex.MeasurementType
+						if measType == "" {
+							measType = "REPS"
+						}
+
+						// 1. If bodyweight, always add to WarmUp_CoolDown category for warm-up/cool-down selection
+						isBW := ex.IsBodyweight || strings.EqualFold(eqResolved, "Body Weight") || strings.EqualFold(eqResolved, "bodyweight")
+						if isBW && len(candidates["WarmUp_CoolDown"]) < 8 {
+							warmupType := "Accessory"
+							if measType == "DURATION" {
+								warmupType = "Cardio"
+							}
+							candidates["WarmUp_CoolDown"] = append(candidates["WarmUp_CoolDown"], []string{
+								ex.ExerciseID,
+								ex.Name,
+								"Body Weight",
+								ex.Difficulty,
+								warmupType,
+								measType,
+							})
+						}
+
+						// Filter by available equipment if user specified any (+ Body Weight)
+						if len(profile.AvailableEquipment) > 0 {
+							eqMatch := ex.IsBodyweight || strings.EqualFold(ex.Equipment, "Body Weight") || strings.EqualFold(eqResolved, "Body Weight") || ex.Equipment == ""
+							if !eqMatch {
+								for _, eq := range profile.AvailableEquipment {
+									userEqResolved := c.resolveEquipmentName(nodeCtx, eq)
+									if strings.EqualFold(ex.Equipment, eq) || strings.EqualFold(eqResolved, userEqResolved) {
+										eqMatch = true
+										break
+									}
+								}
+							}
+							if !eqMatch {
+								continue
+							}
+						}
+
+						// Filter by preferred muscle groups if user specified any (Auto-include Cardio if Goal is Endurance or Fat Loss)
+						if len(profile.PreferredMuscleGroups) > 0 {
+							mgMatch := false
+							isCardio := strings.EqualFold(ex.MuscleGroup, "Cardio") || strings.EqualFold(c.resolveMuscleName(nodeCtx, ex.MuscleGroup), "Cardiovascular System")
+							goalWantsCardio := strings.Contains(strings.ToLower(profile.PrimaryGoal), "endurance") || strings.Contains(strings.ToLower(profile.PrimaryGoal), "fat")
+							if isCardio && goalWantsCardio {
+								mgMatch = true
+							} else {
+								for _, mg := range profile.PreferredMuscleGroups {
+									if strings.EqualFold(ex.MuscleGroup, mg) || strings.EqualFold(c.resolveMuscleName(nodeCtx, ex.MuscleGroup), c.resolveMuscleName(nodeCtx, mg)) {
+										mgMatch = true
+										break
+									}
+								}
+							}
+							if !mgMatch {
+								continue
+							}
+						}
+
+						group := c.resolveMuscleName(nodeCtx, ex.MuscleGroup)
+						if group == "" {
+							group = "General"
+						}
+						movementType := "Compound"
+						if ex.IsMachineOrCable {
+							movementType = "Accessory"
+						}
+						if strings.EqualFold(group, "Cardiovascular System") || strings.EqualFold(ex.MuscleGroup, "Cardio") || measType == "DURATION" {
+							movementType = "Cardio"
+						}
+
+						// Cap to max 6 exercises per muscle group to prevent prompt bloat and hallucination
+						if len(candidates[group]) < 6 {
+							candidates[group] = append(candidates[group], []string{
+								ex.ExerciseID,
+								ex.Name,
+								eqResolved,
+								ex.Difficulty,
+								movementType,
+								measType,
+							})
+						}
+					}
+				}
+			}
+
+			availableEquipNames := make([]string, len(profile.AvailableEquipment))
+			for i, eq := range profile.AvailableEquipment {
+				availableEquipNames[i] = c.resolveEquipmentName(nodeCtx, eq)
+			}
+
+			preferredMuscles := make([]string, len(profile.PreferredMuscleGroups))
+			for i, mg := range profile.PreferredMuscleGroups {
+				preferredMuscles[i] = c.resolveMuscleName(nodeCtx, mg)
+			}
+
+			resolvedInjuries := make([]InjuryStatus, len(injuries))
+			for i, inj := range injuries {
+				resolvedInjuries[i] = InjuryStatus{
+					MuscleGroup: c.resolveMuscleName(nodeCtx, inj.MuscleGroup),
+					Severity:    inj.Severity,
+				}
+			}
+
 			return CoachInput{
 				Flow:        FlowInitiate4Week,
 				CurrentTime: time.Now().UTC().Format(time.RFC3339),
@@ -81,13 +273,14 @@ func (c *CoachingContextAgent) buildNodes() {
 					UserID:                userID,
 					WeightKg:              profile.WeightKg,
 					PrimaryGoal:           profile.PrimaryGoal,
-					AvailableEquipment:    profile.AvailableEquipment,
-					PreferredMuscleGroups: profile.PreferredMuscleGroups,
+					AvailableEquipment:    availableEquipNames,
+					PreferredMuscleGroups: preferredMuscles,
 					PreferredWorkoutTimes: preferredTimes,
 					AvailableSlots:        slots,
-					ActiveInjuries:        injuries,
+					ActiveInjuries:        resolvedInjuries,
 				},
-				RecentSessions: adkSessions,
+				RecentSessions:     adkSessions,
+				AvailableExercises: candidates,
 			}, nil
 		},
 		workflow.NodeConfig{},
@@ -153,12 +346,109 @@ func (c *CoachingContextAgent) buildNodes() {
 			}
 			var plan GeneratedPlan
 			if parseErr := json.Unmarshal([]byte(cleaned), &plan); parseErr != nil {
+				if repaired := repairJSONTail(cleaned); repaired != "" && repaired != cleaned {
+					if retryErr := json.Unmarshal([]byte(repaired), &plan); retryErr == nil {
+						slog.Warn("[parse_to_schema] Repaired malformed JSON tail", slog.Int("orig_len", len(cleaned)), slog.Int("repaired_len", len(repaired)))
+						return &plan, nil
+					}
+				}
 				return nil, fmt.Errorf("unmarshal plan: %w (cleaned tail: %s)", parseErr, cleaned[max(0, len(cleaned)-100):])
 			}
 			return &plan, nil
 		},
 		workflow.NodeConfig{},
 	)
+}
+
+// repairJSONTail trims trailing garbage or mismatched brackets after the last
+// complete JSON object and closes any remaining open '[' or '{' on the stack.
+func repairJSONTail(s string) string {
+	var stack []byte
+	inString := false
+	escaped := false
+	lastObjEnd := -1
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+
+		switch c {
+		case '{', '[':
+			stack = append(stack, c)
+		case '}':
+			if len(stack) == 0 || stack[len(stack)-1] != '{' {
+				goto fix
+			}
+			stack = stack[:len(stack)-1]
+			lastObjEnd = i + 1
+		case ']':
+			if len(stack) == 0 || stack[len(stack)-1] != '[' {
+				goto fix
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
+
+fix:
+	if lastObjEnd <= 0 {
+		return ""
+	}
+	// Recompute open stack up to lastObjEnd
+	stack = stack[:0]
+	inString = false
+	escaped = false
+	for i := 0; i < lastObjEnd; i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		switch c {
+		case '{', '[':
+			stack = append(stack, c)
+		case '}', ']':
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.Grow(lastObjEnd + len(stack))
+	b.WriteString(s[:lastObjEnd])
+	for i := len(stack) - 1; i >= 0; i-- {
+		if stack[i] == '{' {
+			b.WriteByte('}')
+		} else {
+			b.WriteByte(']')
+		}
+	}
+	return b.String()
 }
 
 // cleanJSONResponse strips markdown code fences and extraneous leading/trailing text.

@@ -52,14 +52,13 @@ Score only what code cannot decide.
 1. **Injury safety** — does any session load a muscle group listed in
    `user_context.active_injuries`? A SEVERE injury must not be trained at all;
    MODERATE must be reduced, not merely relabelled.
-2. **Goal fit** — does the volume, rep range and exercise selection actually
+2. **Goal fit** — does the volume, rep range, duration and exercise selection actually
    serve `user_context.primary_goal`? Hypertrophy wants 6-12 reps and multiple
-   sets; strength wants lower reps and heavier loads.
+   sets; strength wants lower reps and heavier loads; endurance / fat loss wants higher reps (12-20) or timed cardio intervals (30-60s) with shorter rest.
 3. **Equipment fit** — does every prescribed exercise need only equipment in
    `user_context.available_equipment`?
 4. **Schedule & Time fit** — do the scheduled dates land ONLY on days the athlete has in `user_context.preferred_workout_times` (days omitted are mandatory rest days)? Is `slot_time` set appropriately within the user's available time slots for that day? Is `estimated_duration_minutes` provided and realistic (30-90 minutes)? Is there at least 48h between sessions loading the same muscle group?
-5. **Progression coherence** — do the four weeks build on each other, and does
-   the reasoning attached to each session match what it prescribes?
+5. **Progression coherence** — do the four weeks build on each other logically from accumulation to deload?
 
 ## Scoring
 
@@ -72,7 +71,6 @@ Add up to +10 each, and only when you can name the evidence in `notes`:
 - Exercise selection covers every muscle group implied by
   `preferred_muscle_groups`, without redundancy.
 - At least 48h separates sessions loading the same muscle group.
-- Each session's `reasoning` explains that session rather than restating the phase.
 
 Subtract 10 each. These are defects even though no hard rule forbids them:
 
@@ -81,7 +79,6 @@ Subtract 10 each. These are defects even though no hard rule forbids them:
 - A session with fewer than 3 main exercises.
 - Identical set and rep schemes repeated across every session in a week.
 - Warm-ups or cool-downs that do not target the muscles being trained.
-- `reasoning` shorter than a full sentence, or copy-pasted between sessions.
 
 **Every deduction you make must appear as a `feedback` entry.** The score is not
 an opinion you hold privately — it is the sum of things you can point at. If you

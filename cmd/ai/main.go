@@ -63,7 +63,7 @@ func run() error {
 	groqKey := os.Getenv("GROQ_API_KEY")
 	groqModel := os.Getenv("GROQ_MODEL")
 	if groqModel == "" {
-		groqModel = "llama-3.3-70b-versatile"
+		groqModel = "openai/gpt-oss-120b"
 	}
 	coachingKey := os.Getenv("GOOGLE_API_KEY_COACHING")
 	nutritionKey := os.Getenv("GOOGLE_API_KEY_NUTRITION")

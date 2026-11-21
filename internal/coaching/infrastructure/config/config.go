@@ -38,12 +38,12 @@ func LoadConfig() Config {
 
 	groqModel := os.Getenv("GROQ_MODEL")
 	if groqModel == "" {
-		groqModel = "llama-3.3-70b-versatile"
+		groqModel = "openai/gpt-oss-120b"
 	}
 
 	groqFallbackModels := os.Getenv("GROQ_FALLBACK_MODELS")
 	if groqFallbackModels == "" {
-		groqFallbackModels = "llama-3.1-8b-instant"
+		groqFallbackModels = "openai/gpt-oss-20b"
 	}
 
 	geminiModel := os.Getenv("GEMINI_MODEL")
@@ -76,7 +76,7 @@ func LoadConfig() Config {
 		activeKey = apiKey
 	}
 
-	maxOutputTokens := 16384
+	maxOutputTokens := 65536
 	if val := os.Getenv("AI_MAX_OUTPUT_TOKENS"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
 			maxOutputTokens = parsed

@@ -74,7 +74,7 @@ func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessi
 	}, nil
 }
 
-func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM, deps *adkDeps) error {
+func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel model.LLM, _ *adkDeps) error {
 	generatorInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/generator.txt")
 	if err != nil {
 		return fmt.Errorf("read generator prompt: %w", err)
@@ -87,20 +87,16 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		maxReviewerTokens = maxGeneratorTokens
 	}
 
-	zero := int32(0)
 	generatorAgent, err := llmagent.New(llmagent.Config{
 		Name:        "CoachGeneratorAgent",
-		Description: "Fitness expert generator agent using exercise and history tools.",
+		Description: "Fitness expert generator agent generating structured roadmaps.",
 		Model:       geminiModel,
 		Instruction: string(generatorInstruction),
-		Tools:       []tool.Tool{deps.searchTool, deps.prTool, deps.clarifyTool, deps.replaceTool, deps.scaleTool, deps.shiftTool},
-		Toolsets:    []tool.Toolset{deps.injurySkill},
+		Tools:       nil,
+		Toolsets:    nil,
 		OutputKey:   "generated_plan_text",
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxGeneratorTokens,
-			ThinkingConfig: &genai.ThinkingConfig{
-				ThinkingBudget: &zero,
-			},
 		},
 		BeforeModelCallbacks: beforeModelCallbacks("CoachGeneratorAgent", validateInputSafety),
 		AfterModelCallbacks:  afterModelCallbacks("CoachGeneratorAgent"),
@@ -114,6 +110,51 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 	if err != nil {
 		return fmt.Errorf("new generator node: %w", err)
 	}
+
+	searchTool, err := makeSearchExercisesTool(c.catalog)
+	if err != nil {
+		return fmt.Errorf("make adhoc search_exercises tool: %w", err)
+	}
+	prTool, err := makeGetExercisePRTool(c.sessionReader)
+	if err != nil {
+		return fmt.Errorf("make adhoc get_exercise_pr tool: %w", err)
+	}
+
+	const adhocToolInstruction = `
+
+AD-HOC SESSION TOOL GUIDANCE (Flow = SUGGEST_AD_HOC_SESSION):
+- Prioritize adhoc_hint.muscle_groups over recent-session avoidance: if the user explicitly requests a recently trained muscle group,
+  still program it but reduce volume/intensity or pick lower-joint-stress variations.
+- You have access to tools: search_exercises and get_exercise_pr.
+- Prefer using the pre-fetched available_exercises in context. Only call search_exercises when available_exercises genuinely lacks
+  suitable exercises for adhoc_hint, to save latency and tokens. Always respect active injuries and available equipment.
+- Use get_exercise_pr when calibrating target_weight_kg for key compound or strength movements if PR history is relevant.
+- Still return the final output strictly in the required JSON schema.`
+
+	adhocGeneratorAgent, err := llmagent.New(llmagent.Config{
+		Name:        "CoachAdHocGeneratorAgent",
+		Description: "Fitness expert generator agent for ad-hoc single sessions with tool support.",
+		Model:       geminiModel,
+		Instruction: string(generatorInstruction) + adhocToolInstruction,
+		Tools:       []tool.Tool{searchTool, prTool},
+		Toolsets:    nil,
+		OutputKey:   "generated_plan_text",
+		GenerateContentConfig: &genai.GenerateContentConfig{
+			MaxOutputTokens: maxGeneratorTokens,
+		},
+		BeforeModelCallbacks: beforeModelCallbacks("CoachAdHocGeneratorAgent", validateInputSafety),
+		AfterModelCallbacks:  afterModelCallbacks("CoachAdHocGeneratorAgent"),
+		BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
+	})
+	if err != nil {
+		return fmt.Errorf("new adhoc generator agent: %w", err)
+	}
+
+	adhocGeneratorNode, err := workflow.NewAgentNode(adhocGeneratorAgent, workflow.NodeConfig{})
+	if err != nil {
+		return fmt.Errorf("new adhoc generator node: %w", err)
+	}
+	c.adhocGeneratorNode = adhocGeneratorNode
 
 	reviewerInstruction, err := os.ReadFile("internal/coaching/infrastructure/ai/adk/prompts/evaluator.txt")
 	if err != nil {
@@ -130,9 +171,6 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		OutputSchema: buildPlanReviewSchema(),
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxReviewerTokens,
-			ThinkingConfig: &genai.ThinkingConfig{
-				ThinkingBudget: &zero,
-			},
 		},
 		BeforeModelCallbacks: beforeModelCallbacks("CoachReviewerAgent"),
 		AfterModelCallbacks:  afterModelCallbacks("CoachReviewerAgent"),
@@ -208,6 +246,8 @@ func (c *CoachingContextAgent) build(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("new fallback gemini model: %w", err)
 	}
+
+	c.ensureMetadataLoaded(ctx)
 
 	deps, err := buildADKDeps(ctx, c.catalog, c.sessionReader)
 	if err != nil {

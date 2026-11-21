@@ -33,10 +33,9 @@ func stateUserID(ctx agent.Context) (string, error) {
 
 // SearchArgs defines parameter schema for search_exercises tool.
 type SearchArgs struct {
-	MuscleGroup  string   `json:"muscle_group"`
 	MuscleGroups []string `json:"muscle_groups"`
-	Equipment    []string `json:"equipment"`
-	Limit        int      `json:"limit"`
+	Equipment    []string `json:"equipment,omitempty"`
+	Limit        int      `json:"limit,omitempty"`
 }
 
 // ExerciseOption represents a single mapped exercise catalog candidate.
@@ -62,9 +61,6 @@ func makeSearchExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, err
 		},
 		func(ctx agent.Context, args SearchArgs) (SearchResults, error) {
 			groups := args.MuscleGroups
-			if len(groups) == 0 && args.MuscleGroup != "" {
-				groups = []string{args.MuscleGroup}
-			}
 			if len(groups) == 0 {
 				groups = []string{"chest", "back", "legs", "shoulders"}
 			}
@@ -107,7 +103,6 @@ func makeSearchExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, err
 
 // PRArgs defines parameter schema for get_exercise_pr tool.
 type PRArgs struct {
-	ExerciseID  string   `json:"exercise_id"`
 	ExerciseIDs []string `json:"exercise_ids"`
 }
 
@@ -121,11 +116,7 @@ type PRItem struct {
 
 // PRResults defines result schema for get_exercise_pr tool.
 type PRResults struct {
-	ExerciseID          string   `json:"exercise_id,omitempty"`
-	Estimated1RMKg      float64  `json:"estimated_1rm_kg,omitempty"`
-	LastSessionWeightKg float64  `json:"last_session_weight_kg,omitempty"`
-	Trend               string   `json:"trend,omitempty"`
-	Results             []PRItem `json:"results,omitempty"`
+	Results []PRItem `json:"results"`
 }
 
 // makeGetExercisePRTool creates an ADK function tool wrapping WorkoutSessionReader logs.
@@ -150,10 +141,6 @@ func makeGetExercisePRTool(sessionReader port.WorkoutSessionReader) (tool.Tool, 
 			}
 
 			ids := args.ExerciseIDs
-			if len(ids) == 0 && args.ExerciseID != "" {
-				ids = []string{args.ExerciseID}
-			}
-
 			items := make([]PRItem, 0, len(ids))
 			for _, id := range ids {
 				logs, err := sessionReader.GetSetLogs(ctx, userID, id, 10)
@@ -185,16 +172,6 @@ func makeGetExercisePRTool(sessionReader port.WorkoutSessionReader) (tool.Tool, 
 					LastSessionWeightKg: lastWeight,
 					Trend:               "improving",
 				})
-			}
-
-			if len(items) == 1 {
-				return PRResults{
-					ExerciseID:          items[0].ExerciseID,
-					Estimated1RMKg:      items[0].Estimated1RMKg,
-					LastSessionWeightKg: items[0].LastSessionWeightKg,
-					Trend:               items[0].Trend,
-					Results:             items,
-				}, nil
 			}
 
 			return PRResults{Results: items}, nil

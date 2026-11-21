@@ -39,7 +39,11 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 		}
 
 		planText, err := retryTransient(nodeCtx, "generator", func() (string, error) {
-			return workflow.RunNode[string](nodeCtx, c.generatorNode, input)
+			genNode := c.generatorNode
+			if input.Flow == FlowSuggestAdHoc && c.adhocGeneratorNode != nil {
+				genNode = c.adhocGeneratorNode
+			}
+			return workflow.RunNode[string](nodeCtx, genNode, input)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("generator: %w", err)
