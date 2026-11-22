@@ -44,14 +44,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	outboxRepo := persistence.NewGormOutboxRepository(gormDB)
 	outboxLogRepo := persistence.NewGormOutboxLogRepository(gormDB)
 	txManager := persistence.NewSQLTransactionManager(gormDB)
-	eventRecorder := socialEvent.NewOutboxWriter(outboxRepo)
 	userSnapshotRepo := persistence.NewGormUserSnapshotRepository(gormDB)
 
-	// Redis Adapters (Bloom filter, Trending pool cache & Debounce buffers)
+	// Redis Adapters (Bloom filter, Trending pool cache, Debounce buffers & Notification deduplicator)
 	var bloomFilter port.FeedBloomFilter
 	var trendingCache port.TrendingPoolCache
 	var reactionDebounceBuffer port.ReactionDebounceBuffer
 	var followDebounceBuffer port.FollowDebounceBuffer
+	var notifDeduplicator port.NotificationDeduplicator
 
 	redisClient, rErr := sharedRedis.GetRegistry().GetClient()
 	if rErr != nil {
@@ -61,7 +61,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 		trendingCache = socialRedis.NewTrendingPoolCache(redisClient)
 		reactionDebounceBuffer = socialRedis.NewReactionDebounceBuffer(redisClient)
 		followDebounceBuffer = socialRedis.NewFollowDebounceBuffer(redisClient)
+		notifDeduplicator = socialRedis.NewNotificationDeduplicator(redisClient)
 	}
+
+	var outboxOpts []socialEvent.OutboxWriterOption
+	if notifDeduplicator != nil {
+		outboxOpts = append(outboxOpts, socialEvent.WithNotificationDeduplicator(notifDeduplicator))
+	}
+	eventRecorder := socialEvent.NewOutboxWriter(outboxRepo, outboxOpts...)
 
 	// Command Handlers (with optional debounce buffer)
 	var followOpts []command.FollowUserOption

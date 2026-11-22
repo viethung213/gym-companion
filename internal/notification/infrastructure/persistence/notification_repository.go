@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
@@ -9,7 +10,10 @@ import (
 	"gorm.io/gorm"
 )
 
-var _ repository.NotificationRepository = (*NotificationRepository)(nil)
+var (
+	_ repository.NotificationRepository    = (*NotificationRepository)(nil)
+	_ repository.ReactionRollupRepository = (*NotificationRepository)(nil)
+)
 
 type NotificationRepository struct {
 	db *gorm.DB
@@ -75,6 +79,40 @@ func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID strin
 		Update("is_read", true).Error
 	if err != nil {
 		return fmt.Errorf("mark all notifications as read: %w", err)
+	}
+	return nil
+}
+
+func (r *NotificationRepository) FindUnreadReactionByPost(ctx context.Context, userID, feedItemID string) (*aggregate.InAppNotification, error) {
+	var model InAppNotificationModel
+	err := GetDB(ctx, r.db).
+		Where("user_id = ? AND is_read = ? AND data->>'type' = ? AND data->>'feedItemId' = ?", userID, false, "POST_REACTION", feedItemID).
+		Order("created_at DESC").
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find unread reaction notification: %w", err)
+	}
+	return model.ToDomain()
+}
+
+func (r *NotificationRepository) UpdateNotificationContent(ctx context.Context, item *aggregate.InAppNotification) error {
+	model, err := ToInAppNotificationModel(item)
+	if err != nil {
+		return err
+	}
+	err = GetDB(ctx, r.db).Model(&InAppNotificationModel{}).
+		Where("user_id = ? AND id = ?", model.UserID, model.ID).
+		Updates(map[string]any{
+			"title":      model.Title,
+			"body":       model.Body,
+			"data":       model.Data,
+			"created_at": model.CreatedAt,
+		}).Error
+	if err != nil {
+		return fmt.Errorf("update rolled-up notification: %w", err)
 	}
 	return nil
 }

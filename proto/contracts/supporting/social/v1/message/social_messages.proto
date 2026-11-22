@@ -137,6 +137,7 @@ message DeleteFeedItemResponse {
 message GetActivityFeedRequest {
   int32 page_size = 1;
   string cursor = 2;
+  string feed_mode = 3;
 }
 
 message GetActivityFeedResponse {

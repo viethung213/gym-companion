@@ -433,3 +433,65 @@ func TestGetActivityFeedHandler_SafetyValveEmergencyRecycle(t *testing.T) {
 		t.Errorf("expected 2 emergency recycled items, got %d", len(res.Items))
 	}
 }
+
+func TestGetActivityFeed_FollowingModeUsesOnlyFollowingAuthors(t *testing.T) {
+	now := time.Now().UTC()
+	pFriend, _ := aggregate.NewPostItem("p-friend", "user-friend", "Friend post", nil, vo.VisibilityPublic, 0, 0, now, now)
+	pStranger, _ := aggregate.NewPostItem("p-stranger", "user-stranger", "Stranger post", nil, vo.VisibilityPublic, 0, 0, now.Add(-time.Minute), now.Add(-time.Minute))
+
+	followRepo := &queryMockFollowRepo{followingIDs: []string{"user-friend"}}
+	feedItemRepo := &queryMockFeedItemRepo{
+		items: []*aggregate.FeedItem{pFriend, pStranger},
+	}
+	interactionRepo := &queryMockInteractionRepo{}
+	userSnapshotRepo := &mockUserSnapshotRepo{}
+	trendingCache := &mockTrendingPoolCacheForQuery{
+		trendingPool: []string{"p-stranger"},
+	}
+
+	handler := NewGetActivityFeedHandler(
+		followRepo,
+		feedItemRepo,
+		interactionRepo,
+		userSnapshotRepo,
+		WithTrendingPoolCache(trendingCache),
+	)
+
+	res, err := handler.Handle(context.Background(), GetActivityFeedQuery{
+		CurrentUserID: "user-me",
+		PageSize:      10,
+		FeedMode:      "following",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Items) != 1 || res.Items[0].ID != "p-friend" {
+		t.Fatalf("expected only p-friend in following mode, got %d items", len(res.Items))
+	}
+}
+
+func TestGetActivityFeed_FollowingModeEmptyWhenNoFollowing(t *testing.T) {
+	now := time.Now().UTC()
+	pStranger, _ := aggregate.NewPostItem("p-stranger", "user-stranger", "Stranger post", nil, vo.VisibilityPublic, 0, 0, now, now)
+
+	followRepo := &queryMockFollowRepo{followingIDs: []string{}}
+	feedItemRepo := &queryMockFeedItemRepo{
+		items: []*aggregate.FeedItem{pStranger},
+	}
+	interactionRepo := &queryMockInteractionRepo{}
+	userSnapshotRepo := &mockUserSnapshotRepo{}
+
+	handler := NewGetActivityFeedHandler(followRepo, feedItemRepo, interactionRepo, userSnapshotRepo)
+
+	res, err := handler.Handle(context.Background(), GetActivityFeedQuery{
+		CurrentUserID: "user-me",
+		PageSize:      10,
+		FeedMode:      "following",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Items) != 0 {
+		t.Fatalf("expected 0 items when not following anyone, got %d", len(res.Items))
+	}
+}

@@ -35,7 +35,9 @@ func (c AddCommentCommand) Validate() error {
 }
 
 type AddCommentResult struct {
-	Comment *entity.Comment
+	Comment       *entity.Comment
+	UserName      string
+	UserAvatarURL string
 }
 
 type AddCommentHandler struct {
@@ -87,6 +89,7 @@ func (h *AddCommentHandler) Handle(ctx context.Context, cmd AddCommentCommand) (
 		return nil, fmt.Errorf("create comment entity: %w", createErr)
 	}
 
+	var actorName, actorAvatarURL string
 	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		// 1. Kiểm tra bài viết tồn tại (Fail-fast)
 		feedItem, err := h.feedItemRepo.GetByID(txCtx, cmd.FeedItemID)
@@ -98,7 +101,6 @@ func (h *AddCommentHandler) Handle(ctx context.Context, cmd AddCommentCommand) (
 		}
 
 		// 2. Kiểm tra người dùng tồn tại và lấy thông tin hiển thị
-		var actorName, actorAvatarURL string
 		if h.userSnapshotRepo != nil {
 			user, err := h.userSnapshotRepo.GetByID(txCtx, cmd.UserID)
 			if err != nil {
@@ -160,5 +162,9 @@ func (h *AddCommentHandler) Handle(ctx context.Context, cmd AddCommentCommand) (
 		return nil, txErr
 	}
 
-	return &AddCommentResult{Comment: comment}, nil
+	return &AddCommentResult{
+		Comment:       comment,
+		UserName:      actorName,
+		UserAvatarURL: actorAvatarURL,
+	}, nil
 }

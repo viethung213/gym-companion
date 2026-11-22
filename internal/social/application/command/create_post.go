@@ -33,7 +33,9 @@ func (c CreatePostCommand) Validate() error {
 }
 
 type CreatePostResult struct {
-	Item *aggregate.FeedItem
+	Item          *aggregate.FeedItem
+	UserName      string
+	UserAvatarURL string
 }
 
 type CreatePostHandler struct {
@@ -92,12 +94,12 @@ func (h *CreatePostHandler) Handle(ctx context.Context, cmd CreatePostCommand) (
 		return nil, fmt.Errorf("create post item aggregate: %w", createErr)
 	}
 
+	var authorName, authorAvatarURL string
 	txErr := h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := h.feedItemRepo.Create(txCtx, item); err != nil {
 			return fmt.Errorf("persist post item: %w", err)
 		}
 
-		var authorName, authorAvatarURL string
 		if h.userSnapshotRepo != nil {
 			if u, getErr := h.userSnapshotRepo.GetByID(txCtx, cmd.UserID); getErr == nil && u != nil {
 				authorName = u.FullName()
@@ -139,5 +141,9 @@ func (h *CreatePostHandler) Handle(ctx context.Context, cmd CreatePostCommand) (
 		return nil, txErr
 	}
 
-	return &CreatePostResult{Item: item}, nil
+	return &CreatePostResult{
+		Item:          item,
+		UserName:      authorName,
+		UserAvatarURL: authorAvatarURL,
+	}, nil
 }
