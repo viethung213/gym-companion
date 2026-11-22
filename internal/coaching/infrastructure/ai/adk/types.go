@@ -1,7 +1,5 @@
 package adk
 
-import "time"
-
 // InjuryStatus represents the severity and muscle group of a user's injury.
 type InjuryStatus struct {
 	MuscleGroup string `json:"muscle_group"`
