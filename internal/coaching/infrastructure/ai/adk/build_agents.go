@@ -33,11 +33,6 @@ func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessi
 		return nil, fmt.Errorf("make search tool: %w", err)
 	}
 
-	prTool, err := makeGetExercisePRTool(sessionReader)
-	if err != nil {
-		return nil, fmt.Errorf("make pr tool: %w", err)
-	}
-
 	clarifyTool, err := makeAskClarifyingQuestionTool()
 	if err != nil {
 		return nil, fmt.Errorf("make clarify tool: %w", err)
@@ -65,7 +60,6 @@ func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessi
 
 	return &adkDeps{
 		searchTool:  searchTool,
-		prTool:      prTool,
 		clarifyTool: clarifyTool,
 		replaceTool: replaceTool,
 		scaleTool:   scaleTool,
@@ -115,10 +109,6 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 	if err != nil {
 		return fmt.Errorf("make adhoc search_exercises tool: %w", err)
 	}
-	prTool, err := makeGetExercisePRTool(c.sessionReader)
-	if err != nil {
-		return fmt.Errorf("make adhoc get_exercise_pr tool: %w", err)
-	}
 
 	const adhocToolInstruction = `
 
@@ -127,12 +117,11 @@ AD-HOC SESSION TOOL GUIDANCE (Flow = SUGGEST_AD_HOC_SESSION):
   as the PRIMARY source of user intent for target muscle groups, cardio/running, and stretching/cool-down.
 - Prioritize adhoc_hint.free_text and adhoc_hint.muscle_groups over recent-session avoidance:
   if the user explicitly requests a recently trained muscle group, still program it with reduced volume/intensity.
-- You have access to tools: search_exercises and get_exercise_pr.
+- You have access to tool: search_exercises. Use pre-fetched muscle_prs in context to calibrate target_weight_kg.
 - Think through the user's request first, then check pre-fetched available_exercises in context.
   If available_exercises already contains matching or similar exercises, use them directly and DO NOT call search_exercises.
 - ONLY call search_exercises (with concise English keywords) when available_exercises has ZERO suitable
   or similar exercises for a requested category — never fall back to unrelated groups. Respect active injuries and equipment.
-- Use get_exercise_pr when calibrating target_weight_kg for key compound or strength movements if PR history is relevant.
 - Always provide a concise, specific non-empty reasoning explaining how the selected exercises match the user's request.
 - Still return the final output strictly in the required JSON schema.`
 
@@ -141,7 +130,7 @@ AD-HOC SESSION TOOL GUIDANCE (Flow = SUGGEST_AD_HOC_SESSION):
 		Description: "Fitness expert generator agent for ad-hoc single sessions with tool support.",
 		Model:       geminiModel,
 		Instruction: string(generatorInstruction) + adhocToolInstruction,
-		Tools:       []tool.Tool{searchTool, prTool},
+		Tools:       []tool.Tool{searchTool},
 		Toolsets:    nil,
 		OutputKey:   "generated_plan_text",
 		GenerateContentConfig: &genai.GenerateContentConfig{

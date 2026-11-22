@@ -119,66 +119,6 @@ type PRResults struct {
 	Results []PRItem `json:"results"`
 }
 
-// makeGetExercisePRTool creates an ADK function tool wrapping WorkoutSessionReader logs.
-//
-// The user is read from state per call, not captured at construction: tools are
-// built once at startup, when no user exists yet. A captured id would be the
-// empty string forever, and every lookup would silently fall back to the
-// no-history defaults below — plausible numbers belonging to nobody.
-func makeGetExercisePRTool(sessionReader port.WorkoutSessionReader) (tool.Tool, error) {
-	return functiontool.New(
-		functiontool.Config{
-			Name:        "get_exercise_pr",
-			Description: "Get user's personal record and recent weight history for multiple exercise IDs in a single batch call.",
-		},
-		func(ctx agent.Context, args PRArgs) (PRResults, error) {
-			userID, err := stateUserID(ctx)
-			if err != nil {
-				// Surfaced to the model rather than defaulted: silently answering
-				// with another user's baseline, or with invented constants, is
-				// worse than telling it the lookup is unavailable.
-				return PRResults{}, err
-			}
-
-			ids := args.ExerciseIDs
-			items := make([]PRItem, 0, len(ids))
-			for _, id := range ids {
-				logs, err := sessionReader.GetSetLogs(ctx, userID, id, 10)
-				if err != nil || len(logs) == 0 {
-					items = append(items, PRItem{
-						ExerciseID:          id,
-						Estimated1RMKg:      60.0,
-						LastSessionWeightKg: 50.0,
-						Trend:               "plateau",
-					})
-					continue
-				}
-
-				var max1RM float64
-				lastWeight := logs[0].Weight
-
-				for _, log := range logs {
-					if log.Reps > 0 {
-						oneRM := log.Weight * (1.0 + float64(log.Reps)/30.0)
-						if oneRM > max1RM {
-							max1RM = oneRM
-						}
-					}
-				}
-
-				items = append(items, PRItem{
-					ExerciseID:          id,
-					Estimated1RMKg:      max1RM,
-					LastSessionWeightKg: lastWeight,
-					Trend:               "improving",
-				})
-			}
-
-			return PRResults{Results: items}, nil
-		},
-	)
-}
-
 type ClarifyArgs struct {
 	Question    string   `json:"question"`
 	Options     []string `json:"options"`

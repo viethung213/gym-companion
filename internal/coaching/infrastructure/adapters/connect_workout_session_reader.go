@@ -155,3 +155,48 @@ func (c *ConnectWorkoutSessionReader) GetSetLogs(ctx context.Context, userID, ex
 
 	return []port.SetLog{}, nil
 }
+
+// GetPersonalRecords fetches all personal records for a user in a single RPC call.
+func (c *ConnectWorkoutSessionReader) GetPersonalRecords(ctx context.Context, userID string) ([]port.PersonalRecordSummary, error) {
+	if userID == "" {
+		return nil, errors.New("user id cannot be empty")
+	}
+
+	tokenStr, err := internaltoken.Generate(userID, "Admin", "ai-coaching", time.Minute, c.internalSecret)
+	if err != nil {
+		return nil, fmt.Errorf("generate internal token: %w", err)
+	}
+
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
+
+	res, err := c.client.AdminGetPersonalRecords(ctx, &workoutexecutionmsg.AdminGetPersonalRecordsRequest{
+		UserId: userID,
+	})
+	if err != nil {
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			return []port.PersonalRecordSummary{}, nil
+		}
+		return nil, fmt.Errorf("gateway get personal records for user %s: %w", userID, err)
+	}
+
+	rawPRs := res.GetRecords()
+	out := make([]port.PersonalRecordSummary, 0, len(rawPRs))
+	for _, pr := range rawPRs {
+		if pr == nil {
+			continue
+		}
+		achievedAt := time.Time{}
+		if pr.GetAchievedAt() != nil {
+			achievedAt = pr.GetAchievedAt().AsTime()
+		}
+		out = append(out, port.PersonalRecordSummary{
+			ExerciseID: pr.GetExerciseId(),
+			OneRepMax:  float64(pr.GetOneRepMax()),
+			Weight:     float64(pr.GetWeight()),
+			Reps:       int(pr.GetReps()),
+			AchievedAt: achievedAt,
+		})
+	}
+	return out, nil
+}

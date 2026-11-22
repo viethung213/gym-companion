@@ -50,7 +50,8 @@ type CoachInput struct {
 	Flow           string           `json:"flow"`
 	CurrentTime    string           `json:"current_time"` // ISO-8601 string
 	Profile        UserProfile      `json:"profile"`
-	RecentSessions []WorkoutSession `json:"recent_sessions"`
+	RecentSessions []string         `json:"recent_sessions"`
+	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
 	CurrentRoadmap *RoadmapSnapshot `json:"current_roadmap,omitempty"`
 	// AvailableExercises groups compact 5-element exercise tuples by muscle group:
 	// [exercise_id, name, equipment, difficulty, movement_type].
@@ -180,7 +181,7 @@ type ValidationReport struct {
 type ReviewRequest struct {
 	OriginalTask     string           `json:"original_task"`
 	UserContext      UserProfile      `json:"user_context"`
-	RecentSessions   []WorkoutSession `json:"recent_sessions,omitempty"`
+	RecentSessions   []string         `json:"recent_sessions,omitempty"`
 	GeneratorOutput  *GeneratedPlan   `json:"generator_output"`
 	ValidationResult ValidationReport `json:"validation_result"`
 	ReviewRound      int              `json:"review_round"`
