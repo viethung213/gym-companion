@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	_ repository.NotificationRepository    = (*NotificationRepository)(nil)
+	_ repository.NotificationRepository   = (*NotificationRepository)(nil)
 	_ repository.ReactionRollupRepository = (*NotificationRepository)(nil)
 )
 

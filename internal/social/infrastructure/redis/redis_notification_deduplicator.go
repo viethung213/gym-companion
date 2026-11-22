@@ -9,19 +9,19 @@ import (
 	"github.com/viethung213/gym-companion/internal/social/application/port"
 )
 
-type RedisNotificationDeduplicator struct {
+type NotificationDeduplicator struct {
 	client goredis.UniversalClient
 }
 
-var _ port.NotificationDeduplicator = (*RedisNotificationDeduplicator)(nil)
+var _ port.NotificationDeduplicator = (*NotificationDeduplicator)(nil)
 
-func NewNotificationDeduplicator(client goredis.UniversalClient) *RedisNotificationDeduplicator {
-	return &RedisNotificationDeduplicator{client: client}
+func NewNotificationDeduplicator(client goredis.UniversalClient) *NotificationDeduplicator {
+	return &NotificationDeduplicator{client: client}
 }
 
 // Allow uses Redis SETNX with TTL to suppress duplicate notifications within the window.
 // Fails open on Redis error so transient cache issues never silently drop notifications.
-func (d *RedisNotificationDeduplicator) Allow(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+func (d *NotificationDeduplicator) Allow(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	if d == nil || d.client == nil || key == "" {
 		return true, nil
 	}
