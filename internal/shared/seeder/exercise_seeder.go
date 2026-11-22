@@ -183,6 +183,9 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 				tagIDs = append(tagIDs, tID)
 			}
 		}
+		if recTagID := classifyRecoveryTagID(trimmedName, idMap); recTagID != "" {
+			tagIDs = appendUniqueString(tagIDs, recTagID)
+		}
 
 		req := &exercisemsg.CreateExerciseRequest{
 			Name:               trimmedName,
@@ -347,4 +350,55 @@ func queryExistingMap(ctx context.Context, db *sql.DB, tableName string) map[str
 	}
 
 	return result
+}
+
+const (
+	seedMobilityWarmUpTagID     = "1b328731-e62e-445e-bc1b-f0d5dc34aa5e"
+	seedStretchingCoolDownTagID = "9f7a2c10-8e4b-4c5d-9a1e-6b3f2d4e8c91"
+)
+
+func isMobilityWarmUpExercise(lowerName string) bool {
+	switch lowerName {
+	case "ankle circles",
+		"wrist circles",
+		"circles knee stretch",
+		"dynamic chest stretch (male)",
+		"world greatest stretch",
+		"high knee against wall",
+		"jack jump (male)",
+		"walking high knees lunge",
+		"swing 360",
+		"glute bridge march":
+		return true
+	default:
+		return false
+	}
+}
+
+func classifyRecoveryTagID(name string, idMap map[string]string) string {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if isMobilityWarmUpExercise(lower) {
+		if mapped := idMap[seedMobilityWarmUpTagID]; mapped != "" {
+			return mapped
+		}
+		return seedMobilityWarmUpTagID
+	}
+	if strings.Contains(lower, "stretch") &&
+		!strings.Contains(lower, "outstretched") &&
+		!strings.Contains(lower, "weighted stretch lunge") {
+		if mapped := idMap[seedStretchingCoolDownTagID]; mapped != "" {
+			return mapped
+		}
+		return seedStretchingCoolDownTagID
+	}
+	return ""
+}
+
+func appendUniqueString(slice []string, val string) []string {
+	for _, s := range slice {
+		if s == val {
+			return slice
+		}
+	}
+	return append(slice, val)
 }

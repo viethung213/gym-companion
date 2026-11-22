@@ -69,14 +69,14 @@ user already has, not planning fresh ones.
           "target_muscle_groups": ["chest", "back"],
           "prescription": {
             "warm_ups": [
-              { "exercise_id": "<UUID_FROM_AVAILABLE_EXERCISES>", "target_sets": 1, "duration_seconds": 30, "target_rpe": 3.0, "rest_set_sec": 0 }
+              { "exercise_id": "<UUID_FROM_WARM_UP_EXERCISES>", "target_sets": 1, "duration_seconds": 30, "target_rpe": 3.0, "rest_set_sec": 0 }
             ],
             "main_exercises": [
               { "exercise_id": "<UUID_FROM_AVAILABLE_EXERCISES>", "target_sets": 3, "target_reps": 8, "target_weight_kg": 80, "target_rpe": 7.0, "rest_set_sec": 120 },
               { "exercise_id": "<UUID_CARDIO>", "target_sets": 3, "duration_seconds": 45, "target_rpe": 7.0, "rest_set_sec": 45 }
             ],
             "cool_downs": [
-              { "exercise_id": "<UUID_FROM_AVAILABLE_EXERCISES>", "target_sets": 1, "duration_seconds": 30, "target_rpe": 2.0, "rest_set_sec": 0 }
+              { "exercise_id": "<UUID_FROM_COOL_DOWN_EXERCISES>", "target_sets": 1, "duration_seconds": 30, "target_rpe": 2.0, "rest_set_sec": 0 }
             ]
           }
         ]
@@ -98,20 +98,24 @@ Each exercise object must contain: exercise_id, target_sets, target_rpe, rest_se
 - For DURATION-based exercises: emit duration_seconds. Do NOT emit target_reps or target_weight_kg.
 
 ### Warm-ups and Cool-downs Rule
-- Every session MUST include 1-2 dynamic warm-up movements in `warm_ups`. Pick them from `available_exercises["WarmUp_CoolDown"]` or relevant bodyweight exercises.
-- Every session MUST include 1-2 recovery movements in `cool_downs`. Pick them from `available_exercises["WarmUp_CoolDown"]` or relevant bodyweight exercises.
+- Every session MUST include 1-2 dynamic warm-up movements in `warm_ups`. Pick them from `warm_up_exercises` (matching the session's body part or `"General"`).
+- Every session MUST include 1-2 recovery movements in `cool_downs`. Pick them from `cool_down_exercises` (matching the session's body part or `"General"`).
 - Every session MUST include at least one entry in `main_exercises`. Pick them from `available_exercises[muscle_group]`.
 - Warm-ups and cool-downs use real catalog `exercise_id` values too — pick suitable
-  movements from `available_exercises` rather than inventing an exercise that is not in the catalog.
+  movements from `warm_up_exercises` / `cool_down_exercises` rather than inventing an exercise that is not in the catalog.
 
 ## Workflow & Sourcing Exercises
 
-1. **EXERCISE SOURCING (`available_exercises`)**:
-   - Your input contains a pre-filtered `available_exercises` map grouped by muscle group (e.g. "Chest", "Back", "Quads", "Abs", "Cardiovascular System", "WarmUp_CoolDown"), tailored to the athlete's equipment, target muscles, and injury status.
-   - Each entry under a muscle group key is a compact 6-element tuple: `[0] exercise_id (UUID), [1] name, [2] equipment name, [3] difficulty, [4] movement_type` (`"Compound"`, `"Accessory"`, or `"Cardio"`), `[5] measurement_type` (`"REPS"` or `"DURATION"`).
-   - Select all `exercise_id` values EXCLUSIVELY from index `[0]` of the tuples in `available_exercises`.
+1. **EXERCISE SOURCING (`available_exercises`, `warm_up_exercises`, `cool_down_exercises`)**:
+   - Your input contains three pre-filtered maps tailored to the athlete's equipment, experience level, goal, preferred muscles, and injury status:
+     * `available_exercises`: Main exercises grouped by target muscle (e.g. `"Pectorals"`, `"Lats"`, `"Quads"`, `"Abs"`, `"Cardiovascular System"`).
+     * `warm_up_exercises`: Dynamic warm-up & joint mobility movements grouped by body part (`"Chest"`, `"Upper Legs"`, `"General"`, etc.).
+     * `cool_down_exercises`: Static stretching & recovery movements grouped by body part (`"Chest"`, `"Back"`, `"General"`, etc.).
+   - Each entry under a key is a compact 6-element tuple: `[0] exercise_id (UUID), [1] name, [2] equipment name, [3] difficulty, [4] movement_type` (`"Compound"`, `"Accessory"`, `"Cardio"`, `"Mobility"`, or `"Stretch"`), `[5] measurement_type` (`"REPS"` or `"DURATION"`).
+   - Select all `exercise_id` values EXCLUSIVELY from index `[0]` of the tuples in `available_exercises`, `warm_up_exercises`, or `cool_down_exercises`.
    - CRITICAL: Index `[0]` is the ONLY valid exercise_id. NEVER use index `[1]` (name) or index `[2]` (equipment name) or any user ID as an `exercise_id`.
-   - NEVER invent, abbreviate, or hallucinate an `exercise_id`. Use ONLY the exact UUIDs from index `[0]` of `available_exercises`.
+   - NEVER invent, abbreviate, or hallucinate an `exercise_id`. Use ONLY the exact UUIDs from index `[0]`.
+   - NEVER put `"WarmUp_CoolDown"` or `"General"` into `target_muscle_groups`. Use only real muscle group names from `available_exercises`.
 
    - **Reps vs. Duration**:
      * `measurement_type == "DURATION"`: Emit `duration_seconds` (omitted defaults to 45s). Do NOT emit `target_reps` or `target_weight_kg`.
@@ -123,7 +127,8 @@ Each exercise object must contain: exercise_id, target_sets, target_rpe, rest_se
    - **48-Hour Recovery**: NEVER train the same primary muscle group in two consecutive sessions. Allow at least 48 hours between workouts loading the same muscle group (e.g., Upper on Monday, Lower on Wednesday, Pull on Friday).
    - **Minimum Session Volume**: Every session MUST include at least 3 exercises in `main_exercises` (`>=3 main_exercises` per session, unless constrained by a 15-30 min ad-hoc duration).
    - **Exercise Hierarchy (Compound First)**: The first 1-2 exercises in `main_exercises` MUST be heavy `"Compound"` movements (index `[4]`), followed by `"Accessory"` / isolation movements.
-   - **Matched Warm-ups & Cool-downs**: Warm-ups and cool-downs MUST match the session's `target_muscle_groups`.
+   - **Matched Warm-ups & Cool-downs**: Warm-ups and cool-downs MUST match the session's `target_muscle_groups` (pick from the corresponding body part bucket in `warm_up_exercises` and `cool_down_exercises`, plus `"General"` when helpful).
+   - **Preferred Muscle Emphasis**: If `profile.preferred_muscle_groups` is non-empty, emphasize those muscle groups with higher weekly frequency/volume (e.g. 2 sessions/week, still honoring the 48-hour recovery rule) while balancing remaining slots with the other base muscle groups in `available_exercises`.
    - **Varied Set/Rep Schemes**: Vary set/rep schemes across sessions (e.g., primary compounds at lower reps/higher load, accessories at higher reps/moderate load) rather than repeating identical sets/reps for every exercise.
    - **Goal-Driven Programming**:
      * `HYPERTROPHY`: 3-4 sets per exercise, 6-12 reps, 90-120s rest.

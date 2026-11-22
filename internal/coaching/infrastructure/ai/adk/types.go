@@ -17,6 +17,7 @@ type WorkoutSlot struct {
 type UserProfile struct {
 	UserID                string              `json:"user_id"`
 	WeightKg              float64             `json:"weight_kg"`
+	ExperienceLevel       string              `json:"experience_level,omitempty"`
 	PrimaryGoal           string              `json:"primary_goal"`
 	AvailableEquipment    []string            `json:"available_equipment"`
 	PreferredMuscleGroups []string            `json:"preferred_muscle_groups"`
@@ -41,9 +42,13 @@ type CoachInput struct {
 	RecentSessions []string            `json:"recent_sessions"`
 	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
 	CurrentRoadmap *RoadmapSnapshot    `json:"current_roadmap,omitempty"`
-	// AvailableExercises groups compact 5-element exercise tuples by muscle group:
-	// [exercise_id, name, equipment, difficulty, movement_type].
+	// AvailableExercises groups compact 6-element main exercise tuples by target muscle:
+	// [exercise_id, name, equipment, difficulty, movement_type, measurement_type].
 	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
+	// WarmUpExercises groups warm-up & mobility exercises by body part (+ "General").
+	WarmUpExercises map[string][][]string `json:"warm_up_exercises,omitempty"`
+	// CoolDownExercises groups stretching & cool-down exercises by body part (+ "General").
+	CoolDownExercises map[string][][]string `json:"cool_down_exercises,omitempty"`
 
 	// 1-based; >1 means the previous plan was rejected. omitempty keeps a first
 	// attempt's payload identical to one with no retry support.

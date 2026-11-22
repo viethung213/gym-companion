@@ -173,17 +173,28 @@ func (c *ConnectExerciseCatalogReader) GetMetadata(ctx context.Context) (port.Ca
 		}
 	}
 
+	bodyPartMap := make(map[string]string, len(res.GetBodyParts()))
 	for _, bp := range res.GetBodyParts() {
 		if bp != nil && bp.GetId() != "" {
+			bodyPartMap[bp.GetId()] = bp.GetName()
 			if _, exists := muscleMap[bp.GetId()]; !exists {
 				muscleMap[bp.GetId()] = bp.GetName()
 			}
 		}
 	}
 
+	tagMap := make(map[string]string, len(res.GetTags()))
+	for _, t := range res.GetTags() {
+		if t != nil && t.GetId() != "" {
+			tagMap[t.GetId()] = t.GetName()
+		}
+	}
+
 	return port.CatalogMetadata{
 		EquipmentNames: eqMap,
 		MuscleNames:    muscleMap,
+		BodyPartNames:  bodyPartMap,
+		TagNames:       tagMap,
 	}, nil
 }
 
@@ -213,8 +224,10 @@ func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {
 		ExerciseID:       info.GetId(),
 		Name:             info.GetName(),
 		MuscleGroup:      muscleGroup,
+		BodyPart:         info.GetBodyPartId(),
 		Equipment:        eqName,
 		Difficulty:       info.GetDifficulty(),
+		TagIDs:           append([]string(nil), info.GetTagIds()...),
 		IsBodyweight:     isBodyweight,
 		IsMachineOrCable: isMachineOrCable,
 		MeasurementType:  measurementType,

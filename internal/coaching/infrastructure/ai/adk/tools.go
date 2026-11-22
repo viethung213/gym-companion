@@ -82,7 +82,8 @@ func makeSearchExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, err
 					continue
 				}
 
-				for _, e := range res {
+				for i := range res {
+					e := &res[i]
 					var eqReq []string
 					if e.Equipment != "" {
 						eqReq = []string{e.Equipment}
