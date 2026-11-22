@@ -15,16 +15,6 @@ type WorkoutSlot struct {
 	EndTime   string `json:"end_time"`    // "HH:MM"
 }
 
-// WorkoutSession represents historical session execution metrics.
-type WorkoutSession struct {
-	SessionID    string    `json:"session_id"`
-	CompletedAt  time.Time `json:"completed_at"`
-	MuscleGroups []string  `json:"muscle_groups"`
-	AverageRPE   float64   `json:"average_rpe"`
-	TotalSets    int       `json:"total_sets"`
-	Aborted      bool      `json:"aborted"`
-}
-
 // UserProfile aggregates user metrics, preferences, equipment and active injuries.
 type UserProfile struct {
 	UserID                string              `json:"user_id"`
