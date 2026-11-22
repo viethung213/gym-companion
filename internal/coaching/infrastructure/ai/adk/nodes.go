@@ -595,11 +595,12 @@ func buildMusclePRs(exList []port.Exercise, prs []port.PersonalRecordSummary, ma
 			when := ""
 			if !e.pr.AchievedAt.IsZero() {
 				days := int(time.Since(e.pr.AchievedAt).Hours() / 24)
-				if days <= 0 {
+				switch {
+				case days <= 0:
 					when = ", today"
-				} else if days == 1 {
+				case days == 1:
 					when = ", 1d ago"
-				} else {
+				default:
 					when = fmt.Sprintf(", %dd ago", days)
 				}
 			}

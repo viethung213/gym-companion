@@ -27,7 +27,7 @@ type adkDeps struct {
 	injurySkill tool.Toolset
 }
 
-func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, sessionReader port.WorkoutSessionReader) (*adkDeps, error) {
+func buildADKDeps(ctx context.Context, catalog port.ExerciseCatalogReader, _ port.WorkoutSessionReader) (*adkDeps, error) {
 	searchTool, err := makeSearchExercisesTool(catalog)
 	if err != nil {
 		return nil, fmt.Errorf("make search tool: %w", err)

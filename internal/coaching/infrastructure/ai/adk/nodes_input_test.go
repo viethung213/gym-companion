@@ -60,7 +60,7 @@ func TestBuildContextNode_EncodesRecentSessionsAndTrimsMusclePRs(t *testing.T) {
 	}
 
 	since := now.AddDate(0, 0, -5)
-	var encoded []string
+	encoded := make([]string, 0, len(sessions))
 	for i := range sessions {
 		if sessions[i].CompletedAt.Before(since) {
 			continue

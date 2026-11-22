@@ -47,12 +47,12 @@ type RoadmapSnapshot struct {
 
 // CoachInput represents the full typed input context sent to the agent.
 type CoachInput struct {
-	Flow           string           `json:"flow"`
-	CurrentTime    string           `json:"current_time"` // ISO-8601 string
-	Profile        UserProfile      `json:"profile"`
-	RecentSessions []string         `json:"recent_sessions"`
+	Flow           string              `json:"flow"`
+	CurrentTime    string              `json:"current_time"` // ISO-8601 string
+	Profile        UserProfile         `json:"profile"`
+	RecentSessions []string            `json:"recent_sessions"`
 	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
-	CurrentRoadmap *RoadmapSnapshot `json:"current_roadmap,omitempty"`
+	CurrentRoadmap *RoadmapSnapshot    `json:"current_roadmap,omitempty"`
 	// AvailableExercises groups compact 5-element exercise tuples by muscle group:
 	// [exercise_id, name, equipment, difficulty, movement_type].
 	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
