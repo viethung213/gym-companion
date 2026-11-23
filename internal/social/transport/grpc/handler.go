@@ -303,17 +303,19 @@ func (h *GRPCHandler) CreatePost(
 	item := res.Item
 	return &socialv1message.CreatePostResponse{
 		Item: &socialv1message.FeedItem{
-			Id:            item.ID(),
-			UserId:        item.UserID(),
-			ItemType:      socialv1message.FeedItemType_FEED_ITEM_TYPE_POST,
-			Caption:       item.Caption(),
-			MediaUrls:     item.MediaURLs(),
-			Visibility:    item.Visibility().String(),
-			ReactionCount: item.ReactionCount(),
-			CommentCount:  item.CommentCount(),
-			UserReaction:  "",
-			CreatedAt:     timestamppb.New(item.CreatedAt()),
-			UpdatedAt:     timestamppb.New(item.UpdatedAt()),
+			Id:              item.ID(),
+			UserId:          item.UserID(),
+			AuthorName:      res.UserName,
+			AuthorAvatarUrl: res.UserAvatarURL,
+			ItemType:        socialv1message.FeedItemType_FEED_ITEM_TYPE_POST,
+			Caption:         item.Caption(),
+			MediaUrls:       item.MediaURLs(),
+			Visibility:      item.Visibility().String(),
+			ReactionCount:   item.ReactionCount(),
+			CommentCount:    item.CommentCount(),
+			UserReaction:    "",
+			CreatedAt:       timestamppb.New(item.CreatedAt()),
+			UpdatedAt:       timestamppb.New(item.UpdatedAt()),
 		},
 	}, nil
 }
@@ -387,6 +389,7 @@ func (h *GRPCHandler) GetActivityFeed(
 		CurrentUserID: actor.UserID,
 		PageSize:      int(req.GetPageSize()),
 		Cursor:        req.GetCursor(),
+		FeedMode:      req.GetFeedMode(),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -593,12 +596,14 @@ func (h *GRPCHandler) AddComment(
 	c := res.Comment
 	return &socialv1message.AddCommentResponse{
 		Comment: &socialv1message.CommentItem{
-			Id:         c.ID(),
-			UserId:     c.UserID(),
-			FeedItemId: c.FeedItemID(),
-			ParentId:   c.ParentID(),
-			Content:    c.Content(),
-			CreatedAt:  timestamppb.New(c.CreatedAt()),
+			Id:              c.ID(),
+			UserId:          c.UserID(),
+			AuthorName:      res.UserName,
+			AuthorAvatarUrl: res.UserAvatarURL,
+			FeedItemId:      c.FeedItemID(),
+			ParentId:        c.ParentID(),
+			Content:         c.Content(),
+			CreatedAt:       timestamppb.New(c.CreatedAt()),
 		},
 	}, nil
 }

@@ -395,3 +395,57 @@ func TestOutboxWriter_PublishReplyToSelfComment_OnlyNotifiesPostOwner(t *testing
 		t.Errorf("expected title 'Bình luận mới', got '%s'", notifProto.Title)
 	}
 }
+
+type mockNotifDeduplicator struct {
+	seen map[string]bool
+}
+
+func (m *mockNotifDeduplicator) Allow(_ context.Context, key string, _ time.Duration) (bool, error) {
+	if m.seen == nil {
+		m.seen = make(map[string]bool)
+	}
+	if m.seen[key] {
+		return false, nil
+	}
+	m.seen[key] = true
+	return true, nil
+}
+
+func TestOutboxWriter_NotificationDedupSuppressesRepeatReactAndFollow(t *testing.T) {
+	repo := &mockOutboxRepo{}
+	dedup := &mockNotifDeduplicator{}
+	writer := event.NewOutboxWriter(repo, event.WithNotificationDeduplicator(dedup), event.WithNotificationDedupTTL(time.Hour))
+
+	reactEv := &domainEvent.PostReactedEvent{
+		FeedItemID:  "post-1",
+		PostOwnerID: "owner-1",
+		UserID:      "actor-1",
+		UserName:    "Alice",
+		ReactedAt:   time.Now().UTC(),
+	}
+	followEv := &domainEvent.UserFollowedEvent{
+		FollowerID:   "actor-1",
+		FollowingID:  "owner-1",
+		FollowerName: "Alice",
+		FollowedAt:   time.Now().UTC(),
+	}
+	commentEv := &domainEvent.PostCommentedEvent{
+		CommentID:   "c-1",
+		FeedItemID:  "post-1",
+		PostOwnerID: "owner-1",
+		UserID:      "actor-1",
+		UserName:    "Alice",
+		Content:     "Nice!",
+		CommentedAt: time.Now().UTC(),
+	}
+
+	// Fire react twice, follow twice, comment twice
+	if err := writer.RecordEvents(context.Background(), []any{reactEv, reactEv, followEv, followEv, commentEv, commentEv}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Expected: 1 react + 1 follow + 2 comments = 4 records (repeat react & repeat follow suppressed)
+	if len(repo.records) != 4 {
+		t.Fatalf("expected 4 outbox records after dedup, got %d", len(repo.records))
+	}
+}

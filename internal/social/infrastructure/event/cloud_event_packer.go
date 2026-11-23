@@ -3,6 +3,7 @@ package event
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,6 +66,7 @@ func packUserFollowedNotification(e *domainEvent.UserFollowedEvent) ([]Notificat
 		"followerName":      e.FollowerName,
 		"followerAvatarUrl": e.FollowerAvatarURL,
 		"type":              "USER_FOLLOWED",
+		"url":               "/community/users/" + e.FollowerID,
 	}
 	body := actorName + " đã bắt đầu theo dõi bạn"
 
@@ -94,6 +96,7 @@ func packPostCreatedNotification(e *domainEvent.PostCreatedEvent) ([]Notificatio
 		"actorName":      e.UserName,
 		"actorAvatarUrl": e.UserAvatarURL,
 		"type":           "POST_CREATED",
+		"url":            "/community/posts/" + e.PostID,
 	}
 	title := "Bài viết mới"
 	body := actorName + " vừa đăng bài viết mới"
@@ -106,6 +109,18 @@ func packPostCreatedNotification(e *domainEvent.PostCreatedEvent) ([]Notificatio
 		return nil, nil
 	}
 	return []NotificationRecordData{*rec}, nil
+}
+
+func formatCommentBody(actorName, action, content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return actorName + " " + action
+	}
+	runes := []rune(trimmed)
+	if len(runes) > 80 {
+		trimmed = string(runes[:80]) + "..."
+	}
+	return fmt.Sprintf("%s %s: %q", actorName, action, trimmed)
 }
 
 func packPostCommentedNotification(e *domainEvent.PostCommentedEvent) ([]NotificationRecordData, error) {
@@ -129,8 +144,9 @@ func packPostCommentedNotification(e *domainEvent.PostCommentedEvent) ([]Notific
 					"actorId":        e.UserID,
 					"actorName":      e.UserName,
 					"actorAvatarUrl": e.UserAvatarURL,
+					"url":            "/community/posts/" + e.FeedItemID,
 				}
-				body := actorName + " đã trả lời bình luận của bạn"
+				body := formatCommentBody(actorName, "đã trả lời bình luận của bạn", e.Content)
 				rec, err := buildNotificationCloudEvent([]string{e.PostOwnerID}, "Phản hồi mới", body, dataMap)
 				if err != nil {
 					return nil, err
@@ -149,8 +165,9 @@ func packPostCommentedNotification(e *domainEvent.PostCommentedEvent) ([]Notific
 					"actorId":        e.UserID,
 					"actorName":      e.UserName,
 					"actorAvatarUrl": e.UserAvatarURL,
+					"url":            "/community/posts/" + e.FeedItemID,
 				}
-				body := actorName + " đã trả lời bình luận của bạn"
+				body := formatCommentBody(actorName, "đã trả lời bình luận của bạn", e.Content)
 				rec, err := buildNotificationCloudEvent([]string{parentOwner}, "Phản hồi mới", body, dataMap)
 				if err != nil {
 					return nil, err
@@ -168,8 +185,9 @@ func packPostCommentedNotification(e *domainEvent.PostCommentedEvent) ([]Notific
 					"actorId":        e.UserID,
 					"actorName":      e.UserName,
 					"actorAvatarUrl": e.UserAvatarURL,
+					"url":            "/community/posts/" + e.FeedItemID,
 				}
-				body := actorName + " đã bình luận bài viết của bạn"
+				body := formatCommentBody(actorName, "đã bình luận bài viết của bạn", e.Content)
 				rec, err := buildNotificationCloudEvent([]string{e.PostOwnerID}, "Bình luận mới", body, dataMap)
 				if err != nil {
 					return nil, err
@@ -187,8 +205,9 @@ func packPostCommentedNotification(e *domainEvent.PostCommentedEvent) ([]Notific
 			"actorId":        e.UserID,
 			"actorName":      e.UserName,
 			"actorAvatarUrl": e.UserAvatarURL,
+			"url":            "/community/posts/" + e.FeedItemID,
 		}
-		body := actorName + " đã bình luận bài viết của bạn"
+		body := formatCommentBody(actorName, "đã bình luận bài viết của bạn", e.Content)
 		rec, err := buildNotificationCloudEvent([]string{e.PostOwnerID}, "Bình luận mới", body, dataMap)
 		if err != nil {
 			return nil, err
@@ -218,6 +237,7 @@ func packPostReactedNotification(e *domainEvent.PostReactedEvent) ([]Notificatio
 		"actorId":        e.UserID,
 		"actorName":      e.UserName,
 		"actorAvatarUrl": e.UserAvatarURL,
+		"url":            "/community/posts/" + e.FeedItemID,
 	}
 	body := actorName + " đã bày tỏ cảm xúc về bài viết của bạn"
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,17 +58,82 @@ func NewSendPushNotificationHandler(
 }
 
 func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNotificationCommand) (*SendPushNotificationResponse, error) {
-	// 1. Create In-App Notification record
+	// 1. Create In-App Notification record (or prepare for POST_REACTION rollup)
+	notifData := make(map[string]string, len(cmd.Data)+1)
+	for k, v := range cmd.Data {
+		notifData[k] = v
+	}
+	isPostReaction := notifData["type"] == "POST_REACTION" && notifData["feedItemId"] != ""
+	if isPostReaction && notifData["rollupCount"] == "" {
+		notifData["rollupCount"] = "1"
+	}
+
 	notifID := uuid.New().String()
-	inAppNotif, err := aggregate.NewInAppNotification(notifID, cmd.UserID, cmd.Title, cmd.Body, cmd.Data)
+	inAppNotif, err := aggregate.NewInAppNotification(notifID, cmd.UserID, cmd.Title, cmd.Body, notifData)
 	if err != nil {
 		return nil, fmt.Errorf("create in-app notification: %w", err)
 	}
 
-	// 2. Save In-App Notification & Outbox CloudEvent 1.0 atomically inside a single DB Transaction
+	effectiveBody := cmd.Body
+	effectiveData := notifData
+
+	// 2. Save (or Rollup) In-App Notification & Outbox CloudEvent 1.0 atomically inside a single DB Transaction
 	saveTxFn := func(txCtx context.Context) error {
-		if saveErr := h.notificationRepo.Save(txCtx, inAppNotif); saveErr != nil {
-			return fmt.Errorf("save in-app notification: %w", saveErr)
+		rolledUp := false
+		if isPostReaction {
+			if rollupRepo, ok := h.notificationRepo.(repository.ReactionRollupRepository); ok {
+				existing, findErr := rollupRepo.FindUnreadReactionByPost(txCtx, cmd.UserID, notifData["feedItemId"])
+				if findErr != nil {
+					slog.WarnContext(txCtx, "FindUnreadReactionByPost failed, falling back to insert", slog.Any("error", findErr))
+				} else if existing != nil {
+					prevCount := 1
+					if rawCount := existing.Data()["rollupCount"]; rawCount != "" {
+						if parsed, pErr := strconv.Atoi(rawCount); pErr == nil && parsed > 0 {
+							prevCount = parsed
+						}
+					}
+					newCount := prevCount + 1
+					mergedData := make(map[string]string, len(notifData)+1)
+					for k, v := range notifData {
+						mergedData[k] = v
+					}
+					mergedData["rollupCount"] = strconv.Itoa(newCount)
+
+					actorName := mergedData["actorName"]
+					if actorName == "" {
+						actorName = "Một người dùng"
+					}
+					rolledBody := fmt.Sprintf("%s và %d người khác đã bày tỏ cảm xúc về bài viết của bạn", actorName, newCount-1)
+					updated := aggregate.ReconstituteInAppNotification(
+						existing.ID(),
+						cmd.UserID,
+						cmd.Title,
+						rolledBody,
+						mergedData,
+						false,
+						time.Now().UTC(),
+					)
+					if updErr := rollupRepo.UpdateNotificationContent(txCtx, updated); updErr != nil {
+						return fmt.Errorf("rollup reaction notification: %w", updErr)
+					}
+					inAppNotif = updated
+					effectiveBody = rolledBody
+					effectiveData = mergedData
+					rolledUp = true
+					slog.InfoContext(txCtx, "Rolled up POST_REACTION notification",
+						slog.String("notification_id", existing.ID()),
+						slog.String("user_id", cmd.UserID),
+						slog.String("feed_item_id", notifData["feedItemId"]),
+						slog.Int("rollup_count", newCount),
+					)
+				}
+			}
+		}
+
+		if !rolledUp {
+			if saveErr := h.notificationRepo.Save(txCtx, inAppNotif); saveErr != nil {
+				return fmt.Errorf("save in-app notification: %w", saveErr)
+			}
 		}
 
 		if h.eventRecorder != nil {
@@ -76,8 +142,8 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 				cmd.UserID,
 				"PUSH",
 				cmd.Title,
-				cmd.Body,
-				cmd.Data,
+				effectiveBody,
+				effectiveData,
 			)
 			if outboxErr := h.eventRecorder.RecordEvents(txCtx, []any{ev}); outboxErr != nil {
 				return fmt.Errorf("record notification outbox event: %w", outboxErr)
@@ -154,7 +220,7 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 	}
 
 	// 5. Send via PushProvider (FCM)
-	pushResp, err := h.pushProvider.SendPush(ctx, tokens, cmd.Title, cmd.Body, cmd.Data)
+	pushResp, err := h.pushProvider.SendPush(ctx, tokens, cmd.Title, effectiveBody, effectiveData)
 	if err != nil {
 		return nil, fmt.Errorf("send push via provider: %w", err)
 	}

@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/social/application/port"
@@ -16,6 +17,7 @@ type GetActivityFeedQuery struct {
 	CurrentUserID string
 	PageSize      int
 	Cursor        string
+	FeedMode      string
 }
 
 type GetActivityFeedResult struct {
@@ -93,130 +95,170 @@ func (h *GetActivityFeedHandler) Handle(ctx context.Context, q GetActivityFeedQu
 		return nil, fmt.Errorf("get following ids: %w", err)
 	}
 
-	// Tác giả bao gồm chính user + những người user follow
-	authorIDs := append([]string{q.CurrentUserID}, followingIDs...)
-
-	// Kích thước lấy ứng viên (over-fetching buffer cho Tầng 1)
-	fetchLimit := q.PageSize
-	if q.Cursor == "" {
-		fetchLimit = min(q.PageSize*2, 60)
-	}
-
-	feedItems, followingRepoCursor, fetchErr := h.feedItemRepo.GetByAuthorIDs(ctx, authorIDs, fetchLimit, q.Cursor)
-	if fetchErr != nil {
-		return nil, fmt.Errorf("fetch feed items: %w", fetchErr)
-	}
-
-	// Tầng 1: Lọc bài viết đã xem qua Bloom Filter khi refresh (cursor rỗng)
-	if q.Cursor == "" && h.bloomFilter != nil && len(feedItems) > 0 {
-		feedItems = h.filterUnseenItems(ctx, q.CurrentUserID, feedItems)
-	}
-
-	totalAvailableFollowing := len(feedItems)
-
-	// Tỷ lệ 80/20: Mục tiêu lấy 80% từ Following, phần còn thiếu lấy từ Trending/Discovery
-	followingTarget := q.PageSize
-	if h.trendingCache != nil && q.PageSize >= 5 {
-		followingTarget = int(float64(q.PageSize) * 0.8)
-	}
-
-	takeFollowing := min(len(feedItems), followingTarget)
-	followingItems := feedItems[:takeFollowing]
-
-	// Tầng 2: Phần còn thiếu để đủ PageSize -> lấy từ Redis Trending Pool
-	needed := q.PageSize - len(followingItems)
-	existingMap := make(map[string]bool, len(feedItems))
-	for _, item := range feedItems {
-		existingMap[item.ID()] = true
-	}
-
-	var trendingItems []*aggregate.FeedItem
-	if needed > 0 && h.trendingCache != nil {
-		trendingItems = h.fetchTrendingItems(ctx, q.CurrentUserID, existingMap, needed)
-	}
-
-	// Quỹ dự phòng: Nếu Trending không đủ `needed`, lấy nốt các bài còn lại của Following bù vào
-	currentCount := len(followingItems) + len(trendingItems)
-	if currentCount < q.PageSize && takeFollowing < len(feedItems) {
-		remainingFollowing := feedItems[takeFollowing:]
-		deficit := q.PageSize - currentCount
-		take := min(deficit, len(remainingFollowing))
-		followingItems = append(followingItems, remainingFollowing[:take]...)
-	}
-
-	// Xen kẽ (Interleave) bài Following và Trending theo nhịp đều đặn
-	combined := interleaveFeed(followingItems, trendingItems)
-
-	// Tầng 3: Fallback sang bài viết công khai gần nhất (Public Stream) nếu vẫn chưa đủ PageSize
-	var pubCursor string
-	if len(combined) < q.PageSize {
-		neededPublic := q.PageSize - len(combined)
-		publicItems, pCursor, pubErr := h.feedItemRepo.GetPublicFeedItems(ctx, neededPublic, q.Cursor)
-		if pubErr == nil && len(publicItems) > 0 {
-			if q.Cursor == "" && h.bloomFilter != nil {
-				publicItems = h.filterUnseenItems(ctx, q.CurrentUserID, publicItems)
-			}
-			combined = appendUniqueItems(combined, publicItems)
-			pubCursor = pCursor
-			if pubCursor == "" && len(publicItems) > 0 {
-				pubCursor = publicItems[len(publicItems)-1].CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
-			}
-		}
-	}
-
-	// Tầng 4: Xả van an toàn (Safety Valve / Never-Empty Fallback)
-	// Nếu người dùng đã xem hết 100% nội dung (cả bạn bè, trending và public),
-	// bỏ qua bộ lọc Bloom Filter để lấy các bài viết công khai mới nhất, tránh màn hình trắng trơn.
-	if len(combined) == 0 {
-		emergencyItems, emCursor, emErr := h.feedItemRepo.GetPublicFeedItems(ctx, q.PageSize, q.Cursor)
-		if emErr == nil && len(emergencyItems) == 0 && q.Cursor != "" {
-			// Nếu phân trang cũ đã cạn kiệt, quay về đầu dòng thời gian công khai
-			emergencyItems, emCursor, emErr = h.feedItemRepo.GetPublicFeedItems(ctx, q.PageSize, "")
-		}
-		if emErr == nil && len(emergencyItems) > 0 {
-			combined = emergencyItems
-			pubCursor = emCursor
-			if pubCursor == "" {
-				pubCursor = emergencyItems[len(emergencyItems)-1].CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
-			}
-		}
-	}
-
-	// Tầng cuối: Áp dụng thuật toán Author Diversity (không quá 2 bài liên tiếp của cùng 1 tác giả)
-	feedItems = combined
-	if len(feedItems) > 0 {
-		feedItems = h.diversityService.ReorderAndDiversify(feedItems, service.FeedDiversityConfig{
-			MaxConsecutiveAuthor: 2,
-			TargetSize:           q.PageSize,
-		})
-	}
-
-	// Giới hạn kết quả theo đúng PageSize
-	if len(feedItems) > q.PageSize {
-		feedItems = feedItems[:q.PageSize]
-	}
-
-	// Tính nextCursor:
-	// QUAN TRỌNG: Cursor phân trang phải bám theo dòng thời gian của bài Bạn bè (Following Stream),
-	// tuyệt đối không lấy thời gian của bài Trending (vì bài Trending là bài hot 48h ngẫu nhiên,
-	// nếu lấy thời gian bài Trending sẽ làm trượt cursor và bỏ sót bài của bạn bè).
+	var feedItems []*aggregate.FeedItem
 	var nextCursor string
-	consumedFollowing := len(followingItems)
-	hasMoreFollowing := consumedFollowing < totalAvailableFollowing || followingRepoCursor != ""
-	if consumedFollowing > 0 && hasMoreFollowing {
-		lastFollowing := followingItems[consumedFollowing-1]
-		nextCursor = lastFollowing.CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
-	} else if pubCursor != "" {
-		nextCursor = pubCursor
-	}
 
-	// Ghi nhận các bài viết đã trả về vào Bloom Filter
-	if h.bloomFilter != nil && len(feedItems) > 0 && q.CurrentUserID != "" {
-		returnedIDs := make([]string, len(feedItems))
-		for i, item := range feedItems {
-			returnedIDs[i] = item.ID()
+	if strings.EqualFold(strings.TrimSpace(q.FeedMode), "following") {
+		if len(followingIDs) == 0 {
+			return &GetActivityFeedResult{
+				Items:      []*FeedItemDTO{},
+				NextCursor: "",
+			}, nil
 		}
-		_ = h.bloomFilter.AddSeen(ctx, q.CurrentUserID, returnedIDs, 3*24*time.Hour)
+		var fetchErr error
+		feedItems, nextCursor, fetchErr = h.feedItemRepo.GetByAuthorIDs(ctx, followingIDs, q.PageSize, q.Cursor)
+		if fetchErr != nil {
+			return nil, fmt.Errorf("fetch following feed items: %w", fetchErr)
+		}
+	} else {
+		// Tác giả bao gồm chính user + những người user follow
+		authorIDs := append([]string{q.CurrentUserID}, followingIDs...)
+
+		// Kích thước lấy ứng viên (over-fetching buffer cho Tầng 1)
+		fetchLimit := q.PageSize
+		if q.Cursor == "" {
+			fetchLimit = min(q.PageSize*2, 60)
+		}
+
+		var followingRepoCursor string
+		var fetchErr error
+		feedItems, followingRepoCursor, fetchErr = h.feedItemRepo.GetByAuthorIDs(ctx, authorIDs, fetchLimit, q.Cursor)
+		if fetchErr != nil {
+			return nil, fmt.Errorf("fetch feed items: %w", fetchErr)
+		}
+
+		// Tầng 1: Lọc bài viết đã xem qua Bloom Filter khi refresh (cursor rỗng)
+		if q.Cursor == "" && h.bloomFilter != nil && len(feedItems) > 0 {
+			feedItems = h.filterUnseenItems(ctx, q.CurrentUserID, feedItems)
+		}
+
+		totalAvailableFollowing := len(feedItems)
+
+		// Tỷ lệ 80/20: Mục tiêu lấy 80% từ Following, phần còn thiếu lấy từ Trending/Discovery
+		followingTarget := q.PageSize
+		if h.trendingCache != nil && q.PageSize >= 5 {
+			followingTarget = int(float64(q.PageSize) * 0.8)
+		}
+
+		takeFollowing := min(len(feedItems), followingTarget)
+		followingItems := feedItems[:takeFollowing]
+
+		// Tầng 2: Phần còn thiếu để đủ PageSize -> lấy từ Redis Trending Pool
+		needed := q.PageSize - len(followingItems)
+		existingMap := make(map[string]bool, len(feedItems))
+		for _, item := range feedItems {
+			existingMap[item.ID()] = true
+		}
+
+		var trendingItems []*aggregate.FeedItem
+		if needed > 0 && h.trendingCache != nil {
+			trendingItems = h.fetchTrendingItems(ctx, q.CurrentUserID, existingMap, needed)
+		}
+
+		// Bổ sung bài PUBLIC mới nhất vào phần discovery khi refresh (cursor rỗng)
+		// nếu Trending chưa lấp đủ slot discovery, giúp bài mới đăng xuất hiện ngay trên For You.
+		if q.Cursor == "" && len(trendingItems) < needed {
+			discoveryDeficit := needed - len(trendingItems)
+			freshPublic, _, freshErr := h.feedItemRepo.GetPublicFeedItems(ctx, discoveryDeficit*2, "")
+			if freshErr == nil && len(freshPublic) > 0 {
+				if h.bloomFilter != nil {
+					freshPublic = h.filterUnseenItems(ctx, q.CurrentUserID, freshPublic)
+				}
+				for _, pubItem := range freshPublic {
+					if len(trendingItems) >= needed {
+						break
+					}
+					if existingMap[pubItem.ID()] {
+						continue
+					}
+					existingMap[pubItem.ID()] = true
+					trendingItems = append(trendingItems, pubItem)
+				}
+			}
+		}
+
+		// Quỹ dự phòng: Nếu Trending không đủ `needed`, lấy nốt các bài còn lại của Following bù vào
+		currentCount := len(followingItems) + len(trendingItems)
+		if currentCount < q.PageSize && takeFollowing < len(feedItems) {
+			remainingFollowing := feedItems[takeFollowing:]
+			deficit := q.PageSize - currentCount
+			take := min(deficit, len(remainingFollowing))
+			followingItems = append(followingItems, remainingFollowing[:take]...)
+		}
+
+		// Xen kẽ (Interleave) bài Following và Trending theo nhịp đều đặn
+		combined := interleaveFeed(followingItems, trendingItems)
+
+		// Tầng 3: Fallback sang bài viết công khai gần nhất (Public Stream) nếu vẫn chưa đủ PageSize
+		var pubCursor string
+		if len(combined) < q.PageSize {
+			neededPublic := q.PageSize - len(combined)
+			publicItems, pCursor, pubErr := h.feedItemRepo.GetPublicFeedItems(ctx, neededPublic, q.Cursor)
+			if pubErr == nil && len(publicItems) > 0 {
+				if q.Cursor == "" && h.bloomFilter != nil {
+					publicItems = h.filterUnseenItems(ctx, q.CurrentUserID, publicItems)
+				}
+				combined = appendUniqueItems(combined, publicItems)
+				pubCursor = pCursor
+				if pubCursor == "" && len(publicItems) > 0 {
+					pubCursor = publicItems[len(publicItems)-1].CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
+				}
+			}
+		}
+
+		// Tầng 4: Xả van an toàn (Safety Valve / Never-Empty Fallback)
+		// Nếu người dùng đã xem hết 100% nội dung (cả bạn bè, trending và public),
+		// bỏ qua bộ lọc Bloom Filter để lấy các bài viết công khai mới nhất, tránh màn hình trắng trơn.
+		if len(combined) == 0 {
+			emergencyItems, emCursor, emErr := h.feedItemRepo.GetPublicFeedItems(ctx, q.PageSize, q.Cursor)
+			if emErr == nil && len(emergencyItems) == 0 && q.Cursor != "" {
+				// Nếu phân trang cũ đã cạn kiệt, quay về đầu dòng thời gian công khai
+				emergencyItems, emCursor, emErr = h.feedItemRepo.GetPublicFeedItems(ctx, q.PageSize, "")
+			}
+			if emErr == nil && len(emergencyItems) > 0 {
+				combined = emergencyItems
+				pubCursor = emCursor
+				if pubCursor == "" {
+					pubCursor = emergencyItems[len(emergencyItems)-1].CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
+				}
+			}
+		}
+
+		// Tầng cuối: Áp dụng thuật toán Author Diversity (không quá 2 bài liên tiếp của cùng 1 tác giả)
+		feedItems = combined
+		if len(feedItems) > 0 {
+			feedItems = h.diversityService.ReorderAndDiversify(feedItems, service.FeedDiversityConfig{
+				MaxConsecutiveAuthor: 2,
+				TargetSize:           q.PageSize,
+			})
+		}
+
+		// Giới hạn kết quả theo đúng PageSize
+		if len(feedItems) > q.PageSize {
+			feedItems = feedItems[:q.PageSize]
+		}
+
+		// Tính nextCursor:
+		// QUAN TRỌNG: Cursor phân trang phải bám theo dòng thời gian của bài Bạn bè (Following Stream),
+		// tuyệt đối không lấy thời gian của bài Trending (vì bài Trending là bài hot 48h ngẫu nhiên,
+		// nếu lấy thời gian bài Trending sẽ làm trượt cursor và bỏ sót bài của bạn bè).
+		consumedFollowing := len(followingItems)
+		hasMoreFollowing := consumedFollowing < totalAvailableFollowing || followingRepoCursor != ""
+		if consumedFollowing > 0 && hasMoreFollowing {
+			lastFollowing := followingItems[consumedFollowing-1]
+			nextCursor = lastFollowing.CreatedAt().Format("2006-01-02T15:04:05.000000Z07:00")
+		} else if pubCursor != "" {
+			nextCursor = pubCursor
+		}
+
+		// Ghi nhận các bài viết đã trả về vào Bloom Filter
+		if h.bloomFilter != nil && len(feedItems) > 0 && q.CurrentUserID != "" {
+			returnedIDs := make([]string, len(feedItems))
+			for i, item := range feedItems {
+				returnedIDs[i] = item.ID()
+			}
+			_ = h.bloomFilter.AddSeen(ctx, q.CurrentUserID, returnedIDs, 3*24*time.Hour)
+		}
 	}
 
 	// Lấy thông tin user (Tên, Avatar) và tương tác của current user theo batch
