@@ -1,7 +1,5 @@
 package adk
 
-import "time"
-
 // InjuryStatus represents the severity and muscle group of a user's injury.
 type InjuryStatus struct {
 	MuscleGroup string `json:"muscle_group"`
@@ -13,16 +11,6 @@ type WorkoutSlot struct {
 	DayOfWeek int    `json:"day_of_week"` // 0=Monday ... 6=Sunday
 	StartTime string `json:"start_time"`  // "HH:MM"
 	EndTime   string `json:"end_time"`    // "HH:MM"
-}
-
-// WorkoutSession represents historical session execution metrics.
-type WorkoutSession struct {
-	SessionID    string    `json:"session_id"`
-	CompletedAt  time.Time `json:"completed_at"`
-	MuscleGroups []string  `json:"muscle_groups"`
-	AverageRPE   float64   `json:"average_rpe"`
-	TotalSets    int       `json:"total_sets"`
-	Aborted      bool      `json:"aborted"`
 }
 
 // UserProfile aggregates user metrics, preferences, equipment and active injuries.
@@ -47,11 +35,12 @@ type RoadmapSnapshot struct {
 
 // CoachInput represents the full typed input context sent to the agent.
 type CoachInput struct {
-	Flow           string           `json:"flow"`
-	CurrentTime    string           `json:"current_time"` // ISO-8601 string
-	Profile        UserProfile      `json:"profile"`
-	RecentSessions []WorkoutSession `json:"recent_sessions"`
-	CurrentRoadmap *RoadmapSnapshot `json:"current_roadmap,omitempty"`
+	Flow           string              `json:"flow"`
+	CurrentTime    string              `json:"current_time"` // ISO-8601 string
+	Profile        UserProfile         `json:"profile"`
+	RecentSessions []string            `json:"recent_sessions"`
+	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
+	CurrentRoadmap *RoadmapSnapshot    `json:"current_roadmap,omitempty"`
 	// AvailableExercises groups compact 5-element exercise tuples by muscle group:
 	// [exercise_id, name, equipment, difficulty, movement_type].
 	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
@@ -180,7 +169,7 @@ type ValidationReport struct {
 type ReviewRequest struct {
 	OriginalTask     string           `json:"original_task"`
 	UserContext      UserProfile      `json:"user_context"`
-	RecentSessions   []WorkoutSession `json:"recent_sessions,omitempty"`
+	RecentSessions   []string         `json:"recent_sessions,omitempty"`
 	GeneratorOutput  *GeneratedPlan   `json:"generator_output"`
 	ValidationResult ValidationReport `json:"validation_result"`
 	ReviewRound      int              `json:"review_round"`

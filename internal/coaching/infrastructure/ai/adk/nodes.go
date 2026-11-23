@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -83,13 +84,10 @@ func (c *CoachingContextAgent) buildNodes() {
 				return CoachInput{}, fmt.Errorf("get profile: %w", getErr)
 			}
 
-			// Fetch only recent 7 days (max 3 items) to drastically reduce Prompt Tokens.
-			recent, getErr := c.sessionReader.GetRecentSessions(nodeCtx, userID, time.Now().AddDate(0, 0, -7))
+			// Fetch all sessions in the recent 5 days and encode them into compact, explicit strings.
+			recent, getErr := c.sessionReader.GetRecentSessions(nodeCtx, userID, time.Now().AddDate(0, 0, -5))
 			if getErr != nil {
 				return CoachInput{}, fmt.Errorf("get recent sessions: %w", getErr)
-			}
-			if len(recent) > 3 {
-				recent = recent[:3]
 			}
 
 			slots := make([]WorkoutSlot, len(profile.AvailableSlots))
@@ -116,18 +114,20 @@ func (c *CoachingContextAgent) buildNodes() {
 				}
 			}
 
-			adkSessions := make([]WorkoutSession, len(recent))
+			now := time.Now().UTC()
+			adkSessions := make([]string, len(recent))
 			for i := range recent {
-				r := &recent[i]
-				adkSessions[i] = WorkoutSession{
-					SessionID:    r.SessionID,
-					CompletedAt:  r.CompletedAt,
-					MuscleGroups: nil,
-					AverageRPE:   r.AverageRPE,
-					TotalSets:    r.TotalSets,
-					Aborted:      r.Aborted,
+				adkSessions[i] = formatRecentSession(&recent[i], now)
+			}
+
+			// Pre-fetch all PRs once (limit=0, no N+1) and group top 3 newest & strongest per muscle group.
+			var prs []port.PersonalRecordSummary
+			if c.sessionReader != nil {
+				if fetchedPRs, prErr := c.sessionReader.GetPersonalRecords(nodeCtx, userID); prErr == nil {
+					prs = fetchedPRs
 				}
 			}
+			var musclePRs map[string][]string
 
 			// Pre-fetch candidate exercises deterministically with hard injury exclusion
 			candidates := make(map[string][][]string)
@@ -145,6 +145,7 @@ func (c *CoachingContextAgent) buildNodes() {
 
 				exList, err := c.catalog.SearchByFilter(nodeCtx, filter)
 				if err == nil {
+					musclePRs = buildMusclePRs(exList, prs, 3)
 					for _, ex := range exList {
 						// Defense-in-depth: Backend hard excludes any exercise touching injured muscle groups
 						conflict := false
@@ -280,6 +281,7 @@ func (c *CoachingContextAgent) buildNodes() {
 					ActiveInjuries:        resolvedInjuries,
 				},
 				RecentSessions:     adkSessions,
+				MusclePRs:          musclePRs,
 				AvailableExercises: candidates,
 			}, nil
 		},
@@ -517,4 +519,95 @@ func weekdayToCode(w time.Weekday) string {
 	default:
 		return "mon"
 	}
+}
+
+func formatRecentSession(r *port.WorkoutSession, now time.Time) string {
+	days := int(now.Sub(r.CompletedAt).Hours() / 24)
+	when := "today"
+	if days == 1 {
+		when = "1 day ago"
+	} else if days > 1 {
+		when = fmt.Sprintf("%d days ago", days)
+	}
+
+	rpeLabel := "optimal effort"
+	switch {
+	case r.AverageRPE <= 0:
+		rpeLabel = "unrated"
+	case r.AverageRPE < 6.0:
+		rpeLabel = "felt easy"
+	case r.AverageRPE >= 9.0:
+		rpeLabel = "felt overreached"
+	case r.AverageRPE >= 8.0:
+		rpeLabel = "felt hard"
+	}
+
+	status := "completed"
+	if r.Aborted {
+		status = "aborted"
+	}
+
+	return fmt.Sprintf("%s | sets: %d | RPE: %.1f/10 (%s) | status: %s",
+		when, r.TotalSets, r.AverageRPE, rpeLabel, status)
+}
+
+func buildMusclePRs(exList []port.Exercise, prs []port.PersonalRecordSummary, maxPerMuscle int) map[string][]string {
+	if len(prs) == 0 || len(exList) == 0 {
+		return nil
+	}
+	exByID := make(map[string]port.Exercise, len(exList))
+	for _, ex := range exList {
+		exByID[ex.ExerciseID] = ex
+	}
+
+	type prEntry struct {
+		pr   port.PersonalRecordSummary
+		name string
+	}
+	grouped := make(map[string][]prEntry)
+	for _, pr := range prs {
+		ex, ok := exByID[pr.ExerciseID]
+		if !ok || ex.MuscleGroup == "" {
+			continue
+		}
+		grouped[ex.MuscleGroup] = append(grouped[ex.MuscleGroup], prEntry{
+			pr:   pr,
+			name: ex.Name,
+		})
+	}
+	if len(grouped) == 0 {
+		return nil
+	}
+
+	out := make(map[string][]string, len(grouped))
+	for muscle, entries := range grouped {
+		sort.Slice(entries, func(i, j int) bool {
+			if !entries[i].pr.AchievedAt.Equal(entries[j].pr.AchievedAt) {
+				return entries[i].pr.AchievedAt.After(entries[j].pr.AchievedAt)
+			}
+			return entries[i].pr.OneRepMax > entries[j].pr.OneRepMax
+		})
+		if maxPerMuscle > 0 && len(entries) > maxPerMuscle {
+			entries = entries[:maxPerMuscle]
+		}
+		lines := make([]string, len(entries))
+		for i, e := range entries {
+			when := ""
+			if !e.pr.AchievedAt.IsZero() {
+				days := int(time.Since(e.pr.AchievedAt).Hours() / 24)
+				switch {
+				case days <= 0:
+					when = ", today"
+				case days == 1:
+					when = ", 1d ago"
+				default:
+					when = fmt.Sprintf(", %dd ago", days)
+				}
+			}
+			lines[i] = fmt.Sprintf("%s: last %.1fkg x %d (1RM %.1fkg%s)",
+				e.name, e.pr.Weight, e.pr.Reps, e.pr.OneRepMax, when)
+		}
+		out[muscle] = lines
+	}
+	return out
 }

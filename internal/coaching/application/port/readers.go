@@ -70,10 +70,19 @@ type SetLog struct {
 	CompletedAt time.Time
 }
 
+// PersonalRecordSummary is a compact PR record for one exercise.
+type PersonalRecordSummary struct {
+	ExerciseID string
+	OneRepMax  float64
+	Weight     float64
+	Reps       int
+	AchievedAt time.Time
+}
+
 // WorkoutSessionReader is the port for querying execution history.
 type WorkoutSessionReader interface {
 	GetRecentSessions(ctx context.Context, userID string, since time.Time) ([]WorkoutSession, error)
-	GetSetLogs(ctx context.Context, userID string, exerciseID string, limit int) ([]SetLog, error)
+	GetPersonalRecords(ctx context.Context, userID string) ([]PersonalRecordSummary, error)
 }
 
 // ExerciseFilter is the search filter mapped directly from Exercise gRPC contract SearchExercisesRequest.
