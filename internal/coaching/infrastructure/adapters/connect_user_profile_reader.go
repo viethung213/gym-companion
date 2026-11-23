@@ -62,10 +62,11 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 	data := res
 
 	profile := port.Profile{
-		UserID:   data.GetUserId(),
-		WeightKg: float64(data.GetWeightKg()),
-		HeightCm: float64(data.GetHeightCm()),
-		Age:      int(data.GetAge()),
+		UserID:          data.GetUserId(),
+		WeightKg:        float64(data.GetWeightKg()),
+		HeightCm:        float64(data.GetHeightCm()),
+		Age:             int(data.GetAge()),
+		ExperienceLevel: strings.TrimSpace(data.GetExperienceLevel()),
 	}
 
 	if profile.UserID == "" {

@@ -351,3 +351,33 @@ func TestPlanValidator_NilPlan(t *testing.T) {
 		t.Errorf("got %d issues, want 1 for a nil plan", len(got.Issues))
 	}
 }
+
+func TestPlanValidator_RejectsWarmUpCoolDownTargetMuscleGroup(t *testing.T) {
+	cat := newFakeCatalog("bench-press")
+	v := newPlanValidator(cat)
+
+	sp := sessionOf("2026-08-03", "bench-press")
+	sp.TargetMuscleGroups = []string{"WarmUp_CoolDown"}
+
+	got, err := v.validate(context.Background(), planOf(sp), false)
+	if err != nil {
+		t.Fatalf("validate returned error: %v", err)
+	}
+	if len(got.Issues) != 1 {
+		t.Fatalf("got %d issues, want 1: %v", len(got.Issues), got.Issues)
+	}
+	if !strings.Contains(got.Issues[0].Reason, "WarmUp_CoolDown") {
+		t.Errorf("got issue %q, want it to reject WarmUp_CoolDown", got.Issues[0].Reason)
+	}
+
+	// Salvage mode must strip WarmUp_CoolDown so it never leaks into persisted plans.
+	sp.TargetMuscleGroups = []string{"WarmUp_CoolDown", "Pectorals"}
+	salvaged, err := v.validate(context.Background(), planOf(sp), true)
+	if err != nil {
+		t.Fatalf("validate (salvage) returned error: %v", err)
+	}
+	kept := salvaged.Plan.Weeks[0].Sessions[0]
+	if len(kept.TargetMuscleGroups) != 1 || kept.TargetMuscleGroups[0] != "Pectorals" {
+		t.Errorf("salvage TargetMuscleGroups = %v, want [Pectorals]", kept.TargetMuscleGroups)
+	}
+}

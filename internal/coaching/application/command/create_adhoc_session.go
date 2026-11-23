@@ -158,7 +158,8 @@ func findOrFallbackDayPlan(rm *roadmap.Roadmap, date time.Time) *roadmap.DayPlan
 // exercisesToPrescribed converts exercise details to PrescribedExercise items.
 func exercisesToPrescribed(exercises []port.Exercise) []roadmap.PrescribedExercise {
 	out := make([]roadmap.PrescribedExercise, len(exercises))
-	for i, ex := range exercises {
+	for i := range exercises {
+		ex := &exercises[i]
 		out[i] = roadmap.PrescribedExercise{
 			ExerciseID:      ex.ExerciseID,
 			ExerciseName:    ex.Name,
@@ -178,11 +179,12 @@ func exercisesToPrescribed(exercises []port.Exercise) []roadmap.PrescribedExerci
 // uniqueMuscleGroups extracts and deduplicates muscle groups from exercises.
 func uniqueMuscleGroups(exercises []port.Exercise) []string {
 	seen := make(map[string]bool)
-	var out []string
-	for _, ex := range exercises {
-		if !seen[ex.MuscleGroup] {
-			seen[ex.MuscleGroup] = true
-			out = append(out, ex.MuscleGroup)
+	out := make([]string, 0, len(exercises))
+	for i := range exercises {
+		mg := exercises[i].MuscleGroup
+		if !seen[mg] {
+			seen[mg] = true
+			out = append(out, mg)
 		}
 	}
 	return out

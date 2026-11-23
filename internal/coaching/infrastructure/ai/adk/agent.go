@@ -57,6 +57,8 @@ type CoachingContextAgent struct {
 	metaMu         sync.RWMutex
 	equipmentNames map[string]string
 	muscleNames    map[string]string
+	bodyPartNames  map[string]string
+	tagNames       map[string]string
 
 	// runner.Run yields only events, so this is the sole channel out of a node.
 	mu      sync.Mutex
@@ -90,6 +92,8 @@ func NewCoachingContextAgent(
 		hints:          make(map[string]*port.AdHocHint),
 		equipmentNames: make(map[string]string),
 		muscleNames:    make(map[string]string),
+		bodyPartNames:  make(map[string]string),
+		tagNames:       make(map[string]string),
 	}
 
 	if err := cca.build(ctx); err != nil {

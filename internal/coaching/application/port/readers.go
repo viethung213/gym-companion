@@ -34,6 +34,7 @@ type Profile struct {
 	WeightKg              float64
 	HeightCm              float64
 	Age                   int
+	ExperienceLevel       string
 	PrimaryGoal           string
 	AvailableEquipment    []string
 	PreferredMuscleGroups []string
@@ -104,8 +105,10 @@ type Exercise struct {
 	ExerciseID       string
 	Name             string
 	MuscleGroup      string
+	BodyPart         string
 	Equipment        string
 	Difficulty       string
+	TagIDs           []string
 	IsBodyweight     bool
 	IsMachineOrCable bool
 	MeasurementType  string // "REPS" | "DURATION"
@@ -121,6 +124,8 @@ type ExerciseCatalogReader interface {
 type CatalogMetadata struct {
 	EquipmentNames map[string]string // ID -> Name
 	MuscleNames    map[string]string // ID -> Name
+	BodyPartNames  map[string]string // ID -> Name
+	TagNames       map[string]string // ID -> Name
 }
 
 // CatalogMetadataReader is an optional capability for readers that can fetch reference dimension metadata.

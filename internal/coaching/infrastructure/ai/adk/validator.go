@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -239,6 +240,17 @@ func (v *planValidator) validateSession(
 		return issues, nil, nil
 	}
 
+	for _, mg := range sp.TargetMuscleGroups {
+		if isForbiddenTargetMuscleGroup(mg) {
+			issues = append(issues, planIssue{
+				WeekNumber: weekNumber,
+				SessionIdx: idx,
+				Reason:     fmt.Sprintf("target_muscle_groups must not contain internal category %q; use real muscle group names", strings.TrimSpace(mg)),
+			})
+			break
+		}
+	}
+
 	slots := []struct {
 		name string
 		exs  []PrescribedExercise
@@ -296,12 +308,26 @@ func (v *planValidator) validateSession(
 	}
 
 	cleaned := *sp
+	if len(sp.TargetMuscleGroups) > 0 {
+		keptMuscles := make([]string, 0, len(sp.TargetMuscleGroups))
+		for _, mg := range sp.TargetMuscleGroups {
+			if !isForbiddenTargetMuscleGroup(mg) {
+				keptMuscles = append(keptMuscles, mg)
+			}
+		}
+		cleaned.TargetMuscleGroups = keptMuscles
+	}
 	cleaned.Prescription = WorkoutPrescription{
 		WarmUps:       cleanedSlots[0],
 		MainExercises: cleanedSlots[1],
 		CoolDowns:     cleanedSlots[2],
 	}
 	return issues, &cleaned, nil
+}
+
+func isForbiddenTargetMuscleGroup(mg string) bool {
+	trimmed := strings.TrimSpace(mg)
+	return strings.EqualFold(trimmed, "WarmUp_CoolDown") || strings.EqualFold(trimmed, "General")
 }
 
 // countDistinctDates counts unique dates, malformed included: the cap is about days asked for.

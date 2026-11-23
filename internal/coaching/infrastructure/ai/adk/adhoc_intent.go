@@ -125,6 +125,26 @@ func (c *CoachingContextAgent) resolveMuscleIDByName(name string) string {
 	return name
 }
 
+func (c *CoachingContextAgent) resolveBodyPartIDByName(name string) string {
+	target := strings.ToLower(strings.TrimSpace(name))
+	if target == "" {
+		return ""
+	}
+	c.metaMu.RLock()
+	defer c.metaMu.RUnlock()
+	for id, n := range c.bodyPartNames {
+		if strings.ToLower(strings.TrimSpace(n)) == target {
+			return id
+		}
+	}
+	for id, n := range c.bodyPartNames {
+		if strings.Contains(strings.ToLower(n), target) {
+			return id
+		}
+	}
+	return ""
+}
+
 func (c *CoachingContextAgent) resolveEquipmentIDByName(name string) string {
 	c.metaMu.RLock()
 	defer c.metaMu.RUnlock()
@@ -142,6 +162,7 @@ func (c *CoachingContextAgent) prefetchAdHocExercises(
 	muscleGroups []string,
 	equipment []string,
 	avoidMuscles []string,
+	experienceLevel string,
 	candidates map[string][][]string,
 ) int {
 	if c.catalog == nil || len(muscleGroups) == 0 || candidates == nil {
@@ -167,23 +188,63 @@ func (c *CoachingContextAgent) prefetchAdHocExercises(
 			continue
 		}
 		muscleID := c.resolveMuscleIDByName(mg)
+		bodyPartID := c.resolveBodyPartIDByName(mg)
 		res, err := c.catalog.SearchByFilter(ctx, &port.ExerciseFilter{
 			TargetMuscleID: muscleID,
 			EquipmentIDs:   equipIDs,
-			Limit:          8,
+			Limit:          24,
 		})
+		if (err != nil || len(res) == 0) && bodyPartID != "" {
+			res, err = c.catalog.SearchByFilter(ctx, &port.ExerciseFilter{
+				BodyPartID:   bodyPartID,
+				EquipmentIDs: equipIDs,
+				Limit:        24,
+			})
+		}
 		if err != nil || len(res) == 0 {
 			if len(equipIDs) > 0 {
 				res, err = c.catalog.SearchByFilter(ctx, &port.ExerciseFilter{
 					TargetMuscleID: muscleID,
-					Limit:          8,
+					Limit:          24,
 				})
+				if (err != nil || len(res) == 0) && bodyPartID != "" {
+					res, err = c.catalog.SearchByFilter(ctx, &port.ExerciseFilter{
+						BodyPartID: bodyPartID,
+						Limit:      24,
+					})
+				}
 			}
 			if err != nil {
 				continue
 			}
 		}
-		for _, ex := range res {
+		for i := range res {
+			ex := &res[i]
+			if len(candidates[mg]) >= 8 {
+				break
+			}
+			if !isDifficultyAllowed(ex.Difficulty, experienceLevel) {
+				continue
+			}
+			// Never re-inject injured muscles/body parts or recovery-only movements into main candidates.
+			exMuscle := strings.ToLower(strings.TrimSpace(c.resolveMuscleName(ctx, ex.MuscleGroup)))
+			exBP := strings.ToLower(strings.TrimSpace(c.resolveBodyPartName(ctx, ex.BodyPart)))
+			if avoidSet[strings.ToLower(strings.TrimSpace(ex.MuscleGroup))] ||
+				avoidSet[exMuscle] ||
+				(ex.BodyPart != "" && (avoidSet[strings.ToLower(strings.TrimSpace(ex.BodyPart))] || avoidSet[exBP])) {
+				continue
+			}
+			isRecovery := false
+			for _, tid := range ex.TagIDs {
+				tn := c.resolveTagName(ctx, tid)
+				if strings.EqualFold(tn, tagMobilityWarmUp) || strings.EqualFold(tn, tagStretchingCoolDown) {
+					isRecovery = true
+					break
+				}
+			}
+			if isRecovery {
+				continue
+			}
 			measType := ex.MeasurementType
 			if measType == "" {
 				measType = "REPS"

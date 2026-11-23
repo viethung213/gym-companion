@@ -84,12 +84,20 @@ func (c *CoachingContextAgent) buildSuggestAdHocAgent(_ context.Context) (agent.
 						})
 					}
 
+					allAvoid := append([]string(nil), intent.AvoidMuscles...)
+					for _, inj := range coachInput.Profile.ActiveInjuries {
+						if strings.TrimSpace(inj.MuscleGroup) != "" {
+							allAvoid = append(allAvoid, inj.MuscleGroup)
+						}
+					}
+
 					prefetchStart := time.Now()
 					added := c.prefetchAdHocExercises(
 						nodeCtx,
 						coachInput.AdHocHint.MuscleGroups,
 						coachInput.AdHocHint.AvailableEquipment,
-						intent.AvoidMuscles,
+						allAvoid,
+						coachInput.Profile.ExperienceLevel,
 						coachInput.AvailableExercises,
 					)
 					slog.InfoContext(nodeCtx, "[adhoc_trace] prefetch_adhoc completed",

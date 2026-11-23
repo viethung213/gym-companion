@@ -44,9 +44,12 @@ func (c *CoachingContextAgent) ensureMetadataLoaded(ctx context.Context) {
 
 	c.equipmentNames = meta.EquipmentNames
 	c.muscleNames = meta.MuscleNames
+	c.bodyPartNames = meta.BodyPartNames
+	c.tagNames = meta.TagNames
 	slog.InfoContext(ctx, "Successfully captured in-memory catalog metadata snapshot",
 		slog.Int("equipments", len(c.equipmentNames)),
-		slog.Int("muscles", len(c.muscleNames)))
+		slog.Int("muscles", len(c.muscleNames)),
+		slog.Int("tags", len(c.tagNames)))
 }
 
 func (c *CoachingContextAgent) resolveEquipmentName(ctx context.Context, idOrName string) string {
@@ -67,6 +70,54 @@ func (c *CoachingContextAgent) resolveMuscleName(ctx context.Context, idOrName s
 		return name
 	}
 	return idOrName
+}
+
+func (c *CoachingContextAgent) resolveBodyPartName(ctx context.Context, idOrName string) string {
+	c.ensureMetadataLoaded(ctx)
+	c.metaMu.RLock()
+	defer c.metaMu.RUnlock()
+	if name, ok := c.bodyPartNames[idOrName]; ok {
+		return name
+	}
+	if name, ok := c.muscleNames[idOrName]; ok {
+		return name
+	}
+	return idOrName
+}
+
+func (c *CoachingContextAgent) resolveTagName(ctx context.Context, idOrName string) string {
+	c.ensureMetadataLoaded(ctx)
+	c.metaMu.RLock()
+	defer c.metaMu.RUnlock()
+	if name, ok := c.tagNames[idOrName]; ok {
+		return name
+	}
+	return idOrName
+}
+
+// difficultyRank maps difficulty/experience labels to an ordered tier.
+// Unknown or empty values return 0 (no cap).
+func difficultyRank(level string) int {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "beginner":
+		return 1
+	case "intermediate":
+		return 2
+	case "advanced":
+		return 3
+	default:
+		return 0
+	}
+}
+
+// isDifficultyAllowed enforces exercise_difficulty <= user_experience_level.
+func isDifficultyAllowed(exDifficulty, userLevel string) bool {
+	userRank := difficultyRank(userLevel)
+	exRank := difficultyRank(exDifficulty)
+	if userRank == 0 || exRank == 0 {
+		return true
+	}
+	return exRank <= userRank
 }
 
 func (c *CoachingContextAgent) buildNodes() {
@@ -129,8 +180,13 @@ func (c *CoachingContextAgent) buildNodes() {
 			}
 			var musclePRs map[string][]string
 
-			// Pre-fetch candidate exercises deterministically with hard injury exclusion
+			// Pre-fetch and select candidate exercises via pure 3-stage pipeline:
+			// 1. Hard filters (injuries, difficulty <= ExperienceLevel, equipment)
+			// 2. Dynamic DB muscle groups + user-preferred emphasis
+			// 3. Dedicated warm-up (Mobility & Warm-up) and cool-down (Stretching & Cool-down)
 			candidates := make(map[string][][]string)
+			var warmUps map[string][][]string
+			var coolDowns map[string][][]string
 			if c.catalog != nil {
 				avoidInjuries := make([]string, 0, len(profile.ActiveInjuries))
 				for _, inj := range profile.ActiveInjuries {
@@ -139,113 +195,19 @@ func (c *CoachingContextAgent) buildNodes() {
 					}
 				}
 
-				filter := &port.ExerciseFilter{
-					Limit: 1000,
-				}
-
-				exList, err := c.catalog.SearchByFilter(nodeCtx, filter)
+				exList, err := c.catalog.SearchByFilter(nodeCtx, &port.ExerciseFilter{Limit: 1000})
 				if err == nil {
 					musclePRs = buildMusclePRs(exList, prs, 3)
-					for _, ex := range exList {
-						// Defense-in-depth: Backend hard excludes any exercise touching injured muscle groups
-						conflict := false
-						exMuscleResolved := c.resolveMuscleName(nodeCtx, ex.MuscleGroup)
-						for _, inj := range avoidInjuries {
-							injResolved := c.resolveMuscleName(nodeCtx, inj)
-							if strings.EqualFold(ex.MuscleGroup, inj) || strings.EqualFold(exMuscleResolved, injResolved) {
-								conflict = true
-								break
-							}
-						}
-						if conflict {
-							continue
-						}
-
-						eqResolved := c.resolveEquipmentName(nodeCtx, ex.Equipment)
-
-						measType := ex.MeasurementType
-						if measType == "" {
-							measType = "REPS"
-						}
-
-						// 1. If bodyweight, always add to WarmUp_CoolDown category for warm-up/cool-down selection
-						isBW := ex.IsBodyweight || strings.EqualFold(eqResolved, "Body Weight") || strings.EqualFold(eqResolved, "bodyweight")
-						if isBW && len(candidates["WarmUp_CoolDown"]) < 8 {
-							warmupType := "Accessory"
-							if measType == "DURATION" {
-								warmupType = "Cardio"
-							}
-							candidates["WarmUp_CoolDown"] = append(candidates["WarmUp_CoolDown"], []string{
-								ex.ExerciseID,
-								ex.Name,
-								"Body Weight",
-								ex.Difficulty,
-								warmupType,
-								measType,
-							})
-						}
-
-						// Filter by available equipment if user specified any (+ Body Weight)
-						if len(profile.AvailableEquipment) > 0 {
-							eqMatch := ex.IsBodyweight || strings.EqualFold(ex.Equipment, "Body Weight") || strings.EqualFold(eqResolved, "Body Weight") || ex.Equipment == ""
-							if !eqMatch {
-								for _, eq := range profile.AvailableEquipment {
-									userEqResolved := c.resolveEquipmentName(nodeCtx, eq)
-									if strings.EqualFold(ex.Equipment, eq) || strings.EqualFold(eqResolved, userEqResolved) {
-										eqMatch = true
-										break
-									}
-								}
-							}
-							if !eqMatch {
-								continue
-							}
-						}
-
-						// Filter by preferred muscle groups if user specified any (Auto-include Cardio if Goal is Endurance or Fat Loss)
-						if len(profile.PreferredMuscleGroups) > 0 {
-							mgMatch := false
-							isCardio := strings.EqualFold(ex.MuscleGroup, "Cardio") || strings.EqualFold(c.resolveMuscleName(nodeCtx, ex.MuscleGroup), "Cardiovascular System")
-							goalWantsCardio := strings.Contains(strings.ToLower(profile.PrimaryGoal), "endurance") || strings.Contains(strings.ToLower(profile.PrimaryGoal), "fat")
-							if isCardio && goalWantsCardio {
-								mgMatch = true
-							} else {
-								for _, mg := range profile.PreferredMuscleGroups {
-									if strings.EqualFold(ex.MuscleGroup, mg) || strings.EqualFold(c.resolveMuscleName(nodeCtx, ex.MuscleGroup), c.resolveMuscleName(nodeCtx, mg)) {
-										mgMatch = true
-										break
-									}
-								}
-							}
-							if !mgMatch {
-								continue
-							}
-						}
-
-						group := c.resolveMuscleName(nodeCtx, ex.MuscleGroup)
-						if group == "" {
-							group = "General"
-						}
-						movementType := "Compound"
-						if ex.IsMachineOrCable {
-							movementType = "Accessory"
-						}
-						if strings.EqualFold(group, "Cardiovascular System") || strings.EqualFold(ex.MuscleGroup, "Cardio") || measType == "DURATION" {
-							movementType = "Cardio"
-						}
-
-						// Cap to max 6 exercises per muscle group to prevent prompt bloat and hallucination
-						if len(candidates[group]) < 6 {
-							candidates[group] = append(candidates[group], []string{
-								ex.ExerciseID,
-								ex.Name,
-								eqResolved,
-								ex.Difficulty,
-								movementType,
-								measType,
-							})
-						}
+					resolver := exerciseMetaResolver{
+						muscle:    func(s string) string { return c.resolveMuscleName(nodeCtx, s) },
+						bodyPart:  func(s string) string { return c.resolveBodyPartName(nodeCtx, s) },
+						equipment: func(s string) string { return c.resolveEquipmentName(nodeCtx, s) },
+						tag:       func(s string) string { return c.resolveTagName(nodeCtx, s) },
 					}
+					eligible := filterEligibleExercises(exList, &profile, avoidInjuries, resolver)
+					var activeBodyParts map[string]bool
+					candidates, activeBodyParts = selectMainCandidates(eligible, &profile, resolver)
+					warmUps, coolDowns = selectRecoveryCandidates(eligible, activeBodyParts, resolver)
 				}
 			}
 
@@ -273,6 +235,7 @@ func (c *CoachingContextAgent) buildNodes() {
 				Profile: UserProfile{
 					UserID:                userID,
 					WeightKg:              profile.WeightKg,
+					ExperienceLevel:       profile.ExperienceLevel,
 					PrimaryGoal:           profile.PrimaryGoal,
 					AvailableEquipment:    availableEquipNames,
 					PreferredMuscleGroups: preferredMuscles,
@@ -283,6 +246,8 @@ func (c *CoachingContextAgent) buildNodes() {
 				RecentSessions:     adkSessions,
 				MusclePRs:          musclePRs,
 				AvailableExercises: candidates,
+				WarmUpExercises:    warmUps,
+				CoolDownExercises:  coolDowns,
 			}, nil
 		},
 		workflow.NodeConfig{},
@@ -555,9 +520,9 @@ func buildMusclePRs(exList []port.Exercise, prs []port.PersonalRecordSummary, ma
 	if len(prs) == 0 || len(exList) == 0 {
 		return nil
 	}
-	exByID := make(map[string]port.Exercise, len(exList))
-	for _, ex := range exList {
-		exByID[ex.ExerciseID] = ex
+	exByID := make(map[string]*port.Exercise, len(exList))
+	for i := range exList {
+		exByID[exList[i].ExerciseID] = &exList[i]
 	}
 
 	type prEntry struct {
