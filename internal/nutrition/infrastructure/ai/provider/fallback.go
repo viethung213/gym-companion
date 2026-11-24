@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"google.golang.org/adk/v2/model"
-	"google.golang.org/genai"
 )
 
 // Compile-time interface check.
@@ -47,15 +46,9 @@ func (f *FallbackLLM) GenerateContent(ctx context.Context, req *model.LLMRequest
 		for idx, m := range f.models {
 			modelReq := req
 			if req != nil {
+				// Callers own MaxOutputTokens (AI_MAX_OUTPUT_TOKENS); capping it here truncated menu JSON.
 				reqCopy := *req
 				reqCopy.Model = m.Name()
-				if reqCopy.Config == nil {
-					reqCopy.Config = &genai.GenerateContentConfig{MaxOutputTokens: 3500}
-				} else if reqCopy.Config.MaxOutputTokens <= 0 || reqCopy.Config.MaxOutputTokens > 4000 {
-					cfgCopy := *reqCopy.Config
-					cfgCopy.MaxOutputTokens = 3500
-					reqCopy.Config = &cfgCopy
-				}
 				modelReq = &reqCopy
 			}
 

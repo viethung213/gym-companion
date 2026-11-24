@@ -4,6 +4,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,9 +13,12 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/nutrition/v1/service/nutritionv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/query"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/domainerror"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -34,6 +38,8 @@ type GRPCHandler struct {
 	getNutritionInsightHdlr *query.GetNutritionInsightHandler
 	getUserAllergiesHdlr    *query.GetUserAllergiesHandler
 	updateUserAllergiesHdlr *command.UpdateUserAllergiesHandler
+	menuGenFlight           singleflight.Group
+	profileClient           repository.ProfileClient
 }
 
 func NewGRPCHandler(
@@ -71,6 +77,51 @@ func (h *GRPCHandler) WithAllergyHandlers(
 	return h
 }
 
+// todayMenuGenTimeout bounds one on-demand LLM menu generation.
+const todayMenuGenTimeout = 3 * time.Minute
+
+// generateTodayMenu generates today's menu on demand. Concurrent callers for the same user and day
+// (Home, Nutrition and meal detail load in parallel) share one LLM call, and the call is detached
+// from the request so a caller that gives up still leaves a saved plan for the next load.
+func (h *GRPCHandler) generateTodayMenu(
+	ctx context.Context, userID string, now time.Time, bio service.BiologicalMetrics,
+) (*aggregate.NutritionPlan, error) {
+	key := userID + "|" + now.Format(time.DateOnly)
+	ch := h.menuGenFlight.DoChan(key, func() (any, error) {
+		genCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), todayMenuGenTimeout)
+		defer cancel()
+
+		var userRestrictions []string
+		if h.getUserAllergiesHdlr != nil {
+			allergies, aErr := h.getUserAllergiesHdlr.Handle(genCtx, query.GetUserAllergiesQuery{UserID: userID})
+			if aErr == nil {
+				userRestrictions = allergies
+			}
+		}
+
+		return h.genPlanHdlr.Handle(genCtx, command.GenerateDailyPlanCommand{
+			UserID:            userID,
+			PlanDate:          now,
+			BiologicalMetrics: bio,
+			UserRestrictions:  userRestrictions,
+		})
+	})
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for today menu generation: %w", ctx.Err())
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		plan, ok := res.Val.(*aggregate.NutritionPlan)
+		if !ok || plan == nil {
+			return nil, errors.New("today menu generation returned no plan")
+		}
+		return plan, nil
+	}
+}
+
 func (h *GRPCHandler) GetTodayMenu(ctx context.Context, _ *nutritionv1msg.GetTodayMenuRequest) (*nutritionv1msg.GetTodayMenuResponse, error) {
 	actor, err := middleware.RequireAuthenticated(ctx)
 	if err != nil {
@@ -78,33 +129,15 @@ func (h *GRPCHandler) GetTodayMenu(ctx context.Context, _ *nutritionv1msg.GetTod
 	}
 	userID := actor.UserID
 
-	now := time.Now()
+	// "Today" and the menu's metrics come from the athlete's profile (zone, body metrics).
+	athlete := command.ResolveAthleteProfile(ctx, h.profileClient, userID)
+	now := athlete.Today(time.Now())
 	plan, err := h.getTodayMenuHdlr.Handle(ctx, query.GetTodayMenuQuery{
 		UserID:   userID,
 		PlanDate: now,
 	})
 	if err != nil || plan == nil {
-		bio := service.BiologicalMetrics{
-			WeightKg: 70.0,
-			HeightCm: 170.0,
-			Age:      25,
-			Gender:   "MALE",
-		}
-
-		var userRestrictions []string
-		if h.getUserAllergiesHdlr != nil {
-			allergies, aErr := h.getUserAllergiesHdlr.Handle(ctx, query.GetUserAllergiesQuery{UserID: userID})
-			if aErr == nil {
-				userRestrictions = allergies
-			}
-		}
-
-		genPlan, genErr := h.genPlanHdlr.Handle(ctx, command.GenerateDailyPlanCommand{
-			UserID:            userID,
-			PlanDate:          now,
-			BiologicalMetrics: bio,
-			UserRestrictions:  userRestrictions,
-		})
+		genPlan, genErr := h.generateTodayMenu(ctx, userID, now, athlete.Metrics)
 		if genErr != nil {
 			return nil, status.Errorf(codes.Internal, "failed to generate daily menu: %v", genErr)
 		}
@@ -667,4 +700,11 @@ func (c *ConnectNutritionHandler) UpdateUserAllergies(
 	req *nutritionv1msg.UpdateUserAllergiesRequest,
 ) (*nutritionv1msg.UpdateUserAllergiesResponse, error) {
 	return c.grpcHandler.UpdateUserAllergies(ctx, req)
+}
+
+// WithProfileClient lets GetTodayMenu read the athlete's zone and body metrics.
+// Without it the menu falls back to default metrics and UTC.
+func (h *GRPCHandler) WithProfileClient(client repository.ProfileClient) *GRPCHandler {
+	h.profileClient = client
+	return h
 }

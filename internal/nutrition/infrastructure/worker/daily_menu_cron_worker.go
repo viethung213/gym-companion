@@ -9,7 +9,6 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
-	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 )
 
 const (
@@ -22,17 +21,6 @@ const (
 	// defaultDailyTargetMinute là phút mặc định kích hoạt (00).
 	defaultDailyTargetMinute = 0
 )
-
-// getDefaultBiologicalMetrics trả về chỉ số sinh trắc học mặc định khi không lấy được profile thực của user.
-func getDefaultBiologicalMetrics() service.BiologicalMetrics {
-	return service.BiologicalMetrics{
-		WeightKg:      70.0,
-		HeightCm:      170.0,
-		Age:           25,
-		Gender:        "MALE",
-		ActivityLevel: "MODERATELY_ACTIVE",
-	}
-}
 
 // DailyMenuCronWorker sinh thực đơn hằng ngày cho các user hoạt động.
 type DailyMenuCronWorker struct {
@@ -198,7 +186,7 @@ func (w *DailyMenuCronWorker) RunOnce(ctx context.Context) (successCount, failur
 				return
 			}
 
-			metrics := w.fetchBiologicalMetrics(ctx, uid)
+			athlete := command.ResolveAthleteProfile(ctx, w.profileClient, uid)
 
 			var restrictions []string
 			if userAllergiesMap != nil {
@@ -207,8 +195,8 @@ func (w *DailyMenuCronWorker) RunOnce(ctx context.Context) (successCount, failur
 
 			_, genErr := w.generatePlanHandler.Handle(ctx, command.GenerateDailyPlanCommand{
 				UserID:            uid,
-				PlanDate:          time.Now(),
-				BiologicalMetrics: metrics,
+				PlanDate:          athlete.Today(time.Now()),
+				BiologicalMetrics: athlete.Metrics,
 				UserRestrictions:  restrictions,
 			})
 
@@ -233,33 +221,6 @@ func (w *DailyMenuCronWorker) RunOnce(ctx context.Context) (successCount, failur
 	)
 
 	return successCount, failCount, nil
-}
-
-// fetchBiologicalMetrics lấy chỉ số sinh trắc học từ ProfileService.
-// Nếu profile không tìm thấy hoặc lỗi, trả về defaultBiologicalMetrics.
-func (w *DailyMenuCronWorker) fetchBiologicalMetrics(ctx context.Context, userID string) service.BiologicalMetrics {
-	if w.profileClient == nil {
-		slog.WarnContext(ctx, "profileClient not configured, using fallback metrics", slog.String("user_id", userID))
-		return getDefaultBiologicalMetrics()
-	}
-
-	profileMetrics, err := w.profileClient.GetBiologicalMetrics(ctx, userID)
-	if err != nil {
-		slog.WarnContext(ctx, "Could not fetch profile metrics, using fallback", slog.String("user_id", userID), slog.String("error", err.Error()))
-		return getDefaultBiologicalMetrics()
-	}
-	if profileMetrics == nil {
-		slog.WarnContext(ctx, "User profile not found, using fallback", slog.String("user_id", userID))
-		return getDefaultBiologicalMetrics()
-	}
-
-	return service.BiologicalMetrics{
-		WeightKg:      profileMetrics.WeightKg,
-		HeightCm:      profileMetrics.HeightCm,
-		Age:           profileMetrics.Age,
-		Gender:        profileMetrics.Gender,
-		ActivityLevel: profileMetrics.ActivityLevel,
-	}
 }
 
 // Stop dừng cron worker.

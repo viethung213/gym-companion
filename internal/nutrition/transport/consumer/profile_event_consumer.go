@@ -35,6 +35,7 @@ type ProfileEventConsumer struct {
 	outboxLogRepo       port.OutboxLogRepository
 	generatePlanHandler *command.GenerateDailyPlanHandler
 	allergyRepo         repository.UserAllergyRepository
+	profileClient       repository.ProfileClient
 }
 
 func (c *ProfileEventConsumer) WithUserAllergyRepository(repo repository.UserAllergyRepository) *ProfileEventConsumer {
@@ -192,10 +193,12 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			}
 		}
 
+		bioMetrics, planDate := c.planFor(ctx, userID, bioMetrics)
+
 		if c.generatePlanHandler != nil {
 			_, genErr := c.generatePlanHandler.Handle(ctx, command.GenerateDailyPlanCommand{
 				UserID:            userID,
-				PlanDate:          time.Now(),
+				PlanDate:          planDate,
 				BiologicalMetrics: bioMetrics,
 				UserRestrictions:  userRestrictions,
 			})
@@ -263,10 +266,12 @@ func (c *ProfileEventConsumer) ProcessMessage(ctx context.Context, msg kafka.Mes
 			}
 		}
 
+		bioMetrics, planDate := c.planFor(ctx, userID, bioMetrics)
+
 		if c.generatePlanHandler != nil {
 			_, genErr := c.generatePlanHandler.Handle(ctx, command.GenerateDailyPlanCommand{
 				UserID:            userID,
-				PlanDate:          time.Now(),
+				PlanDate:          planDate,
 				BiologicalMetrics: bioMetrics,
 				UserRestrictions:  userRestrictions,
 			})
@@ -308,4 +313,32 @@ func (c *ProfileEventConsumer) saveLog(ctx context.Context, rawPayload []byte, e
 	if saveErr := c.outboxLogRepo.SaveLog(ctx, logRecord); saveErr != nil {
 		slog.WarnContext(ctx, "Warning: failed to save outbox log for event", slog.String("event_id", env.ID), slog.Any("error", saveErr))
 	}
+}
+
+// WithProfileClient lets the consumer read the athlete's age and time zone,
+// which profile events do not carry.
+func (c *ProfileEventConsumer) WithProfileClient(client repository.ProfileClient) *ProfileEventConsumer {
+	c.profileClient = client
+	return c
+}
+
+// planFor returns the metrics and the athlete's current day to plan for. The
+// event's metrics win when set (they are the change being reacted to); the
+// profile supplies age, zone and anything the event left empty.
+func (c *ProfileEventConsumer) planFor(ctx context.Context, userID string, fromEvent service.BiologicalMetrics) (service.BiologicalMetrics, time.Time) {
+	if c.profileClient == nil {
+		return fromEvent, time.Now()
+	}
+	athlete := command.ResolveAthleteProfile(ctx, c.profileClient, userID)
+	m := athlete.Metrics
+	if fromEvent.WeightKg > 0 {
+		m.WeightKg = fromEvent.WeightKg
+	}
+	if fromEvent.HeightCm > 0 {
+		m.HeightCm = fromEvent.HeightCm
+	}
+	if fromEvent.Gender != "" {
+		m.Gender = fromEvent.Gender
+	}
+	return m, athlete.Today(time.Now())
 }

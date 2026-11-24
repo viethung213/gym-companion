@@ -5,9 +5,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/event"
+	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/vo"
 )
 
@@ -58,41 +60,72 @@ func (m *mockEventRecorder) PublishEvents(ctx context.Context, events []any) err
 	return m.RecordEvents(ctx, events)
 }
 
-func TestUpcomingMealReminderWorker_RunCheck(t *testing.T) {
-	now := time.Now()
-	// Set meal scheduled 30 minutes in the future
-	futureMealTime := now.Add(30 * time.Minute)
-	scheduledTimeStr := futureMealTime.Format("15:04")
+// zoneProfileClient reports every user in one zone and counts lookups.
+type zoneProfileClient struct {
+	zone  string
+	calls int
+}
 
+func (z *zoneProfileClient) GetBiologicalMetrics(_ context.Context, _ string) (*repository.UserBiologicalMetrics, error) {
+	z.calls++
+	return &repository.UserBiologicalMetrics{Timezone: z.zone}, nil
+}
+
+// breakfastPlan is usr_100's plan for planDate with breakfast at clock.
+func breakfastPlan(planDate time.Time, clock string) *aggregate.NutritionPlan {
 	alloc, _ := vo.NewCalorieAllocation(2000, 150, 200, 60)
 	mealOpt := aggregate.NewMealOption("opt_1", "Phở Bò", 500, 30, 60, 15, nil, nil, false)
-	dailyMeal := aggregate.NewDailyMealWithSchedule("BREAKFAST", []aggregate.MealOption{mealOpt}, scheduledTimeStr)
+	dailyMeal := aggregate.NewDailyMealWithSchedule("BREAKFAST", []aggregate.MealOption{mealOpt}, clock)
+	return aggregate.NewNutritionPlan("plan_001", "usr_100", planDate, alloc, []aggregate.DailyMeal{dailyMeal})
+}
 
-	plan := aggregate.NewNutritionPlan("plan_001", "usr_100", futureMealTime, alloc, []aggregate.DailyMeal{dailyMeal})
-
-	repo := &mockNutritionPlanRepo{plans: []*aggregate.NutritionPlan{plan}}
+func TestUpcomingMealReminderWorker_RemindsInUserZone(t *testing.T) {
+	// Breakfast at 07:30 ICT on 2026-11-25 = 00:30 UTC; now is 00:00 UTC (07:00 ICT).
+	now := time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)
+	repo := &mockNutritionPlanRepo{plans: []*aggregate.NutritionPlan{
+		breakfastPlan(time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC), "07:30"),
+	}}
 	recorder := &mockEventRecorder{}
+	profiles := &zoneProfileClient{zone: "Asia/Ho_Chi_Minh"}
 
-	worker := NewUpcomingMealReminderWorker(repo, recorder, 100*time.Millisecond)
-	worker.runCheck(context.Background())
+	worker := NewUpcomingMealReminderWorker(repo, recorder, 100*time.Millisecond).WithProfileClient(profiles)
+	worker.runCheckAt(context.Background(), now)
+	worker.runCheckAt(context.Background(), now.Add(5*time.Minute))
 
 	recorder.mu.Lock()
-	count := len(recorder.events)
-	recorder.mu.Unlock()
-
-	if got, want := count, 1; got != want {
-		t.Fatalf("events count got %d, want %d", got, want)
+	defer recorder.mu.Unlock()
+	if got, want := len(recorder.events), 1; got != want {
+		t.Fatalf("events count got %d, want %d (one reminder, no duplicates)", got, want)
 	}
-
 	reminder, ok := recorder.events[0].(*event.UpcomingMealReminderEvent)
 	if !ok {
 		t.Fatalf("event type got %T, want *event.UpcomingMealReminderEvent", recorder.events[0])
 	}
-
 	if got, want := reminder.UserID(), "usr_100"; got != want {
 		t.Errorf("UserID got %s, want %s", got, want)
 	}
 	if got, want := reminder.MealType(), "BREAKFAST"; got != want {
 		t.Errorf("MealType got %s, want %s", got, want)
+	}
+	if profiles.calls != 1 {
+		t.Errorf("profile looked up %d times, want 1 (zone is cached)", profiles.calls)
+	}
+}
+
+func TestUpcomingMealReminderWorker_WithoutProfileReadsUTC(t *testing.T) {
+	// Same plan, no profile client: 07:30 is read as UTC, seven hours away.
+	now := time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)
+	repo := &mockNutritionPlanRepo{plans: []*aggregate.NutritionPlan{
+		breakfastPlan(time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC), "07:30"),
+	}}
+	recorder := &mockEventRecorder{}
+
+	NewUpcomingMealReminderWorker(repo, recorder, 100*time.Millisecond).runCheckAt(context.Background(), now)
+	if len(recorder.events) != 0 {
+		t.Fatalf("got %d reminders, want none 7 hours ahead of the meal", len(recorder.events))
+	}
+	NewUpcomingMealReminderWorker(repo, recorder, 100*time.Millisecond).runCheckAt(context.Background(), now.Add(7*time.Hour))
+	if len(recorder.events) != 1 {
+		t.Fatalf("got %d reminders, want 1 at 07:00 UTC", len(recorder.events))
 	}
 }

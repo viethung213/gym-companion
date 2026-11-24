@@ -93,5 +93,6 @@ func (c *ConnectProfileClient) GetBiologicalMetrics(
 		Age:           int(data.GetAge()),
 		Gender:        data.GetGender(),
 		ActivityLevel: activity,
+		Timezone:      data.GetTimezone(),
 	}, nil
 }
