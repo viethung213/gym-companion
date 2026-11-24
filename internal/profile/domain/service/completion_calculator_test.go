@@ -23,8 +23,8 @@ func TestCompletionCalculator(t *testing.T) {
 			"INTERMEDIATE",
 			[]string{"MUSCLE_GAIN"},
 			[]string{"MORNING"},
-			[]string{"DUMBBELL"},
-			[]string{"CHEST"},
+			[]vo.Equipment{vo.EquipmentDumbbell},
+			[]vo.MuscleGroup{vo.MuscleGroupChest},
 			"FRIENDLY",
 			75.0,
 			nil,
@@ -43,8 +43,8 @@ func TestCompletionCalculator(t *testing.T) {
 			"BEGINNER",
 			[]string{"FAT_LOSS"},
 			[]string{"EVENING"},
-			[]string{}, // missing equipment
-			[]string{}, // missing preferred muscle groups
+			nil, // missing equipment
+			nil, // missing preferred muscle groups
 			"STRICT",
 			0.0,
 			nil,

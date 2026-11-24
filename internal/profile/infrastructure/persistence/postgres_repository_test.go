@@ -44,6 +44,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			target_body_fat_percent REAL,
 			completion_rate REAL,
 			ai_coach_activated INTEGER,
+			timezone TEXT NOT NULL DEFAULT 'UTC',
 			created_at DATETIME,
 			updated_at DATETIME
 		);
@@ -59,7 +60,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		CREATE TABLE profile.injuries (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
-			muscle_group TEXT NOT NULL,
+			region TEXT NOT NULL,
+			muscle TEXT,
+			side TEXT NOT NULL DEFAULT 'BOTH',
 			severity TEXT NOT NULL,
 			notes TEXT,
 			reported_at DATETIME,
@@ -105,7 +108,7 @@ func TestPostgresUserProfileRepository(t *testing.T) {
 	bio, err := vo.NewBiologicalMetricsWithDOB(72.0, 175.0, dob, "MALE")
 	require.NoError(t, err)
 
-	inj, err := entity.NewInjury("inj-101", "Shoulder", "MODERATE", "Rotator cuff pain", time.Now())
+	inj, err := entity.NewInjury("inj-101", vo.JointRegionShoulder, "", vo.BodySideBoth, vo.InjurySeverityModerate, "Rotator cuff pain", time.Now())
 	require.NoError(t, err)
 
 	p, err := aggregate.NewUserProfile(
@@ -114,14 +117,18 @@ func TestPostgresUserProfileRepository(t *testing.T) {
 		"INTERMEDIATE",
 		[]string{"MUSCLE_GAIN"},
 		[]string{"MORNING"},
-		[]string{"DUMBBELL"},
-		[]string{"CHEST"},
+		[]vo.Equipment{vo.EquipmentDumbbell},
+		[]vo.MuscleGroup{vo.MuscleGroupChest},
 		"FRIENDLY",
 		70.0,
 		15.0,
 		[]*entity.Injury{inj},
 	)
 	require.NoError(t, err)
+
+	tz, err := vo.ParseTimezone("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	p.SetTimezone(tz)
 
 	// Save inside transaction
 	err = txManager.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -139,8 +146,9 @@ func TestPostgresUserProfileRepository(t *testing.T) {
 	assert.Equal(t, "user-infra-1", fetched.UserID())
 	assert.Equal(t, 72.0, fetched.BiologicalMetrics().WeightKg())
 	assert.Equal(t, 175.0, fetched.BiologicalMetrics().HeightCm())
+	assert.Equal(t, "Asia/Ho_Chi_Minh", fetched.Timezone().String())
 	assert.Len(t, fetched.Injuries(), 1)
-	assert.Equal(t, "Shoulder", fetched.Injuries()[0].MuscleGroup())
+	assert.Equal(t, vo.JointRegionShoulder, fetched.Injuries()[0].Region())
 	assert.False(t, fetched.Injuries()[0].IsRecovered())
 
 	// Recover injury and update in db via surgical RecoverInjury
@@ -197,8 +205,8 @@ func TestMapper_ToDomainAggregate_EdgeCases(t *testing.T) {
 		Gender:                "FEMALE",
 		Goals:                 []byte(`invalid-json-goals`),
 		PreferredWorkoutTimes: []byte(`["MORNING"]`),
-		AvailableEquipment:    []byte(`["MAT"]`),
-		PreferredMuscleGroups: []byte(`["LEGS"]`),
+		AvailableEquipment:    []byte(`["OTHER"]`),
+		PreferredMuscleGroups: []byte(`["QUADRICEPS"]`),
 	}
 
 	_, err := persistence.ToDomainAggregate(userModel, nil, nil)

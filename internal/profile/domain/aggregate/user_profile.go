@@ -2,6 +2,8 @@ package aggregate
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,8 +27,8 @@ type UserProfile struct {
 	experienceLevel       string
 	goals                 []string
 	preferredWorkoutTimes []string
-	availableEquipment    []string
-	preferredMuscleGroups []string
+	availableEquipment    []vo.Equipment
+	preferredMuscleGroups []vo.MuscleGroup
 	coachStyle            string
 	targetWeightKg        float64
 	targetBodyFatPercent  float64
@@ -34,6 +36,7 @@ type UserProfile struct {
 	periodicMetrics       []vo.PeriodicMetric
 	completionRate        float64
 	aiCoachActivated      bool
+	timezone              vo.Timezone
 	createdAt             time.Time
 	updatedAt             time.Time
 
@@ -46,8 +49,8 @@ func NewUserProfile(
 	experienceLevel string,
 	goals []string,
 	preferredWorkoutTimes []string,
-	availableEquipment []string,
-	preferredMuscleGroups []string,
+	availableEquipment []vo.Equipment,
+	preferredMuscleGroups []vo.MuscleGroup,
 	coachStyle string,
 	targetWeightKg float64,
 	targetBodyFatPercent float64,
@@ -55,6 +58,12 @@ func NewUserProfile(
 ) (*UserProfile, error) {
 	if userID == "" {
 		return nil, errors.New("user_id required")
+	}
+	if err := validateTraining(availableEquipment, preferredMuscleGroups); err != nil {
+		return nil, err
+	}
+	if err := validateWorkoutTimes(preferredWorkoutTimes); err != nil {
+		return nil, err
 	}
 
 	if coachStyle == "" {
@@ -85,8 +94,8 @@ func NewUserProfile(
 
 	copiedGoals := copyStringSlice(goals)
 	copiedTimes := copyStringSlice(preferredWorkoutTimes)
-	copiedEquip := copyStringSlice(availableEquipment)
-	copiedMuscles := copyStringSlice(preferredMuscleGroups)
+	copiedEquip := copySlice(availableEquipment)
+	copiedMuscles := copySlice(preferredMuscleGroups)
 	copiedInjuries := copyInjurySlice(injuries)
 
 	p := &UserProfile{
@@ -129,8 +138,8 @@ func ReconstituteUserProfile(
 	experienceLevel string,
 	goals []string,
 	preferredWorkoutTimes []string,
-	availableEquipment []string,
-	preferredMuscleGroups []string,
+	availableEquipment []vo.Equipment,
+	preferredMuscleGroups []vo.MuscleGroup,
 	coachStyle string,
 	targetWeightKg float64,
 	targetBodyFatPercent float64,
@@ -147,8 +156,8 @@ func ReconstituteUserProfile(
 		experienceLevel:       experienceLevel,
 		goals:                 copyStringSlice(goals),
 		preferredWorkoutTimes: copyStringSlice(preferredWorkoutTimes),
-		availableEquipment:    copyStringSlice(availableEquipment),
-		preferredMuscleGroups: copyStringSlice(preferredMuscleGroups),
+		availableEquipment:    copySlice(availableEquipment),
+		preferredMuscleGroups: copySlice(preferredMuscleGroups),
 		coachStyle:            coachStyle,
 		targetWeightKg:        targetWeightKg,
 		targetBodyFatPercent:  targetBodyFatPercent,
@@ -218,9 +227,9 @@ func (p *UserProfile) Goals() []string                         { return copyStri
 func (p *UserProfile) PreferredWorkoutTimes() []string {
 	return copyStringSlice(p.preferredWorkoutTimes)
 }
-func (p *UserProfile) AvailableEquipment() []string { return copyStringSlice(p.availableEquipment) }
-func (p *UserProfile) PreferredMuscleGroups() []string {
-	return copyStringSlice(p.preferredMuscleGroups)
+func (p *UserProfile) AvailableEquipment() []vo.Equipment { return copySlice(p.availableEquipment) }
+func (p *UserProfile) PreferredMuscleGroups() []vo.MuscleGroup {
+	return copySlice(p.preferredMuscleGroups)
 }
 func (p *UserProfile) CoachStyle() string            { return p.coachStyle }
 func (p *UserProfile) TargetWeightKg() float64       { return p.targetWeightKg }
@@ -233,6 +242,66 @@ func (p *UserProfile) CompletionRate() float64 { return p.completionRate }
 func (p *UserProfile) AICoachActivated() bool  { return p.aiCoachActivated }
 func (p *UserProfile) CreatedAt() time.Time    { return p.createdAt }
 func (p *UserProfile) UpdatedAt() time.Time    { return p.updatedAt }
+
+// Timezone returns the athlete's IANA zone; slot times are wall clock in it.
+func (p *UserProfile) Timezone() vo.Timezone {
+	if p.timezone == "" {
+		return vo.DefaultTimezone
+	}
+	return p.timezone
+}
+
+// SetTimezone records the athlete's zone, parsed by vo.ParseTimezone.
+// The zero value keeps the current zone, so an update that omits it changes nothing.
+func (p *UserProfile) SetTimezone(tz vo.Timezone) {
+	if tz != "" {
+		p.timezone = tz
+	}
+}
+
+// validateTraining rejects unknown equipment or muscle group codes, which may
+// reach the aggregate from stored JSONB or callers.
+// MaxWorkoutSlotsPerWeek caps the weekly slots an athlete may select. The coach
+// schedules one session per slot: up to six training sessions (BR-AC-01), the
+// rest active recovery. Must match coaching roadmap.MaxSlotsPerWeek.
+const MaxWorkoutSlotsPerWeek = 10
+
+// validateWorkoutTimes rejects more than MaxWorkoutSlotsPerWeek distinct slots.
+func validateWorkoutTimes(times []string) error {
+	distinct := make(map[string]struct{}, len(times))
+	for _, t := range times {
+		if t = strings.ToLower(strings.TrimSpace(t)); t != "" {
+			distinct[t] = struct{}{}
+		}
+	}
+	if len(distinct) > MaxWorkoutSlotsPerWeek {
+		return fmt.Errorf("%w: %d selected, at most %d", derror.ErrTooManyWorkoutSlots, len(distinct), MaxWorkoutSlotsPerWeek)
+	}
+	return nil
+}
+
+func validateTraining(equipment []vo.Equipment, muscles []vo.MuscleGroup) error {
+	for _, e := range equipment {
+		if !e.Valid() {
+			return fmt.Errorf("%w: unknown equipment %q", derror.ErrInvalidTaxonomy, e)
+		}
+	}
+	for _, m := range muscles {
+		if !m.Valid() {
+			return fmt.Errorf("%w: unknown muscle group %q", derror.ErrInvalidTaxonomy, m)
+		}
+	}
+	return nil
+}
+
+func copySlice[T any](s []T) []T {
+	if s == nil {
+		return nil
+	}
+	c := make([]T, len(s))
+	copy(c, s)
+	return c
+}
 
 func copyStringSlice(s []string) []string {
 	if len(s) == 0 {
@@ -280,13 +349,24 @@ func (p *UserProfile) UpdateProfile(
 	experienceLevel string,
 	goals []string,
 	preferredWorkoutTimes []string,
-	availableEquipment []string,
-	preferredMuscleGroups []string,
+	availableEquipment []vo.Equipment,
+	preferredMuscleGroups []vo.MuscleGroup,
 	coachStyle string,
 	targetWeightKg float64,
 	targetBodyFatPercent float64,
 	bodyFatPercent ...float64,
-) {
+) error {
+	if err := validateTraining(availableEquipment, preferredMuscleGroups); err != nil {
+		return err
+	}
+	// Only a changed selection is checked, so writes that pass the stored slots
+	// through (e.g. logging body metrics) keep working for older profiles.
+	if !slices.Equal(preferredWorkoutTimes, p.preferredWorkoutTimes) {
+		if err := validateWorkoutTimes(preferredWorkoutTimes); err != nil {
+			return err
+		}
+	}
+
 	prevActivated := p.aiCoachActivated
 	prevRate := p.completionRate
 
@@ -364,10 +444,10 @@ func (p *UserProfile) UpdateProfile(
 		p.preferredWorkoutTimes = copyStringSlice(preferredWorkoutTimes)
 	}
 	if len(availableEquipment) > 0 {
-		p.availableEquipment = copyStringSlice(availableEquipment)
+		p.availableEquipment = copySlice(availableEquipment)
 	}
 	if len(preferredMuscleGroups) > 0 {
-		p.preferredMuscleGroups = copyStringSlice(preferredMuscleGroups)
+		p.preferredMuscleGroups = copySlice(preferredMuscleGroups)
 	}
 	if coachStyle != "" {
 		p.coachStyle = coachStyle
@@ -402,6 +482,8 @@ func (p *UserProfile) UpdateProfile(
 			p.userID, p.biologicalMetrics, p.goals, p.injuries, p.preferredWorkoutTimes, p.updatedAt,
 		))
 	}
+
+	return nil
 }
 
 //nolint:gocritic // heavy value object passed by value
@@ -412,7 +494,7 @@ func (p *UserProfile) AddPeriodicMetric(metric vo.PeriodicMetric) {
 
 func (p *UserProfile) AddInjury(injury *entity.Injury) error {
 	for _, existing := range p.injuries {
-		if existing.MuscleGroup() == injury.MuscleGroup() && !existing.IsRecovered() {
+		if existing.SameLocation(injury) && !existing.IsRecovered() {
 			return derror.ErrInjuryAlreadyActive
 		}
 	}

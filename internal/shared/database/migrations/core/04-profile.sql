@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS profile.users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- IANA zone of the athlete; workout slot times are wall clock in it.
+ALTER TABLE profile.users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
+
 -- 3. BODY METRICS (Lịch sử chỉ số cơ thể)
 CREATE TABLE IF NOT EXISTS profile.body_metrics (
     id UUID PRIMARY KEY,
@@ -72,17 +75,40 @@ CREATE TABLE IF NOT EXISTS profile.body_metrics (
 CREATE INDEX IF NOT EXISTS idx_profile_body_metrics_user_id ON profile.body_metrics(user_id, logged_at DESC);
 
 -- 4. INJURIES (Vết chấn thương)
+-- region/muscle/side/severity hold the short codes of the proto enums in
+-- contracts/supporting/exercise/v1/message/taxonomy.proto (docs/05 §5.2).
 CREATE TABLE IF NOT EXISTS profile.injuries (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES profile.users(user_id) ON DELETE CASCADE,
-    muscle_group VARCHAR(100) NOT NULL,
+    region TEXT NOT NULL,
+    muscle TEXT,
+    side TEXT NOT NULL DEFAULT 'BOTH',
     severity VARCHAR(50) NOT NULL DEFAULT 'MILD',
     notes TEXT DEFAULT '',
     reported_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_recovered BOOLEAN DEFAULT FALSE,
     recovered_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_injuries_region CHECK (
+        region IN (
+            'NECK', 'SHOULDER', 'ELBOW', 'WRIST_HAND', 'UPPER_BACK', 'LOWER_BACK', 'CHEST', 'HIP',
+            'KNEE', 'ANKLE_FOOT'
+        )
+    ),
+    CONSTRAINT chk_injuries_muscle CHECK (
+        muscle IN (
+            'ABDOMINALS', 'ABDUCTORS', 'ADDUCTORS', 'BICEPS', 'CALVES', 'CHEST', 'FOREARMS', 'GLUTES',
+            'HAMSTRINGS', 'LATS', 'LOWER_BACK', 'MIDDLE_BACK', 'NECK', 'QUADRICEPS', 'SHOULDERS', 'TRAPS',
+            'TRICEPS'
+        )
+    ),
+    CONSTRAINT chk_injuries_side CHECK (
+        side IN ('LEFT', 'RIGHT', 'BOTH')
+    ),
+    CONSTRAINT chk_injuries_severity CHECK (
+        severity IN ('MILD', 'MODERATE', 'SEVERE')
+    )
 );
 
 CREATE INDEX IF NOT EXISTS idx_profile_injuries_user_id ON profile.injuries(user_id);

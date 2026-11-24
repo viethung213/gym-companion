@@ -5,13 +5,21 @@ package contracts.supporting.profile.v1.event;
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event;profilev1event";
 
 import "google/protobuf/timestamp.proto";
+import "contracts/supporting/exercise/v1/message/taxonomy.proto";
 
+// InjuryDetails describes one injury. muscle is UNSPECIFIED when the user
+// reported the region only.
 message InjuryDetails {
+  reserved 2, 3;
+  reserved "muscle_group";
+
   string injury_id = 1;
-  string muscle_group = 2;
-  string severity = 3;
   string notes = 4;
   google.protobuf.Timestamp reported_at = 5;
+  contracts.supporting.exercise.v1.message.JointRegion region = 6;
+  contracts.supporting.exercise.v1.message.MuscleGroup muscle = 7;
+  contracts.supporting.exercise.v1.message.BodySide side = 8;
+  contracts.supporting.exercise.v1.message.InjurySeverity severity = 9;
 }
 
 message InjuryReported {

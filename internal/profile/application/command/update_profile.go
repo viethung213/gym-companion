@@ -22,11 +22,12 @@ type UpdateProfileCommand struct {
 	Goals                 []string
 	ExperienceLevel       string
 	PreferredWorkoutTimes []string
-	AvailableEquipment    []string
-	PreferredMuscleGroups []string
+	AvailableEquipment    []vo.Equipment
+	PreferredMuscleGroups []vo.MuscleGroup
 	CoachStyle            string
 	TargetWeightKg        float64
 	TargetBodyFatPercent  float64
+	Timezone              vo.Timezone // zero keeps the stored zone
 }
 
 type UpdateProfileHandler struct {
@@ -70,7 +71,8 @@ func (h *UpdateProfileHandler) Handle(ctx context.Context, cmd UpdateProfileComm
 		bio, _ = vo.NewBiologicalMetrics(cmd.WeightKg, cmd.HeightCm, cmd.Age, cmd.Gender)
 	}
 
-	profile.UpdateProfile(
+	profile.SetTimezone(cmd.Timezone)
+	if err := profile.UpdateProfile(
 		bio,
 		cmd.ExperienceLevel,
 		cmd.Goals,
@@ -81,7 +83,9 @@ func (h *UpdateProfileHandler) Handle(ctx context.Context, cmd UpdateProfileComm
 		cmd.TargetWeightKg,
 		cmd.TargetBodyFatPercent,
 		cmd.BodyFatPercent,
-	)
+	); err != nil {
+		return fmt.Errorf("update profile: %w", err)
+	}
 	events := profile.PopEvents()
 
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {

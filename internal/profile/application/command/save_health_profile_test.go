@@ -138,7 +138,7 @@ func TestSaveHealthProfileHandler(t *testing.T) {
 		ExperienceLevel:       "BEGINNER",
 		PreferredWorkoutTimes: []string{"EVENING"},
 		Injuries: []command.InjuryInput{
-			{ID: "inj-1", MuscleGroup: "Shoulder", Severity: "MILD", Notes: "Minor pain"},
+			{ID: "inj-1", Region: vo.JointRegionShoulder, Severity: vo.InjurySeverityMild, Notes: "Minor pain"},
 		},
 	}
 

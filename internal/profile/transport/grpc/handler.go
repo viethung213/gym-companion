@@ -6,12 +6,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	profilev1service "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
 	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
+	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
+	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
+	"github.com/viethung213/gym-companion/internal/profile/infrastructure/protomap"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -82,12 +86,21 @@ func (h *GRPCHandler) SaveHealthProfile(
 
 	injuries := make([]command.InjuryInput, 0, len(req.GetInjuries()))
 	for _, in := range req.GetInjuries() {
-		injuries = append(injuries, command.InjuryInput{
-			ID:          uuid.New().String(),
-			MuscleGroup: in.GetMuscleGroup(),
-			Severity:    in.GetSeverity(),
-			Notes:       in.GetNotes(),
-		})
+		input, mapErr := injuryInputFromProto(in)
+		if mapErr != nil {
+			return nil, status.Error(codes.InvalidArgument, mapErr.Error())
+		}
+		input.ID = uuid.New().String()
+		injuries = append(injuries, input)
+	}
+	equipment, muscles, err := trainingFromProto(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	tz, err := optionalTimezone(req.GetTimezone())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	cmd := command.SaveHealthProfileCommand{
@@ -100,16 +113,20 @@ func (h *GRPCHandler) SaveHealthProfile(
 		Goals:                 req.GetGoals(),
 		ExperienceLevel:       req.GetExperienceLevel(),
 		PreferredWorkoutTimes: req.GetPreferredWorkoutTimes(),
-		AvailableEquipment:    req.GetAvailableEquipment(),
-		PreferredMuscleGroups: req.GetPreferredMuscleGroups(),
+		AvailableEquipment:    equipment,
+		PreferredMuscleGroups: muscles,
 		CoachStyle:            req.GetCoachStyle(),
 		TargetWeightKg:        float64(req.GetTargetWeightKg()),
 		TargetBodyFatPercent:  float64(req.GetTargetBodyFatPercent()),
 		Injuries:              injuries,
+		Timezone:              tz,
 	}
 
 	res, err := h.saveHealthProfileHandler.Handle(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, derror.ErrInvalidTaxonomy) || errors.Is(err, derror.ErrTooManyWorkoutSlots) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "save health profile failed: %v", err)
 	}
 
@@ -138,19 +155,7 @@ func (h *GRPCHandler) GetProfile(ctx context.Context, req *profilev1message.GetP
 	bio := profile.BiologicalMetrics()
 	injuriesProto := make([]*profilev1message.Injury, 0, len(profile.Injuries()))
 	for _, inj := range profile.Injuries() {
-		var recAt string
-		if inj.RecoveredAt() != nil {
-			recAt = inj.RecoveredAt().Format(time.RFC3339)
-		}
-		injuriesProto = append(injuriesProto, &profilev1message.Injury{
-			InjuryId:    inj.ID(),
-			MuscleGroup: inj.MuscleGroup(),
-			Severity:    inj.Severity(),
-			Notes:       inj.Notes(),
-			ReportedAt:  inj.ReportedAt().Format(time.RFC3339),
-			IsRecovered: inj.IsRecovered(),
-			RecoveredAt: recAt,
-		})
+		injuriesProto = append(injuriesProto, toProtoInjury(inj))
 	}
 
 	dobStr := ""
@@ -173,8 +178,8 @@ func (h *GRPCHandler) GetProfile(ctx context.Context, req *profilev1message.GetP
 		Goals:                 profile.Goals(),
 		ExperienceLevel:       profile.ExperienceLevel(),
 		PreferredWorkoutTimes: profile.PreferredWorkoutTimes(),
-		AvailableEquipment:    profile.AvailableEquipment(),
-		PreferredMuscleGroups: profile.PreferredMuscleGroups(),
+		AvailableEquipment:    protomap.EquipmentListToProto(profile.AvailableEquipment()),
+		PreferredMuscleGroups: protomap.MuscleGroupsToProto(profile.PreferredMuscleGroups()),
 		CoachStyle:            profile.CoachStyle(),
 		TargetWeightKg:        float32(profile.TargetWeightKg()),
 		TargetBodyFatPercent:  float32(profile.TargetBodyFatPercent()),
@@ -185,6 +190,7 @@ func (h *GRPCHandler) GetProfile(ctx context.Context, req *profilev1message.GetP
 		BodyFatPercent:        latestBf,
 		FullName:              profile.FullName(),
 		AvatarUrl:             profile.AvatarURL(),
+		Timezone:              profile.Timezone().String(),
 	}, nil
 }
 
@@ -192,6 +198,16 @@ func (h *GRPCHandler) UpdateProfile(ctx context.Context, req *profilev1message.U
 	targetUserID, err := resolveUserID(ctx, "")
 	if err != nil {
 		return nil, err
+	}
+
+	equipment, muscles, err := trainingFromProto(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	tz, err := optionalTimezone(req.GetTimezone())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	cmd := command.UpdateProfileCommand{
@@ -204,17 +220,21 @@ func (h *GRPCHandler) UpdateProfile(ctx context.Context, req *profilev1message.U
 		Goals:                 req.GetGoals(),
 		ExperienceLevel:       req.GetExperienceLevel(),
 		PreferredWorkoutTimes: req.GetPreferredWorkoutTimes(),
-		AvailableEquipment:    req.GetAvailableEquipment(),
-		PreferredMuscleGroups: req.GetPreferredMuscleGroups(),
+		AvailableEquipment:    equipment,
+		PreferredMuscleGroups: muscles,
 		CoachStyle:            req.GetCoachStyle(),
 		TargetWeightKg:        float64(req.GetTargetWeightKg()),
 		TargetBodyFatPercent:  float64(req.GetTargetBodyFatPercent()),
+		Timezone:              tz,
 	}
 
 	err = h.updateProfileHandler.Handle(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, derror.ErrProfileNotFound) {
 			return nil, status.Error(codes.NotFound, "user profile not found")
+		}
+		if errors.Is(err, derror.ErrInvalidTaxonomy) || errors.Is(err, derror.ErrTooManyWorkoutSlots) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, "update profile failed: %v", err)
 	}
@@ -345,19 +365,27 @@ func (h *GRPCHandler) ReportInjury(ctx context.Context, req *profilev1message.Re
 		return nil, err
 	}
 
-	injuryID := uuid.New().String()
+	input, err := injuryInputFromProto(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	cmd := command.ReportInjuryCommand{
-		InjuryID:    injuryID,
-		UserID:      targetUserID,
-		MuscleGroup: req.GetMuscleGroup(),
-		Severity:    req.GetSeverity(),
-		Notes:       req.GetNotes(),
+		InjuryID: uuid.New().String(),
+		UserID:   targetUserID,
+		Region:   input.Region,
+		Muscle:   input.Muscle,
+		Side:     input.Side,
+		Severity: input.Severity,
+		Notes:    input.Notes,
 	}
 
 	id, err := h.reportInjuryHandler.Handle(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, derror.ErrProfileNotFound) {
 			return nil, status.Error(codes.NotFound, "user profile not found")
+		}
+		if errors.Is(err, derror.ErrInjuryAlreadyActive) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, "report injury failed: %v", err)
 	}
@@ -410,25 +438,87 @@ func (h *GRPCHandler) GetInjuryHistory(ctx context.Context, req *profilev1messag
 
 	pbInjuries := make([]*profilev1message.Injury, 0, len(injuries))
 	for _, inj := range injuries {
-		var recAt string
-		if inj.RecoveredAt() != nil {
-			recAt = inj.RecoveredAt().Format(time.RFC3339)
-		}
-		pbInjuries = append(pbInjuries, &profilev1message.Injury{
-			InjuryId:    inj.ID(),
-			MuscleGroup: inj.MuscleGroup(),
-			Severity:    inj.Severity(),
-			Notes:       inj.Notes(),
-			ReportedAt:  inj.ReportedAt().Format(time.RFC3339),
-			IsRecovered: inj.IsRecovered(),
-			RecoveredAt: recAt,
-		})
+		pbInjuries = append(pbInjuries, toProtoInjury(inj))
 	}
 
 	return &profilev1message.GetInjuryHistoryResponse{
 		UserId:   targetUserID,
 		Injuries: pbInjuries,
 	}, nil
+}
+
+// injuryRequest is the injury field set shared by InjuryInput and ReportInjuryRequest.
+type injuryRequest interface {
+	GetRegion() exercisemsg.JointRegion
+	GetMuscle() exercisemsg.MuscleGroup
+	GetSide() exercisemsg.BodySide
+	GetSeverity() exercisemsg.InjurySeverity
+	GetNotes() string
+}
+
+// injuryInputFromProto requires region and severity; muscle is optional and
+// an unset side means BOTH (docs/05 §6.5, §6.7).
+func injuryInputFromProto(req injuryRequest) (command.InjuryInput, error) {
+	region, err := protomap.JointRegionFromProto(req.GetRegion())
+	if err != nil {
+		return command.InjuryInput{}, err
+	}
+	muscle, err := protomap.OptionalMuscleGroupFromProto(req.GetMuscle())
+	if err != nil {
+		return command.InjuryInput{}, err
+	}
+	side, err := protomap.BodySideFromProto(req.GetSide())
+	if err != nil {
+		return command.InjuryInput{}, err
+	}
+	severity, err := protomap.InjurySeverityFromProto(req.GetSeverity())
+	if err != nil {
+		return command.InjuryInput{}, err
+	}
+
+	return command.InjuryInput{
+		Region:   region,
+		Muscle:   muscle,
+		Side:     side,
+		Severity: severity,
+		Notes:    req.GetNotes(),
+	}, nil
+}
+
+// trainingRequest is the equipment and muscle preference field set of profile writes.
+type trainingRequest interface {
+	GetAvailableEquipment() []exercisemsg.Equipment
+	GetPreferredMuscleGroups() []exercisemsg.MuscleGroup
+}
+
+func trainingFromProto(req trainingRequest) ([]vo.Equipment, []vo.MuscleGroup, error) {
+	equipment, err := protomap.EquipmentListFromProto(req.GetAvailableEquipment())
+	if err != nil {
+		return nil, nil, err
+	}
+	muscles, err := protomap.MuscleGroupsFromProto(req.GetPreferredMuscleGroups())
+	if err != nil {
+		return nil, nil, err
+	}
+	return equipment, muscles, nil
+}
+
+func toProtoInjury(inj *entity.Injury) *profilev1message.Injury {
+	var recAt string
+	if inj.RecoveredAt() != nil {
+		recAt = inj.RecoveredAt().Format(time.RFC3339)
+	}
+	return &profilev1message.Injury{
+		InjuryId:    inj.ID(),
+		Region:      protomap.JointRegionToProto(inj.Region()),
+		Muscle:      protomap.MuscleGroupToProto(inj.Muscle()),
+		Side:        protomap.BodySideToProto(inj.Side()),
+		Severity:    protomap.InjurySeverityToProto(inj.Severity()),
+		Notes:       inj.Notes(),
+		ReportedAt:  inj.ReportedAt().Format(time.RFC3339),
+		IsRecovered: inj.IsRecovered(),
+		RecoveredAt: recAt,
+	}
 }
 
 // --- ConnectRPC Adapter ---
@@ -540,4 +630,12 @@ func (c *ConnectProfileHandler) GetInjuryHistory(
 		return nil, err
 	}
 	return res, nil
+}
+
+// optionalTimezone parses a client zone name; empty yields the zero zone, which keeps the stored one.
+func optionalTimezone(name string) (vo.Timezone, error) {
+	if name == "" {
+		return "", nil
+	}
+	return vo.ParseTimezone(name)
 }

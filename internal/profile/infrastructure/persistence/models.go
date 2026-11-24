@@ -21,6 +21,7 @@ type UserProfileModel struct {
 	TargetBodyFatPercent  float64    `gorm:"column:target_body_fat_percent"`
 	CompletionRate        float64    `gorm:"column:completion_rate"`
 	AICoachActivated      bool       `gorm:"column:ai_coach_activated"`
+	Timezone              string     `gorm:"column:timezone"`
 	CreatedAt             time.Time  `gorm:"column:created_at"`
 	UpdatedAt             time.Time  `gorm:"column:updated_at"`
 }
@@ -46,7 +47,9 @@ func (BodyMetricModel) TableName() string {
 type InjuryModel struct {
 	ID          string     `gorm:"primaryKey;column:id"`
 	UserID      string     `gorm:"column:user_id"`
-	MuscleGroup string     `gorm:"column:muscle_group"`
+	Region      string     `gorm:"column:region"`
+	Muscle      *string    `gorm:"column:muscle"`
+	Side        string     `gorm:"column:side"`
 	Severity    string     `gorm:"column:severity"`
 	Notes       string     `gorm:"column:notes"`
 	ReportedAt  time.Time  `gorm:"column:reported_at"`

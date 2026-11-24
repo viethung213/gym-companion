@@ -42,7 +42,7 @@ func TestSaveHealthProfileHandler_Errors(t *testing.T) {
 		UserID:   "user-err-2",
 		WeightKg: 70.0,
 		HeightCm: 170.0,
-		Injuries: []command.InjuryInput{{ID: "inj-bad", MuscleGroup: ""}},
+		Injuries: []command.InjuryInput{{ID: "inj-bad", Severity: vo.InjurySeverityMild}},
 	}
 	_, err = handler.Handle(context.Background(), cmd2)
 	assert.Error(t, err)
@@ -145,16 +145,17 @@ func TestReportAndRecoverInjuryHandler(t *testing.T) {
 	assert.ErrorIs(t, err, derror.ErrProfileNotFound)
 
 	// Report invalid injury
-	_, err = reportHandler.Handle(context.Background(), command.ReportInjuryCommand{UserID: "user-cmd-2", InjuryID: "inj-1", MuscleGroup: ""})
+	_, err = reportHandler.Handle(context.Background(), command.ReportInjuryCommand{UserID: "user-cmd-2", InjuryID: "inj-1", Severity: vo.InjurySeverityMild})
 	assert.Error(t, err)
 
 	// 1. Report Injury Success
 	reportCmd := command.ReportInjuryCommand{
-		InjuryID:    "inj-cmd-1",
-		UserID:      "user-cmd-2",
-		MuscleGroup: "Hamstring",
-		Severity:    "MILD",
-		Notes:       "Pulled while sprinting",
+		InjuryID: "inj-cmd-1",
+		UserID:   "user-cmd-2",
+		Region:   vo.JointRegionHip,
+		Muscle:   vo.MuscleGroupHamstrings,
+		Severity: vo.InjurySeverityMild,
+		Notes:    "Pulled while sprinting",
 	}
 
 	injuryID, err := reportHandler.Handle(context.Background(), reportCmd)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
@@ -186,13 +187,17 @@ func TestGRPCHandler_Endpoints(t *testing.T) {
 			Goals:                 []string{"MUSCLE_GAIN"},
 			ExperienceLevel:       "INTERMEDIATE",
 			PreferredWorkoutTimes: []string{"MORNING"},
-			AvailableEquipment:    []string{"DUMBBELL"},
-			PreferredMuscleGroups: []string{"CHEST"},
+			AvailableEquipment:    []exercisemsg.Equipment{exercisemsg.Equipment_EQUIPMENT_DUMBBELL},
+			PreferredMuscleGroups: []exercisemsg.MuscleGroup{exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST},
 			CoachStyle:            "FRIENDLY",
 			TargetWeightKg:        78.0,
 			TargetBodyFatPercent:  12.0,
 			Injuries: []*profilev1message.InjuryInput{
-				{MuscleGroup: "Knee", Severity: "MILD", Notes: "Strain"},
+				{
+					Region:   exercisemsg.JointRegion_JOINT_REGION_KNEE,
+					Severity: exercisemsg.InjurySeverity_INJURY_SEVERITY_MILD,
+					Notes:    "Strain",
+				},
 			},
 		}
 
@@ -295,9 +300,9 @@ func TestGRPCHandler_Endpoints(t *testing.T) {
 	// 6. ReportInjury & RecoverInjury & GetInjuryHistory
 	t.Run("ReportAndRecoverInjuryAndHistory", func(t *testing.T) {
 		repReq := &profilev1message.ReportInjuryRequest{
-			MuscleGroup: "Shoulder",
-			Severity:    "MILD",
-			Notes:       "Pain during press",
+			Region:   exercisemsg.JointRegion_JOINT_REGION_SHOULDER,
+			Severity: exercisemsg.InjurySeverity_INJURY_SEVERITY_MILD,
+			Notes:    "Pain during press",
 		}
 		repRes, err := handler.ReportInjury(ctx, repReq)
 		require.NoError(t, err)

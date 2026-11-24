@@ -2,21 +2,25 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	"github.com/viethung213/gym-companion/internal/profile/domain/aggregate"
+	"github.com/viethung213/gym-companion/internal/profile/domain/derror"
 	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
 	"github.com/viethung213/gym-companion/internal/profile/domain/repository"
 	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
 )
 
 type InjuryInput struct {
-	ID          string
-	MuscleGroup string
-	Severity    string
-	Notes       string
+	ID       string
+	Region   vo.JointRegion
+	Muscle   vo.MuscleGroup
+	Side     vo.BodySide
+	Severity vo.InjurySeverity
+	Notes    string
 }
 
 type SaveHealthProfileCommand struct {
@@ -30,12 +34,13 @@ type SaveHealthProfileCommand struct {
 	Goals                 []string
 	ExperienceLevel       string
 	PreferredWorkoutTimes []string
-	AvailableEquipment    []string
-	PreferredMuscleGroups []string
+	AvailableEquipment    []vo.Equipment
+	PreferredMuscleGroups []vo.MuscleGroup
 	CoachStyle            string
 	TargetWeightKg        float64
 	TargetBodyFatPercent  float64
 	Injuries              []InjuryInput
+	Timezone              vo.Timezone // zero keeps the stored zone
 }
 
 type SaveHealthProfileResult struct {
@@ -84,7 +89,7 @@ func (h *SaveHealthProfileHandler) Handle(ctx context.Context, cmd SaveHealthPro
 
 	injuries := make([]*entity.Injury, 0, len(cmd.Injuries))
 	for _, in := range cmd.Injuries {
-		inj, injErr := entity.NewInjury(in.ID, in.MuscleGroup, in.Severity, in.Notes, time.Now())
+		inj, injErr := entity.NewInjury(in.ID, in.Region, in.Muscle, in.Side, in.Severity, in.Notes, time.Now())
 		if injErr != nil {
 			return nil, fmt.Errorf("create injury: %w", injErr)
 		}
@@ -96,7 +101,7 @@ func (h *SaveHealthProfileHandler) Handle(ctx context.Context, cmd SaveHealthPro
 
 	if findErr == nil && existingProfile != nil {
 		// Update existing profile (such as blank profile created at registration)
-		existingProfile.UpdateProfile(
+		if updateErr := existingProfile.UpdateProfile(
 			bio,
 			cmd.ExperienceLevel,
 			cmd.Goals,
@@ -107,9 +112,14 @@ func (h *SaveHealthProfileHandler) Handle(ctx context.Context, cmd SaveHealthPro
 			cmd.TargetWeightKg,
 			cmd.TargetBodyFatPercent,
 			cmd.BodyFatPercent,
-		)
+		); updateErr != nil {
+			return nil, fmt.Errorf("update user profile: %w", updateErr)
+		}
 		for _, inj := range injuries {
-			_ = existingProfile.AddInjury(inj)
+			// An injury already active at the same location is kept as is.
+			if addErr := existingProfile.AddInjury(inj); addErr != nil && !errors.Is(addErr, derror.ErrInjuryAlreadyActive) {
+				return nil, fmt.Errorf("add injury: %w", addErr)
+			}
 		}
 		profile = existingProfile
 	} else {
@@ -131,6 +141,8 @@ func (h *SaveHealthProfileHandler) Handle(ctx context.Context, cmd SaveHealthPro
 			return nil, fmt.Errorf("create user profile: %w", createErr)
 		}
 	}
+
+	profile.SetTimezone(cmd.Timezone)
 
 	var eventsToPublish []any
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {

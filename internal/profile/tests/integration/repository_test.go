@@ -58,6 +58,7 @@ func ensureTablesExist(db *gorm.DB) {
 		target_body_fat_percent NUMERIC(5, 2),
 		completion_rate NUMERIC(5, 2),
 		ai_coach_activated BOOLEAN DEFAULT FALSE,
+		timezone VARCHAR(64) NOT NULL DEFAULT 'UTC',
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
@@ -75,7 +76,9 @@ func ensureTablesExist(db *gorm.DB) {
 	db.Exec(`CREATE TABLE IF NOT EXISTS profile.injuries (
 		id VARCHAR(255) PRIMARY KEY,
 		user_id VARCHAR(255) NOT NULL REFERENCES profile.users(user_id) ON DELETE CASCADE,
-		muscle_group VARCHAR(100) NOT NULL,
+		region TEXT NOT NULL,
+		muscle TEXT,
+		side TEXT NOT NULL DEFAULT 'BOTH',
 		severity VARCHAR(50) NOT NULL,
 		notes TEXT,
 		reported_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -140,8 +143,8 @@ func TestPostgresUserProfileRepository_SaveAndFindByUserID(t *testing.T) {
 		"INTERMEDIATE",
 		[]string{"BUILD_MUSCLE"},
 		[]string{"MORNING"},
-		[]string{"BARBELL"},
-		[]string{"CHEST"},
+		[]vo.Equipment{vo.EquipmentBarbell},
+		[]vo.MuscleGroup{vo.MuscleGroupChest},
 		"FRIENDLY",
 		80.0,
 		15.0,
@@ -152,20 +155,22 @@ func TestPostgresUserProfileRepository_SaveAndFindByUserID(t *testing.T) {
 	}
 
 	// Update Preferences & Target Metrics
-	userProfile.UpdateProfile(
+	if err = userProfile.UpdateProfile(
 		bioMetrics,
 		"ADVANCED",
 		[]string{"BUILD_MUSCLE"},
 		[]string{"MORNING"},
-		[]string{"BARBELL", "DUMBBELL"},
-		[]string{"CHEST", "ARMS"},
+		[]vo.Equipment{vo.EquipmentBarbell, vo.EquipmentDumbbell},
+		[]vo.MuscleGroup{vo.MuscleGroupChest, vo.MuscleGroupBiceps},
 		"MOTIVATIONAL",
 		82.0,
 		14.0,
-	)
+	); err != nil {
+		t.Fatalf("UpdateProfile failed: %v", err)
+	}
 
 	// Add Injury
-	inj, err := entity.NewInjury(uuid.NewString(), "SHOULDER", "MODERATE", "Overuse strain", time.Now().UTC())
+	inj, err := entity.NewInjury(uuid.NewString(), vo.JointRegionShoulder, "", vo.BodySideBoth, vo.InjurySeverityModerate, "Overuse strain", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("NewInjury failed: %v", err)
 	}
@@ -196,8 +201,8 @@ func TestPostgresUserProfileRepository_SaveAndFindByUserID(t *testing.T) {
 	if len(fetched.Injuries()) != 1 {
 		t.Errorf("got %d injuries, want 1", len(fetched.Injuries()))
 	}
-	if fetched.Injuries()[0].MuscleGroup() != "SHOULDER" {
-		t.Errorf("got injury muscle group %s, want SHOULDER", fetched.Injuries()[0].MuscleGroup())
+	if fetched.Injuries()[0].Region() != vo.JointRegionShoulder {
+		t.Errorf("got injury region %s, want SHOULDER", fetched.Injuries()[0].Region())
 	}
 }
 
@@ -219,8 +224,8 @@ func TestPostgresUserProfileRepository_TransactionManager(t *testing.T) {
 		"BEGINNER",
 		[]string{"LOSE_WEIGHT"},
 		[]string{"EVENING"},
-		[]string{"DUMBBELL"},
-		[]string{"LEGS"},
+		[]vo.Equipment{vo.EquipmentDumbbell},
+		[]vo.MuscleGroup{vo.MuscleGroupQuadriceps},
 		"FRIENDLY",
 		55.0,
 		20.0,

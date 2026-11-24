@@ -27,8 +27,8 @@ func TestUserProfile_NewUserProfile(t *testing.T) {
 			"INTERMEDIATE",
 			[]string{"PRIMARY_GOAL_MUSCLE_GAIN"},
 			[]string{"MORNING"},
-			[]string{"DUMBBELL", "MAT"},
-			[]string{"CHEST", "SHOULDERS"},
+			[]vo.Equipment{vo.EquipmentDumbbell, vo.EquipmentOther},
+			[]vo.MuscleGroup{vo.MuscleGroupChest, vo.MuscleGroupShoulders},
 			"FRIENDLY",
 			70.0,
 			15.0,
@@ -47,8 +47,8 @@ func TestUserProfile_NewUserProfile(t *testing.T) {
 		assert.Equal(t, "INTERMEDIATE", p.ExperienceLevel())
 		assert.Equal(t, []string{"PRIMARY_GOAL_MUSCLE_GAIN"}, p.Goals())
 		assert.Equal(t, []string{"MORNING"}, p.PreferredWorkoutTimes())
-		assert.Equal(t, []string{"DUMBBELL", "MAT"}, p.AvailableEquipment())
-		assert.Equal(t, []string{"CHEST", "SHOULDERS"}, p.PreferredMuscleGroups())
+		assert.Equal(t, []vo.Equipment{vo.EquipmentDumbbell, vo.EquipmentOther}, p.AvailableEquipment())
+		assert.Equal(t, []vo.MuscleGroup{vo.MuscleGroupChest, vo.MuscleGroupShoulders}, p.PreferredMuscleGroups())
 		assert.Equal(t, "FRIENDLY", p.CoachStyle())
 		assert.Equal(t, 70.0, p.TargetWeightKg())
 		assert.Equal(t, 15.0, p.TargetBodyFatPercent())
@@ -93,8 +93,8 @@ func TestUserProfile_NewUserProfile(t *testing.T) {
 			"BEGINNER",
 			[]string{"FAT_LOSS"},
 			[]string{"EVENING"},
-			[]string{"DUMBBELL"},
-			[]string{"LEGS"},
+			[]vo.Equipment{vo.EquipmentDumbbell},
+			[]vo.MuscleGroup{vo.MuscleGroupQuadriceps},
 			"STRICT",
 			65.0,
 			15.0,
@@ -118,17 +118,17 @@ func TestUserProfile_UpdateAndMetrics(t *testing.T) {
 
 	// UpdateProfile crossing threshold >= 80%
 	updatedBio, _ := vo.NewBiologicalMetrics(70.0, 170.0, 20, "MALE")
-	p.UpdateProfile(
+	require.NoError(t, p.UpdateProfile(
 		updatedBio,
 		"INTERMEDIATE",
 		[]string{"FAT_LOSS"},
 		[]string{"MORNING"},
-		[]string{"DUMBBELL"},
-		[]string{"CHEST"},
+		[]vo.Equipment{vo.EquipmentDumbbell},
+		[]vo.MuscleGroup{vo.MuscleGroupChest},
 		"STRICT",
 		65.0,
 		15.0,
-	)
+	))
 
 	assert.True(t, p.AICoachActivated())
 	events := p.PopEvents()
@@ -150,8 +150,8 @@ func TestUserProfile_InjuryLifecycle(t *testing.T) {
 		"ADVANCED",
 		[]string{"STRENGTH"},
 		[]string{"EVENING"},
-		[]string{"DUMBBELL"},
-		[]string{"LEGS"},
+		[]vo.Equipment{vo.EquipmentDumbbell},
+		[]vo.MuscleGroup{vo.MuscleGroupQuadriceps},
 		"STRICT",
 		75.0,
 		12.0,
@@ -160,7 +160,7 @@ func TestUserProfile_InjuryLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	_ = p.PopEvents() // clear initial events
 
-	inj, err := entity.NewInjury("inj-1", "Knee", "MODERATE", "Slight strain", time.Now())
+	inj, err := entity.NewInjury("inj-1", vo.JointRegionKnee, "", vo.BodySideBoth, vo.InjurySeverityModerate, "Slight strain", time.Now())
 	require.NoError(t, err)
 
 	err = p.AddInjury(inj)
@@ -172,7 +172,7 @@ func TestUserProfile_InjuryLifecycle(t *testing.T) {
 	assert.Len(t, events, 1) // InjuryReportedEvent
 
 	// Attempt adding duplicate active injury for same muscle group
-	inj2, err := entity.NewInjury("inj-2", "Knee", "SEVERE", "Twisted again", time.Now())
+	inj2, err := entity.NewInjury("inj-2", vo.JointRegionKnee, "", vo.BodySideBoth, vo.InjurySeveritySevere, "Twisted again", time.Now())
 	require.NoError(t, err)
 	err = p.AddInjury(inj2)
 	assert.ErrorIs(t, err, derror.ErrInjuryAlreadyActive)
@@ -196,7 +196,7 @@ func TestUserProfile_DefensiveCopy(t *testing.T) {
 	require.NoError(t, err)
 
 	goals := []string{"STRENGTH"}
-	inj, err := entity.NewInjury("inj-1", "Knee", "MILD", "Test strain", time.Now())
+	inj, err := entity.NewInjury("inj-1", vo.JointRegionKnee, "", vo.BodySideBoth, vo.InjurySeverityMild, "Test strain", time.Now())
 	require.NoError(t, err)
 
 	p, err := aggregate.NewUserProfile(
@@ -205,8 +205,8 @@ func TestUserProfile_DefensiveCopy(t *testing.T) {
 		"INTERMEDIATE",
 		goals,
 		[]string{"MORNING"},
-		[]string{"BARBELL"},
-		[]string{"CHEST"},
+		[]vo.Equipment{vo.EquipmentBarbell},
+		[]vo.MuscleGroup{vo.MuscleGroupChest},
 		"STRICT",
 		70.0,
 		15.0,
@@ -350,4 +350,38 @@ func TestUserProfile_UpdateIdentity(t *testing.T) {
 		assert.Equal(t, aggregate.DefaultAvatarURL, p.AvatarURL())
 		assert.Equal(t, "User Name", p.FullName())
 	})
+}
+
+func TestUserProfile_RejectsUnknownTrainingCodes(t *testing.T) {
+	bio, err := vo.NewBiologicalMetrics(70, 170, 30, "MALE")
+	require.NoError(t, err)
+
+	_, err = aggregate.NewUserProfile("user-x", bio, "BEGINNER", nil, nil,
+		[]vo.Equipment{"bench"}, nil, "", 0, 0, nil)
+	assert.ErrorIs(t, err, derror.ErrInvalidTaxonomy)
+
+	p, err := aggregate.NewUserProfile("user-x", bio, "BEGINNER", nil, nil,
+		[]vo.Equipment{vo.EquipmentDumbbell}, nil, "", 0, 0, nil)
+	require.NoError(t, err)
+
+	err = p.UpdateProfile(bio, "", nil, nil, nil, []vo.MuscleGroup{"LEGS"}, "", 0, 0)
+	assert.ErrorIs(t, err, derror.ErrInvalidTaxonomy)
+	assert.Empty(t, p.PreferredMuscleGroups(), "a rejected update must not change the profile")
+}
+
+func TestUserProfile_AddInjuryDuplicateIsPerLocation(t *testing.T) {
+	bio, err := vo.NewBiologicalMetrics(70, 170, 30, "MALE")
+	require.NoError(t, err)
+	p, err := aggregate.NewUserProfile("user-y", bio, "BEGINNER", nil, nil, nil, nil, "", 0, 0, nil)
+	require.NoError(t, err)
+
+	newInjury := func(id string, side vo.BodySide) *entity.Injury {
+		inj, injErr := entity.NewInjury(id, vo.JointRegionKnee, "", side, vo.InjurySeverityMild, "", time.Now())
+		require.NoError(t, injErr)
+		return inj
+	}
+
+	require.NoError(t, p.AddInjury(newInjury("left", vo.BodySideLeft)))
+	assert.NoError(t, p.AddInjury(newInjury("right", vo.BodySideRight)), "other side is a separate injury")
+	assert.ErrorIs(t, p.AddInjury(newInjury("left-again", vo.BodySideLeft)), derror.ErrInjuryAlreadyActive)
 }
