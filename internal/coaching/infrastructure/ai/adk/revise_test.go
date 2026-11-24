@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
@@ -117,7 +118,7 @@ func TestCurrentPhase_FindsOwningWeek(t *testing.T) {
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 	plan.Weeks[0].Phase = "OVERLOAD"
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -131,7 +132,8 @@ func TestCurrentPhase_FindsOwningWeek(t *testing.T) {
 func TestCurrentPhase_UnknownWeekIsEmpty(t *testing.T) {
 	c := mapperFor(t, "bench-press")
 	rm, err := c.mapToDomainRoadmap(context.Background(),
-		planOf(sessionOf("2026-08-03", "bench-press")), nil, "user-1", getMapNow())
+		planOf(sessionOf("2026-08-03", "bench-press")), nil,
+		map[string]string{"bench-press": "CHEST"}, "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -185,7 +187,10 @@ func TestMapToRegeneratedSessions_PreservesInputOrder(t *testing.T) {
 		sessionOf("2026-08-07", "bench-press"),
 	)
 
-	infos := c.mapToRegeneratedSessions(context.Background(), plan, nil, "user-1", getMapNow())
+	infos, mapErr := c.mapToRegeneratedSessions(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow())
+	if mapErr != nil {
+		t.Fatalf("mapToRegeneratedSessions returned error: %v", mapErr)
+	}
 	if len(infos) != 3 {
 		t.Fatalf("got %d infos, want 3", len(infos))
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
 	coachingGrpc "github.com/viethung213/gym-companion/internal/coaching/transport/grpc"
 	pbsvc "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/service"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
@@ -33,6 +34,13 @@ type TestSuite struct {
 type fakeClock struct{ t time.Time }
 
 func (c *fakeClock) Now() time.Time { return c.t }
+
+// fakeProfileReader reports a profile without injuries.
+type fakeProfileReader struct{}
+
+func (fakeProfileReader) GetProfile(_ context.Context, userID string) (port.Profile, error) {
+	return port.Profile{UserID: userID}, nil
+}
 
 type fakeTx struct{}
 
@@ -90,7 +98,7 @@ func (m *memRepo) FindSessionByID(_ context.Context, sid string) (*roadmap.Roadm
 	return nil, roadmap.ErrSessionNotFound
 }
 
-func (m *memRepo) FindPendingSessionsByDate(_ context.Context, _ time.Time) ([]*roadmap.SessionPlanInfo, error) {
+func (m *memRepo) FindPendingSessionsStarting(_ context.Context, _, _ time.Time) ([]port.ScheduledSession, error) {
 	return nil, nil
 }
 
@@ -170,10 +178,10 @@ func SetupCoachingE2ESuite(t *testing.T) *TestSuite {
 	repo := newMemRepo()
 	outbox := &captureOutbox{}
 	mockAgent := &fakeCoachAgent{t: clock.t}
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
 
-	initiateHandler := command.NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
-	regenerateHandler := command.NewRegenerateScheduleHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
+	initiateHandler := command.NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, fakeProfileReader{}, outbox, clock)
+	regenerateHandler := command.NewRegenerateScheduleHandler(fakeTx{}, repo, mockAgent, guard, fakeProfileReader{}, outbox, clock, persistence.UUIDGenerator{})
 	createAdhocHandler := command.NewCreateAdhocSessionHandler(fakeTx{}, repo, nil, nil, clock)
 	queriesHandler := query.NewHandlers(repo)
 

@@ -39,6 +39,7 @@ type SessionPlanInfo struct {
 	EstimatedDurationMinutes int32
 	Status                   SessionPlanStatus
 	Source                   SessionPlanSource
+	Kind                     SessionKind // empty means TRAINING
 	TargetMuscleGroups       []string
 	Prescription             WorkoutPrescription
 	Reasoning                string
@@ -140,6 +141,9 @@ func (s *SessionPlan) ID() string { return s.info.SessionPlanID }
 
 // Status returns the current lifecycle status.
 func (s *SessionPlan) Status() SessionPlanStatus { return s.info.Status }
+
+// Kind returns TRAINING or RECOVERY.
+func (s *SessionPlan) Kind() SessionKind { return s.info.Kind }
 
 // ScheduledDate returns the calendar date the session is planned for.
 func (s *SessionPlan) ScheduledDate() time.Time { return s.info.ScheduledDate }
@@ -252,6 +256,10 @@ func (s *SessionPlan) validate() error {
 		return fmt.Errorf("%w: invalid source %s", ErrInvalidRoadmap, i.Source)
 	}
 
+	if !i.Kind.Valid() {
+		return fmt.Errorf("%w: invalid session kind %q", ErrInvalidRoadmap, i.Kind)
+	}
+
 	return nil
 }
 
@@ -279,6 +287,10 @@ func normalizeSessionInfo(info *SessionPlanInfo) *SessionPlanInfo {
 	cp.TargetMuscleGroups = copyStringSlice(cp.TargetMuscleGroups)
 
 	cp.Prescription = copyPrescription(cp.Prescription)
+
+	if cp.Kind == "" {
+		cp.Kind = SessionKindTraining
+	}
 
 	return &cp
 }

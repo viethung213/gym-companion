@@ -84,8 +84,28 @@ func (p Phase) Valid() bool {
 	}
 }
 
-// MaxSessionsPerWeek is the hard cap defined by BR-AC-01.
+// MaxSessionsPerWeek is the hard cap on TRAINING sessions defined by BR-AC-01.
+// Recovery sessions do not count toward it.
 const MaxSessionsPerWeek = 6
+
+// MaxSlotsPerWeek caps all sessions of a week, training and recovery: the
+// athlete may select at most this many weekly slots.
+const MaxSlotsPerWeek = 10
+
+// RecoveryMaxRPE is the intensity ceiling of a recovery session.
+const RecoveryMaxRPE = 4
+
+// SessionKind separates training sessions from active-recovery ones.
+type SessionKind string
+
+const (
+	SessionKindTraining SessionKind = "TRAINING"
+	// SessionKindRecovery is mobility, stretching or light cardio at RPE <= RecoveryMaxRPE.
+	SessionKindRecovery SessionKind = "RECOVERY"
+)
+
+// Valid reports whether k is a known SessionKind.
+func (k SessionKind) Valid() bool { return k == SessionKindTraining || k == SessionKindRecovery }
 
 // WeeksPerRoadmap is the fixed 4-week program length.
 const WeeksPerRoadmap = 4

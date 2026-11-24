@@ -100,7 +100,7 @@ func TestProfileCompletedConsumer_ProfileUpdatedAndInjuryEvents(t *testing.T) {
 
 	// Test InjuryReported
 	rawInj := makeProfileCE(t, "evt-inj", injuryReportedEventType,
-		ProfileEventPayload{UserID: "usr-1", MuscleGroup: "Chest"})
+		ProfileEventPayload{UserID: "usr-1"})
 	if err := c.HandleMessage(context.Background(), rawInj); err != nil {
 		t.Errorf("expected nil for InjuryReported with nil handler, got %v", err)
 	}
@@ -165,7 +165,7 @@ func (alwaysExistsRepo) ListByUser(context.Context, string, roadmap.Status, int,
 func (alwaysExistsRepo) FindSessionByID(context.Context, string) (*roadmap.Roadmap, error) {
 	return nil, roadmap.ErrSessionNotFound
 }
-func (alwaysExistsRepo) FindPendingSessionsByDate(context.Context, time.Time) ([]*roadmap.SessionPlanInfo, error) {
+func (alwaysExistsRepo) FindPendingSessionsStarting(context.Context, time.Time, time.Time) ([]port.ScheduledSession, error) {
 	return nil, nil
 }
 

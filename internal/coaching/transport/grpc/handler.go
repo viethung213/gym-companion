@@ -349,6 +349,7 @@ func toPBSession(s *roadmap.SessionPlan) *pbmsg.SessionPlan {
 		ScheduledDate:            dateToPB(info.ScheduledDate.Year(), int(info.ScheduledDate.Month()), info.ScheduledDate.Day()),
 		SlotTime:                 info.SlotTime,
 		EstimatedDurationMinutes: info.EstimatedDurationMinutes,
+		Kind:                     domainKindToPB(info.Kind),
 		Status:                   domainSessionStatusToPB(info.Status),
 		Source:                   domainSourceToPB(info.Source),
 		TargetMuscleGroups:       append([]string(nil), info.TargetMuscleGroups...),
@@ -466,6 +467,17 @@ func pbStatusToDomain(s pbmsg.RoadmapStatus) roadmap.Status {
 
 	default:
 		return "" // no filter
+	}
+}
+
+func domainKindToPB(k roadmap.SessionKind) pbmsg.SessionKind {
+	switch k {
+	case roadmap.SessionKindTraining:
+		return pbmsg.SessionKind_SESSION_KIND_TRAINING
+	case roadmap.SessionKindRecovery:
+		return pbmsg.SessionKind_SESSION_KIND_RECOVERY
+	default:
+		return pbmsg.SessionKind_SESSION_KIND_UNSPECIFIED
 	}
 }
 

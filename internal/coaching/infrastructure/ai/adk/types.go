@@ -1,16 +1,35 @@
 package adk
 
-// InjuryStatus represents the severity and muscle group of a user's injury.
+import "time"
+
+// InjuryStatus is one active injury, or an ad-hoc avoid, as taxonomy codes.
 type InjuryStatus struct {
-	MuscleGroup string `json:"muscle_group"`
-	Severity    string `json:"severity"` // "MILD" | "MODERATE" | "SEVERE"
+	Region   string `json:"region,omitempty"` // JointRegion code
+	Muscle   string `json:"muscle,omitempty"` // MuscleGroup code
+	Severity string `json:"severity"`         // "MILD" | "MODERATE" | "SEVERE"
 }
 
 // WorkoutSlot defines available time windows for training.
 type WorkoutSlot struct {
-	DayOfWeek int    `json:"day_of_week"` // 0=Monday ... 6=Sunday
+	DayOfWeek int    `json:"day_of_week"` // time.Weekday: 0=Sunday ... 6=Saturday
 	StartTime string `json:"start_time"`  // "HH:MM"
 	EndTime   string `json:"end_time"`    // "HH:MM"
+}
+
+// WeekSlotPlan lists the selected slots still open in one week of the initial
+// roadmap and how many sessions that week must hold.
+type WeekSlotPlan struct {
+	WeekNumber       int         `json:"week_number"`
+	ExpectedSessions int         `json:"expected_sessions"`
+	TrainingSessions int         `json:"training_sessions"`
+	Slots            []DatedSlot `json:"slots"`
+}
+
+// DatedSlot is one occurrence of a selected slot on a calendar date.
+type DatedSlot struct {
+	ScheduledDate string `json:"scheduled_date"` // YYYY-MM-DD
+	SlotTime      string `json:"slot_time"`      // as in preferred_workout_times
+	SessionKind   string `json:"session_kind"`   // "TRAINING" | "RECOVERY", assigned by the backend
 }
 
 // UserProfile aggregates user metrics, preferences, equipment and active injuries.
@@ -19,8 +38,8 @@ type UserProfile struct {
 	WeightKg              float64             `json:"weight_kg"`
 	ExperienceLevel       string              `json:"experience_level,omitempty"`
 	PrimaryGoal           string              `json:"primary_goal"`
-	AvailableEquipment    []string            `json:"available_equipment"`
-	PreferredMuscleGroups []string            `json:"preferred_muscle_groups"`
+	AvailableEquipment    []string            `json:"available_equipment"`     // Equipment codes
+	PreferredMuscleGroups []string            `json:"preferred_muscle_groups"` // MuscleGroup codes
 	PreferredWorkoutTimes map[string][]string `json:"preferred_workout_times"`
 	AvailableSlots        []WorkoutSlot       `json:"available_slots"`
 	ActiveInjuries        []InjuryStatus      `json:"active_injuries"`
@@ -36,19 +55,28 @@ type RoadmapSnapshot struct {
 
 // CoachInput represents the full typed input context sent to the agent.
 type CoachInput struct {
-	Flow           string              `json:"flow"`
-	CurrentTime    string              `json:"current_time"` // ISO-8601 string
+	Flow        string `json:"flow"`
+	CurrentTime string `json:"current_time"` // RFC 3339, in the athlete's zone
+	// Timezone is the athlete's IANA zone: scheduled_date and slot_time are wall clock in it.
+	Timezone       string              `json:"timezone,omitempty"`
 	Profile        UserProfile         `json:"profile"`
 	RecentSessions []string            `json:"recent_sessions"`
 	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
 	CurrentRoadmap *RoadmapSnapshot    `json:"current_roadmap,omitempty"`
-	// AvailableExercises groups compact 6-element main exercise tuples by target muscle:
-	// [exercise_id, name, equipment, difficulty, movement_type, measurement_type].
+	// AvailableExercises groups compact 6-element main exercise tuples by
+	// primary MuscleGroup code:
+	// [exercise_id, name, equipment, level, movement_type, measurement_type].
 	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
-	// WarmUpExercises groups warm-up & mobility exercises by body part (+ "General").
-	WarmUpExercises map[string][][]string `json:"warm_up_exercises,omitempty"`
-	// CoolDownExercises groups stretching & cool-down exercises by body part (+ "General").
-	CoolDownExercises map[string][][]string `json:"cool_down_exercises,omitempty"`
+	// RecoveryExercises groups STRETCHING exercises, used for both warm-ups and
+	// cool-downs, by primary MuscleGroup code (+ "General").
+	RecoveryExercises map[string][][]string `json:"recovery_exercises,omitempty"`
+	// InjuryLimits maps exercise_id to the injury limit it must respect
+	// (RPE cap and reason) for exercises kept despite an injury.
+	InjuryLimits map[string]string `json:"injury_limits,omitempty"`
+
+	// WeekSlots is set for INITIATE_4_WEEK only: every week's open slots and
+	// the session count it must hold.
+	WeekSlots []WeekSlotPlan `json:"week_slots,omitempty"`
 
 	// 1-based; >1 means the previous plan was rejected. omitempty keeps a first
 	// attempt's payload identical to one with no retry support.
@@ -68,8 +96,10 @@ type CoachInput struct {
 	ReviewFeedback *PlanReview `json:"review_feedback,omitempty"`
 
 	SessionsToRevise []SessionToRevise `json:"sessions_to_revise,omitempty"`
-	AdaptationReason string            `json:"adaptation_reason,omitempty"`
-	AdHocHint        *AdHocHintInput   `json:"adhoc_hint,omitempty"`
+	// Rescheduled marks sessions_to_revise as new sessions on changed weekly slots.
+	Rescheduled      bool            `json:"rescheduled,omitempty"`
+	AdaptationReason string          `json:"adaptation_reason,omitempty"`
+	AdHocHint        *AdHocHintInput `json:"adhoc_hint,omitempty"`
 }
 
 // AdHocHintInput defines custom user preferences for single ad-hoc session recommendations.
@@ -85,6 +115,7 @@ type AdHocHintInput struct {
 type SessionToRevise struct {
 	ScheduledDate            string              `json:"scheduled_date"` // YYYY-MM-DD
 	SlotTime                 string              `json:"slot_time"`
+	SessionKind              string              `json:"session_kind"`
 	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
 	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
 	CurrentPrescription      WorkoutPrescription `json:"current_prescription"`
@@ -113,8 +144,9 @@ type WorkoutPrescription struct {
 // SessionPlan is one scheduled session. No session_plan_id: the backend mints
 // identifiers, so the model cannot collide with or point at another user's row.
 type SessionPlan struct {
-	ScheduledDate            string              `json:"scheduled_date"` // YYYY-MM-DD
-	SlotTime                 string              `json:"slot_time"`      // "HH:MM" or "06:00-07:30"
+	ScheduledDate            string              `json:"scheduled_date"`         // YYYY-MM-DD
+	SlotTime                 string              `json:"slot_time"`              // "HH:MM" or "06:00-07:30"
+	SessionKind              string              `json:"session_kind,omitempty"` // pinned by the backend from the slot
 	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
 	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
 	Prescription             WorkoutPrescription `json:"prescription"`
@@ -140,8 +172,16 @@ type GeneratedPlan struct {
 type PlanResult struct {
 	Plan     *GeneratedPlan    `json:"plan"`
 	Names    map[string]string `json:"-"` // exercise_id -> catalog display name
-	Degraded bool              `json:"degraded"`
-	Issues   []string          `json:"issues,omitempty"`
+	Cautions map[string]string `json:"-"` // exercise_id -> injury caution kept in reasoning
+	// Primaries maps each validated exercise_id to its primary MuscleGroup code.
+	Primaries map[string]string `json:"-"`
+	Degraded  bool              `json:"degraded"`
+	Issues    []string          `json:"issues,omitempty"`
+	// Timezone is the zone the plan was scheduled in (CoachInput.Timezone).
+	Timezone string `json:"-"`
+	// WeekStart is week 1's first calendar day as the slot schedule counted it
+	// (the plan's creation day in Timezone); zero when no schedule applied.
+	WeekStart time.Time `json:"-"`
 
 	// Review is the last verdict the plan received, nil when the flow ships
 	// unreviewed. A shipped plan may carry a failing verdict: the loop ran out

@@ -1,286 +1,206 @@
 package adk
 
 import (
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 const (
-	tagMobilityWarmUp     = "Mobility & Warm-up"
-	tagStretchingCoolDown = "Stretching & Cool-down"
-
 	defaultMuscleQuota   = 3
 	preferredMuscleQuota = 8
+
+	generalBucket         = "General"
+	recoveryPerMuscleCap  = 3
+	recoveryGeneralCap    = 6
+	movementTypeCompound  = "Compound"
+	movementTypeAccessory = "Accessory"
+	movementTypeCardio    = "Cardio"
+	movementTypeStretch   = "Stretch"
+	measurementReps       = "REPS"
+	measurementDuration   = "DURATION"
 )
 
-// exerciseMetaResolver abstracts metadata ID->Name lookups for pure selector functions.
-type exerciseMetaResolver struct {
-	muscle    func(idOrName string) string
-	bodyPart  func(idOrName string) string
-	equipment func(idOrName string) string
-	tag       func(idOrName string) string
+// candidate is an exercise that passed the hard filters, with its injury verdict.
+type candidate struct {
+	exercise port.Exercise
+	traits   service.ExerciseTraits
+	verdict  service.Verdict
 }
 
-func (r exerciseMetaResolver) resolveMuscle(s string) string {
-	if r.muscle != nil {
-		return r.muscle(s)
-	}
-	return s
+// candidatePrefs steers which main-work muscles get the larger quota.
+type candidatePrefs struct {
+	PreferredMuscles []taxonomy.MuscleGroup
+	PrimaryGoal      string
 }
 
-func (r exerciseMetaResolver) resolveBodyPart(s string) string {
-	if r.bodyPart != nil {
-		return r.bodyPart(s)
-	}
-	return s
+// candidateLists is what the generator may pick from.
+type candidateLists struct {
+	main     map[string][][]string // primary MuscleGroup code -> tuples
+	recovery map[string][][]string // primary MuscleGroup code or "General" -> tuples
+	limits   map[string]string     // exercise_id -> injury limit
 }
 
-func (r exerciseMetaResolver) resolveEquipment(s string) string {
-	if r.equipment != nil {
-		return r.equipment(s)
-	}
-	return s
+// buildCandidateLists filters the catalog for the athlete and groups what is
+// left into main work and recovery (warm-up / cool-down) candidates.
+func buildCandidateLists(exercises []port.Exercise, prefs *candidatePrefs, athlete *service.Athlete) candidateLists {
+	eligible := filterEligibleExercises(exercises, athlete)
+	lists := candidateLists{limits: make(map[string]string)}
+
+	var activeMuscles map[string]bool
+	lists.main, activeMuscles = selectMainCandidates(eligible, prefs, lists.limits)
+	lists.recovery = selectRecoveryCandidates(eligible, activeMuscles, lists.limits)
+	return lists
 }
 
-func (r exerciseMetaResolver) resolveTag(s string) string {
-	if r.tag != nil {
-		return r.tag(s)
-	}
-	return s
-}
-
-func hasExerciseTag(ex *port.Exercise, targetTag string, r exerciseMetaResolver) bool {
-	for _, tid := range ex.TagIDs {
-		if strings.EqualFold(tid, targetTag) || strings.EqualFold(r.resolveTag(tid), targetTag) {
-			return true
-		}
-	}
-	return false
-}
-
-func isBodyweightExercise(ex *port.Exercise, eqResolved string) bool {
-	return ex.IsBodyweight ||
-		strings.EqualFold(ex.Equipment, "Body Weight") ||
-		strings.EqualFold(eqResolved, "Body Weight") ||
-		strings.EqualFold(eqResolved, "bodyweight") ||
-		ex.Equipment == ""
-}
-
-func isCardioExercise(ex *port.Exercise, exMuscleResolved, exBodyPartResolved string) bool {
-	return strings.EqualFold(ex.MuscleGroup, "Cardio") ||
-		strings.EqualFold(exMuscleResolved, "Cardiovascular System") ||
-		strings.EqualFold(exBodyPartResolved, "Cardio")
-}
-
-func buildExerciseTuple(ex *port.Exercise, eqResolved, movementType string) []string {
-	measType := ex.MeasurementType
-	if measType == "" {
-		measType = "REPS"
-	}
-	return []string{
-		ex.ExerciseID,
-		ex.Name,
-		eqResolved,
-		ex.Difficulty,
-		movementType,
-		measType,
-	}
-}
-
-// filterEligibleExercises applies all hard safety & capability filters:
-// 1. Exclude active injuries (matching both MuscleGroup and BodyPart).
-// 2. Enforce exercise_difficulty <= user_experience_level.
-// 3. Match user's available equipment (+ Body Weight).
-func filterEligibleExercises(
-	exercises []port.Exercise,
-	profile *port.Profile,
-	avoidInjuries []string,
-	r exerciseMetaResolver,
-) []port.Exercise {
-	eligible := make([]port.Exercise, 0, len(exercises))
+// filterEligibleExercises applies the hard filters of docs/05 §8.2-8.4: level
+// <= the athlete's, equipment owned (BODY_ONLY always) and not excluded by an
+// injury. Where an injury prefers machine or cable, guided exercises move
+// ahead of the others, otherwise catalog order is kept.
+func filterEligibleExercises(exercises []port.Exercise, athlete *service.Athlete) []candidate {
+	eligible := make([]candidate, 0, len(exercises))
 	for i := range exercises {
-		ex := &exercises[i]
-		exMuscleResolved := r.resolveMuscle(ex.MuscleGroup)
-		exBodyPartResolved := r.resolveBodyPart(ex.BodyPart)
-
-		conflict := false
-		for _, inj := range avoidInjuries {
-			injResolved := r.resolveMuscle(inj)
-			if strings.EqualFold(ex.MuscleGroup, inj) ||
-				strings.EqualFold(exMuscleResolved, injResolved) ||
-				(ex.BodyPart != "" && (strings.EqualFold(ex.BodyPart, inj) || strings.EqualFold(exBodyPartResolved, injResolved))) {
-				conflict = true
-				break
-			}
-		}
-		if conflict {
+		c := candidate{exercise: exercises[i], traits: exercises[i].Traits()}
+		if !service.LevelAllowed(c.traits.Level, athlete.Level) ||
+			!service.EquipmentAvailable(c.traits.Equipment, athlete.Equipment) {
 			continue
 		}
-
-		if !isDifficultyAllowed(ex.Difficulty, profile.ExperienceLevel) {
+		c.verdict = service.EvaluateInjuries(&c.traits, athlete.Injuries)
+		if c.verdict.Excluded {
 			continue
 		}
-
-		eqResolved := r.resolveEquipment(ex.Equipment)
-		if len(profile.AvailableEquipment) > 0 && !isBodyweightExercise(ex, eqResolved) {
-			eqMatch := false
-			for _, eq := range profile.AvailableEquipment {
-				userEqResolved := r.resolveEquipment(eq)
-				if strings.EqualFold(ex.Equipment, eq) || strings.EqualFold(eqResolved, userEqResolved) {
-					eqMatch = true
-					break
-				}
-			}
-			if !eqMatch {
-				continue
-			}
-		}
-
-		eligible = append(eligible, *ex)
+		eligible = append(eligible, c)
 	}
+
+	sort.SliceStable(eligible, func(i, j int) bool {
+		return guidedRank(&eligible[i]) < guidedRank(&eligible[j])
+	})
 	return eligible
 }
 
-// selectMainCandidates builds the main_exercises map dynamically from the DB's eligible exercises.
-// User-preferred muscles (matched by MuscleGroup or BodyPart) receive preferredMuscleQuota (8);
-// all other muscles in the catalog receive defaultMuscleQuota (3) for balanced programming.
-// Cardio is included when the user explicitly prefers it or when PrimaryGoal targets fat loss / endurance.
+// guidedRank is 1 for a non-guided exercise an injury would rather replace.
+func guidedRank(c *candidate) int {
+	if c.verdict.PreferMachineOrCable && !c.traits.IsMachineOrCable() {
+		return 1
+	}
+	return 0
+}
+
+// selectMainCandidates groups main work (every category but STRETCHING) by
+// primary muscle. Preferred muscles get preferredMuscleQuota, the rest
+// defaultMuscleQuota. Cardio is kept only when preferred or when the goal
+// targets fat loss or endurance.
 func selectMainCandidates(
-	eligible []port.Exercise,
-	profile *port.Profile,
-	r exerciseMetaResolver,
-) (candidates map[string][][]string, activeBodyParts map[string]bool) {
+	eligible []candidate,
+	prefs *candidatePrefs,
+	limits map[string]string,
+) (candidates map[string][][]string, activeMuscles map[string]bool) {
 	candidates = make(map[string][][]string)
-	activeBodyParts = make(map[string]bool)
+	activeMuscles = make(map[string]bool)
 
-	goalLower := strings.ToLower(profile.PrimaryGoal)
+	goalLower := strings.ToLower(prefs.PrimaryGoal)
 	goalWantsCardio := strings.Contains(goalLower, "fat") || strings.Contains(goalLower, "endurance")
-
-	isPreferred := func(ex *port.Exercise, exMuscleResolved, exBodyPartResolved string) bool {
-		for _, mg := range profile.PreferredMuscleGroups {
-			mgResolved := r.resolveMuscle(mg)
-			if strings.EqualFold(ex.MuscleGroup, mg) ||
-				strings.EqualFold(exMuscleResolved, mgResolved) ||
-				(ex.BodyPart != "" && (strings.EqualFold(ex.BodyPart, mg) || strings.EqualFold(exBodyPartResolved, mgResolved))) {
-				return true
-			}
-		}
-		return false
+	preferred := make(map[taxonomy.MuscleGroup]bool, len(prefs.PreferredMuscles))
+	for _, m := range prefs.PreferredMuscles {
+		preferred[m] = true
 	}
 
 	for i := range eligible {
-		ex := &eligible[i]
-		if hasExerciseTag(ex, tagStretchingCoolDown, r) || hasExerciseTag(ex, tagMobilityWarmUp, r) {
+		c := &eligible[i]
+		if c.traits.IsWarmUpCoolDown() {
 			continue
 		}
-
-		exMuscleResolved := r.resolveMuscle(ex.MuscleGroup)
-		exBodyPartResolved := r.resolveBodyPart(ex.BodyPart)
-		preferred := isPreferred(ex, exMuscleResolved, exBodyPartResolved)
-
-		if isCardioExercise(ex, exMuscleResolved, exBodyPartResolved) && !goalWantsCardio && !preferred {
+		isPreferred := preferred[c.traits.PrimaryMuscle]
+		isCardio := c.traits.Category == taxonomy.CategoryCardio
+		if isCardio && !goalWantsCardio && !isPreferred {
 			continue
 		}
 
 		quota := defaultMuscleQuota
-		if preferred {
+		if isPreferred {
 			quota = preferredMuscleQuota
 		}
-
-		group := exMuscleResolved
-		if group == "" {
-			group = "General"
-		}
+		group := string(c.traits.PrimaryMuscle)
 		if len(candidates[group]) >= quota {
 			continue
 		}
 
-		eqResolved := r.resolveEquipment(ex.Equipment)
-		measType := ex.MeasurementType
-		if measType == "" {
-			measType = "REPS"
-		}
-		movementType := "Compound"
-		if ex.IsMachineOrCable {
-			movementType = "Accessory"
-		}
-		if isCardioExercise(ex, exMuscleResolved, exBodyPartResolved) || measType == "DURATION" {
-			movementType = "Cardio"
-		}
-
-		candidates[group] = append(candidates[group], buildExerciseTuple(ex, eqResolved, movementType))
-		if exBodyPartResolved != "" {
-			activeBodyParts[exBodyPartResolved] = true
-		}
+		candidates[group] = append(candidates[group], buildExerciseTuple(c, mainMovementType(c)))
+		activeMuscles[group] = true
+		recordLimit(c, limits)
 	}
 
-	return candidates, activeBodyParts
+	return candidates, activeMuscles
 }
 
-// selectRecoveryCandidates builds dedicated warm_up_exercises and cool_down_exercises
-// maps grouped by body part (+ "General"), strictly disjoint from main_exercises.
+// selectRecoveryCandidates picks STRETCHING exercises for warm-ups and
+// cool-downs (docs/05 §8.4), bucketed by primary muscle when that muscle is
+// trained in main work and under "General" otherwise.
 func selectRecoveryCandidates(
-	eligible []port.Exercise,
-	activeBodyParts map[string]bool,
-	r exerciseMetaResolver,
-) (warmUps, coolDowns map[string][][]string) {
-	warmUps = make(map[string][][]string)
-	coolDowns = make(map[string][][]string)
-
-	warmSeen := make(map[string]bool)
-	coolSeen := make(map[string]bool)
-
-	// 1. Warm-ups: strictly exercises tagged Mobility & Warm-up.
+	eligible []candidate,
+	activeMuscles map[string]bool,
+	limits map[string]string,
+) map[string][][]string {
+	recovery := make(map[string][][]string)
 	for i := range eligible {
-		ex := &eligible[i]
-		if !hasExerciseTag(ex, tagMobilityWarmUp, r) {
+		c := &eligible[i]
+		if !c.traits.IsWarmUpCoolDown() {
 			continue
 		}
-		bp := r.resolveBodyPart(ex.BodyPart)
-		bucket := "General"
-		capLimit := 6
-		if bp != "" && activeBodyParts[bp] {
-			bucket = bp
-			capLimit = 3
-		}
-		if len(warmUps[bucket]) >= capLimit || warmSeen[ex.ExerciseID] {
-			continue
-		}
-		eqResolved := r.resolveEquipment(ex.Equipment)
-		warmUps[bucket] = append(warmUps[bucket], buildExerciseTuple(ex, eqResolved, "Mobility"))
-		warmSeen[ex.ExerciseID] = true
-	}
 
-	// 2. Cool-downs: strictly exercises tagged Stretching & Cool-down matching activeBodyParts first.
-	for i := range eligible {
-		ex := &eligible[i]
-		if !hasExerciseTag(ex, tagStretchingCoolDown, r) {
+		bucket, capLimit := generalBucket, recoveryGeneralCap
+		if muscle := string(c.traits.PrimaryMuscle); activeMuscles[muscle] {
+			bucket, capLimit = muscle, recoveryPerMuscleCap
+		}
+		if len(recovery[bucket]) >= capLimit {
 			continue
 		}
-		bp := r.resolveBodyPart(ex.BodyPart)
-		if bp != "" && activeBodyParts[bp] {
-			if len(coolDowns[bp]) < 3 && !coolSeen[ex.ExerciseID] {
-				eqResolved := r.resolveEquipment(ex.Equipment)
-				coolDowns[bp] = append(coolDowns[bp], buildExerciseTuple(ex, eqResolved, "Stretch"))
-				coolSeen[ex.ExerciseID] = true
-			}
-		}
-	}
 
-	// Fill "General" cool-down stretches for broader recovery options.
-	for i := range eligible {
-		if len(coolDowns["General"]) >= 4 {
-			break
-		}
-		ex := &eligible[i]
-		if !hasExerciseTag(ex, tagStretchingCoolDown, r) || coolSeen[ex.ExerciseID] {
-			continue
-		}
-		eqResolved := r.resolveEquipment(ex.Equipment)
-		coolDowns["General"] = append(coolDowns["General"], buildExerciseTuple(ex, eqResolved, "Stretch"))
-		coolSeen[ex.ExerciseID] = true
+		recovery[bucket] = append(recovery[bucket], buildExerciseTuple(c, movementTypeStretch))
+		recordLimit(c, limits)
 	}
+	return recovery
+}
 
-	return warmUps, coolDowns
+// mainMovementType labels main work for the generator from source data.
+func mainMovementType(c *candidate) string {
+	switch {
+	case c.traits.Category == taxonomy.CategoryCardio || c.exercise.MeasurementType == measurementDuration:
+		return movementTypeCardio
+	case c.traits.Mechanic == taxonomy.MechanicCompound:
+		return movementTypeCompound
+	default:
+		return movementTypeAccessory
+	}
+}
+
+// recordLimit notes the injury limit of an exercise kept with an RPE cap.
+func recordLimit(c *candidate, limits map[string]string) {
+	if c.verdict.MaxRPE > 0 {
+		limits[c.exercise.ExerciseID] = injuryLimitText(&c.verdict)
+	}
+}
+
+// injuryLimitText is the limit shown to the generator and kept in reasoning.
+func injuryLimitText(v *service.Verdict) string {
+	return "max RPE " + strconv.FormatFloat(v.MaxRPE, 'f', -1, 64) + " (" + v.Reason() + ")"
+}
+
+func buildExerciseTuple(c *candidate, movementType string) []string {
+	measType := c.exercise.MeasurementType
+	if measType == "" {
+		measType = measurementReps
+	}
+	return []string{
+		c.exercise.ExerciseID,
+		c.exercise.Name,
+		string(c.traits.Equipment),
+		string(c.traits.Level),
+		movementType,
+		measType,
+	}
 }

@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"cmp"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -31,6 +32,8 @@ func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
 		CreatedAt: info.CreatedAt,
 
 		UpdatedAt: info.UpdatedAt,
+
+		Timezone: cmp.Or(info.Timezone, roadmap.DefaultTimezone),
 	}
 }
 
@@ -47,6 +50,7 @@ func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.
 		EndDate:   rec.EndDate,
 		CreatedAt: rec.CreatedAt,
 		UpdatedAt: rec.UpdatedAt,
+		Timezone:  rec.Timezone,
 	}, weeks)
 }
 
@@ -173,6 +177,8 @@ func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
 
 		Source: string(info.Source),
 
+		Kind: string(info.Kind),
+
 		TargetMuscleGroups: musclesBytes,
 
 		Prescription: prescBytes,
@@ -238,6 +244,7 @@ func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error)
 		Status: roadmap.SessionPlanStatus(rec.Status),
 
 		Source: roadmap.SessionPlanSource(rec.Source),
+		Kind:   roadmap.SessionKind(rec.Kind),
 
 		TargetMuscleGroups: muscles,
 

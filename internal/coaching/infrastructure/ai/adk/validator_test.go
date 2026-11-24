@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 // fakeCatalog is a hand-rolled ExerciseCatalogReader that reports which IDs it
@@ -21,7 +23,13 @@ type fakeCatalog struct {
 func newFakeCatalog(ids ...string) *fakeCatalog {
 	byID := make(map[string]port.Exercise, len(ids))
 	for _, id := range ids {
-		byID[id] = port.Exercise{ExerciseID: id, Name: "Name of " + id, MuscleGroup: "chest"}
+		byID[id] = port.Exercise{
+			ExerciseID:    id,
+			Name:          "Name of " + id,
+			PrimaryMuscle: taxonomy.MuscleGroupChest,
+			Equipment:     taxonomy.EquipmentBarbell,
+			Category:      taxonomy.CategoryStrength,
+		}
 	}
 	return &fakeCatalog{byID: byID, calls: make(map[string]int)}
 }
@@ -60,6 +68,7 @@ func sessionOf(date string, mainIDs ...string) SessionPlan {
 	return SessionPlan{
 		ScheduledDate:            date,
 		SlotTime:                 "06:00-07:30",
+		SessionKind:              kindTraining, // what the backend pins for an unscheduled slot
 		EstimatedDurationMinutes: 60,
 		TargetMuscleGroups:       []string{"chest"},
 		Prescription:             WorkoutPrescription{MainExercises: mains},
@@ -165,7 +174,8 @@ func TestPlanValidator_DropModeRemovesSessionWithNoValidMains(t *testing.T) {
 	}
 }
 
-func TestPlanValidator_DropModeRemovesEmptyWeek(t *testing.T) {
+// A week emptied by salvage is kept (empty) so the roadmap keeps its four weeks.
+func TestPlanValidator_DropModeKeepsEmptiedWeek(t *testing.T) {
 	cat := newFakeCatalog("bench-press")
 	v := newPlanValidator(cat)
 	plan := &GeneratedPlan{Weeks: []WeekPlan{
@@ -178,11 +188,14 @@ func TestPlanValidator_DropModeRemovesEmptyWeek(t *testing.T) {
 		t.Fatalf("validate returned error: %v", err)
 	}
 
-	if len(got.Plan.Weeks) != 1 {
-		t.Fatalf("got %d surviving weeks, want 1", len(got.Plan.Weeks))
+	if len(got.Plan.Weeks) != 2 {
+		t.Fatalf("got %d weeks, want both kept", len(got.Plan.Weeks))
 	}
-	if got.Plan.Weeks[0].WeekNumber != 2 {
-		t.Errorf("got surviving week %d, want 2", got.Plan.Weeks[0].WeekNumber)
+	if n := len(got.Plan.Weeks[0].Sessions); n != 0 {
+		t.Errorf("week 1 keeps %d sessions, want 0 (its only session was invalid)", n)
+	}
+	if !got.Degraded {
+		t.Error("a dropped session must mark the plan degraded")
 	}
 }
 
@@ -352,32 +365,101 @@ func TestPlanValidator_NilPlan(t *testing.T) {
 	}
 }
 
-func TestPlanValidator_RejectsWarmUpCoolDownTargetMuscleGroup(t *testing.T) {
+// injuryCatalog knows a squat (QUADRICEPS primary, GLUTES secondary) and a bench press.
+func injuryCatalog() *fakeCatalog {
 	cat := newFakeCatalog("bench-press")
-	v := newPlanValidator(cat)
+	cat.byID["squat"] = port.Exercise{
+		ExerciseID:       "squat",
+		Name:             "Barbell Squat",
+		PrimaryMuscle:    taxonomy.MuscleGroupQuadriceps,
+		SecondaryMuscles: []taxonomy.MuscleGroup{taxonomy.MuscleGroupGlutes},
+		Equipment:        taxonomy.EquipmentBarbell,
+		Category:         taxonomy.CategoryStrength,
+	}
+	return cat
+}
 
-	sp := sessionOf("2026-08-03", "bench-press")
-	sp.TargetMuscleGroups = []string{"WarmUp_CoolDown"}
+func TestPlanValidator_InjuryExclusionIsRetryableAndSalvageDrops(t *testing.T) {
+	v := newPlanValidator(injuryCatalog()).withAthlete(&service.Athlete{
+		Equipment: service.DefaultGymEquipment(),
+		Injuries:  []service.Injury{{Region: taxonomy.JointRegionKnee, Severity: taxonomy.InjurySeverityModerate}},
+	})
+	sp := sessionOf("2026-08-03", "bench-press", "squat")
 
 	got, err := v.validate(context.Background(), planOf(sp), false)
 	if err != nil {
 		t.Fatalf("validate returned error: %v", err)
 	}
-	if len(got.Issues) != 1 {
-		t.Fatalf("got %d issues, want 1: %v", len(got.Issues), got.Issues)
-	}
-	if !strings.Contains(got.Issues[0].Reason, "WarmUp_CoolDown") {
-		t.Errorf("got issue %q, want it to reject WarmUp_CoolDown", got.Issues[0].Reason)
+	if len(got.Issues) != 1 || got.Issues[0].ExerciseID != "squat" ||
+		!strings.Contains(got.Issues[0].Reason, "active injury") {
+		t.Fatalf("got issues %v, want one injury issue for squat", got.Issues)
 	}
 
-	// Salvage mode must strip WarmUp_CoolDown so it never leaks into persisted plans.
-	sp.TargetMuscleGroups = []string{"WarmUp_CoolDown", "Pectorals"}
 	salvaged, err := v.validate(context.Background(), planOf(sp), true)
 	if err != nil {
 		t.Fatalf("validate (salvage) returned error: %v", err)
 	}
-	kept := salvaged.Plan.Weeks[0].Sessions[0]
-	if len(kept.TargetMuscleGroups) != 1 || kept.TargetMuscleGroups[0] != "Pectorals" {
-		t.Errorf("salvage TargetMuscleGroups = %v, want [Pectorals]", kept.TargetMuscleGroups)
+	mains := salvaged.Plan.Weeks[0].Sessions[0].Prescription.MainExercises
+	if len(mains) != 1 || mains[0].ExerciseID != "bench-press" || !salvaged.Degraded {
+		t.Errorf("salvage kept %v (degraded=%v), want only bench-press", mains, salvaged.Degraded)
+	}
+}
+
+func TestPlanValidator_InjuryRPECap(t *testing.T) {
+	v := newPlanValidator(injuryCatalog()).withAthlete(&service.Athlete{
+		Equipment: service.DefaultGymEquipment(),
+		Injuries:  []service.Injury{{Region: taxonomy.JointRegionLowerBack, Severity: taxonomy.InjurySeverityModerate}},
+	})
+	sp := sessionOf("2026-08-03", "squat")
+	sp.Prescription.MainExercises[0].TargetRPE = 7.5
+
+	got, err := v.validate(context.Background(), planOf(sp), false)
+	if err != nil {
+		t.Fatalf("validate returned error: %v", err)
+	}
+	if len(got.Issues) != 1 || !strings.Contains(got.Issues[0].Reason, "injury cap") {
+		t.Fatalf("got issues %v, want one RPE cap issue", got.Issues)
+	}
+	if !strings.Contains(got.Cautions["squat"], "max RPE 6") {
+		t.Errorf("got caution %q, want the RPE 6 limit", got.Cautions["squat"])
+	}
+
+	salvaged, err := v.validate(context.Background(), planOf(sp), true)
+	if err != nil {
+		t.Fatalf("validate (salvage) returned error: %v", err)
+	}
+	if rpe := salvaged.Plan.Weeks[0].Sessions[0].Prescription.MainExercises[0].TargetRPE; rpe != 6 {
+		t.Errorf("salvage RPE = %v, want clamped to 6", rpe)
+	}
+	if sp.Prescription.MainExercises[0].TargetRPE != 7.5 {
+		t.Error("salvage must not mutate the input plan")
+	}
+}
+
+func TestAnnotateInjuryCautions(t *testing.T) {
+	sp := sessionOf("2026-08-03", "squat", "bench-press")
+	sp.Reasoning = "Leg day."
+	plan := planOf(sp)
+
+	annotateInjuryCautions(plan, map[string]string{"squat": "max RPE 7 (KNEE (MILD): caution)"})
+
+	got := plan.Weeks[0].Sessions[0].Reasoning
+	if !strings.HasPrefix(got, "Leg day.") || !strings.Contains(got, "Injury caution: squat: max RPE 7") {
+		t.Errorf("got reasoning %q", got)
+	}
+}
+
+func TestPlanValidator_EquipmentNotOwnedIsRetryable(t *testing.T) {
+	v := newPlanValidator(injuryCatalog()).withAthlete(&service.Athlete{
+		Equipment: []taxonomy.Equipment{taxonomy.EquipmentDumbbell},
+	})
+	sp := sessionOf("2026-08-03", "bench-press")
+
+	got, err := v.validate(context.Background(), planOf(sp), false)
+	if err != nil {
+		t.Fatalf("validate returned error: %v", err)
+	}
+	if len(got.Issues) != 1 || !strings.Contains(got.Issues[0].Reason, "BARBELL") {
+		t.Errorf("got issues %v, want one missing-equipment issue", got.Issues)
 	}
 }

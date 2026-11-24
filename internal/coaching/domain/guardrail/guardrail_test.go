@@ -7,6 +7,8 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 // validRPE is mid-band for each phase, so the baseline satisfies BR-AC-10.
@@ -110,9 +112,9 @@ func TestGuardrail_Approved_Baseline(t *testing.T) {
 		}
 
 		return 0
-	}, nil)
+	})
 
-	got := e.Check(r)
+	got := e.Check(r, nil, time.Time{})
 
 	if got.Status != StatusApproved {
 		t.Errorf("status = %s, violations = %+v", got.Status, got.Violations)
@@ -130,9 +132,9 @@ func TestGuardrail_RejectsWeightOverBand(t *testing.T) {
 		}
 
 		return 0
-	}, nil)
+	})
 
-	got := e.Check(r)
+	got := e.Check(r, nil, time.Time{})
 
 	if got.Status != StatusRejected {
 		t.Fatalf("expected rejected")
@@ -153,56 +155,86 @@ func TestGuardrail_RejectsWeightOverBand(t *testing.T) {
 	}
 }
 
-func TestGuardrail_RejectsInjuryTargeted(t *testing.T) {
-	r := buildValidRoadmap(t)
+// benchCatalog knows ex-bench: CHEST primary, TRICEPS and SHOULDERS secondary, barbell strength.
+func benchCatalog() *fakeCatalogReader {
+	return &fakeCatalogReader{exercises: map[string]port.Exercise{
+		"ex-bench": {
+			ExerciseID:       "ex-bench",
+			Name:             "Bench",
+			PrimaryMuscle:    taxonomy.MuscleGroupChest,
+			SecondaryMuscles: []taxonomy.MuscleGroup{taxonomy.MuscleGroupTriceps, taxonomy.MuscleGroupShoulders},
+			Equipment:        taxonomy.EquipmentBarbell,
+			Category:         taxonomy.CategoryStrength,
+			Level:            taxonomy.LevelBeginner,
+		},
+	}}
+}
 
-	// All sessions target "chest" — injury on chest should reject them all.
-
-	e := NewEngine(nil, nil, nil, []port.InjuryStatus{
-		{MuscleGroup: "chest"},
-	})
-
-	got := e.Check(r)
-
-	if got.Status != StatusRejected {
-		t.Fatalf("expected rejected")
+// TestGuardrail_InjuryExclusion checks BR-AC-09 against each exercise using
+// the docs/05 §8.2 table (the baseline plan prescribes ex-bench at RPE 6.5,
+// 7.5, 8.5, 5.5 per week).
+func TestGuardrail_InjuryExclusion(t *testing.T) {
+	tests := []struct {
+		name     string
+		injuries []service.Injury
+		want     string
+	}{
+		{name: "no injuries", injuries: nil},
+		{
+			name:     "moderate chest: primary load excluded",
+			injuries: []service.Injury{{Region: taxonomy.JointRegionChest, Severity: taxonomy.InjurySeverityModerate}},
+			want:     "BR-AC-09",
+		},
+		{
+			name:     "severe elbow: secondary triceps load excluded",
+			injuries: []service.Injury{{Region: taxonomy.JointRegionElbow, Severity: taxonomy.InjurySeveritySevere}},
+			want:     "BR-AC-09",
+		},
+		{
+			name:     "moderate elbow: secondary load above the RPE 6 cap",
+			injuries: []service.Injury{{Region: taxonomy.JointRegionElbow, Severity: taxonomy.InjurySeverityModerate}},
+			want:     "BR-AC-09",
+		},
+		{
+			name:     "unrelated knee injury",
+			injuries: []service.Injury{{Region: taxonomy.JointRegionKnee, Severity: taxonomy.InjurySeveritySevere}},
+		},
 	}
 
-	foundBRAC09 := false
-
-	for _, v := range got.Violations {
-		if v.Code == "BR-AC-09" {
-			foundBRAC09 = true
-
-			break
-		}
-	}
-
-	if !foundBRAC09 {
-		t.Errorf("expected BR-AC-09 violation")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewEngine(nil, benchCatalog(), nil).Check(buildValidRoadmap(t), tt.injuries, time.Time{})
+			assertViolation(t, got, tt.want)
+		})
 	}
 }
 
-func TestGuardrail_RecoveredInjury_NotFlagged(t *testing.T) {
-	r := buildValidRoadmap(t)
+// TestGuardrail_InjuryCapLowersPhaseBand: a capped exercise within its cap
+// passes both BR-AC-09 and BR-AC-10 even where the phase band is higher.
+func TestGuardrail_InjuryCapLowersPhaseBand(t *testing.T) {
+	mildChest := []service.Injury{{Region: taxonomy.JointRegionChest, Severity: taxonomy.InjurySeverityMild}}
+	tests := []struct {
+		name string
+		give [4]float32
+		want string
+	}{
+		{name: "within the RPE 7 cap every week", give: [4]float32{6.5, 7.0, 7.0, 5.5}},
+		{name: "peak at RPE 8 breaks the cap", give: [4]float32{6.5, 7.0, 8.0, 5.5}, want: "BR-AC-09"},
+		{name: "overload below its floor still breaks the band", give: [4]float32{6.5, 6.5, 7.0, 5.5}, want: "BR-AC-10"},
+	}
 
-	rec := time.Now()
-
-	e := NewEngine(nil, nil, nil, []port.InjuryStatus{
-		{MuscleGroup: "chest", RecoveredAt: &rec},
-	})
-
-	got := e.Check(r)
-
-	if got.Status != StatusApproved {
-		t.Errorf("expected approved for recovered injury, got %s: %+v", got.Status, got.Violations)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewEngine(nil, benchCatalog(), nil).Check(buildRoadmap(t, tt.give, validSets()), mildChest, time.Time{})
+			assertViolation(t, got, tt.want)
+		})
 	}
 }
 
 func TestGuardrail_NilRoadmapRejected(t *testing.T) {
-	e := NewEngine(nil, nil, nil, nil)
+	e := NewEngine(nil, nil, nil)
 
-	got := e.Check(nil)
+	got := e.Check(nil, nil, time.Time{})
 
 	if got.Status != StatusRejected {
 		t.Errorf("nil roadmap should reject")
@@ -229,7 +261,7 @@ func TestGuardrail_PhaseRPEBand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()))
+			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()), nil, time.Time{})
 
 			assertViolation(t, got, tt.want)
 		})
@@ -256,7 +288,7 @@ func TestGuardrail_DeloadVolume(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give))
+			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give), nil, time.Time{})
 
 			assertViolation(t, got, tt.want)
 		})
@@ -285,7 +317,8 @@ func assertViolation(t *testing.T, got ReviewResult, code string) {
 }
 
 type fakeCatalogReader struct {
-	validIDs map[string]bool
+	validIDs  map[string]bool
+	exercises map[string]port.Exercise
 }
 
 func (f *fakeCatalogReader) SearchByFilter(_ context.Context, _ *port.ExerciseFilter) ([]port.Exercise, error) {
@@ -293,6 +326,9 @@ func (f *fakeCatalogReader) SearchByFilter(_ context.Context, _ *port.ExerciseFi
 }
 
 func (f *fakeCatalogReader) GetByID(_ context.Context, id string) (port.Exercise, error) {
+	if ex, ok := f.exercises[id]; ok {
+		return ex, nil
+	}
 	if f.validIDs[id] {
 		return port.Exercise{ExerciseID: id, Name: "Name of " + id}, nil
 	}
@@ -303,12 +339,86 @@ func TestGuardrail_RejectsInvalidCatalogExerciseID(t *testing.T) {
 	r := buildValidRoadmap(t)
 	cat := &fakeCatalogReader{validIDs: map[string]bool{}} // "ex-bench" is NOT in validIDs
 
-	e := NewEngine(nil, cat, nil, nil)
-	got := e.Check(r)
+	e := NewEngine(nil, cat, nil)
+	got := e.Check(r, nil, time.Time{})
 
 	if got.Status != StatusRejected {
 		t.Fatalf("expected status REJECTED for non-existent exercise ID")
 	}
 
 	assertViolation(t, got, "BR-AC-12")
+}
+
+// TestGuardrail_InjuryRulesOnlyApplyToRewritableSessions: a regen only rewrites
+// PENDING sessions from now, so completed or past sessions that load the
+// injured area must not block it (they are history, not prescriptions).
+func TestGuardrail_InjuryRulesOnlyApplyToRewritableSessions(t *testing.T) {
+	moderateChest := []service.Injury{{Region: taxonomy.JointRegionChest, Severity: taxonomy.InjurySeverityModerate}}
+	mildChest := []service.Injury{{Region: taxonomy.JointRegionChest, Severity: taxonomy.InjurySeverityMild}}
+	week2 := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	afterRoadmap := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		injuries []service.Injury
+		finish   func(t *testing.T, s *roadmap.SessionPlan) // applied to every session
+		from     time.Time
+		want     string
+	}{
+		{
+			name:     "pending future session loading the injury blocks",
+			injuries: moderateChest,
+			from:     week2,
+			want:     "BR-AC-09",
+		},
+		{
+			name:     "completed sessions loading the injury are approved",
+			injuries: moderateChest,
+			finish: func(t *testing.T, s *roadmap.SessionPlan) {
+				if err := s.MarkCompleted(80, 0, time.Now()); err != nil {
+					t.Fatalf("complete: %v", err)
+				}
+			},
+			from: week2,
+		},
+		{
+			name:     "skipped sessions are approved",
+			injuries: moderateChest,
+			finish: func(t *testing.T, s *roadmap.SessionPlan) {
+				if err := s.MarkSkipped(); err != nil {
+					t.Fatalf("skip: %v", err)
+				}
+			},
+			from: week2,
+		},
+		{
+			name:     "past pending sessions are approved",
+			injuries: moderateChest,
+			from:     afterRoadmap,
+		},
+		{
+			// PEAK sessions sit at RPE 8.5 above the MILD cap of 7: only a
+			// rewritable session may be held to the cap.
+			name:     "injury cap does not lower the band of past sessions",
+			injuries: mildChest,
+			from:     afterRoadmap,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := buildValidRoadmap(t)
+			if tt.finish != nil {
+				for _, w := range r.Weeks() {
+					for _, d := range w.Days() {
+						for _, s := range d.Sessions() {
+							tt.finish(t, s)
+						}
+					}
+				}
+			}
+			got := NewEngine(nil, benchCatalog(), nil).Check(r, tt.injuries, tt.from)
+			assertViolation(t, got, tt.want)
+		})
+	}
 }

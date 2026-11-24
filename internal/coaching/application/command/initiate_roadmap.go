@@ -5,11 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"golang.org/x/sync/singleflight"
 )
 
 // InitiateRoadmapCommand is the input to UC-02.1.
@@ -25,13 +28,21 @@ type InitiateRoadmapResult struct {
 // InitiateRoadmapHandler orchestrates: ContextBuilder → CoachAgent → Guard →
 // Save (Roadmap + Outbox event) in a single transaction.
 type InitiateRoadmapHandler struct {
-	tx     port.TransactionManager
-	repo   port.RoadmapRepository
-	agent  port.CoachAgent
-	guard  *guardrail.Engine
-	outbox port.OutboxWriter
-	clock  port.Clock
+	tx       port.TransactionManager
+	repo     port.RoadmapRepository
+	agent    port.CoachAgent
+	guard    *guardrail.Engine
+	profiles port.UserProfileReader
+	outbox   port.OutboxWriter
+	clock    port.Clock
+
+	// flight joins concurrent initiations for one user (the onboarding RPC and
+	// the ProfileCompleted consumer race) into a single LLM generation.
+	flight singleflight.Group
 }
+
+// initiateTimeout bounds one roadmap generation, detached from any caller.
+const initiateTimeout = 5 * time.Minute
 
 // NewInitiateRoadmapHandler wires the handler.
 func NewInitiateRoadmapHandler(
@@ -39,25 +50,48 @@ func NewInitiateRoadmapHandler(
 	repo port.RoadmapRepository,
 	agent port.CoachAgent,
 	guard *guardrail.Engine,
+	profiles port.UserProfileReader,
 	outbox port.OutboxWriter,
 	clock port.Clock,
 ) *InitiateRoadmapHandler {
 	return &InitiateRoadmapHandler{
-		tx:     tx,
-		repo:   repo,
-		agent:  agent,
-		guard:  guard,
-		outbox: outbox,
-		clock:  clock,
+		tx:       tx,
+		repo:     repo,
+		agent:    agent,
+		guard:    guard,
+		profiles: profiles,
+		outbox:   outbox,
+		clock:    clock,
 	}
 }
 
-// Handle executes UC-02.1.
+// Handle executes UC-02.1. Concurrent calls for the same user share one
+// generation and its result; the generation is detached from the caller, so a
+// caller that gives up still leaves the roadmap saved. A roadmap that already
+// exists yields roadmap.ErrActiveRoadmapExists.
 func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmapCommand) (*InitiateRoadmapResult, error) {
 	if cmd.UserID == "" {
 		return nil, errors.New("user_id is required")
 	}
 
+	ch := h.flight.DoChan(cmd.UserID, func() (any, error) {
+		genCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), initiateTimeout)
+		defer cancel()
+		return h.initiate(genCtx, cmd)
+	})
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for roadmap initiation: %w", ctx.Err())
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		out, _ := res.Val.(*InitiateRoadmapResult)
+		return out, nil
+	}
+}
+
+func (h *InitiateRoadmapHandler) initiate(ctx context.Context, cmd InitiateRoadmapCommand) (*InitiateRoadmapResult, error) {
 	// Reject if an ACTIVE roadmap already exists (BR-AC constraint enforced also
 	// at DB level via ux_roadmaps_user_active).
 
@@ -87,7 +121,13 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmap
 		return nil, valErr
 	}
 
-	if result := h.guard.Check(draft); result.Status != guardrail.StatusApproved {
+	injuries, err := activeInjuries(ctx, h.profiles, cmd.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Every session of a fresh draft is new, so all of them are checked.
+	if result := h.guard.Check(draft, injuries, time.Time{}); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected: %+v", result.Violations)
 	}
 
@@ -118,6 +158,16 @@ func (h *InitiateRoadmapHandler) Handle(ctx context.Context, cmd InitiateRoadmap
 	}
 
 	return out, nil
+}
+
+// activeInjuries loads the user's unrecovered injuries for the guardrail (BR-AC-09).
+func activeInjuries(ctx context.Context, profiles port.UserProfileReader, userID string) ([]service.Injury, error) {
+	profile, err := profiles.GetProfile(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load injuries for guardrail: %w", err)
+	}
+	athlete := profile.Athlete()
+	return athlete.Injuries, nil
 }
 
 // validateExercisesResolved requires an ID and a catalog-resolved name on every

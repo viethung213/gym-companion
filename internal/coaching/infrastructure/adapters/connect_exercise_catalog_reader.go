@@ -3,23 +3,23 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/protomap"
 	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/service/exercisev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
-var (
-	_ port.ExerciseCatalogReader = (*ConnectExerciseCatalogReader)(nil)
-	_ port.CatalogMetadataReader = (*ConnectExerciseCatalogReader)(nil)
-)
+const defaultSearchLimit = 100
+
+var _ port.ExerciseCatalogReader = (*ConnectExerciseCatalogReader)(nil)
 
 // ConnectExerciseCatalogReader queries exercise catalog via API Gateway over ConnectRPC.
 type ConnectExerciseCatalogReader struct {
@@ -40,7 +40,7 @@ func NewConnectExerciseCatalogReader(gatewayURL, internalSecret string, httpClie
 	}
 }
 
-// SearchByFilter queries active exercises matching the filter options.
+// SearchByFilter queries active exercises matching the filter.
 func (c *ConnectExerciseCatalogReader) SearchByFilter(ctx context.Context, filter *port.ExerciseFilter) ([]port.Exercise, error) {
 	tokenStr, err := internaltoken.Generate("system", "Admin", "ai-coaching", time.Minute, c.internalSecret)
 	if err != nil {
@@ -49,64 +49,33 @@ func (c *ConnectExerciseCatalogReader) SearchByFilter(ctx context.Context, filte
 
 	reqMsg := &exercisemsg.SearchExercisesRequest{
 		Status: exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE,
+		Limit:  defaultSearchLimit,
 	}
-
 	if filter != nil {
-		reqMsg.BodyPartId = filter.BodyPartID
-		reqMsg.TargetMuscleId = filter.TargetMuscleID
-		reqMsg.SecondaryMuscleIds = filter.SecondaryMuscleIDs
-		reqMsg.AvoidInjuryAreas = filter.AvoidInjuryAreas
-		reqMsg.TagIds = filter.TagIDs
-		reqMsg.Keyword = filter.Keyword
-		reqMsg.Difficulty = filter.Difficulty
-		if filter.Limit > 0 {
-			reqMsg.Limit = int32(filter.Limit)
-		} else {
-			reqMsg.Limit = 100
-		}
-		if filter.Offset > 0 {
-			reqMsg.Offset = int32(filter.Offset)
-		}
-		if len(filter.EquipmentIDs) > 0 {
-			reqMsg.EquipmentId = filter.EquipmentIDs[0]
-		}
-	} else {
-		reqMsg.Limit = 100
+		applyFilter(reqMsg, filter)
 	}
 
-	req := reqMsg
 	ctx, info := connect.NewClientContext(ctx)
 	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
 
-	res, err := c.client.SearchExercises(ctx, req)
+	res, err := c.client.SearchExercises(ctx, reqMsg)
 	if err != nil {
 		return nil, fmt.Errorf("gateway search exercises: %w", err)
 	}
 
-	items := res.GetExercises()
-	exercises := make([]port.Exercise, 0, len(items))
-
-	for _, item := range items {
+	exercises := make([]port.Exercise, 0, len(res.GetExercises()))
+	for _, item := range res.GetExercises() {
 		if item == nil {
 			continue
 		}
-		ex := mapExerciseInfoToPort(item)
-
-		// If caller provided multiple EquipmentIDs and we could only send 1 via proto EquipmentId,
-		// filter in-memory if needed.
-		if filter != nil && len(filter.EquipmentIDs) > 1 {
-			matched := false
-			for _, eq := range filter.EquipmentIDs {
-				if strings.EqualFold(ex.Equipment, eq) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
+		ex, mapErr := mapExerciseInfoToPort(item)
+		if mapErr != nil {
+			// Logged and skipped (docs/05 §7): one bad row must not hide the catalog.
+			slog.WarnContext(ctx, "Skipping exercise with unknown taxonomy value",
+				slog.String("field", "exercise"), slog.String("value", item.GetId()),
+				slog.String("source", "exercise_catalog"), slog.String("error", mapErr.Error()))
+			continue
 		}
-
 		exercises = append(exercises, ex)
 	}
 
@@ -140,80 +109,67 @@ func (c *ConnectExerciseCatalogReader) GetByID(ctx context.Context, exerciseID s
 		return port.Exercise{}, fmt.Errorf("%w: %s", port.ErrExerciseNotFound, exerciseID)
 	}
 
-	return mapExerciseInfoToPort(res.GetExercise()), nil
+	ex, err := mapExerciseInfoToPort(res.GetExercise())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("map exercise %s: %w", exerciseID, err)
+	}
+	return ex, nil
 }
 
-// GetMetadata fetches all equipment and muscle group metadata from ExerciseService.
-func (c *ConnectExerciseCatalogReader) GetMetadata(ctx context.Context) (port.CatalogMetadata, error) {
-	tokenStr, err := internaltoken.Generate("system", "Admin", "ai-coaching", time.Minute, c.internalSecret)
-	if err != nil {
-		return port.CatalogMetadata{}, fmt.Errorf("generate internal token: %w", err)
+func applyFilter(req *exercisemsg.SearchExercisesRequest, f *port.ExerciseFilter) {
+	for _, m := range f.PrimaryMuscles {
+		req.PrimaryMuscles = append(req.PrimaryMuscles, protomap.MuscleGroupToProto(m))
 	}
-
-	reqMsg := &exercisemsg.GetCatalogMetadataRequest{}
-	ctx, info := connect.NewClientContext(ctx)
-	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
-
-	res, err := c.client.GetCatalogMetadata(ctx, reqMsg)
-	if err != nil {
-		return port.CatalogMetadata{}, fmt.Errorf("gateway get catalog metadata: %w", err)
+	for _, m := range f.ExcludeMuscles {
+		req.ExcludeMuscles = append(req.ExcludeMuscles, protomap.MuscleGroupToProto(m))
 	}
-
-	eqMap := make(map[string]string, len(res.GetEquipments()))
-	for _, eq := range res.GetEquipments() {
-		if eq != nil && eq.GetId() != "" {
-			eqMap[eq.GetId()] = eq.GetName()
-		}
+	for _, e := range f.Equipment {
+		req.Equipment = append(req.Equipment, protomap.EquipmentToProto(e))
 	}
-
-	muscleMap := make(map[string]string, len(res.GetMuscles()))
-	for _, m := range res.GetMuscles() {
-		if m != nil && m.GetId() != "" {
-			muscleMap[m.GetId()] = m.GetName()
-		}
+	for _, cat := range f.Categories {
+		req.Categories = append(req.Categories, protomap.CategoryToProto(cat))
 	}
-
-	bodyPartMap := make(map[string]string, len(res.GetBodyParts()))
-	for _, bp := range res.GetBodyParts() {
-		if bp != nil && bp.GetId() != "" {
-			bodyPartMap[bp.GetId()] = bp.GetName()
-			if _, exists := muscleMap[bp.GetId()]; !exists {
-				muscleMap[bp.GetId()] = bp.GetName()
-			}
-		}
+	for _, l := range f.Levels {
+		req.Levels = append(req.Levels, protomap.LevelToProto(l))
 	}
-
-	tagMap := make(map[string]string, len(res.GetTags()))
-	for _, t := range res.GetTags() {
-		if t != nil && t.GetId() != "" {
-			tagMap[t.GetId()] = t.GetName()
-		}
+	req.Keyword = f.Keyword
+	if f.Limit > 0 {
+		req.Limit = int32(f.Limit)
 	}
-
-	return port.CatalogMetadata{
-		EquipmentNames: eqMap,
-		MuscleNames:    muscleMap,
-		BodyPartNames:  bodyPartMap,
-		TagNames:       tagMap,
-	}, nil
+	if f.Offset > 0 {
+		req.Offset = int32(f.Offset)
+	}
 }
 
-func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {
-	muscleGroup := info.GetTargetMuscleId()
-	if muscleGroup == "" {
-		muscleGroup = info.GetBodyPartId()
+func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) (port.Exercise, error) {
+	primary, err := protomap.MuscleGroup(info.GetPrimaryMuscle())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("primary muscle: %w", err)
 	}
-
-	eqName := info.GetEquipmentId()
-	eqLower := strings.ToLower(eqName)
-
-	isBodyweight := eqLower == "bodyweight" || eqLower == "body weight" ||
-		eqLower == "none" || eqLower == "" ||
-		eqLower == "pull-up-bar" || eqLower == "body_weight"
-	isMachineOrCable := strings.Contains(eqLower, "cable") ||
-		strings.Contains(eqLower, "machine") ||
-		strings.Contains(eqLower, "pulldown") ||
-		strings.Contains(eqLower, "lever")
+	secondary, err := protomap.MuscleGroups(info.GetSecondaryMuscles())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("secondary muscles: %w", err)
+	}
+	equipment, err := protomap.Equipment(info.GetEquipment())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("equipment: %w", err)
+	}
+	category, err := protomap.Category(info.GetCategory())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("category: %w", err)
+	}
+	level, err := protomap.Level(info.GetLevel())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("level: %w", err)
+	}
+	force, err := protomap.OptionalForce(info.GetForce())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("force: %w", err)
+	}
+	mechanic, err := protomap.OptionalMechanic(info.GetMechanic())
+	if err != nil {
+		return port.Exercise{}, fmt.Errorf("mechanic: %w", err)
+	}
 
 	measurementType := "REPS"
 	if info.GetMeasurementType() == exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION {
@@ -223,13 +179,13 @@ func mapExerciseInfoToPort(info *exercisemsg.ExerciseInfo) port.Exercise {
 	return port.Exercise{
 		ExerciseID:       info.GetId(),
 		Name:             info.GetName(),
-		MuscleGroup:      muscleGroup,
-		BodyPart:         info.GetBodyPartId(),
-		Equipment:        eqName,
-		Difficulty:       info.GetDifficulty(),
-		TagIDs:           append([]string(nil), info.GetTagIds()...),
-		IsBodyweight:     isBodyweight,
-		IsMachineOrCable: isMachineOrCable,
+		PrimaryMuscle:    primary,
+		SecondaryMuscles: secondary,
+		Equipment:        equipment,
+		Category:         category,
+		Level:            level,
+		Force:            force,
+		Mechanic:         mechanic,
 		MeasurementType:  measurementType,
-	}
+	}, nil
 }

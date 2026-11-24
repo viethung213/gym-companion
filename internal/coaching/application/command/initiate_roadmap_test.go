@@ -79,7 +79,7 @@ func (m *memRepo) FindSessionByID(_ context.Context, sid string) (*roadmap.Roadm
 	return nil, roadmap.ErrSessionNotFound
 }
 
-func (m *memRepo) FindPendingSessionsByDate(_ context.Context, _ time.Time) ([]*roadmap.SessionPlanInfo, error) {
+func (m *memRepo) FindPendingSessionsStarting(_ context.Context, _, _ time.Time) ([]port.ScheduledSession, error) {
 	return nil, nil
 }
 
@@ -144,16 +144,23 @@ func (f *fakeCoachAgent) SuggestAdHocSession(_ context.Context, _ string, _ *por
 	return port.SuggestedSession{}, nil
 }
 
+// fakeProfileReader reports a profile without injuries.
+type fakeProfileReader struct{}
+
+func (fakeProfileReader) GetProfile(_ context.Context, userID string) (port.Profile, error) {
+	return port.Profile{UserID: userID}, nil
+}
+
 func buildHandler(t *testing.T) (*InitiateRoadmapHandler, *memRepo, *captureOutbox) {
 	t.Helper()
 
 	clock := &fakeClock{t: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)}
 	mockAgent := &fakeCoachAgent{t: clock.t}
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), nil, nil)
 	repo := newMemRepo()
 	outbox := &captureOutbox{}
 
-	h := NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, outbox, clock)
+	h := NewInitiateRoadmapHandler(fakeTx{}, repo, mockAgent, guard, fakeProfileReader{}, outbox, clock)
 
 	return h, repo, outbox
 }

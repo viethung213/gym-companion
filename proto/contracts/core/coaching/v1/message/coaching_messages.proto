@@ -28,6 +28,15 @@ enum SessionPlanSource {
   SESSION_PLAN_SOURCE_SOLO_MATCH = 3;
 }
 
+// SessionKind separates the weekly training sessions (at most six, BR-AC-01)
+// from active-recovery sessions placed on any further selected slots.
+enum SessionKind {
+  SESSION_KIND_UNSPECIFIED = 0;
+  SESSION_KIND_TRAINING = 1;
+  // Mobility, stretching or light cardio: 20-30 min at RPE <= 4.
+  SESSION_KIND_RECOVERY = 2;
+}
+
 enum RoadmapPhase {
   ROADMAP_PHASE_UNSPECIFIED = 0;
   ROADMAP_PHASE_ACCUMULATION = 1; // Tích lũy khối lượng
@@ -130,6 +139,7 @@ message SessionPlan {
   google.protobuf.Timestamp generated_at = 12;
   SessionPlanSource source = 13;
   int32 estimated_duration_minutes = 14;
+  SessionKind kind = 15;
 }
 
 message WorkoutPrescription {

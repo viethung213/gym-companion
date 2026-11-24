@@ -15,12 +15,19 @@ type Info struct {
 	EndDate   time.Time
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// Timezone is the IANA zone the schedule's wall clock is in (see Location).
+	Timezone string
 }
 
 // Roadmap is the aggregate root managing a 4-week training program.
 type Roadmap struct {
 	info  Info
 	weeks []*WeekPlan
+
+	// removedSessions / removedDays are the children ReschedulePending dropped
+	// since load; persistence deletes exactly these rows.
+	removedSessions []string
+	removedDays     []string
 }
 
 // NewRoadmap constructs a new ACTIVE roadmap with the given weeks attached.
@@ -122,24 +129,6 @@ func (r *Roadmap) FindSession(sessionPlanID string) (*SessionPlan, bool) {
 	}
 
 	return nil, false
-}
-
-// PendingSessionsFrom returns all sessions with status PENDING and
-// scheduled_date >= from. Used by RegenerateSchedule (D3).
-func (r *Roadmap) PendingSessionsFrom(from time.Time) []*SessionPlan {
-	var out []*SessionPlan
-
-	for _, w := range r.weeks {
-		for _, d := range w.Days() {
-			for _, s := range d.Sessions() {
-				if s.Status() == SessionPlanStatusPending && !s.ScheduledDate().Before(from) {
-					out = append(out, s)
-				}
-			}
-		}
-	}
-
-	return out
 }
 
 func (r *Roadmap) validate() error {

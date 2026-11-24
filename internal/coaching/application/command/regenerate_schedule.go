@@ -24,12 +24,14 @@ type RegenerateScheduleResult struct {
 
 // RegenerateScheduleHandler orchestrates UC-02.3 (FR-AC-06).
 type RegenerateScheduleHandler struct {
-	tx     port.TransactionManager
-	repo   port.RoadmapRepository
-	agent  port.CoachAgent
-	guard  *guardrail.Engine
-	outbox port.OutboxWriter
-	clock  port.Clock
+	tx       port.TransactionManager
+	repo     port.RoadmapRepository
+	agent    port.CoachAgent
+	guard    *guardrail.Engine
+	profiles port.UserProfileReader
+	outbox   port.OutboxWriter
+	clock    port.Clock
+	ids      port.IDGenerator
 }
 
 // NewRegenerateScheduleHandler wires the handler.
@@ -38,109 +40,96 @@ func NewRegenerateScheduleHandler(
 	repo port.RoadmapRepository,
 	agent port.CoachAgent,
 	guard *guardrail.Engine,
+	profiles port.UserProfileReader,
 	outbox port.OutboxWriter,
 	clock port.Clock,
+	ids port.IDGenerator,
 ) *RegenerateScheduleHandler {
 	return &RegenerateScheduleHandler{
-		tx:     tx,
-		repo:   repo,
-		agent:  agent,
-		guard:  guard,
-		outbox: outbox,
-		clock:  clock,
+		tx:       tx,
+		repo:     repo,
+		agent:    agent,
+		guard:    guard,
+		profiles: profiles,
+		outbox:   outbox,
+		clock:    clock,
+		ids:      ids,
 	}
 }
 
-// Handle executes UC-02.3: rewrite only PENDING sessions from today onward (D3).
+// Handle executes UC-02.3 on the PENDING sessions that have not started (D3).
+//
+// The agent either rewrites those sessions in place or — when the athlete's
+// weekly slots changed — returns sessions on the new slots, which replace
+// them. Drafts that match the pending sessions (day, slot, kind) are rewrites;
+// anything else is a reschedule.
 func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateScheduleCommand) (*RegenerateScheduleResult, error) {
 	if cmd.UserID == "" {
 		return nil, errors.New("user_id required")
 	}
 
-	now := h.clock.Now()
-
-	// Load current active roadmap.
-
 	rm, err := h.repo.FindActiveByUser(ctx, cmd.UserID)
-
 	if err != nil {
 		return nil, err
 	}
 
-	pending := rm.PendingSessionsFrom(now)
+	// The schedule is read in the athlete's current zone, the same zone the
+	// agent plans in, so both see the same upcoming sessions.
+	profile, err := h.profiles.GetProfile(ctx, cmd.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load profile for regenerate: %w", err)
+	}
+	rm.SetTimezone(profile.Zone().String())
 
+	pending := rm.UpcomingPendingSessions(h.clock.Now())
 	if len(pending) == 0 {
-		// Nothing to regenerate.
-
-		return &RegenerateScheduleResult{Roadmap: rm}, nil
+		return &RegenerateScheduleResult{Roadmap: rm}, nil // nothing left to regenerate
 	}
 
 	ids := make([]string, 0, len(pending))
-
 	for _, s := range pending {
 		ids = append(ids, s.ID())
 	}
 
 	drafts, err := h.agent.RegeneratePending(ctx, cmd.UserID, ids)
-
 	if err != nil {
 		return nil, fmt.Errorf("agent regenerate: %w", err)
 	}
 
-	// The agent returns one draft per pending session, in the same order.
+	// Generation takes a while: a session may have started meanwhile, and a
+	// started session is never touched.
+	now := h.clock.Now()
+	pending = rm.UpcomingPendingSessions(now)
 
-	if len(drafts) != len(pending) {
-		return nil, fmt.Errorf("agent returned %d drafts for %d pending sessions", len(drafts), len(pending))
+	if aligned, ok := alignDrafts(pending, drafts); ok {
+		applied, rwErr := rewriteInPlace(pending, aligned, now)
+		if rwErr != nil {
+			return nil, rwErr
+		}
+		if applied == 0 {
+			return nil, fmt.Errorf("no session was rewritten out of %d pending", len(pending))
+		}
+	} else if rsErr := rm.ReschedulePending(now, drafts, h.ids.NewID); rsErr != nil {
+		return nil, fmt.Errorf("reschedule pending sessions: %w", rsErr)
 	}
 
-	applied := 0
-
-	for i, draft := range drafts {
-		if draft == nil {
-			continue
-		}
-
-		s := pending[i]
-
-		if s.Status() != roadmap.SessionPlanStatusPending {
-			continue // Someone else finalized it — respect D3.
-		}
-
-		if rwErr := s.RewritePrescription(draft.Prescription, draft.TargetMuscleGroups, draft.Reasoning, now); rwErr != nil {
-			return nil, fmt.Errorf("rewrite session %s: %w", s.ID(), rwErr)
-		}
-
-		applied++
-	}
-
-	if applied == 0 {
-		return nil, fmt.Errorf("no session was rewritten out of %d pending", len(pending))
-	}
-
-	if result := h.guard.Check(rm); result.Status != guardrail.StatusApproved {
+	athlete := profile.Athlete()
+	if result := h.guard.Check(rm, athlete.Injuries, now); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected regen: %+v", result.Violations)
 	}
 
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		rm.Touch(now)
-
 		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
 			return saveErr
 		}
-
-		evt := &domainevent.RoadmapAdjusted{
-			RoadmapID: rm.ID(),
-
-			UserID: rm.UserID(),
-
-			Reason: cmd.Reason,
-
+		return h.outbox.Enqueue(txCtx, rm.UserID(), &domainevent.RoadmapAdjusted{
+			RoadmapID:  rm.ID(),
+			UserID:     rm.UserID(),
+			Reason:     cmd.Reason,
 			AdjustedAt: now,
-		}
-
-		return h.outbox.Enqueue(txCtx, rm.UserID(), evt)
+		})
 	})
-
 	if err != nil {
 		return nil, err
 	}

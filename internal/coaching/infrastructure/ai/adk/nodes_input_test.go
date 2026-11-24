@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 func TestBuildContextNode_EncodesRecentSessionsAndTrimsMusclePRs(t *testing.T) {
@@ -27,11 +28,11 @@ func TestBuildContextNode_EncodesRecentSessionsAndTrimsMusclePRs(t *testing.T) {
 	for i := 1; i <= 6; i++ {
 		id := fmt.Sprintf("chest-%d", i)
 		exercises = append(exercises, port.Exercise{
-			ExerciseID:  id,
-			Name:        fmt.Sprintf("Chest Exercise %d", i),
-			MuscleGroup: "CHEST",
-			Equipment:   "BARBELL",
-			Difficulty:  "INTERMEDIATE",
+			ExerciseID:    id,
+			Name:          fmt.Sprintf("Chest Exercise %d", i),
+			PrimaryMuscle: taxonomy.MuscleGroupChest,
+			Equipment:     taxonomy.EquipmentBarbell,
+			Level:         taxonomy.LevelIntermediate,
 		})
 		prs = append(prs, port.PersonalRecordSummary{
 			ExerciseID: id,
@@ -44,11 +45,11 @@ func TestBuildContextNode_EncodesRecentSessionsAndTrimsMusclePRs(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		id := fmt.Sprintf("back-%d", i)
 		exercises = append(exercises, port.Exercise{
-			ExerciseID:  id,
-			Name:        fmt.Sprintf("Back Exercise %d", i),
-			MuscleGroup: "BACK",
-			Equipment:   "CABLE",
-			Difficulty:  "BEGINNER",
+			ExerciseID:    id,
+			Name:          fmt.Sprintf("Back Exercise %d", i),
+			PrimaryMuscle: taxonomy.MuscleGroupLats,
+			Equipment:     taxonomy.EquipmentCable,
+			Level:         taxonomy.LevelBeginner,
 		})
 		prs = append(prs, port.PersonalRecordSummary{
 			ExerciseID: id,
@@ -76,8 +77,8 @@ func TestBuildContextNode_EncodesRecentSessionsAndTrimsMusclePRs(t *testing.T) {
 	if len(musclePRs["CHEST"]) != 3 {
 		t.Fatalf("expected 3 CHEST PRs, got %d", len(musclePRs["CHEST"]))
 	}
-	if len(musclePRs["BACK"]) != 3 {
-		t.Fatalf("expected 3 BACK PRs, got %d", len(musclePRs["BACK"]))
+	if len(musclePRs["LATS"]) != 3 {
+		t.Fatalf("expected 3 LATS PRs, got %d", len(musclePRs["LATS"]))
 	}
 
 	sample := CoachInput{

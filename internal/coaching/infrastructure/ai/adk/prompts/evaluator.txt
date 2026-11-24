@@ -50,7 +50,7 @@ will reject a verdict that tries to.
 Score only what code cannot decide.
 
 1. **Injury safety** — does any session load a muscle group listed in
-   `user_context.active_injuries`? A SEVERE injury must not be trained at all;
+   `user_context.active_injuries` (joint `region`, optional `muscle`, `severity`)? A SEVERE injury must not be trained at all;
    MODERATE must be reduced, not merely relabelled.
 2. **Goal fit** — does the volume, rep range, duration and exercise selection actually
    serve `user_context.primary_goal`? Hypertrophy wants 6-12 reps and multiple

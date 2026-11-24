@@ -107,7 +107,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		txMgr = persistence.NewSQLTransactionManager(gormDB)
 	}
 
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, nil, nil)
+	// One engine for all users: each Check receives the user's injuries.
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, nil)
 	clock := realClock{}
 
 	// Wire gRPC Command & Query Handlers
@@ -118,6 +119,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 			deps.RoadmapRepo,
 			coachAgent,
 			guard,
+			deps.ProfileReader,
 			deps.OutboxWriter,
 			clock,
 		)
@@ -130,8 +132,10 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 			deps.RoadmapRepo,
 			coachAgent,
 			guard,
+			deps.ProfileReader,
 			deps.OutboxWriter,
 			clock,
+			deps.IDGenerator,
 		)
 	}
 

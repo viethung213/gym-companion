@@ -14,6 +14,7 @@ type roadmapRecord struct {
 	EndDate   time.Time `gorm:"column:end_date;not null;type:date"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`
+	Timezone  string    `gorm:"column:timezone;not null"`
 }
 
 func (roadmapRecord) TableName() string { return "coaching.roadmaps" }
@@ -59,6 +60,7 @@ type sessionPlanRecord struct {
 	EstimatedDurationMinutes int32           `gorm:"column:estimated_duration_minutes"`
 	Status                   string          `gorm:"column:status;not null"`
 	Source                   string          `gorm:"column:source;not null"`
+	Kind                     string          `gorm:"column:session_kind;not null"`
 	TargetMuscleGroups       []byte          `gorm:"column:target_muscle_groups;type:jsonb"`
 	Prescription             []byte          `gorm:"column:prescription;type:jsonb"`
 	Reasoning                string          `gorm:"column:reasoning"`

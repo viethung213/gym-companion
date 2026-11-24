@@ -32,17 +32,14 @@ const (
 
 // ProfileEventPayload mirrors the data field of Profile CloudEvents.
 type ProfileEventPayload struct {
-	UserID      string `json:"userId"`
-	MuscleGroup string `json:"muscleGroup"`
+	UserID string `json:"userId"`
 }
 
 // UnmarshalJSON supports both camelCase and snake_case for flexibility.
 func (p *ProfileEventPayload) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		UserIDCamel      string `json:"userId"`
-		UserIDSnake      string `json:"user_id"`
-		MuscleGroupCamel string `json:"muscleGroup"`
-		MuscleGroupSnake string `json:"muscle_group"`
+		UserIDCamel string `json:"userId"`
+		UserIDSnake string `json:"user_id"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -53,12 +50,6 @@ func (p *ProfileEventPayload) UnmarshalJSON(data []byte) error {
 		p.UserID = raw.UserIDCamel
 	} else {
 		p.UserID = raw.UserIDSnake
-	}
-
-	if raw.MuscleGroupCamel != "" {
-		p.MuscleGroup = raw.MuscleGroupCamel
-	} else {
-		p.MuscleGroup = raw.MuscleGroupSnake
 	}
 
 	return nil
@@ -249,7 +240,7 @@ func (c *ProfileCompletedConsumer) handleInjuryReported(ctx context.Context, dat
 		return nil
 	}
 
-	slog.InfoContext(ctx, "InjuryReported received, regenerating schedule", slog.String("user_id", p.UserID), slog.String("muscle_group", p.MuscleGroup))
+	slog.InfoContext(ctx, "InjuryReported received, regenerating schedule", slog.String("user_id", p.UserID))
 	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
 		UserID: p.UserID,
 		Reason: "injury_reported",

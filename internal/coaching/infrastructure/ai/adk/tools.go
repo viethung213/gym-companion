@@ -1,11 +1,14 @@
 package adk
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -31,10 +34,24 @@ func stateUserID(ctx agent.Context) (string, error) {
 	return userID, nil
 }
 
+// stateCoachInput reads the input of the current attempt; tools use it to see
+// the athlete's equipment, level and injuries.
+func stateCoachInput(ctx agent.Context) (CoachInput, error) {
+	val, err := ctx.State().Get("coach_input")
+	if err != nil {
+		return CoachInput{}, fmt.Errorf("read coach input from workflow state: %w", err)
+	}
+	in, ok := val.(CoachInput)
+	if !ok {
+		return CoachInput{}, fmt.Errorf("unexpected coach input type %T in workflow state", val)
+	}
+	return in, nil
+}
+
 // SearchArgs defines parameter schema for search_exercises tool.
 type SearchArgs struct {
-	MuscleGroups []string `json:"muscle_groups"`
-	Equipment    []string `json:"equipment,omitempty"`
+	MuscleGroups []string `json:"muscle_groups"`       // MuscleGroup codes
+	Equipment    []string `json:"equipment,omitempty"` // Equipment codes
 	Limit        int      `json:"limit,omitempty"`
 }
 
@@ -52,54 +69,74 @@ type SearchResults struct {
 	Exercises []ExerciseOption `json:"exercises"`
 }
 
-// makeSearchExercisesTool creates an ADK function tool wrapping ExerciseCatalogReader.
+// makeSearchExercisesTool creates an ADK function tool wrapping
+// ExerciseCatalogReader. Results honour the athlete's equipment, level and
+// injuries (docs/05 §8.2-8.4).
 func makeSearchExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "search_exercises",
-			Description: "Batch search exercise catalog for muscle groups and equipment, returning matching catalog IDs and details.",
+			Description: "Batch search exercise catalog by MuscleGroup and Equipment codes, returning matching catalog IDs and details.",
 		},
 		func(ctx agent.Context, args SearchArgs) (SearchResults, error) {
-			groups := args.MuscleGroups
-			if len(groups) == 0 {
-				groups = []string{"chest", "back", "legs", "shoulders"}
+			in, err := stateCoachInput(ctx)
+			if err != nil {
+				return SearchResults{}, err
 			}
-
-			limit := args.Limit
-			if limit <= 0 {
-				limit = 5
-			}
-
-			out := make([]ExerciseOption, 0, len(groups)*limit)
-			for _, mg := range groups {
-				filter := port.ExerciseFilter{
-					TargetMuscleID: mg,
-					EquipmentIDs:   args.Equipment,
-					Limit:          limit,
-				}
-				res, err := catalog.SearchByFilter(ctx, &filter)
-				if err != nil {
-					continue
-				}
-
-				for i := range res {
-					e := &res[i]
-					var eqReq []string
-					if e.Equipment != "" {
-						eqReq = []string{e.Equipment}
-					}
-					out = append(out, ExerciseOption{
-						ID:            e.ExerciseID,
-						Name:          e.Name,
-						PrimaryMuscle: e.MuscleGroup,
-						IsCompound:    !e.IsMachineOrCable,
-						EquipmentReq:  eqReq,
-					})
-				}
-			}
-			return SearchResults{Exercises: out}, nil
+			athlete := athleteFromInput(ctx, &in)
+			return searchExercises(ctx, catalog, &args, &athlete)
 		},
 	)
+}
+
+// searchExercises runs one search per requested muscle and keeps what the
+// athlete may train.
+func searchExercises(
+	ctx context.Context, catalog port.ExerciseCatalogReader, args *SearchArgs, athlete *service.Athlete,
+) (SearchResults, error) {
+	limit := args.Limit
+	if limit <= 0 {
+		limit = 5
+	}
+	filter := port.ExerciseFilter{
+		Equipment: parseLLMValues(ctx, "equipment", args.Equipment, "search_exercises", taxonomy.ParseEquipment),
+		Limit:     limit,
+	}
+	muscles := parseLLMValues(ctx, "muscle_groups", args.MuscleGroups, "search_exercises", taxonomy.ParseMuscleGroup)
+	// One search per muscle keeps `limit` per group; none means one unfiltered search.
+	groups := [][]taxonomy.MuscleGroup{nil}
+	if len(muscles) > 0 {
+		groups = groups[:0]
+		for _, m := range muscles {
+			groups = append(groups, []taxonomy.MuscleGroup{m})
+		}
+	}
+
+	var out []ExerciseOption
+	for _, group := range groups {
+		filter.PrimaryMuscles = group
+		res, searchErr := catalog.SearchByFilter(ctx, &filter)
+		if searchErr != nil {
+			return SearchResults{}, fmt.Errorf("search exercises: %w", searchErr)
+		}
+		for i := range res {
+			e := &res[i]
+			traits := e.Traits()
+			if !service.EquipmentAvailable(traits.Equipment, athlete.Equipment) ||
+				!service.LevelAllowed(traits.Level, athlete.Level) ||
+				service.EvaluateInjuries(&traits, athlete.Injuries).Excluded {
+				continue
+			}
+			out = append(out, ExerciseOption{
+				ID:            e.ExerciseID,
+				Name:          e.Name,
+				PrimaryMuscle: string(e.PrimaryMuscle),
+				IsCompound:    e.Mechanic == taxonomy.MechanicCompound,
+				EquipmentReq:  []string{string(e.Equipment)},
+			})
+		}
+	}
+	return SearchResults{Exercises: out}, nil
 }
 
 // PRArgs defines parameter schema for get_exercise_pr tool.
@@ -154,65 +191,112 @@ func makeAskClarifyingQuestionTool() (tool.Tool, error) {
 
 // ReplaceInjuredArgs defines parameter schema for replace_injured_exercises tool.
 type ReplaceInjuredArgs struct {
-	OriginalExerciseID string   `json:"original_exercise_id"`
-	InjuredMuscleGroup string   `json:"injured_muscle_group"`
-	AvailableEquipment []string `json:"available_equipment"`
+	OriginalExerciseID string `json:"original_exercise_id"`
+	// SessionTargetMuscleGroups are the session's MuscleGroup codes, for tier 3 of the ranking.
+	SessionTargetMuscleGroups []string `json:"session_target_muscle_groups,omitempty"`
 }
 
 // ReplaceInjuredResult defines result schema for replace_injured_exercises tool.
+// An empty substitute means no safe exercise exists: drop the original.
 type ReplaceInjuredResult struct {
 	SubstituteExerciseID   string `json:"substitute_id"`
 	SubstituteExerciseName string `json:"substitute_name"`
 	SafetyReason           string `json:"safety_reason"`
 }
 
-// makeReplaceInjuredExercisesTool finds a safe substitute avoiding the injured muscle.
-// Substitutes come from the live catalog; a hardcoded ID would fail validation.
+// replacementSearchLimit bounds the candidate pool searched per replacement.
+const replacementSearchLimit = 100
+
+// makeReplaceInjuredExercisesTool finds the best safe substitute for an
+// exercise using the athlete's injuries, equipment and level (docs/05 §8.6).
 func makeReplaceInjuredExercisesTool(catalog port.ExerciseCatalogReader) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
-			Name:        "replace_injured_exercises",
-			Description: "Find safe substitute exercises that avoid injured muscle groups.",
+			Name: "replace_injured_exercises",
+			Description: "Find the safest substitute for an exercise that conflicts with the athlete's injuries; " +
+				"an empty substitute_id means drop the exercise.",
 		},
 		func(ctx agent.Context, args ReplaceInjuredArgs) (ReplaceInjuredResult, error) {
-			// Prefer machine/cable: constrained range of motion is safer here.
-			candidates, err := catalog.SearchByFilter(ctx, &port.ExerciseFilter{
-				AvoidInjuryAreas: []string{args.InjuredMuscleGroup},
-				EquipmentIDs:     args.AvailableEquipment,
-				Limit:            10,
-			})
+			in, err := stateCoachInput(ctx)
 			if err != nil {
-				return ReplaceInjuredResult{}, fmt.Errorf("search substitute exercises: %w", err)
+				return ReplaceInjuredResult{}, err
 			}
-
-			var chosen *port.Exercise
-			for i := range candidates {
-				c := &candidates[i]
-				if c.ExerciseID == args.OriginalExerciseID || c.MuscleGroup == args.InjuredMuscleGroup {
-					continue
-				}
-				if c.IsMachineOrCable {
-					chosen = c
-					break
-				}
-				if chosen == nil {
-					chosen = c
-				}
-			}
-
-			if chosen == nil {
-				return ReplaceInjuredResult{}, fmt.Errorf(
-					"no substitute exercise available that avoids %s", args.InjuredMuscleGroup)
-			}
-
-			return ReplaceInjuredResult{
-				SubstituteExerciseID:   chosen.ExerciseID,
-				SubstituteExerciseName: chosen.Name,
-				SafetyReason: fmt.Sprintf("Replaced %s with %s to bypass active injury on %s.",
-					args.OriginalExerciseID, chosen.Name, args.InjuredMuscleGroup),
-			}, nil
+			athlete := athleteFromInput(ctx, &in)
+			targets := parseLLMValues(ctx, "session_target_muscle_groups", args.SessionTargetMuscleGroups,
+				"replace_injured_exercises", taxonomy.ParseMuscleGroup)
+			return replaceInjuredExercise(ctx, catalog, args.OriginalExerciseID, targets, &athlete)
 		},
 	)
+}
+
+// replaceInjuredExercise searches the catalog with exclude_muscles for the
+// SEVERE injuries, then ranks what is left with the full §8.2 rules.
+func replaceInjuredExercise(
+	ctx context.Context,
+	catalog port.ExerciseCatalogReader,
+	originalID string,
+	targets []taxonomy.MuscleGroup,
+	athlete *service.Athlete,
+) (ReplaceInjuredResult, error) {
+	original, err := catalog.GetByID(ctx, originalID)
+	if err != nil {
+		return ReplaceInjuredResult{}, fmt.Errorf("get original exercise: %w", err)
+	}
+	originalTraits := original.Traits()
+	verdict := service.EvaluateInjuries(&originalTraits, athlete.Injuries)
+
+	candidates, err := catalog.SearchByFilter(ctx, &port.ExerciseFilter{
+		PrimaryMuscles: append([]taxonomy.MuscleGroup{original.PrimaryMuscle}, targets...),
+		Equipment:      append([]taxonomy.Equipment{taxonomy.EquipmentBodyOnly}, athlete.Equipment...),
+		ExcludeMuscles: severeInjuryMuscles(athlete.Injuries),
+		Limit:          replacementSearchLimit,
+	})
+	if err != nil {
+		return ReplaceInjuredResult{}, fmt.Errorf("search substitute exercises: %w", err)
+	}
+
+	pool := make([]service.ReplacementCandidate, len(candidates))
+	byID := make(map[string]string, len(candidates))
+	for i := range candidates {
+		pool[i] = service.ReplacementCandidate{ID: candidates[i].ExerciseID, Traits: candidates[i].Traits()}
+		byID[candidates[i].ExerciseID] = candidates[i].Name
+	}
+
+	reason := verdict.Reason()
+	if reason == "" {
+		reason = "requested replacement"
+	}
+	ranked := service.RankReplacements(originalID, &originalTraits, pool, targets, athlete)
+	if len(ranked) == 0 {
+		return ReplaceInjuredResult{
+			SafetyReason: fmt.Sprintf("No safe substitute for %s (%s); drop it from the session and say so in reasoning.",
+				original.Name, reason),
+		}, nil
+	}
+
+	chosen := ranked[0]
+	return ReplaceInjuredResult{
+		SubstituteExerciseID:   chosen.ID,
+		SubstituteExerciseName: byID[chosen.ID],
+		SafetyReason:           fmt.Sprintf("Replaced %s with %s: %s.", original.Name, byID[chosen.ID], reason),
+	}, nil
+}
+
+// severeInjuryMuscles lists muscles a SEVERE injury excludes outright, which
+// exclude_muscles can filter server-side.
+func severeInjuryMuscles(injuries []service.Injury) []taxonomy.MuscleGroup {
+	var out []taxonomy.MuscleGroup
+	for i := range injuries {
+		if injuries[i].Severity != taxonomy.InjurySeveritySevere {
+			continue
+		}
+		for _, m := range taxonomy.AllMuscleGroups() {
+			if injuries[i].Muscles()[m] {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
 }
 
 // ScaleArgs defines parameter schema for scale_volume_intensity tool.

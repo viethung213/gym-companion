@@ -25,6 +25,14 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 			}
 			coachInput.Flow = FlowInitiate4Week
 
+			schedule, scheduleErr := initSlotSchedule(&coachInput)
+			if scheduleErr != nil {
+				return nil, fmt.Errorf("slot schedule: %w", scheduleErr)
+			}
+			if schedule != nil {
+				coachInput.WeekSlots = schedule.weekSlotPlans()
+			}
+
 			enableReview := config.LoadConfig().EnableReview
 			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, enableReview)
 			if genErr != nil {
@@ -46,12 +54,9 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 			if setErr := nodeCtx.State().Set("evaluation_result", evaluated); setErr != nil {
 				return nil, fmt.Errorf("record evaluation result: %w", setErr)
 			}
-			c.putResult(nodeCtx.SessionID(), &PlanResult{
-				Plan:     res.Plan,
-				Names:    res.Names,
-				Degraded: evaluated.Degraded,
-				Issues:   evaluated.Issues,
-			})
+			// Hand over the whole result: rebuilding it field by field once dropped
+			// Timezone, saving every initial roadmap as UTC.
+			c.putResult(nodeCtx.SessionID(), res)
 
 			return evaluated, nil
 		},
