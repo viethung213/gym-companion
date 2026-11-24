@@ -1,0 +1,14 @@
+{
+  "bench_press": ["Barbell_Bench_Press_-_Medium_Grip"],
+  "bicep_curl": ["Dumbbell_Bicep_Curl"],
+  "deadlift": ["Barbell_Deadlift"],
+  "lateral_raise": ["Side_Lateral_Raise"],
+  "lunge": ["Dumbbell_Lunges", "Barbell_Lunge"],
+  "plank": ["Plank"],
+  "pull_up": ["Pullups"],
+  "push_up": ["Pushups"],
+  "shoulder_press": ["Dumbbell_Shoulder_Press"],
+  "sit_up": ["Sit-Up", "3_4_Sit-Up"],
+  "squat": ["Barbell_Squat", "Bodyweight_Squat"],
+  "triceps_dip": ["Dips_-_Triceps_Version", "Bench_Dips"]
+}

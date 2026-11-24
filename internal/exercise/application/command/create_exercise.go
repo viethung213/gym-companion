@@ -50,6 +50,13 @@ func (h *CreateExerciseHandler) Handle(
 	if info.Status == "" {
 		info.Status = domain.StatusDraft
 	}
+	// A caller-supplied slug is the free-exercise-db id; otherwise the
+	// exercise is custom and its slug comes from the name.
+	info.Source = domain.SourceFreeExerciseDB
+	if info.Slug == "" {
+		info.Source = domain.SourceCustom
+		info.Slug = domain.SlugFromName(info.Name)
+	}
 
 	exercise, err := domain.NewExercise(info, now)
 	if err != nil {

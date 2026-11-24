@@ -11,24 +11,36 @@ import (
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
 
+type mockIDGenerator struct {
+	nextID string
+	err    error
+}
+
+func (m *mockIDGenerator) NewID() (string, error) {
+	return m.nextID, m.err
+}
+
 func TestNewEvent_CloudEvents(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	info := domain.Info{
 		ID:                 "exercise-123",
+		Slug:               "Barbell_Bench_Press_-_Medium_Grip",
 		Name:               "Bench Press",
-		BodyPartID:         "chest",
-		EquipmentID:        "barbell",
-		TargetMuscleID:     "pecs",
-		SecondaryMuscleIDs: []string{"triceps"},
-		Instructions:       "Lie down and press.",
-		ThumbnailURL:       "thumb.png",
-		MediaURL:           "media.png",
+		PrimaryMuscle:      domain.MuscleGroupChest,
+		SecondaryMuscles:   []domain.MuscleGroup{domain.MuscleGroupTriceps},
+		Equipment:          domain.EquipmentBarbell,
+		Category:           domain.CategoryStrength,
+		Level:              domain.LevelIntermediate,
+		Force:              domain.ForcePush,
+		Instructions:       []string{"Lie down and press."},
+		Images:             []string{"Barbell_Bench_Press_-_Medium_Grip/0.jpg"},
 		VideoURL:           "video.mp4",
-		Difficulty:         "Intermediate",
 		DefaultRestSeconds: 90,
-		TagIDs:             []string{"power"},
+		MotionSlug:         "bench_press",
+		HasAISupported:     true,
+		Source:             domain.SourceFreeExerciseDB,
 		Status:             domain.StatusDraft,
 	}
 
@@ -165,8 +177,27 @@ func TestNewEvent_CloudEvents(t *testing.T) {
 			if got := exerciseMap["name"]; got != info.Name {
 				t.Errorf("got nested exercise name %v, want %s", got, info.Name)
 			}
-			if got := exerciseMap["bodyPartId"]; got != info.BodyPartID {
-				t.Errorf("got nested exercise bodyPartId %v, want %s", got, info.BodyPartID)
+			wantFields := map[string]any{
+				"slug":           info.Slug,
+				"primaryMuscle":  "MUSCLE_GROUP_CHEST",
+				"equipment":      "EQUIPMENT_BARBELL",
+				"category":       "EXERCISE_CATEGORY_STRENGTH",
+				"level":          "EXERCISE_LEVEL_INTERMEDIATE",
+				"force":          "EXERCISE_FORCE_PUSH",
+				"motionSlug":     "bench_press",
+				"hasAiSupported": true,
+			}
+			for field, want := range wantFields {
+				if got := exerciseMap[field]; got != want {
+					t.Errorf("got nested exercise %s %v, want %v", field, got, want)
+				}
+			}
+			if _, ok := exerciseMap["mechanic"]; ok {
+				t.Errorf("empty mechanic must be omitted as UNSPECIFIED, got %v", exerciseMap["mechanic"])
+			}
+			secondary, ok := exerciseMap["secondaryMuscles"].([]any)
+			if !ok || len(secondary) != 1 || secondary[0] != "MUSCLE_GROUP_TRICEPS" {
+				t.Errorf("got nested secondaryMuscles %v, want [MUSCLE_GROUP_TRICEPS]", exerciseMap["secondaryMuscles"])
 			}
 			if got := exerciseMap["status"]; got != "EXERCISE_STATUS_DRAFT" {
 				t.Errorf("got nested exercise status %v, want EXERCISE_STATUS_DRAFT", got)

@@ -135,13 +135,6 @@ func TestSearchAndGetOnlyReturnActiveExercises(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create active exercise: %v", err)
 	}
-	_, err = suite.submitForApprovalHandler.Handle(
-		adminCtx,
-		command.SubmitExerciseForApprovalCommand{ID: active.Info().ID},
-	)
-	if err != nil {
-		t.Fatalf("submit exercise: %v", err)
-	}
 	_, err = suite.approveHandler.Handle(
 		adminCtx,
 		command.ApproveExerciseCommand{ID: active.Info().ID},
@@ -244,48 +237,6 @@ func (r *fakeRepository) GetRandomAISupported(
 	return nil, domain.ErrExerciseNotFound
 }
 
-func (r *fakeRepository) GetMetadata(_ context.Context) (port.Metadata, error) {
-	return port.Metadata{}, nil
-}
-
-func (r *fakeRepository) CreateBodyPart(_ context.Context, _ *port.BodyPart) error { return nil }
-func (r *fakeRepository) GetBodyPart(_ context.Context, _ string) (*port.BodyPart, error) {
-	return nil, nil
-}
-func (r *fakeRepository) ListBodyParts(_ context.Context, _, _ int) ([]port.BodyPart, int, error) {
-	return nil, 0, nil
-}
-func (r *fakeRepository) UpdateBodyPart(_ context.Context, _ *port.BodyPart) error { return nil }
-func (r *fakeRepository) DeleteBodyPart(_ context.Context, _ string) error         { return nil }
-
-func (r *fakeRepository) CreateEquipment(_ context.Context, _ *port.Equipment) error { return nil }
-func (r *fakeRepository) GetEquipment(_ context.Context, _ string) (*port.Equipment, error) {
-	return nil, nil
-}
-func (r *fakeRepository) ListEquipments(_ context.Context, _, _ int) ([]port.Equipment, int, error) {
-	return nil, 0, nil
-}
-func (r *fakeRepository) UpdateEquipment(_ context.Context, _ *port.Equipment) error { return nil }
-func (r *fakeRepository) DeleteEquipment(_ context.Context, _ string) error          { return nil }
-
-func (r *fakeRepository) CreateMuscle(_ context.Context, _ *port.Muscle) error { return nil }
-func (r *fakeRepository) GetMuscle(_ context.Context, _ string) (*port.Muscle, error) {
-	return nil, nil
-}
-func (r *fakeRepository) ListMuscles(_ context.Context, _ string, _, _ int) ([]port.Muscle, int, error) {
-	return nil, 0, nil
-}
-func (r *fakeRepository) UpdateMuscle(_ context.Context, _ *port.Muscle) error { return nil }
-func (r *fakeRepository) DeleteMuscle(_ context.Context, _ string) error       { return nil }
-
-func (r *fakeRepository) CreateTag(_ context.Context, _ *port.Tag) error        { return nil }
-func (r *fakeRepository) GetTag(_ context.Context, _ string) (*port.Tag, error) { return nil, nil }
-func (r *fakeRepository) ListTags(_ context.Context, _, _ int) ([]port.Tag, int, error) {
-	return nil, 0, nil
-}
-func (r *fakeRepository) UpdateTag(_ context.Context, _ *port.Tag) error { return nil }
-func (r *fakeRepository) DeleteTag(_ context.Context, _ string) error    { return nil }
-
 func (r *fakeRepository) SetAISupportedWithOutboxLog(
 	_ context.Context,
 	exerciseID string,
@@ -318,17 +269,15 @@ func (g *sequenceIDGenerator) NewID() (string, error) {
 }
 
 type testSuite struct {
-	repo                     *fakeRepository
-	clock                    fakeClock
-	ids                      *sequenceIDGenerator
-	createHandler            *command.CreateExerciseHandler
-	updateHandler            *command.UpdateExerciseHandler
-	submitForApprovalHandler *command.SubmitExerciseForApprovalHandler
-	approveHandler           *command.ApproveExerciseHandler
-	archiveHandler           *command.ArchiveExerciseHandler
-	getHandler               *query.GetExerciseHandler
-	searchHandler            *query.SearchExercisesHandler
-	metadataHandler          *query.GetCatalogMetadataHandler
+	repo           *fakeRepository
+	clock          fakeClock
+	ids            *sequenceIDGenerator
+	createHandler  *command.CreateExerciseHandler
+	updateHandler  *command.UpdateExerciseHandler
+	approveHandler *command.ApproveExerciseHandler
+	archiveHandler *command.ArchiveExerciseHandler
+	getHandler     *query.GetExerciseHandler
+	searchHandler  *query.SearchExercisesHandler
 }
 
 func newTestSuite() *testSuite {
@@ -341,17 +290,15 @@ func newTestSuite() *testSuite {
 	ids := &sequenceIDGenerator{}
 
 	return &testSuite{
-		repo:                     repo,
-		clock:                    clock,
-		ids:                      ids,
-		createHandler:            command.NewCreateExerciseHandler(repo, clock, ids),
-		updateHandler:            command.NewUpdateExerciseHandler(repo, clock),
-		submitForApprovalHandler: command.NewSubmitExerciseForApprovalHandler(repo, clock, ids),
-		approveHandler:           command.NewApproveExerciseHandler(repo, clock, ids),
-		archiveHandler:           command.NewArchiveExerciseHandler(repo, clock, ids),
-		getHandler:               query.NewGetExerciseHandler(repo),
-		searchHandler:            query.NewSearchExercisesHandler(repo),
-		metadataHandler:          query.NewGetCatalogMetadataHandler(repo),
+		repo:           repo,
+		clock:          clock,
+		ids:            ids,
+		createHandler:  command.NewCreateExerciseHandler(repo, clock, ids),
+		updateHandler:  command.NewUpdateExerciseHandler(repo, clock),
+		approveHandler: command.NewApproveExerciseHandler(repo, clock, ids),
+		archiveHandler: command.NewArchiveExerciseHandler(repo, clock, ids),
+		getHandler:     query.NewGetExerciseHandler(repo),
+		searchHandler:  query.NewSearchExercisesHandler(repo),
 	}
 }
 
@@ -371,27 +318,11 @@ func userContext() context.Context {
 
 func validInfo() domain.Info {
 	return domain.Info{
-		Name:           "Squat",
-		BodyPartID:     "legs",
-		EquipmentID:    "barbell",
-		TargetMuscleID: "quads",
-	}
-}
-
-func TestGetCatalogMetadata(t *testing.T) {
-	t.Parallel()
-	suite := newTestSuite()
-
-	// 1. Success with authenticated user
-	_, err := suite.metadataHandler.Handle(userContext(), query.GetCatalogMetadataQuery{})
-	if err != nil {
-		t.Fatalf("get metadata: %v", err)
-	}
-
-	// 2. Unauthenticated context should succeed (public bypass)
-	_, err = suite.metadataHandler.Handle(context.Background(), query.GetCatalogMetadataQuery{})
-	if err != nil {
-		t.Fatalf("get metadata unauthenticated: %v", err)
+		Name:          "Squat",
+		PrimaryMuscle: domain.MuscleGroupQuadriceps,
+		Equipment:     domain.EquipmentBarbell,
+		Category:      domain.CategoryStrength,
+		Level:         domain.LevelBeginner,
 	}
 }
 
@@ -448,13 +379,6 @@ func TestRequireAdmin_Authorization(t *testing.T) {
 			},
 		},
 		{
-			name: "SubmitExerciseForApprovalHandler",
-			run: func(ctx context.Context, s *testSuite) error {
-				_, err := s.submitForApprovalHandler.Handle(ctx, command.SubmitExerciseForApprovalCommand{ID: "id-1"})
-				return err
-			},
-		},
-		{
 			name: "ApproveExerciseHandler",
 			run: func(ctx context.Context, s *testSuite) error {
 				_, err := s.approveHandler.Handle(ctx, command.ApproveExerciseCommand{ID: "id-1"})
@@ -500,11 +424,5 @@ func TestPublicCatalogBypass(t *testing.T) {
 	_, err := suite.searchHandler.Handle(unauthCtx, query.SearchExercisesQuery{Filters: &port.SearchFilters{}})
 	if err != nil {
 		t.Fatalf("search exercises unauthenticated: %v", err)
-	}
-
-	// GetCatalogMetadataHandler should succeed when unauthenticated
-	_, err = suite.metadataHandler.Handle(unauthCtx, query.GetCatalogMetadataQuery{})
-	if err != nil {
-		t.Fatalf("get metadata unauthenticated: %v", err)
 	}
 }

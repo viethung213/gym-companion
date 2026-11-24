@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,47 +20,46 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is required")
-	}
+// exerciseMigration is the real schema, so CHECK constraints are tested as shipped.
+const exerciseMigration = "../../../shared/database/migrations/core/02-exercise.sql"
 
-	db, err := InitDB(databaseURL)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get database handle: %v", err)
-	}
-	defer sqlDB.Close()
+func integrationExercise(t *testing.T, id, slug string, primary domain.MuscleGroup, secondary ...domain.MuscleGroup) *domain.Exercise {
+	t.Helper()
 
-	ctx := context.Background()
-	if err := prepareExerciseSchema(ctx, db); err != nil {
-		t.Fatalf("prepare schema: %v", err)
-	}
-
-	repo := NewPostgresRepository(db)
-	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
 	exercise, err := domain.NewExercise(domain.Info{
-		ID:                 "11111111-1111-4111-8111-111111111111",
-		Name:               "Barbell Squat",
-		BodyPartID:         "legs",
-		EquipmentID:        "barbell",
-		TargetMuscleID:     "quads",
-		SecondaryMuscleIDs: []string{"glutes"},
-		TagIDs:             []string{"strength"},
-	}, now)
+		ID:               id,
+		Slug:             slug,
+		Name:             strings.ReplaceAll(slug, "_", " "),
+		PrimaryMuscle:    primary,
+		SecondaryMuscles: secondary,
+		Equipment:        domain.EquipmentBarbell,
+		Category:         domain.CategoryStrength,
+		Level:            domain.LevelIntermediate,
+		Force:            domain.ForcePush,
+		Instructions:     []string{"Step one.", "Step two."},
+		Images:           []string{slug + "/0.jpg"},
+		Source:           domain.SourceFreeExerciseDB,
+		Status:           domain.StatusActive,
+	}, time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("new exercise: %v", err)
 	}
+	return exercise
+}
+
+func TestPostgresRepository_SaveFindAndOutbox(t *testing.T) {
+	db := getExerciseTestDB(t)
+	ctx := context.Background()
+	repo := NewPostgresRepository(db)
+
+	exercise := integrationExercise(t, uuid.NewString(), "Barbell_Squat",
+		domain.MuscleGroupQuadriceps, domain.MuscleGroupGlutes, domain.MuscleGroupCalves)
 	event := &domain.Event{
-		ID:           "22222222-2222-4222-8222-222222222222",
+		ID:           uuid.NewString(),
 		Type:         domain.EventTypeExerciseCreated,
 		PartitionKey: exercise.Info().ID,
-		Payload:      []byte(`{"id":"11111111-1111-4111-8111-111111111111"}`),
-		CreatedAt:    now,
+		Payload:      []byte(`{"id":"x"}`),
+		CreatedAt:    time.Now().UTC(),
 	}
 
 	if err := repo.Save(ctx, exercise, event); err != nil {
@@ -70,135 +70,179 @@ func TestPostgresRepository_SaveSearchMetadataAndOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find exercise: %v", err)
 	}
-	if got := loaded.Info().SecondaryMuscleIDs[0]; got != "glutes" {
-		t.Fatalf("got secondary muscle %q, want glutes", got)
+	got := loaded.Info()
+	if len(got.SecondaryMuscles) != 2 || got.SecondaryMuscles[1] != domain.MuscleGroupCalves {
+		t.Errorf("got secondary muscles %v", got.SecondaryMuscles)
 	}
-
-	if err := loaded.SubmitForApproval(now); err != nil {
-		t.Fatalf("submit exercise: %v", err)
+	if len(got.Instructions) != 2 || got.Images[0] != "Barbell_Squat/0.jpg" {
+		t.Errorf("got instructions %v images %v", got.Instructions, got.Images)
 	}
-	if err := loaded.Approve(now); err != nil {
-		t.Fatalf("approve exercise: %v", err)
-	}
-	if err := repo.Save(ctx, loaded, nil); err != nil {
-		t.Fatalf("save active exercise: %v", err)
-	}
-
-	exercises, totalCount, err := repo.SearchActive(ctx, &port.SearchFilters{
-		TagIDs: []string{"strength"},
-	})
-	if err != nil {
-		t.Fatalf("search active exercises: %v", err)
-	}
-	if got := len(exercises); got != 1 {
-		t.Fatalf("got exercises %d, want 1", got)
-	}
-	if totalCount != 1 {
-		t.Fatalf("got total count %d, want 1", totalCount)
-	}
-
-	metadata, err := repo.GetMetadata(ctx)
-	if err != nil {
-		t.Fatalf("get metadata: %v", err)
-	}
-	if got := len(metadata.BodyParts); got != 1 {
-		t.Fatalf("got body parts %d, want 1", got)
+	if got.Force != domain.ForcePush || got.Mechanic != "" {
+		t.Errorf("got force %q mechanic %q", got.Force, got.Mechanic)
 	}
 
 	var outboxCount int
-	err = db.WithContext(ctx).
+	if err := db.WithContext(ctx).
 		Raw(`SELECT COUNT(*) FROM exercise.outbox WHERE event_id = ?`, event.ID).
-		Scan(&outboxCount).
-		Error
-	if err != nil {
+		Scan(&outboxCount).Error; err != nil {
 		t.Fatalf("count outbox: %v", err)
 	}
 	if outboxCount != 1 {
 		t.Fatalf("got outbox count %d, want 1", outboxCount)
 	}
+
+	duplicate := integrationExercise(t, uuid.NewString(), "Barbell_Squat", domain.MuscleGroupQuadriceps)
+	if err := repo.Save(ctx, duplicate, nil); !errors.Is(err, domain.ErrDuplicateSlug) {
+		t.Errorf("duplicate slug: got %v, want %v", err, domain.ErrDuplicateSlug)
+	}
 }
 
-func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
-	statements := []string{
-		`CREATE SCHEMA IF NOT EXISTS exercise`,
-		`DROP TABLE IF EXISTS exercise.exercise_tags`,
-		`DROP TABLE IF EXISTS exercise.exercise_secondary_muscles`,
-		`DROP TABLE IF EXISTS exercise.exercises`,
-		`DROP TABLE IF EXISTS exercise.tags`,
-		`DROP TABLE IF EXISTS exercise.muscles`,
-		`DROP TABLE IF EXISTS exercise.equipments`,
-		`DROP TABLE IF EXISTS exercise.body_parts`,
-		`DROP TABLE IF EXISTS exercise.outbox`,
-		`CREATE TABLE exercise.body_parts (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL)`,
-		`CREATE TABLE exercise.equipments (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL)`,
-		`CREATE TABLE exercise.muscles (
-			id VARCHAR(255) PRIMARY KEY,
-			name VARCHAR(255) NOT NULL,
-			body_part_id VARCHAR(255) NOT NULL REFERENCES exercise.body_parts(id)
-		)`,
-		`CREATE TABLE exercise.tags (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL)`,
-		`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
-		`CREATE TABLE exercise.exercises (
-			id VARCHAR(255) PRIMARY KEY,
-			name VARCHAR(255) NOT NULL,
-			body_part_id VARCHAR(255) NOT NULL REFERENCES exercise.body_parts(id),
-			equipment_id VARCHAR(255) NOT NULL REFERENCES exercise.equipments(id),
-			target_muscle_id VARCHAR(255) NOT NULL REFERENCES exercise.muscles(id),
-			instructions TEXT,
-			thumbnail_url VARCHAR(1024),
-			media_url VARCHAR(1024),
-			video_url VARCHAR(1024),
-			difficulty VARCHAR(50) DEFAULT 'Beginner',
-			default_rest_seconds INT DEFAULT 60,
-			status VARCHAR(50) DEFAULT 'DRAFT',
-			archived_at TIMESTAMP WITH TIME ZONE,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			CONSTRAINT chk_exercises_status CHECK (
-				status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'ARCHIVED')
-			)
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_exercises_name_trgm ON exercise.exercises USING gin (name gin_trgm_ops)`,
-		`CREATE TABLE exercise.exercise_secondary_muscles (
-			exercise_id VARCHAR(255) NOT NULL REFERENCES exercise.exercises(id) ON DELETE CASCADE,
-			muscle_id VARCHAR(255) NOT NULL REFERENCES exercise.muscles(id) ON DELETE CASCADE,
-			PRIMARY KEY (exercise_id, muscle_id)
-		)`,
-		`CREATE TABLE exercise.exercise_tags (
-			exercise_id VARCHAR(255) NOT NULL REFERENCES exercise.exercises(id) ON DELETE CASCADE,
-			tag_id VARCHAR(255) NOT NULL REFERENCES exercise.tags(id) ON DELETE CASCADE,
-			PRIMARY KEY (exercise_id, tag_id)
-		)`,
-		`CREATE TABLE exercise.outbox (
-			id UUID PRIMARY KEY,
-			event_id UUID NOT NULL UNIQUE,
-			aggregate_type VARCHAR(255),
-			aggregate_id VARCHAR(255),
-			event_type VARCHAR(255) NOT NULL,
-			payload JSONB NOT NULL,
-			partition_key VARCHAR(255) NOT NULL,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			published BOOLEAN DEFAULT FALSE,
-			published_at TIMESTAMP WITH TIME ZONE,
-			status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
-			locked_until TIMESTAMP WITH TIME ZONE
-		)`,
-		`ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;`,
-		`ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;`,
-		`INSERT INTO exercise.body_parts (id, name) VALUES ('legs', 'Legs')`,
-		`INSERT INTO exercise.equipments (id, name) VALUES ('barbell', 'Barbell')`,
-		`INSERT INTO exercise.muscles (id, name, body_part_id) VALUES ('quads', 'Quads', 'legs')`,
-		`INSERT INTO exercise.muscles (id, name, body_part_id) VALUES ('glutes', 'Glutes', 'legs')`,
-		`INSERT INTO exercise.tags (id, name) VALUES ('strength', 'Strength')`,
-	}
+// TestPostgresRepository_SearchExcludeMuscles pins docs/05 §8.2 item 4 (fixes F1):
+// an excluded muscle drops exercises loading it as primary or secondary.
+func TestPostgresRepository_SearchExcludeMuscles(t *testing.T) {
+	db := getExerciseTestDB(t)
+	ctx := context.Background()
+	repo := NewPostgresRepository(db)
 
-	for _, statement := range statements {
-		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
-			return err
+	squat := integrationExercise(t, uuid.NewString(), "Barbell_Squat", domain.MuscleGroupQuadriceps, domain.MuscleGroupGlutes)
+	deadlift := integrationExercise(t, uuid.NewString(), "Barbell_Deadlift", domain.MuscleGroupLowerBack, domain.MuscleGroupHamstrings)
+	bench := integrationExercise(t, uuid.NewString(), "Barbell_Bench_Press", domain.MuscleGroupChest, domain.MuscleGroupTriceps)
+	for _, ex := range []*domain.Exercise{squat, deadlift, bench} {
+		if err := repo.Save(ctx, ex, nil); err != nil {
+			t.Fatalf("save %s: %v", ex.Info().Slug, err)
 		}
 	}
 
-	return nil
+	tests := []struct {
+		name    string
+		filters port.SearchFilters
+		want    []string
+	}{
+		{
+			name:    "exclude primary and secondary",
+			filters: port.SearchFilters{ExcludeMuscles: []domain.MuscleGroup{domain.MuscleGroupQuadriceps, domain.MuscleGroupHamstrings}},
+			want:    []string{"Barbell_Bench_Press"},
+		},
+		{
+			name:    "primary any of",
+			filters: port.SearchFilters{PrimaryMuscles: []domain.MuscleGroup{domain.MuscleGroupChest, domain.MuscleGroupLowerBack}},
+			want:    []string{"Barbell_Bench_Press", "Barbell_Deadlift"},
+		},
+		{
+			name:    "secondary overlap",
+			filters: port.SearchFilters{SecondaryMuscles: []domain.MuscleGroup{domain.MuscleGroupGlutes}},
+			want:    []string{"Barbell_Squat"},
+		},
+		{
+			name: "equipment, category, level and force",
+			filters: port.SearchFilters{
+				Equipment:  []domain.Equipment{domain.EquipmentBarbell},
+				Categories: []domain.Category{domain.CategoryStrength},
+				Levels:     []domain.Level{domain.LevelIntermediate},
+				Force:      domain.ForcePush,
+			},
+			want: []string{"Barbell_Bench_Press", "Barbell_Deadlift", "Barbell_Squat"},
+		},
+		{
+			name:    "mechanic filter",
+			filters: port.SearchFilters{Mechanic: domain.MechanicCompound},
+			want:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exercises, total, err := repo.SearchActive(ctx, &tt.filters)
+			if err != nil {
+				t.Fatalf("search: %v", err)
+			}
+			var got []string
+			for _, ex := range exercises {
+				got = append(got, ex.Info().Slug)
+			}
+			if fmt.Sprint(got) != fmt.Sprint(tt.want) || int(total) != len(tt.want) {
+				t.Errorf("got %v (total %d), want %v", got, total, tt.want)
+			}
+		})
+	}
+}
+
+// TestExerciseSchema_ChecksRejectInvalidValues verifies the migration CHECKs
+// are the last line of defence (docs/05 §7).
+func TestExerciseSchema_ChecksRejectInvalidValues(t *testing.T) {
+	db := getExerciseTestDB(t)
+
+	tests := []struct {
+		name       string
+		column     string
+		value      string
+		constraint string
+	}{
+		{"primary muscle", "primary_muscle", "'QUADS'", "chk_exercises_primary_muscle"},
+		{"secondary muscles", "secondary_muscles", "ARRAY['GLUTES','UPPER_LEGS']", "chk_exercises_secondary_muscles"},
+		{"equipment", "equipment", "'body only'", "chk_exercises_equipment"},
+		{"category", "category", "'YOGA'", "chk_exercises_category"},
+		{"level", "level", "'ADVANCED'", "chk_exercises_level"},
+		{"force", "force", "'TWIST'", "chk_exercises_force"},
+		{"mechanic", "mechanic", "'HYBRID'", "chk_exercises_mechanic"},
+		{"source", "source", "'wger'", "chk_exercises_source"},
+		{"ai without motion slug", "has_ai_supported", "TRUE", "chk_exercises_ai_requires_motion_slug"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values := map[string]string{
+				"primary_muscle":    "'CHEST'",
+				"secondary_muscles": "ARRAY['TRICEPS']",
+				"equipment":         "'BARBELL'",
+				"category":          "'STRENGTH'",
+				"level":             "'BEGINNER'",
+				"force":             "NULL",
+				"mechanic":          "NULL",
+				"source":            "'custom'",
+				"has_ai_supported":  "FALSE",
+			}
+			values[tt.column] = tt.value
+
+			stmt := fmt.Sprintf(`INSERT INTO exercise.exercises
+				(id, slug, name, primary_muscle, secondary_muscles, equipment, category, level,
+				 force, mechanic, source, has_ai_supported)
+				VALUES ('%s', '%s', 'x', %s, %s, %s, %s, %s, %s, %s, %s, %s)`,
+				uuid.NewString(), uuid.NewString(), values["primary_muscle"], values["secondary_muscles"],
+				values["equipment"], values["category"], values["level"], values["force"],
+				values["mechanic"], values["source"], values["has_ai_supported"])
+
+			err := db.Exec(stmt).Error
+			if err == nil || !strings.Contains(err.Error(), tt.constraint) {
+				t.Errorf("got error %v, want violation of %s", err, tt.constraint)
+			}
+		})
+	}
+}
+
+func TestPostgresRepository_FindByIDNotFound(t *testing.T) {
+	repo := NewPostgresRepository(getExerciseTestDB(t))
+
+	_, err := repo.FindByID(context.Background(), "non-existent-uuid")
+	if !errors.Is(err, domain.ErrExerciseNotFound) {
+		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
+	}
+}
+
+// prepareExerciseSchema applies the real migration (idempotent) and empties
+// the exercise tables this package writes.
+func prepareExerciseSchema(ctx context.Context, db *gorm.DB) error {
+	migration, err := os.ReadFile(exerciseMigration)
+	if err != nil {
+		return fmt.Errorf("read migration: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec(string(migration)).Error; err != nil {
+		return fmt.Errorf("apply migration: %w", err)
+	}
+
+	return db.WithContext(ctx).
+		Exec(`TRUNCATE TABLE exercise.exercise_stats, exercise.exercises, exercise.outbox CASCADE`).
+		Error
 }
 
 func InitDB(databaseURL string) (*gorm.DB, error) {
@@ -221,63 +265,30 @@ func InitDB(databaseURL string) (*gorm.DB, error) {
 	return db, nil
 }
 
-func TestPostgresRepository_FindByIDNotFound(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is required")
-	}
-
-	db, err := InitDB(databaseURL)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get database handle: %v", err)
-	}
-	defer sqlDB.Close()
-
-	ctx := context.Background()
-	if err := prepareExerciseSchema(ctx, db); err != nil {
-		t.Fatalf("prepare schema: %v", err)
-	}
-
-	repo := NewPostgresRepository(db)
-	_, err = repo.FindByID(ctx, "non-existent-uuid")
-	if !errors.Is(err, domain.ErrExerciseNotFound) {
-		t.Fatalf("got error %v, want %v", err, domain.ErrExerciseNotFound)
-	}
-}
-
 func getExerciseTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL != "" {
-		db, err := InitDB(databaseURL)
-		if err != nil {
+
+	var db *gorm.DB
+	if databaseURL := os.Getenv("TEST_DATABASE_URL"); databaseURL != "" {
+		var err error
+		if db, err = InitDB(databaseURL); err != nil {
 			t.Fatalf("open database: %v", err)
 		}
-		_ = prepareExerciseSchema(context.Background(), db)
-		return db
+	} else {
+		sqlDB, err := database.GetRegistry().GetPool("exercise")
+		if err != nil {
+			t.Fatalf("Failed to initialize exercise test database: %v", err)
+		}
+		if db, err = gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
+			SkipDefaultTransaction: true,
+		}); err != nil {
+			t.Fatalf("Failed to wrap database in gorm: %v", err)
+		}
 	}
 
-	sqlDB, err := database.GetRegistry().GetPool("exercise")
-	if err != nil {
-		t.Fatalf("Failed to initialize exercise test database: %v", err)
+	if err := prepareExerciseSchema(context.Background(), db); err != nil {
+		t.Fatalf("prepare schema: %v", err)
 	}
-
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		Conn: sqlDB,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
-	if err != nil {
-		t.Fatalf("Failed to wrap database in gorm: %v", err)
-	}
-
-	_ = prepareExerciseSchema(context.Background(), db)
-	db.Exec("ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;")
-	db.Exec("ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;")
 	return db
 }
 

@@ -29,11 +29,6 @@ func newEvent(
 			ExerciseId: exerciseInfo.Id,
 			Exercise:   exerciseInfo,
 		}
-	case domain.EventTypeExerciseSubmittedForApproval:
-		protoMsg = &exercisev1event.ExerciseSubmittedForApprovalEvent{
-			ExerciseId: exerciseInfo.Id,
-			Exercise:   exerciseInfo,
-		}
 	case domain.EventTypeExerciseApproved:
 		protoMsg = &exercisev1event.ExerciseApprovedEvent{
 			ExerciseId: exerciseInfo.Id,
@@ -88,31 +83,47 @@ func newEvent(
 	}, nil
 }
 
+// mapToProtoExerciseInfo builds the event payload. Images stay relative:
+// consumers only read id and name.
 func mapToProtoExerciseInfo(info *domain.Info) *exercisev1msg.ExerciseInfo {
+	secondary := make([]exercisev1msg.MuscleGroup, len(info.SecondaryMuscles))
+	for i, m := range info.SecondaryMuscles {
+		secondary[i] = exercisev1msg.MuscleGroup(protoValue(exercisev1msg.MuscleGroup_value, "MUSCLE_GROUP_", m))
+	}
+
 	return &exercisev1msg.ExerciseInfo{
 		Id:                 info.ID,
+		Slug:               info.Slug,
 		Name:               info.Name,
-		BodyPartId:         info.BodyPartID,
-		EquipmentId:        info.EquipmentID,
-		TargetMuscleId:     info.TargetMuscleID,
+		PrimaryMuscle:      exercisev1msg.MuscleGroup(protoValue(exercisev1msg.MuscleGroup_value, "MUSCLE_GROUP_", info.PrimaryMuscle)),
+		SecondaryMuscles:   secondary,
+		Equipment:          exercisev1msg.Equipment(protoValue(exercisev1msg.Equipment_value, "EQUIPMENT_", info.Equipment)),
+		Category:           exercisev1msg.ExerciseCategory(protoValue(exercisev1msg.ExerciseCategory_value, "EXERCISE_CATEGORY_", info.Category)),
+		Level:              exercisev1msg.ExerciseLevel(protoValue(exercisev1msg.ExerciseLevel_value, "EXERCISE_LEVEL_", info.Level)),
+		Force:              exercisev1msg.ExerciseForce(protoValue(exercisev1msg.ExerciseForce_value, "EXERCISE_FORCE_", info.Force)),
+		Mechanic:           exercisev1msg.ExerciseMechanic(protoValue(exercisev1msg.ExerciseMechanic_value, "EXERCISE_MECHANIC_", info.Mechanic)),
 		Instructions:       info.Instructions,
-		SecondaryMuscleIds: info.SecondaryMuscleIDs,
-		ThumbnailUrl:       info.ThumbnailURL,
-		MediaUrl:           info.MediaURL,
+		Images:             info.Images,
 		VideoUrl:           info.VideoURL,
-		Difficulty:         info.Difficulty,
 		DefaultRestSeconds: info.DefaultRestSeconds,
-		TagIds:             info.TagIDs,
+		MotionSlug:         info.MotionSlug,
 		Status:             mapToProtoStatus(info.Status),
+		HasAiSupported:     info.HasAISupported,
+		MeasurementType: exercisev1msg.ExerciseMeasurementType(
+			protoValue(exercisev1msg.ExerciseMeasurementType_value, "EXERCISE_MEASUREMENT_TYPE_", info.MeasurementType)),
 	}
+}
+
+// protoValue resolves a domain code to its enum number by the contract's
+// naming convention (prefix + code); unknown or empty codes give UNSPECIFIED.
+func protoValue[T ~string](values map[string]int32, prefix string, code T) int32 {
+	return values[prefix+string(code)]
 }
 
 func mapToProtoStatus(status domain.Status) exercisev1msg.ExerciseStatus {
 	switch status {
 	case domain.StatusDraft:
 		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_DRAFT
-	case domain.StatusPendingApproval:
-		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_PENDING_APPROVAL
 	case domain.StatusActive:
 		return exercisev1msg.ExerciseStatus_EXERCISE_STATUS_ACTIVE
 	case domain.StatusArchived:

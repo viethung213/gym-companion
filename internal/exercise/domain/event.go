@@ -11,9 +11,7 @@ type Event struct {
 }
 
 const (
-	EventTypeExerciseCreated              = "contracts.supporting.exercise.v1.exerciseCreated"
-	EventTypeExerciseSubmittedForApproval = "contracts.supporting.exercise.v1." +
-		"exerciseSubmittedForApproval"
+	EventTypeExerciseCreated  = "contracts.supporting.exercise.v1.exerciseCreated"
 	EventTypeExerciseApproved = "contracts.supporting.exercise.v1.exerciseApproved"
 	EventTypeExerciseArchived = "contracts.supporting.exercise.v1.exerciseArchived"
 	EventTypeExerciseRestored = "contracts.supporting.exercise.v1.exerciseRestored"

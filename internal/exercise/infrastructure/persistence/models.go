@@ -3,85 +3,37 @@ package persistence
 import (
 	"database/sql"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 type exerciseRecord struct {
-	ID                 string     `gorm:"column:id;primaryKey"`
-	Name               string     `gorm:"column:name"`
-	BodyPartID         string     `gorm:"column:body_part_id"`
-	EquipmentID        string     `gorm:"column:equipment_id"`
-	TargetMuscleID     string     `gorm:"column:target_muscle_id"`
-	Instructions       string     `gorm:"column:instructions"`
-	ThumbnailURL       *string    `gorm:"column:thumbnail_url"`
-	MediaURL           *string    `gorm:"column:media_url"`
-	VideoURL           *string    `gorm:"column:video_url"`
-	Difficulty         string     `gorm:"column:difficulty"`
-	DefaultRestSeconds int32      `gorm:"column:default_rest_seconds"`
-	Status             string     `gorm:"column:status"`
-	HasAISupported     bool       `gorm:"column:has_ai_supported"`
-	MeasurementType    string     `gorm:"column:measurement_type"`
-	ArchivedAt         *time.Time `gorm:"column:archived_at"`
-	CreatedAt          time.Time  `gorm:"column:created_at"`
-	UpdatedAt          time.Time  `gorm:"column:updated_at"`
+	ID                 string         `gorm:"column:id;primaryKey"`
+	Slug               string         `gorm:"column:slug"`
+	Name               string         `gorm:"column:name"`
+	PrimaryMuscle      string         `gorm:"column:primary_muscle"`
+	SecondaryMuscles   pq.StringArray `gorm:"column:secondary_muscles;type:text[]"`
+	Equipment          string         `gorm:"column:equipment"`
+	Category           string         `gorm:"column:category"`
+	Level              string         `gorm:"column:level"`
+	Force              *string        `gorm:"column:force"`
+	Mechanic           *string        `gorm:"column:mechanic"`
+	Instructions       pq.StringArray `gorm:"column:instructions;type:text[]"`
+	Images             pq.StringArray `gorm:"column:images;type:text[]"`
+	VideoURL           *string        `gorm:"column:video_url"`
+	MeasurementType    string         `gorm:"column:measurement_type"`
+	DefaultRestSeconds int32          `gorm:"column:default_rest_seconds"`
+	MotionSlug         *string        `gorm:"column:motion_slug"`
+	HasAISupported     bool           `gorm:"column:has_ai_supported"`
+	Source             string         `gorm:"column:source"`
+	Status             string         `gorm:"column:status"`
+	ArchivedAt         *time.Time     `gorm:"column:archived_at"`
+	CreatedAt          time.Time      `gorm:"column:created_at"`
+	UpdatedAt          time.Time      `gorm:"column:updated_at"`
 }
 
 func (exerciseRecord) TableName() string {
 	return "exercise.exercises"
-}
-
-type exerciseSecondaryMuscleRecord struct {
-	ExerciseID string `gorm:"column:exercise_id;primaryKey"`
-	MuscleID   string `gorm:"column:muscle_id;primaryKey"`
-}
-
-func (exerciseSecondaryMuscleRecord) TableName() string {
-	return "exercise.exercise_secondary_muscles"
-}
-
-type exerciseTagRecord struct {
-	ExerciseID string `gorm:"column:exercise_id;primaryKey"`
-	TagID      string `gorm:"column:tag_id;primaryKey"`
-}
-
-func (exerciseTagRecord) TableName() string {
-	return "exercise.exercise_tags"
-}
-
-type bodyPartRecord struct {
-	ID   string `gorm:"column:id;primaryKey"`
-	Name string `gorm:"column:name"`
-}
-
-func (bodyPartRecord) TableName() string {
-	return "exercise.body_parts"
-}
-
-type equipmentRecord struct {
-	ID   string `gorm:"column:id;primaryKey"`
-	Name string `gorm:"column:name"`
-}
-
-func (equipmentRecord) TableName() string {
-	return "exercise.equipments"
-}
-
-type muscleRecord struct {
-	ID         string `gorm:"column:id;primaryKey"`
-	Name       string `gorm:"column:name"`
-	BodyPartID string `gorm:"column:body_part_id"`
-}
-
-func (muscleRecord) TableName() string {
-	return "exercise.muscles"
-}
-
-type tagRecord struct {
-	ID   string `gorm:"column:id;primaryKey"`
-	Name string `gorm:"column:name"`
-}
-
-func (tagRecord) TableName() string {
-	return "exercise.tags"
 }
 
 type outboxRecord struct {

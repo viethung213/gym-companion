@@ -3,7 +3,7 @@
 -- Initial Schema, Transactional Outbox, Tables, and Search Indexes
 -- =====================================================================
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
 CREATE SCHEMA IF NOT EXISTS social;
 
