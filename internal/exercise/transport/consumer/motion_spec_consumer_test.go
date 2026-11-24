@@ -50,11 +50,15 @@ func (m *mockExerciseRepo) SetAISupportedWithOutboxLog(ctx context.Context, exer
 func TestMotionSpecConsumer_ConsumeMotionSpecReady(t *testing.T) {
 	now := time.Now()
 	ex, err := domain.NewExercise(domain.Info{
-		ID:             "ex-100",
-		Name:           "Squat",
-		BodyPartID:     "legs",
-		EquipmentID:    "barbell",
-		TargetMuscleID: "quadriceps",
+		ID:            "ex-100",
+		Slug:          "Barbell_Squat",
+		Name:          "Squat",
+		PrimaryMuscle: domain.MuscleGroupQuadriceps,
+		Equipment:     domain.EquipmentBarbell,
+		Category:      domain.CategoryStrength,
+		Level:         domain.LevelBeginner,
+		Source:        domain.SourceFreeExerciseDB,
+		MotionSlug:    "squat",
 	}, now)
 	if err != nil {
 		t.Fatalf("unexpected error creating exercise: %v", err)

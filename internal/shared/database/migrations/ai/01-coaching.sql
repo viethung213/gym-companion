@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS coaching.roadmaps (
     CONSTRAINT chk_roadmap_status CHECK (status IN ('ACTIVE', 'COMPLETED'))
 );
 
+-- IANA zone the schedule's scheduled_date / slot_time wall clock is in.
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON coaching.roadmaps(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
 
@@ -112,4 +114,10 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
 CREATE INDEX IF NOT EXISTS idx_session_plans_day_plan_id  ON coaching.session_plans(day_plan_id);
 CREATE INDEX IF NOT EXISTS idx_session_plans_user_date    ON coaching.session_plans(user_id, scheduled_date);
 CREATE INDEX IF NOT EXISTS ix_session_plans_pending       ON coaching.session_plans(user_id, scheduled_date) WHERE status = 'PENDING';
+
+-- TRAINING sessions count toward the weekly cap (BR-AC-01); RECOVERY ones are active recovery.
+ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS session_kind VARCHAR(20) NOT NULL DEFAULT 'TRAINING';
+DO $$ BEGIN
+    ALTER TABLE coaching.session_plans ADD CONSTRAINT chk_session_plans_kind CHECK (session_kind IN ('TRAINING', 'RECOVERY'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 

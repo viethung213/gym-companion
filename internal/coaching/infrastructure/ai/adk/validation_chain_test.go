@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
@@ -35,7 +36,7 @@ func TestValidationChain_HallucinatedIDNeverReachesDomain(t *testing.T) {
 			t.Errorf("attempt 2 was not told which id failed: %v", att.seenIssues[1])
 		}
 
-		rm, err := c.mapToDomainRoadmap(context.Background(), res.Plan, res.Names, "user-1", getMapNow())
+		rm, err := c.mapToDomainRoadmap(context.Background(), res.Plan, res.Names, res.Primaries, "user-1", getMapNow(), time.Time{})
 		if err != nil {
 			t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 		}
@@ -54,7 +55,7 @@ func TestValidationChain_HallucinatedIDNeverReachesDomain(t *testing.T) {
 			t.Error("got Degraded = false, want true after salvage")
 		}
 
-		rm, err := c.mapToDomainRoadmap(context.Background(), res.Plan, res.Names, "user-1", getMapNow())
+		rm, err := c.mapToDomainRoadmap(context.Background(), res.Plan, res.Names, res.Primaries, "user-1", getMapNow(), time.Time{})
 		if err != nil {
 			t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 		}
@@ -82,7 +83,7 @@ func TestValidationChain_EveryExerciseCarriesACatalogName(t *testing.T) {
 		t.Fatalf("runWithRetries returned error: %v", err)
 	}
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), res.Plan, res.Names, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), res.Plan, res.Names, res.Primaries, "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}

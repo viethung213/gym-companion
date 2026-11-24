@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	profilev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event"
+	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
 	domainEvent "github.com/viethung213/gym-companion/internal/profile/domain/event"
+	"github.com/viethung213/gym-companion/internal/profile/infrastructure/protomap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -82,9 +84,9 @@ func PackCloudEvent(ev any) (*OutboxRecordData, error) {
 
 	case *domainEvent.ProfileCompletedEvent:
 		bio := e.BiologicalMetrics()
-		registeredInjuries := make([]string, 0, len(e.Injuries()))
+		injuries := make([]*profilev1event.InjuryDetails, 0, len(e.Injuries()))
 		for _, inj := range e.Injuries() {
-			registeredInjuries = append(registeredInjuries, inj.MuscleGroup())
+			injuries = append(injuries, injuryDetails(inj))
 		}
 
 		payloadProto := &profilev1event.ProfileCompleted{
@@ -96,7 +98,7 @@ func PackCloudEvent(ev any) (*OutboxRecordData, error) {
 				Gender:   bio.Gender(),
 			},
 			Goals:                 e.Goals(),
-			RegisteredInjuries:    registeredInjuries,
+			Injuries:              injuries,
 			PreferredWorkoutTimes: e.PreferredWorkoutTimes(),
 			CompletedAt:           timestamppb.New(e.CompletedAt()),
 		}
@@ -112,16 +114,9 @@ func PackCloudEvent(ev any) (*OutboxRecordData, error) {
 		occurredAt = e.CompletedAt()
 
 	case *domainEvent.InjuryReportedEvent:
-		inj := e.Injury()
 		payloadProto := &profilev1event.InjuryReported{
 			UserId: e.UserID(),
-			Injury: &profilev1event.InjuryDetails{
-				InjuryId:    inj.ID(),
-				MuscleGroup: inj.MuscleGroup(),
-				Severity:    inj.Severity(),
-				Notes:       inj.Notes(),
-				ReportedAt:  timestamppb.New(inj.ReportedAt()),
-			},
+			Injury: injuryDetails(e.Injury()),
 		}
 
 		payloadBytes, err = protojson.Marshal(payloadProto)
@@ -139,7 +134,8 @@ func PackCloudEvent(ev any) (*OutboxRecordData, error) {
 		payloadProto := &profilev1event.InjuryRecoveredData{
 			UserId:      e.UserID(),
 			InjuryId:    inj.ID(),
-			MuscleGroup: inj.MuscleGroup(),
+			Region:      protomap.JointRegionToProto(inj.Region()),
+			Muscle:      protomap.MuscleGroupToProto(inj.Muscle()),
 			RecoveredAt: timestamppb.New(e.RecoveredAt()),
 		}
 
@@ -204,4 +200,16 @@ func PackCloudEvent(ev any) (*OutboxRecordData, error) {
 		OccurredAt:    occurredAt,
 		Payload:       cloudEventBytes,
 	}, nil
+}
+
+func injuryDetails(inj *entity.Injury) *profilev1event.InjuryDetails {
+	return &profilev1event.InjuryDetails{
+		InjuryId:   inj.ID(),
+		Region:     protomap.JointRegionToProto(inj.Region()),
+		Muscle:     protomap.MuscleGroupToProto(inj.Muscle()),
+		Side:       protomap.BodySideToProto(inj.Side()),
+		Severity:   protomap.InjurySeverityToProto(inj.Severity()),
+		Notes:      inj.Notes(),
+		ReportedAt: timestamppb.New(inj.ReportedAt()),
+	}
 }

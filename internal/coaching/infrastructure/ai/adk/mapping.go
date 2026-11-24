@@ -15,18 +15,25 @@ func (c *CoachingContextAgent) mapToDomainRoadmap(
 	ctx context.Context,
 	plan *GeneratedPlan,
 	names map[string]string,
+	primaries map[string]string,
 	userID string,
 	now time.Time,
+	weekStart time.Time,
 ) (*roadmap.Roadmap, error) {
 	if plan == nil || len(plan.Weeks) == 0 {
 		return nil, fmt.Errorf("%w: plan has no weeks", ErrPlanGenerationFailed)
 	}
 
-	// Anchor on the plan's earliest session, not now, or sessions fall outside
-	// their week and every date-based query downstream breaks.
-	startDate, err := earliestScheduledDate(plan)
-	if err != nil {
-		return nil, err
+	// Week N spans [startDate + 7(N-1), +7). The slot schedule counted weeks from
+	// weekStart, and the validator kept every session inside its week, so the
+	// roadmap uses the same anchor; without a schedule it falls back to the
+	// earliest session.
+	startDate := weekStart
+	if startDate.IsZero() {
+		var err error
+		if startDate, err = earliestScheduledDate(plan); err != nil {
+			return nil, err
+		}
 	}
 
 	roadmapID := c.idgen.NewID()
@@ -82,6 +89,10 @@ func (c *CoachingContextAgent) mapToDomainRoadmap(
 
 			for i := range bucket.sessions {
 				sp := &bucket.sessions[i]
+				targets, err := sessionTargetMuscles(sp.Prescription, primaries)
+				if err != nil {
+					return nil, fmt.Errorf("session on %s: %w", key, err)
+				}
 				dur := sp.EstimatedDurationMinutes
 				if dur <= 0 {
 					dur = 45
@@ -102,7 +113,8 @@ func (c *CoachingContextAgent) mapToDomainRoadmap(
 					EstimatedDurationMinutes: dur,
 					Status:                   roadmap.SessionPlanStatusPending,
 					Source:                   roadmap.SessionPlanSourceScheduled,
-					TargetMuscleGroups:       sp.TargetMuscleGroups,
+					Kind:                     sessionKind(sp.SessionKind),
+					TargetMuscleGroups:       targets,
 					Prescription:             c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
 					Reasoning:                sp.Reasoning,
 					GeneratedAt:              now,
@@ -133,11 +145,12 @@ func (c *CoachingContextAgent) mapToRegeneratedSessions(
 	ctx context.Context,
 	plan *GeneratedPlan,
 	names map[string]string,
+	primaries map[string]string,
 	userID string,
 	now time.Time,
-) []*roadmap.SessionPlanInfo {
+) ([]*roadmap.SessionPlanInfo, error) {
 	if plan == nil {
-		return nil
+		return nil, nil
 	}
 
 	var infos []*roadmap.SessionPlanInfo
@@ -152,6 +165,11 @@ func (c *CoachingContextAgent) mapToRegeneratedSessions(
 					slog.String("date", sp.ScheduledDate),
 					slog.String("user_id", userID))
 				continue
+			}
+
+			targets, err := sessionTargetMuscles(sp.Prescription, primaries)
+			if err != nil {
+				return nil, fmt.Errorf("session on %s: %w", sp.ScheduledDate, err)
 			}
 
 			dur := sp.EstimatedDurationMinutes
@@ -169,14 +187,15 @@ func (c *CoachingContextAgent) mapToRegeneratedSessions(
 				SlotTime:                 slotTime,
 				EstimatedDurationMinutes: dur,
 				Status:                   roadmap.SessionPlanStatusPending,
-				TargetMuscleGroups:       sp.TargetMuscleGroups,
+				Kind:                     sessionKind(sp.SessionKind),
+				TargetMuscleGroups:       targets,
 				Prescription:             c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
 				Reasoning:                sp.Reasoning,
 				GeneratedAt:              now,
 			})
 		}
 	}
-	return infos
+	return infos, nil
 }
 
 func (c *CoachingContextAgent) mapPrescriptionToDomain(
@@ -250,6 +269,26 @@ func (c *CoachingContextAgent) mapExercisesToDomain(
 		}
 	}
 	return out
+}
+
+// sessionTargetMuscles derives a session's TargetMuscleGroups as the primary
+// MuscleGroup codes of its main exercises (docs/05 §8.4), from the catalog data
+// resolved during validation. A main exercise without that data was never
+// validated, which is a defect, not an empty muscle list.
+func sessionTargetMuscles(p WorkoutPrescription, primaries map[string]string) ([]string, error) {
+	var out []string
+	seen := make(map[string]bool)
+	for _, e := range p.MainExercises {
+		muscle, ok := primaries[e.ExerciseID]
+		if !ok {
+			return nil, fmt.Errorf("%w: exercise %s has no validated primary muscle", ErrPlanGenerationFailed, e.ExerciseID)
+		}
+		if !seen[muscle] {
+			seen[muscle] = true
+			out = append(out, muscle)
+		}
+	}
+	return out, nil
 }
 
 // resolveExerciseDetails returns the catalog name and measurement type ("REPS" | "DURATION").
@@ -370,4 +409,12 @@ func earliestScheduledDate(plan *GeneratedPlan) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("%w: plan contains no sessions", ErrPlanGenerationFailed)
 	}
 	return earliest.UTC(), nil
+}
+
+// sessionKind maps the pinned kind to the domain; anything but RECOVERY trains.
+func sessionKind(k string) roadmap.SessionKind {
+	if k == kindRecovery {
+		return roadmap.SessionKindRecovery
+	}
+	return roadmap.SessionKindTraining
 }

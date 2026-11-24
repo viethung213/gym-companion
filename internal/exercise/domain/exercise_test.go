@@ -15,13 +15,6 @@ func TestExerciseTransitions(t *testing.T) {
 		t.Fatalf("got status %q, want %q", got, StatusDraft)
 	}
 
-	if err := exercise.SubmitForApproval(now.Add(time.Minute)); err != nil {
-		t.Fatalf("submit for approval: %v", err)
-	}
-	if got := exercise.Info().Status; got != StatusPendingApproval {
-		t.Fatalf("got status %q, want %q", got, StatusPendingApproval)
-	}
-
 	if err := exercise.Approve(now.Add(2 * time.Minute)); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
@@ -70,16 +63,12 @@ func TestExerciseInvalidTransitions(t *testing.T) {
 			},
 		},
 		{
-			name: "submit active",
+			name: "approve archived",
 			give: func(exercise *Exercise) error {
-				if err := exercise.SubmitForApproval(now); err != nil {
+				if err := exercise.Archive(now); err != nil {
 					return err
 				}
-				if err := exercise.Approve(now); err != nil {
-					return err
-				}
-
-				return exercise.SubmitForApproval(now)
+				return exercise.Approve(now)
 			},
 		},
 	}
@@ -137,11 +126,14 @@ func newValidExercise(t *testing.T, now time.Time) *Exercise {
 
 func validInfo() Info {
 	return Info{
-		ID:             "exercise-1",
-		Name:           "Squat",
-		BodyPartID:     "legs",
-		EquipmentID:    "barbell",
-		TargetMuscleID: "quads",
+		ID:            "exercise-1",
+		Slug:          "Barbell_Squat",
+		Name:          "Squat",
+		PrimaryMuscle: MuscleGroupQuadriceps,
+		Equipment:     EquipmentBarbell,
+		Category:      CategoryStrength,
+		Level:         LevelBeginner,
+		Source:        SourceFreeExerciseDB,
 	}
 }
 
@@ -151,63 +143,31 @@ func TestNewExercise_Validations(t *testing.T) {
 
 	tests := []struct {
 		name string
-		give Info
+		give func(*Info)
 		want error
 	}{
+		{name: "missing id", give: func(i *Info) { i.ID = "" }, want: ErrInvalidExercise},
+		{name: "missing slug", give: func(i *Info) { i.Slug = " " }, want: ErrInvalidExercise},
+		{name: "missing name", give: func(i *Info) { i.Name = "" }, want: ErrInvalidExercise},
+		{name: "unknown source", give: func(i *Info) { i.Source = "wger" }, want: ErrInvalidExercise},
+		{name: "missing primary muscle", give: func(i *Info) { i.PrimaryMuscle = "" }, want: ErrInvalidExercise},
+		{name: "unknown primary muscle", give: func(i *Info) { i.PrimaryMuscle = "QUADS" }, want: ErrInvalidExercise},
 		{
-			name: "missing id",
-			give: Info{
-				ID:             "",
-				Name:           "Squat",
-				BodyPartID:     "legs",
-				EquipmentID:    "barbell",
-				TargetMuscleID: "quads",
-			},
+			name: "unknown secondary muscle",
+			give: func(i *Info) { i.SecondaryMuscles = []MuscleGroup{MuscleGroupGlutes, "Upper Legs"} },
 			want: ErrInvalidExercise,
 		},
+		{name: "missing equipment", give: func(i *Info) { i.Equipment = "" }, want: ErrInvalidExercise},
+		{name: "unknown equipment", give: func(i *Info) { i.Equipment = "body weight" }, want: ErrInvalidExercise},
+		{name: "missing category", give: func(i *Info) { i.Category = "" }, want: ErrInvalidExercise},
+		{name: "missing level", give: func(i *Info) { i.Level = "" }, want: ErrInvalidExercise},
+		{name: "advanced is not a level", give: func(i *Info) { i.Level = "ADVANCED" }, want: ErrInvalidExercise},
+		{name: "unknown force", give: func(i *Info) { i.Force = "TWIST" }, want: ErrInvalidExercise},
+		{name: "unknown mechanic", give: func(i *Info) { i.Mechanic = "HYBRID" }, want: ErrInvalidExercise},
 		{
-			name: "missing name",
-			give: Info{
-				ID:             "exercise-1",
-				Name:           "",
-				BodyPartID:     "legs",
-				EquipmentID:    "barbell",
-				TargetMuscleID: "quads",
-			},
-			want: ErrInvalidExercise,
-		},
-		{
-			name: "missing body part id",
-			give: Info{
-				ID:             "exercise-1",
-				Name:           "Squat",
-				BodyPartID:     "",
-				EquipmentID:    "barbell",
-				TargetMuscleID: "quads",
-			},
-			want: ErrInvalidExercise,
-		},
-		{
-			name: "missing equipment id",
-			give: Info{
-				ID:             "exercise-1",
-				Name:           "Squat",
-				BodyPartID:     "legs",
-				EquipmentID:    "",
-				TargetMuscleID: "quads",
-			},
-			want: ErrInvalidExercise,
-		},
-		{
-			name: "missing target muscle id",
-			give: Info{
-				ID:             "exercise-1",
-				Name:           "Squat",
-				BodyPartID:     "legs",
-				EquipmentID:    "barbell",
-				TargetMuscleID: "",
-			},
-			want: ErrInvalidExercise,
+			name: "ai without motion slug",
+			give: func(i *Info) { i.HasAISupported = true },
+			want: ErrMotionSlugRequired,
 		},
 	}
 
@@ -215,7 +175,9 @@ func TestNewExercise_Validations(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewExercise(tt.give, now)
+			info := validInfo()
+			tt.give(&info)
+			_, err := NewExercise(info, now)
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("got error %v, want %v", err, tt.want)
 			}
@@ -223,19 +185,34 @@ func TestNewExercise_Validations(t *testing.T) {
 	}
 }
 
+func TestNewExercise_OptionalForceAndMechanic(t *testing.T) {
+	t.Parallel()
+	info := validInfo()
+	info.Force = ""
+	info.Mechanic = ""
+
+	exercise, err := NewExercise(info, time.Now())
+	if err != nil {
+		t.Fatalf("new exercise: %v", err)
+	}
+	if got := exercise.Info(); got.Force != "" || got.Mechanic != "" {
+		t.Errorf("got force %q mechanic %q, want empty", got.Force, got.Mechanic)
+	}
+}
+
 func TestNewExercise_Normalization(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
 
-	give := Info{
-		ID:                 "  exercise-1  ",
-		Name:               "  Squat  ",
-		BodyPartID:         "  legs  ",
-		EquipmentID:        "  barbell  ",
-		TargetMuscleID:     "  quads  ",
-		Difficulty:         "",
-		DefaultRestSeconds: 0,
+	give := validInfo()
+	give.ID = "  exercise-1  "
+	give.Name = "  Squat  "
+	give.MotionSlug = " squat "
+	give.SecondaryMuscles = []MuscleGroup{
+		MuscleGroupGlutes, MuscleGroupQuadriceps, MuscleGroupGlutes, MuscleGroupCalves,
 	}
+	give.Instructions = []string{" Stand. ", "", "Squat."}
+	give.Images = []string{"Barbell_Squat/0.jpg", " "}
 
 	exercise, err := NewExercise(give, now)
 	if err != nil {
@@ -249,8 +226,19 @@ func TestNewExercise_Normalization(t *testing.T) {
 	if got, want := info.Name, "Squat"; got != want {
 		t.Errorf("got name %q, want %q", got, want)
 	}
-	if got, want := info.Difficulty, "Beginner"; got != want {
-		t.Errorf("got difficulty %q, want %q", got, want)
+	if got, want := info.MotionSlug, "squat"; got != want {
+		t.Errorf("got motion slug %q, want %q", got, want)
+	}
+	wantSecondary := []MuscleGroup{MuscleGroupGlutes, MuscleGroupCalves}
+	if len(info.SecondaryMuscles) != 2 || info.SecondaryMuscles[0] != wantSecondary[0] ||
+		info.SecondaryMuscles[1] != wantSecondary[1] {
+		t.Errorf("got secondary %v, want %v (deduped, primary dropped)", info.SecondaryMuscles, wantSecondary)
+	}
+	if len(info.Instructions) != 2 || info.Instructions[0] != "Stand." {
+		t.Errorf("got instructions %q", info.Instructions)
+	}
+	if len(info.Images) != 1 {
+		t.Errorf("got images %q, want one", info.Images)
 	}
 	if got, want := info.DefaultRestSeconds, int32(60); got != want {
 		t.Errorf("got default rest seconds %d, want %d", got, want)
@@ -260,44 +248,39 @@ func TestNewExercise_Normalization(t *testing.T) {
 	}
 }
 
+func TestInfo_ReturnsCopies(t *testing.T) {
+	t.Parallel()
+	info := validInfo()
+	info.SecondaryMuscles = []MuscleGroup{MuscleGroupGlutes}
+	info.Images = []string{"a.jpg"}
+	exercise, err := NewExercise(info, time.Now())
+	if err != nil {
+		t.Fatalf("new exercise: %v", err)
+	}
+
+	got := exercise.Info()
+	got.SecondaryMuscles[0] = MuscleGroupChest
+	got.Images[0] = "b.jpg"
+
+	if again := exercise.Info(); again.SecondaryMuscles[0] != MuscleGroupGlutes || again.Images[0] != "a.jpg" {
+		t.Errorf("aggregate state changed through Info(): %v %v", again.SecondaryMuscles, again.Images)
+	}
+}
+
 func TestUpdateInfo_Validations(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name string
-		give Info
+		give func(*Info)
 		want error
 	}{
-		{
-			name: "missing name",
-			give: Info{
-				Name:           "",
-				BodyPartID:     "legs",
-				EquipmentID:    "barbell",
-				TargetMuscleID: "quads",
-			},
-			want: ErrInvalidExercise,
-		},
-		{
-			name: "missing body part id",
-			give: Info{
-				Name:           "Squat",
-				BodyPartID:     "",
-				EquipmentID:    "barbell",
-				TargetMuscleID: "quads",
-			},
-			want: ErrInvalidExercise,
-		},
+		{name: "missing name", give: func(i *Info) { i.Name = "" }, want: ErrInvalidExercise},
+		{name: "unknown category", give: func(i *Info) { i.Category = "YOGA" }, want: ErrInvalidExercise},
 		{
 			name: "invalid measurement type",
-			give: Info{
-				Name:            "Squat",
-				BodyPartID:      "legs",
-				EquipmentID:     "barbell",
-				TargetMuscleID:  "quads",
-				MeasurementType: "INVALID",
-			},
+			give: func(i *Info) { i.MeasurementType = "INVALID" },
 			want: ErrInvalidExercise,
 		},
 	}
@@ -307,11 +290,139 @@ func TestUpdateInfo_Validations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			exercise := newValidExercise(t, now)
-			err := exercise.UpdateInfo(tt.give, now)
+			info := validInfo()
+			tt.give(&info)
+			err := exercise.UpdateInfo(info, now)
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("got error %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestUpdateInfo_KeepsIdentityAndAIFlag(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
+	info := validInfo()
+	info.MotionSlug = "squat"
+	info.HasAISupported = true
+	exercise, err := NewExercise(info, now)
+	if err != nil {
+		t.Fatalf("new exercise: %v", err)
+	}
+
+	update := validInfo()
+	update.Slug = "Other_Slug"
+	update.Source = SourceCustom
+	update.MotionSlug = "squat"
+	update.Level = LevelExpert
+	if err := exercise.UpdateInfo(update, now); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	got := exercise.Info()
+	if got.Slug != "Barbell_Squat" || got.Source != SourceFreeExerciseDB || !got.HasAISupported {
+		t.Errorf("got slug %q source %q ai %v; identity and AI flag must not change",
+			got.Slug, got.Source, got.HasAISupported)
+	}
+	if got.Level != LevelExpert {
+		t.Errorf("got level %q, want EXPERT", got.Level)
+	}
+
+	update.MotionSlug = ""
+	if err := exercise.UpdateInfo(update, now); !errors.Is(err, ErrMotionSlugRequired) {
+		t.Errorf("clearing motion slug of an AI exercise: got %v, want %v", err, ErrMotionSlugRequired)
+	}
+}
+
+func TestSetAISupported(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		motionSlug string
+		give       bool
+		want       error
+	}{
+		{name: "enable with motion slug", motionSlug: "squat", give: true},
+		{name: "enable without motion slug", give: true, want: ErrMotionSlugRequired},
+		{name: "disable without motion slug", give: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info := validInfo()
+			info.MotionSlug = tt.motionSlug
+			exercise, err := NewExercise(info, now)
+			if err != nil {
+				t.Fatalf("new exercise: %v", err)
+			}
+
+			err = exercise.SetAISupported(tt.give, now)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("got error %v, want %v", err, tt.want)
+			}
+			if tt.want == nil && exercise.Info().HasAISupported != tt.give {
+				t.Errorf("got has_ai_supported %v, want %v", exercise.Info().HasAISupported, tt.give)
+			}
+		})
+	}
+}
+
+func TestSlugFromName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		give string
+		want string
+	}{
+		{give: "Barbell Squat", want: "Barbell_Squat"},
+		{give: "3/4 Sit-Up", want: "3_4_Sit-Up"},
+		{give: "  Dips - Triceps Version ", want: "Dips_-_Triceps_Version"},
+		{give: "Cable (Rope) Pushdown!", want: "Cable_Rope_Pushdown"},
+	}
+
+	for _, tt := range tests {
+		if got := SlugFromName(tt.give); got != tt.want {
+			t.Errorf("SlugFromName(%q) = %q, want %q", tt.give, got, tt.want)
+		}
+	}
+}
+
+func TestParseTaxonomy(t *testing.T) {
+	t.Parallel()
+
+	if got, err := ParseMuscleGroup("LOWER_BACK"); err != nil || got != MuscleGroupLowerBack {
+		t.Errorf("ParseMuscleGroup(LOWER_BACK) = %q, %v", got, err)
+	}
+	if got, err := ParseEquipment("EZ_CURL_BAR"); err != nil || got != EquipmentEZCurlBar {
+		t.Errorf("ParseEquipment(EZ_CURL_BAR) = %q, %v", got, err)
+	}
+
+	invalid := []func() error{
+		func() error { _, err := ParseMuscleGroup("lower back"); return err },
+		func() error { _, err := ParseEquipment(""); return err },
+		func() error { _, err := ParseCategory("YOGA"); return err },
+		func() error { _, err := ParseLevel("ADVANCED"); return err },
+		func() error { _, err := ParseForce("push"); return err },
+		func() error { _, err := ParseMechanic("COMPOUNDS"); return err },
+	}
+	for i, parse := range invalid {
+		if err := parse(); !errors.Is(err, ErrInvalidExercise) {
+			t.Errorf("case %d: got %v, want ErrInvalidExercise", i, err)
+		}
+	}
+
+	if got := len(AllMuscleGroups()); got != 17 {
+		t.Errorf("got %d muscle groups, want 17", got)
+	}
+	if got := len(AllEquipment()); got != 12 {
+		t.Errorf("got %d equipment values, want 12", got)
+	}
+	if got := len(AllCategories()); got != 7 {
+		t.Errorf("got %d categories, want 7", got)
 	}
 }
 

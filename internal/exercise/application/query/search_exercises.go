@@ -6,6 +6,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
 type SearchExercisesQuery struct {
@@ -31,7 +32,17 @@ func (h *SearchExercisesHandler) Handle(
 	ctx context.Context,
 	q SearchExercisesQuery,
 ) (*SearchExercisesResult, error) {
-	exercises, totalCount, err := h.repo.SearchActive(ctx, q.Filters)
+	// Unpublished exercises (draft, pending, archived) are an admin view, as in
+	// GetExercise; everyone else searches ACTIVE exercises only.
+	filters := q.Filters
+	if actor, _ := middleware.RequireAuthenticated(ctx); filters != nil && !actor.IsAdmin() {
+		public := *filters
+		public.Status = ""
+		public.IncludeAllStatuses = false
+		filters = &public
+	}
+
+	exercises, totalCount, err := h.repo.SearchActive(ctx, filters)
 	if err != nil {
 		return nil, fmt.Errorf("search exercises: %w", err)
 	}

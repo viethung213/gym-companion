@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	workoutexecutionmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/service/workoutexecutionv1serviceconnect"
@@ -86,13 +88,17 @@ func TestConnectUserProfileReader_Success(t *testing.T) {
 			}
 
 			return &profilemsg.GetProfileResponse{
-				UserId:                "user-123",
-				WeightKg:              80.5,
-				HeightCm:              178.0,
-				Age:                   28,
-				Goals:                 []string{"hypertrophy", "strength"},
-				AvailableEquipment:    []string{"barbell", "dumbbell"},
-				PreferredMuscleGroups: []string{"chest", "triceps"},
+				UserId:   "user-123",
+				WeightKg: 80.5,
+				HeightCm: 178.0,
+				Age:      28,
+				Goals:    []string{"hypertrophy", "strength"},
+				AvailableEquipment: []exercisemsg.Equipment{
+					exercisemsg.Equipment_EQUIPMENT_BARBELL, exercisemsg.Equipment_EQUIPMENT_DUMBBELL, 99,
+				},
+				PreferredMuscleGroups: []exercisemsg.MuscleGroup{
+					exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST, exercisemsg.MuscleGroup_MUSCLE_GROUP_TRICEPS,
+				},
 				PreferredWorkoutTimes: []string{
 					`{"mon": ["06:00-07:30"]}`,
 					`[{"day_of_week":3, "start_time":"18:00", "end_time":"19:30"}]`,
@@ -100,16 +106,23 @@ func TestConnectUserProfileReader_Success(t *testing.T) {
 				},
 				Injuries: []*profilemsg.Injury{
 					{
-						MuscleGroup: "shoulder",
+						Region:      exercisemsg.JointRegion_JOINT_REGION_SHOULDER,
+						Muscle:      exercisemsg.MuscleGroup_MUSCLE_GROUP_SHOULDERS,
+						Severity:    exercisemsg.InjurySeverity_INJURY_SEVERITY_MILD,
 						ReportedAt:  time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
 						IsRecovered: false,
 						Notes:       "Mild impingement",
 					},
 					{
-						MuscleGroup: "knee",
+						Region:      exercisemsg.JointRegion_JOINT_REGION_KNEE,
+						Severity:    exercisemsg.InjurySeverity_INJURY_SEVERITY_SEVERE,
 						ReportedAt:  time.Now().Add(-48 * time.Hour).Format(time.RFC3339),
 						IsRecovered: true,
 						RecoveredAt: time.Now().Format(time.RFC3339),
+					},
+					{
+						InjuryId: "free-text-legacy",
+						Severity: exercisemsg.InjurySeverity_INJURY_SEVERITY_MILD,
 					},
 				},
 				UpdatedAt: time.Now().Format(time.RFC3339),
@@ -133,11 +146,14 @@ func TestConnectUserProfileReader_Success(t *testing.T) {
 	assert.Equal(t, 178.0, profile.HeightCm)
 	assert.Equal(t, 28, profile.Age)
 	assert.Equal(t, "hypertrophy", profile.PrimaryGoal)
-	assert.Equal(t, []string{"barbell", "dumbbell"}, profile.AvailableEquipment)
-	assert.Equal(t, []string{"chest", "triceps"}, profile.PreferredMuscleGroups)
+	assert.Equal(t, []taxonomy.Equipment{taxonomy.EquipmentBarbell, taxonomy.EquipmentDumbbell}, profile.AvailableEquipment,
+		"unknown equipment is dropped")
+	assert.Equal(t, []taxonomy.MuscleGroup{taxonomy.MuscleGroupChest, taxonomy.MuscleGroupTriceps}, profile.PreferredMuscleGroups)
 	assert.Len(t, profile.AvailableSlots, 3)
-	assert.Len(t, profile.ActiveInjuries, 1)
-	assert.Equal(t, "shoulder", profile.ActiveInjuries[0].MuscleGroup)
+	require.Len(t, profile.ActiveInjuries, 1, "recovered and region-less injuries are dropped")
+	assert.Equal(t, taxonomy.JointRegionShoulder, profile.ActiveInjuries[0].Region)
+	assert.Equal(t, taxonomy.MuscleGroupShoulders, profile.ActiveInjuries[0].Muscle)
+	assert.Equal(t, taxonomy.InjurySeverityMild, profile.ActiveInjuries[0].Severity)
 }
 
 func TestConnectUserProfileReader_NotFound_Error(t *testing.T) {
@@ -169,31 +185,40 @@ func TestConnectUserProfileReader_EmptyUserID(t *testing.T) {
 func TestConnectExerciseCatalogReader_SearchByFilter(t *testing.T) {
 	mockHandler := &mockExerciseHandler{
 		searchFn: func(_ context.Context, req *exercisemsg.SearchExercisesRequest) (*exercisemsg.SearchExercisesResponse, error) {
-			assert.Equal(t, "chest", req.GetTargetMuscleId())
+			assert.Equal(t, []exercisemsg.MuscleGroup{exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST}, req.GetPrimaryMuscles())
+			assert.Equal(t, []exercisemsg.MuscleGroup{exercisemsg.MuscleGroup_MUSCLE_GROUP_TRICEPS}, req.GetExcludeMuscles())
+			assert.Equal(t, []exercisemsg.Equipment{exercisemsg.Equipment_EQUIPMENT_CABLE}, req.GetEquipment())
 			assert.Equal(t, exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE, req.GetStatus())
 
 			return &exercisemsg.SearchExercisesResponse{
 				Exercises: []*exercisemsg.ExerciseInfo{
 					{
-						Id:             "bench-press",
-						Name:           "Bench Press",
-						TargetMuscleId: "chest",
-						EquipmentId:    "barbell",
-						Difficulty:     "INTERMEDIATE",
+						Id:            "bench-press",
+						Name:          "Bench Press",
+						PrimaryMuscle: exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST,
+						Equipment:     exercisemsg.Equipment_EQUIPMENT_BARBELL,
+						Category:      exercisemsg.ExerciseCategory_EXERCISE_CATEGORY_STRENGTH,
+						Level:         exercisemsg.ExerciseLevel_EXERCISE_LEVEL_INTERMEDIATE,
 					},
 					{
-						Id:             "cable-crossover",
-						Name:           "Cable Crossover",
-						TargetMuscleId: "chest",
-						EquipmentId:    "cable",
-						Difficulty:     "BEGINNER",
+						Id:            "cable-crossover",
+						Name:          "Cable Crossover",
+						PrimaryMuscle: exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST,
+						Equipment:     exercisemsg.Equipment_EQUIPMENT_CABLE,
+						Category:      exercisemsg.ExerciseCategory_EXERCISE_CATEGORY_STRENGTH,
+						Level:         exercisemsg.ExerciseLevel_EXERCISE_LEVEL_BEGINNER,
 					},
 					{
-						Id:             "push-up",
-						Name:           "Push Up",
-						TargetMuscleId: "chest",
-						EquipmentId:    "bodyweight",
-						Difficulty:     "BEGINNER",
+						Id:            "push-up",
+						Name:          "Push Up",
+						PrimaryMuscle: exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST,
+						Equipment:     exercisemsg.Equipment_EQUIPMENT_BODY_ONLY,
+						Category:      exercisemsg.ExerciseCategory_EXERCISE_CATEGORY_STRENGTH,
+						Level:         exercisemsg.ExerciseLevel_EXERCISE_LEVEL_BEGINNER,
+					},
+					{
+						Id:   "unknown-taxonomy",
+						Name: "Legacy Row",
 					},
 				},
 				TotalCount: 3,
@@ -210,21 +235,28 @@ func TestConnectExerciseCatalogReader_SearchByFilter(t *testing.T) {
 
 	reader := adapters.NewConnectExerciseCatalogReader(server.URL, "test-secret", server.Client())
 	exercises, err := reader.SearchByFilter(context.Background(), &port.ExerciseFilter{
-		TargetMuscleID: "chest",
+		PrimaryMuscles: []taxonomy.MuscleGroup{taxonomy.MuscleGroupChest},
+		ExcludeMuscles: []taxonomy.MuscleGroup{taxonomy.MuscleGroupTriceps},
+		Equipment:      []taxonomy.Equipment{taxonomy.EquipmentCable},
 	})
 
 	require.NoError(t, err)
-	require.Len(t, exercises, 3)
+	require.Len(t, exercises, 3, "an exercise with unknown taxonomy is skipped")
 
 	assert.Equal(t, "bench-press", exercises[0].ExerciseID)
-	assert.False(t, exercises[0].IsBodyweight)
-	assert.False(t, exercises[0].IsMachineOrCable)
+	assert.Equal(t, taxonomy.MuscleGroupChest, exercises[0].PrimaryMuscle)
+	assert.Equal(t, taxonomy.LevelIntermediate, exercises[0].Level)
+	traits := exercises[0].Traits()
+	assert.False(t, traits.IsBodyweight())
+	assert.False(t, traits.IsMachineOrCable())
 
 	assert.Equal(t, "cable-crossover", exercises[1].ExerciseID)
-	assert.True(t, exercises[1].IsMachineOrCable)
+	traits = exercises[1].Traits()
+	assert.True(t, traits.IsMachineOrCable())
 
 	assert.Equal(t, "push-up", exercises[2].ExerciseID)
-	assert.True(t, exercises[2].IsBodyweight)
+	traits = exercises[2].Traits()
+	assert.True(t, traits.IsBodyweight())
 }
 
 func TestConnectExerciseCatalogReader_GetByID_SuccessAndNotFound(t *testing.T) {
@@ -233,10 +265,12 @@ func TestConnectExerciseCatalogReader_GetByID_SuccessAndNotFound(t *testing.T) {
 			if req.GetId() == "bench-press" {
 				return &exercisemsg.GetExerciseResponse{
 					Exercise: &exercisemsg.ExerciseInfo{
-						Id:             "bench-press",
-						Name:           "Bench Press",
-						TargetMuscleId: "chest",
-						EquipmentId:    "barbell",
+						Id:            "bench-press",
+						Name:          "Bench Press",
+						PrimaryMuscle: exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST,
+						Equipment:     exercisemsg.Equipment_EQUIPMENT_BARBELL,
+						Category:      exercisemsg.ExerciseCategory_EXERCISE_CATEGORY_STRENGTH,
+						Level:         exercisemsg.ExerciseLevel_EXERCISE_LEVEL_BEGINNER,
 					},
 				}, nil
 			}
@@ -423,49 +457,9 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 	assert.Equal(t, 170.0, p.HeightCm)
 	assert.Greater(t, p.Age, 20)
 	assert.Equal(t, "hypertrophy", p.PrimaryGoal)
-	assert.NotEmpty(t, p.AvailableEquipment)
-	assert.NotEmpty(t, p.PreferredMuscleGroups)
+	assert.Equal(t, service.DefaultGymEquipment(), p.AvailableEquipment)
+	assert.Empty(t, p.PreferredMuscleGroups, "no preference means no emphasis")
 	assert.NotEmpty(t, p.AvailableSlots)
-
-	// 2. ExerciseCatalogReader edge cases (body part fallback, equipment filter)
-	exerciseHandler := &mockExerciseHandler{
-		searchFn: func(_ context.Context, req *exercisemsg.SearchExercisesRequest) (*exercisemsg.SearchExercisesResponse, error) {
-			return &exercisemsg.SearchExercisesResponse{
-				Exercises: []*exercisemsg.ExerciseInfo{
-					{
-						Id:          "lat-pull",
-						Name:        "Lat Pulldown",
-						BodyPartId:  "back",
-						EquipmentId: "cable",
-					},
-					{
-						Id:          "pull-up",
-						Name:        "Pull Up",
-						BodyPartId:  "back",
-						EquipmentId: "pull-up-bar",
-					},
-				},
-			}, nil
-		},
-	}
-	eMux := http.NewServeMux()
-	eServerConn := connect.NewServer()
-	exercisev1serviceconnect.RegisterExerciseServiceHandler(eServerConn, exerciseHandler)
-	connecthttp.Mount(eMux, eServerConn)
-	eServer := httptest.NewServer(eMux)
-	defer eServer.Close()
-
-	eReader := adapters.NewConnectExerciseCatalogReader(eServer.URL, "secret", eServer.Client())
-	exs, err := eReader.SearchByFilter(ctx, &port.ExerciseFilter{
-		EquipmentIDs: []string{"cable", "pull-up-bar"},
-		Limit:        10,
-		Offset:       0,
-	})
-	require.NoError(t, err)
-	require.Len(t, exs, 2)
-	assert.Equal(t, "back", exs[0].MuscleGroup)
-	assert.True(t, exs[0].IsMachineOrCable)
-	assert.True(t, exs[1].IsBodyweight)
 
 	// 3. WorkoutSessionReader CodeNotFound returns empty slices
 	workoutHandler := &mockWorkoutHandler{

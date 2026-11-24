@@ -151,18 +151,7 @@ func (r *PostgresUserProfileRepository) AddPeriodicMetric(
 func (r *PostgresUserProfileRepository) AddInjury(ctx context.Context, userID string, injury *entity.Injury) error {
 	db := GetDB(ctx, r.db)
 	now := time.Now()
-	injuryModel := &InjuryModel{
-		ID:          injury.ID(),
-		UserID:      userID,
-		MuscleGroup: injury.MuscleGroup(),
-		Severity:    injury.Severity(),
-		Notes:       injury.Notes(),
-		ReportedAt:  injury.ReportedAt(),
-		IsRecovered: injury.IsRecovered(),
-		RecoveredAt: injury.RecoveredAt(),
-		CreatedAt:   injury.ReportedAt(),
-		UpdatedAt:   now,
-	}
+	injuryModel := newInjuryModel(userID, injury, now)
 
 	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(injuryModel).Error; err != nil {
 		return fmt.Errorf("insert injury: %w", err)
@@ -227,15 +216,10 @@ func (r *PostgresUserProfileRepository) FindInjuryHistory(ctx context.Context, u
 
 	result := make([]*entity.Injury, 0, len(injuryModels))
 	for _, im := range injuryModels {
-		inj := entity.ReconstituteInjury(
-			im.ID,
-			im.MuscleGroup,
-			im.Severity,
-			im.Notes,
-			im.ReportedAt,
-			im.IsRecovered,
-			im.RecoveredAt,
-		)
+		inj, err := im.toDomain()
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, inj)
 	}
 	return result, nil

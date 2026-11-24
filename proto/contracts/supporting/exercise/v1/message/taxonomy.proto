@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package contracts.supporting.exercise.v1.message;
+
+option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message;exercisev1message";
+
+// Shared vocabulary for the exercise catalog, user equipment, preferred muscles,
+// injuries and AI prompts. Values mirror free-exercise-db (docs/05 §4); the DB
+// and domain store the short code (value name without the enum prefix).
+
+// MuscleGroup is the 17 muscle groups of free-exercise-db.
+enum MuscleGroup {
+  MUSCLE_GROUP_UNSPECIFIED = 0;
+  MUSCLE_GROUP_ABDOMINALS = 1;
+  MUSCLE_GROUP_ABDUCTORS = 2;
+  MUSCLE_GROUP_ADDUCTORS = 3;
+  MUSCLE_GROUP_BICEPS = 4;
+  MUSCLE_GROUP_CALVES = 5;
+  MUSCLE_GROUP_CHEST = 6;
+  MUSCLE_GROUP_FOREARMS = 7;
+  MUSCLE_GROUP_GLUTES = 8;
+  MUSCLE_GROUP_HAMSTRINGS = 9;
+  MUSCLE_GROUP_LATS = 10;
+  MUSCLE_GROUP_LOWER_BACK = 11;
+  MUSCLE_GROUP_MIDDLE_BACK = 12;
+  MUSCLE_GROUP_NECK = 13;
+  MUSCLE_GROUP_QUADRICEPS = 14;
+  MUSCLE_GROUP_SHOULDERS = 15;
+  MUSCLE_GROUP_TRAPS = 16;
+  MUSCLE_GROUP_TRICEPS = 17;
+}
+
+// Equipment is the 12 equipment values of free-exercise-db.
+enum Equipment {
+  EQUIPMENT_UNSPECIFIED = 0;
+  EQUIPMENT_BODY_ONLY = 1;
+  EQUIPMENT_BARBELL = 2;
+  EQUIPMENT_DUMBBELL = 3;
+  EQUIPMENT_KETTLEBELLS = 4;
+  EQUIPMENT_CABLE = 5;
+  EQUIPMENT_MACHINE = 6;
+  EQUIPMENT_BANDS = 7;
+  EQUIPMENT_EZ_CURL_BAR = 8;
+  EQUIPMENT_MEDICINE_BALL = 9;
+  EQUIPMENT_EXERCISE_BALL = 10;
+  EQUIPMENT_FOAM_ROLL = 11;
+  EQUIPMENT_OTHER = 12;
+}
+
+enum ExerciseCategory {
+  EXERCISE_CATEGORY_UNSPECIFIED = 0;
+  EXERCISE_CATEGORY_STRENGTH = 1;
+  EXERCISE_CATEGORY_STRETCHING = 2;
+  EXERCISE_CATEGORY_PLYOMETRICS = 3;
+  EXERCISE_CATEGORY_POWERLIFTING = 4;
+  EXERCISE_CATEGORY_OLYMPIC_WEIGHTLIFTING = 5;
+  EXERCISE_CATEGORY_STRONGMAN = 6;
+  EXERCISE_CATEGORY_CARDIO = 7;
+}
+
+enum ExerciseLevel {
+  EXERCISE_LEVEL_UNSPECIFIED = 0;
+  EXERCISE_LEVEL_BEGINNER = 1;
+  EXERCISE_LEVEL_INTERMEDIATE = 2;
+  EXERCISE_LEVEL_EXPERT = 3;
+}
+
+enum ExerciseForce {
+  EXERCISE_FORCE_UNSPECIFIED = 0;
+  EXERCISE_FORCE_PUSH = 1;
+  EXERCISE_FORCE_PULL = 2;
+  EXERCISE_FORCE_STATIC = 3;
+}
+
+enum ExerciseMechanic {
+  EXERCISE_MECHANIC_UNSPECIFIED = 0;
+  EXERCISE_MECHANIC_COMPOUND = 1;
+  EXERCISE_MECHANIC_ISOLATION = 2;
+}
+
+// JointRegion is not part of free-exercise-db: it lets users report pain by
+// joint; coaching maps each region to the muscle groups it covers.
+enum JointRegion {
+  JOINT_REGION_UNSPECIFIED = 0;
+  JOINT_REGION_NECK = 1;
+  JOINT_REGION_SHOULDER = 2;
+  JOINT_REGION_ELBOW = 3;
+  JOINT_REGION_WRIST_HAND = 4;
+  JOINT_REGION_UPPER_BACK = 5;
+  JOINT_REGION_LOWER_BACK = 6;
+  JOINT_REGION_CHEST = 7;
+  JOINT_REGION_HIP = 8;
+  JOINT_REGION_KNEE = 9;
+  JOINT_REGION_ANKLE_FOOT = 10;
+}
+
+enum InjurySeverity {
+  INJURY_SEVERITY_UNSPECIFIED = 0;
+  INJURY_SEVERITY_MILD = 1;
+  INJURY_SEVERITY_MODERATE = 2;
+  INJURY_SEVERITY_SEVERE = 3;
+}
+
+enum BodySide {
+  BODY_SIDE_UNSPECIFIED = 0;
+  BODY_SIDE_LEFT = 1;
+  BODY_SIDE_RIGHT = 2;
+  BODY_SIDE_BOTH = 3;
+}

@@ -98,6 +98,19 @@ func (w *WeekPlan) AddDay(day *DayPlan) error {
 	return nil
 }
 
+// TrainingSessions counts the TRAINING sessions, the ones BR-AC-01 caps.
+func (w *WeekPlan) TrainingSessions() int {
+	total := 0
+	for _, d := range w.days {
+		for _, s := range d.sessions {
+			if s.Kind() == SessionKindTraining {
+				total++
+			}
+		}
+	}
+	return total
+}
+
 // TotalSessions returns the total non-rest sessions across all days.
 func (w *WeekPlan) TotalSessions() int { return w.totalSessions() }
 func (w *WeekPlan) totalSessions() int {

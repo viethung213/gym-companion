@@ -79,7 +79,7 @@ func (h *LogPeriodicMetricsHandler) Handle(ctx context.Context, cmd LogPeriodicM
 			updatedBio, bioErr = vo.NewBiologicalMetrics(newWeight, newHeight, currentBio.Age(), currentBio.Gender())
 		}
 		if bioErr == nil {
-			profile.UpdateProfile(
+			if updateErr := profile.UpdateProfile(
 				updatedBio,
 				profile.ExperienceLevel(),
 				profile.Goals(),
@@ -89,7 +89,9 @@ func (h *LogPeriodicMetricsHandler) Handle(ctx context.Context, cmd LogPeriodicM
 				profile.CoachStyle(),
 				profile.TargetWeightKg(),
 				profile.TargetBodyFatPercent(),
-			)
+			); updateErr != nil {
+				return nil, fmt.Errorf("update profile metrics: %w", updateErr)
+			}
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Config holds all environmental parameters dedicated to the Coaching module.
@@ -22,6 +23,9 @@ type Config struct {
 	MaxOutputTokens      int
 	EnableReview         bool
 }
+
+//nolint:gochecknoglobals // Process-wide once guard: the startup config is logged a single time.
+var logConfigOnce sync.Once
 
 // LoadConfig loads environment variables for the Coaching module with default fallbacks.
 func LoadConfig() Config {
@@ -85,12 +89,15 @@ func LoadConfig() Config {
 		masked = fmt.Sprintf("%s... (len=%d)", activeKey[:2], len(activeKey))
 	}
 
-	slog.Info("Coaching Config initialized",
-		slog.String("provider", aiProvider),
-		slog.String("active_model", activeModel),
-		slog.Int("max_tokens", maxOutputTokens),
-		slog.String("key_status", masked),
-	)
+	// Several components load the config at startup; announce it once.
+	logConfigOnce.Do(func() {
+		slog.Info("Coaching Config initialized",
+			slog.String("provider", aiProvider),
+			slog.String("active_model", activeModel),
+			slog.Int("max_tokens", maxOutputTokens),
+			slog.String("key_status", masked),
+		)
+	})
 
 	enableReview := strings.EqualFold(os.Getenv("COACHING_ENABLE_REVIEW"), "true")
 

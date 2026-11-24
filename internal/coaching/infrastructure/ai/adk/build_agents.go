@@ -120,7 +120,7 @@ AD-HOC SESSION TOOL GUIDANCE (Flow = SUGGEST_AD_HOC_SESSION):
 - You have access to tool: search_exercises. Use pre-fetched muscle_prs in context to calibrate target_weight_kg.
 - Think through the user's request first, then check pre-fetched available_exercises in context.
   If available_exercises already contains matching or similar exercises, use them directly and DO NOT call search_exercises.
-- ONLY call search_exercises (with concise English keywords) when available_exercises has ZERO suitable
+- ONLY call search_exercises (with muscle group and equipment codes) when available_exercises has ZERO suitable
   or similar exercises for a requested category — never fall back to unrelated groups. Respect active injuries and equipment.
 - Always provide a concise, specific non-empty reasoning explaining how the selected exercises match the user's request.
 - Still return the final output strictly in the required JSON schema.`
@@ -241,8 +241,6 @@ func (c *CoachingContextAgent) build(ctx context.Context) error {
 		return fmt.Errorf("new fallback gemini model: %w", err)
 	}
 	c.llm = geminiModel
-
-	c.ensureMetadataLoaded(ctx)
 
 	deps, err := buildADKDeps(ctx, c.catalog, c.sessionReader)
 	if err != nil {

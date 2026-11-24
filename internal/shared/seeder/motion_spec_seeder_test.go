@@ -33,6 +33,7 @@ func setupMotionSpecTestDB(t *testing.T, dbName string) *sql.DB {
 		CREATE TABLE IF NOT EXISTS exercise.exercises (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
+			motion_slug TEXT,
 			has_ai_supported INTEGER NOT NULL DEFAULT 0
 		);
 
@@ -67,21 +68,19 @@ func TestSeedAIMotionSpecifications_NilDBs(t *testing.T) {
 	assert.ErrorContains(t, err, "exerciseDB cannot be nil")
 }
 
-func TestSeedAIMotionSpecifications_NoMatchingExercises(t *testing.T) {
+func TestSeedAIMotionSpecifications_NoLinkedExercises(t *testing.T) {
 	ctx := context.Background()
 	db := setupMotionSpecTestDB(t, "no_match_test")
 	defer db.Close()
 
-	// Insert irrelevant exercises
-	_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, has_ai_supported) VALUES ('ex-1', 'Unknown Exercise', 0)`)
+	// A name that used to match an alias no longer links anything: only motion_slug does (F7).
+	_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, motion_slug) VALUES ('ex-1', 'Squat', NULL)`)
 	require.NoError(t, err)
 
-	err = seeder.SeedAIMotionSpecifications(ctx, db, db)
-	require.NoError(t, err)
+	require.NoError(t, seeder.SeedAIMotionSpecifications(ctx, db, db))
 
 	var count int
-	err = db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&count)
-	require.NoError(t, err)
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&count))
 	assert.Equal(t, 0, count)
 }
 
@@ -90,66 +89,82 @@ func TestSeedAIMotionSpecifications_SuccessAndIdempotent(t *testing.T) {
 	db := setupMotionSpecTestDB(t, "success_test")
 	defer db.Close()
 
-	// Insert all supported exercises
+	// The 16 source exercises of data/ai_motion_map.json (12 motion slugs).
 	exercises := []struct {
-		id   string
-		name string
+		id         string
+		motionSlug string
 	}{
-		{"ex-bicep", "Dumbbell Biceps Curl"},
-		{"ex-lat-raise", "Lateral Raise"},
-		{"ex-lunge", "Barbell Lunge"},
-		{"ex-plank", "Plank"},
-		{"ex-pullup", "Pull-up"},
-		{"ex-pushup", "Push-up"},
-		{"ex-shoulder", "Shoulder Press"},
-		{"ex-situp", "Sit-up"},
-		{"ex-squat", "Squat"},
-		{"ex-bench", "Barbell Bench Press"},
-		{"ex-deadlift", "Barbell Deadlift"},
-		{"ex-dip", "Triceps Dip"},
+		{"Barbell_Bench_Press_-_Medium_Grip", "bench_press"},
+		{"Dumbbell_Bicep_Curl", "bicep_curl"},
+		{"Barbell_Deadlift", "deadlift"},
+		{"Side_Lateral_Raise", "lateral_raise"},
+		{"Dumbbell_Lunges", "lunge"},
+		{"Barbell_Lunge", "lunge"},
+		{"Plank", "plank"},
+		{"Pullups", "pull_up"},
+		{"Pushups", "push_up"},
+		{"Dumbbell_Shoulder_Press", "shoulder_press"},
+		{"Sit-Up", "sit_up"},
+		{"3_4_Sit-Up", "sit_up"},
+		{"Barbell_Squat", "squat"},
+		{"Bodyweight_Squat", "squat"},
+		{"Dips_-_Triceps_Version", "triceps_dip"},
+		{"Bench_Dips", "triceps_dip"},
 	}
-
 	for _, ex := range exercises {
-		_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, has_ai_supported) VALUES ($1, $2, 0)`, ex.id, ex.name)
+		_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, motion_slug) VALUES ($1, $1, $2)`, ex.id, ex.motionSlug)
 		require.NoError(t, err)
 	}
-
-	// 1. First run: should insert 12 motion specs and update has_ai_supported
-	err := seeder.SeedAIMotionSpecifications(ctx, db, db)
+	_, err := db.Exec(`INSERT INTO exercise.exercises (id, name) VALUES ('Romanian_Deadlift', 'Romanian Deadlift')`)
 	require.NoError(t, err)
 
-	var specCount int
-	err = db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&specCount)
-	require.NoError(t, err)
-	assert.Equal(t, 12, specCount)
+	for run := 1; run <= 2; run++ {
+		require.NoError(t, seeder.SeedAIMotionSpecifications(ctx, db, db), "run %d", run)
 
-	// Verify specific exercises camera angles and rule paths
+		var specCount, aiCount, slugCount int
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&specCount))
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM exercise.exercises WHERE has_ai_supported = 1`).Scan(&aiCount))
+		require.NoError(t, db.QueryRow(
+			`SELECT COUNT(DISTINCT motion_slug) FROM exercise.exercises WHERE has_ai_supported = 1`).Scan(&slugCount))
+		assert.Equal(t, len(exercises), specCount, "run %d", run)
+		assert.Equal(t, len(exercises), aiCount, "run %d", run)
+		assert.Equal(t, 12, slugCount, "run %d", run)
+	}
+
 	var camAngle, ruleURL string
 	var isReady bool
-	err = db.QueryRow(`SELECT recommended_camera_angle, local_rules_url, is_ready FROM workout_execution.motion_specifications WHERE exercise_id = 'ex-pullup'`).Scan(&camAngle, &ruleURL, &isReady)
+	err = db.QueryRow(`SELECT recommended_camera_angle, local_rules_url, is_ready FROM workout_execution.motion_specifications
+		WHERE exercise_id = 'Pullups'`).Scan(&camAngle, &ruleURL, &isReady)
 	require.NoError(t, err)
 	assert.Equal(t, "FRONT", camAngle)
 	assert.Equal(t, "rules/pull_up_rule.json", ruleURL)
 	assert.True(t, isReady)
 
-	err = db.QueryRow(`SELECT recommended_camera_angle, local_rules_url FROM workout_execution.motion_specifications WHERE exercise_id = 'ex-bicep'`).Scan(&camAngle, &ruleURL)
+	err = db.QueryRow(`SELECT local_rules_url FROM workout_execution.motion_specifications
+		WHERE exercise_id = '3_4_Sit-Up'`).Scan(&ruleURL)
 	require.NoError(t, err)
-	assert.Equal(t, "SIDE", camAngle)
-	assert.Equal(t, "rules/bicep_curl_rule.json", ruleURL)
+	assert.Equal(t, "rules/sit_up_rule.json", ruleURL)
 
-	// Verify has_ai_supported was updated in exercise.exercises
-	var aiSupportedCount int
-	err = db.QueryRow(`SELECT COUNT(*) FROM exercise.exercises WHERE has_ai_supported = 1`).Scan(&aiSupportedCount)
-	require.NoError(t, err)
-	assert.Equal(t, 12, aiSupportedCount)
+	var romanianAI int
+	require.NoError(t, db.QueryRow(`SELECT has_ai_supported FROM exercise.exercises WHERE id = 'Romanian_Deadlift'`).Scan(&romanianAI))
+	assert.Equal(t, 0, romanianAI, "Romanian deadlift is not linked to the deadlift rule (Q2)")
+}
 
-	// 2. Second run: idempotency test, should succeed without error
-	err = seeder.SeedAIMotionSpecifications(ctx, db, db)
+func TestSeedAIMotionSpecifications_UnknownMotionSlugSkipped(t *testing.T) {
+	ctx := context.Background()
+	db := setupMotionSpecTestDB(t, "unknown_slug_test")
+	defer db.Close()
+
+	_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, motion_slug) VALUES ('ex-x', 'Burpee', 'burpee')`)
 	require.NoError(t, err)
 
-	err = db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&specCount)
-	require.NoError(t, err)
-	assert.Equal(t, 12, specCount)
+	require.NoError(t, seeder.SeedAIMotionSpecifications(ctx, db, db))
+
+	var specCount, aiCount int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&specCount))
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM exercise.exercises WHERE has_ai_supported = 1`).Scan(&aiCount))
+	assert.Equal(t, 0, specCount)
+	assert.Equal(t, 0, aiCount)
 }
 
 func TestSeedAIMotionSpecifications_ContextCancelled(t *testing.T) {
@@ -159,45 +174,7 @@ func TestSeedAIMotionSpecifications_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := seeder.SeedAIMotionSpecifications(ctx, db, db)
-	assert.Error(t, err)
-}
-
-func TestSeedAIMotionSpecifications_CaseAndWhitespaceInsensitive(t *testing.T) {
-	ctx := context.Background()
-	db := setupMotionSpecTestDB(t, "case_insensitive_test")
-	defer db.Close()
-
-	// Insert exercises with mixed casing, aliases, and whitespace
-	exercises := []struct {
-		id   string
-		name string
-	}{
-		{"ex-lower-pullup", "pull-up"},
-		{"ex-upper-pushup", "PUSH-UP"},
-		{"ex-spaced-bicep", "  Dumbbell Biceps Curl  "},
-		{"ex-bench-alias", "Bench Press"},
-		{"ex-deadlift-alias", "Deadlift"},
-	}
-
-	for _, ex := range exercises {
-		_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, has_ai_supported) VALUES ($1, $2, 0)`, ex.id, ex.name)
-		require.NoError(t, err)
-	}
-
-	err := seeder.SeedAIMotionSpecifications(ctx, db, db)
-	require.NoError(t, err)
-
-	var specCount int
-	err = db.QueryRow(`SELECT COUNT(*) FROM workout_execution.motion_specifications`).Scan(&specCount)
-	require.NoError(t, err)
-	assert.Equal(t, len(exercises), specCount)
-
-	// Verify has_ai_supported was updated for all
-	var aiSupportedCount int
-	err = db.QueryRow(`SELECT COUNT(*) FROM exercise.exercises WHERE has_ai_supported = 1`).Scan(&aiSupportedCount)
-	require.NoError(t, err)
-	assert.Equal(t, len(exercises), aiSupportedCount)
+	assert.Error(t, seeder.SeedAIMotionSpecifications(ctx, db, db))
 }
 
 func TestSeedAIMotionSpecifications_DualPoolSelfHealing(t *testing.T) {
@@ -205,26 +182,27 @@ func TestSeedAIMotionSpecifications_DualPoolSelfHealing(t *testing.T) {
 	db := setupMotionSpecTestDB(t, "self_healing_test")
 	defer db.Close()
 
-	// Scenario: Motion specification was committed in workoutDB, but exerciseDB update was missed
-	// (e.g. partial failure or network glitch)
-	_, err := db.Exec(`INSERT INTO exercise.exercises (id, name, has_ai_supported) VALUES ('ex-healed', 'Custom Squat', 0)`)
+	// Ready specifications committed in workoutDB while the exerciseDB update was missed.
+	// Only the exercise with a motion slug may be flagged (chk_exercises_ai_requires_motion_slug).
+	_, err := db.Exec(`
+		INSERT INTO exercise.exercises (id, name, motion_slug) VALUES
+			('ex-healed', 'Barbell Squat', 'squat'),
+			('ex-unlinked', 'Custom Squat', NULL)`)
 	require.NoError(t, err)
-
 	_, err = db.Exec(`
 		INSERT INTO workout_execution.motion_specifications (
 			exercise_id, exercise_name, onnx_detector_url, onnx_skeleton_url, local_rules_url, dialogue_engine_url, recommended_camera_angle, is_ready
-		) VALUES (
-			'ex-healed', 'Custom Squat', '/models/yolo.onnx', '/models/yolo.onnx', 'rules/squat_rule.json', 'dialogues/squat_dialogue.json', 'SIDE', 1
-		)
+		) VALUES
+			('ex-healed', 'Barbell Squat', '/m', '/m', 'rules/squat_rule.json', 'dialogues/squat_dialogue.json', 'SIDE', 1),
+			('ex-unlinked', 'Custom Squat', '/m', '/m', 'rules/squat_rule.json', 'dialogues/squat_dialogue.json', 'SIDE', 1)
 	`)
 	require.NoError(t, err)
 
-	// Run seeder: it should detect the existing ready motion specification and sync has_ai_supported = 1
-	err = seeder.SeedAIMotionSpecifications(ctx, db, db)
-	require.NoError(t, err)
+	require.NoError(t, seeder.SeedAIMotionSpecifications(ctx, db, db))
 
-	var hasAI int
-	err = db.QueryRow(`SELECT has_ai_supported FROM exercise.exercises WHERE id = 'ex-healed'`).Scan(&hasAI)
-	require.NoError(t, err)
-	assert.Equal(t, 1, hasAI, "expected has_ai_supported to be healed to 1")
+	var healed, unlinked int
+	require.NoError(t, db.QueryRow(`SELECT has_ai_supported FROM exercise.exercises WHERE id = 'ex-healed'`).Scan(&healed))
+	require.NoError(t, db.QueryRow(`SELECT has_ai_supported FROM exercise.exercises WHERE id = 'ex-unlinked'`).Scan(&unlinked))
+	assert.Equal(t, 1, healed, "expected has_ai_supported to be healed to 1")
+	assert.Equal(t, 0, unlinked, "an exercise without motion slug must not be flagged")
 }

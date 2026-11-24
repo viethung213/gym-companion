@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 // ErrExerciseNotFound is returned by ExerciseCatalogReader.GetByID when the
@@ -20,12 +23,19 @@ type Slot struct {
 	EndTime   string // "HH:MM"
 }
 
-// InjuryStatus is a compact summary of one active injury.
+// InjuryStatus is a compact summary of one injury.
 type InjuryStatus struct {
-	MuscleGroup string
+	Region      taxonomy.JointRegion
+	Muscle      taxonomy.MuscleGroup // optional
+	Severity    taxonomy.InjurySeverity
 	ReportedAt  time.Time
 	RecoveredAt *time.Time
 	Notes       string
+}
+
+// Injury returns the eligibility view of the injury.
+func (s *InjuryStatus) Injury() service.Injury {
+	return service.Injury{Region: s.Region, Muscle: s.Muscle, Severity: s.Severity}
 }
 
 // Profile is what Coaching needs from the Profile bounded context.
@@ -36,11 +46,36 @@ type Profile struct {
 	Age                   int
 	ExperienceLevel       string
 	PrimaryGoal           string
-	AvailableEquipment    []string
-	PreferredMuscleGroups []string
+	AvailableEquipment    []taxonomy.Equipment
+	PreferredMuscleGroups []taxonomy.MuscleGroup
 	AvailableSlots        []Slot
-	ActiveInjuries        []InjuryStatus
-	UpdatedAt             time.Time
+	// Location is the athlete's zone; slot times are wall clock in it. Read it via Zone.
+	Location       *time.Location
+	ActiveInjuries []InjuryStatus
+	UpdatedAt      time.Time
+}
+
+// Athlete returns the eligibility view of the profile: owned equipment,
+// highest exercise level and the injuries not yet recovered.
+func (p *Profile) Athlete() service.Athlete {
+	athlete := service.Athlete{
+		Equipment: append([]taxonomy.Equipment(nil), p.AvailableEquipment...),
+		Level:     service.UserLevel(p.ExperienceLevel),
+	}
+	for i := range p.ActiveInjuries {
+		if p.ActiveInjuries[i].RecoveredAt == nil {
+			athlete.Injuries = append(athlete.Injuries, p.ActiveInjuries[i].Injury())
+		}
+	}
+	return athlete
+}
+
+// Zone returns the athlete's time zone, UTC when unknown.
+func (p *Profile) Zone() *time.Location {
+	if p.Location == nil {
+		return time.UTC
+	}
+	return p.Location
 }
 
 // UserProfileReader is the port for querying the Profile bounded context.
@@ -86,51 +121,51 @@ type WorkoutSessionReader interface {
 	GetPersonalRecords(ctx context.Context, userID string) ([]PersonalRecordSummary, error)
 }
 
-// ExerciseFilter is the search filter mapped directly from Exercise gRPC contract SearchExercisesRequest.
+// ExerciseFilter is the catalog search filter, mapped onto the Exercise
+// SearchExercisesRequest. Slice filters match any listed value;
+// ExcludeMuscles drops exercises loading a listed muscle as primary or secondary.
 type ExerciseFilter struct {
-	BodyPartID         string
-	TargetMuscleID     string
-	SecondaryMuscleIDs []string
-	EquipmentIDs       []string
-	AvoidInjuryAreas   []string
-	TagIDs             []string
-	Keyword            string
-	Difficulty         string
-	Limit              int
-	Offset             int
+	PrimaryMuscles []taxonomy.MuscleGroup
+	Equipment      []taxonomy.Equipment
+	Categories     []taxonomy.Category
+	Levels         []taxonomy.Level
+	ExcludeMuscles []taxonomy.MuscleGroup
+	Keyword        string
+	Limit          int
+	Offset         int
 }
 
 // Exercise is the minimal exercise info Coaching consumes.
 type Exercise struct {
 	ExerciseID       string
 	Name             string
-	MuscleGroup      string
-	BodyPart         string
-	Equipment        string
-	Difficulty       string
-	TagIDs           []string
-	IsBodyweight     bool
-	IsMachineOrCable bool
+	PrimaryMuscle    taxonomy.MuscleGroup
+	SecondaryMuscles []taxonomy.MuscleGroup
+	Equipment        taxonomy.Equipment
+	Category         taxonomy.Category
+	Level            taxonomy.Level
+	Force            taxonomy.Force
+	Mechanic         taxonomy.Mechanic
 	MeasurementType  string // "REPS" | "DURATION"
+}
+
+// Traits returns the eligibility view of the exercise.
+func (e *Exercise) Traits() service.ExerciseTraits {
+	return service.ExerciseTraits{
+		PrimaryMuscle:    e.PrimaryMuscle,
+		SecondaryMuscles: append([]taxonomy.MuscleGroup(nil), e.SecondaryMuscles...),
+		Equipment:        e.Equipment,
+		Category:         e.Category,
+		Level:            e.Level,
+		Force:            e.Force,
+		Mechanic:         e.Mechanic,
+	}
 }
 
 // ExerciseCatalogReader is the port for querying the Exercise catalog.
 type ExerciseCatalogReader interface {
 	SearchByFilter(ctx context.Context, f *ExerciseFilter) ([]Exercise, error)
 	GetByID(ctx context.Context, exerciseID string) (Exercise, error)
-}
-
-// CatalogMetadata represents the in-memory snapshot of exercise catalog dimensions.
-type CatalogMetadata struct {
-	EquipmentNames map[string]string // ID -> Name
-	MuscleNames    map[string]string // ID -> Name
-	BodyPartNames  map[string]string // ID -> Name
-	TagNames       map[string]string // ID -> Name
-}
-
-// CatalogMetadataReader is an optional capability for readers that can fetch reference dimension metadata.
-type CatalogMetadataReader interface {
-	GetMetadata(ctx context.Context) (CatalogMetadata, error)
 }
 
 // Notifier delivers personality-styled messages to the user. Phase-1 uses a

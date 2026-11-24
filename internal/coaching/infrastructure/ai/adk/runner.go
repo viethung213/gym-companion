@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -61,12 +62,63 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 		review = c.reviewPlan(nodeCtx, coachInput)
 	}
 
-	v := c.validator
+	athlete := athleteFromInput(nodeCtx, coachInput)
+	v := c.validator.withAthlete(&athlete)
 	if n := len(coachInput.SessionsToRevise); n > 0 {
-		v = v.expecting(n)
+		v = v.expecting(n).withRevise(coachInput.SessionsToRevise)
+	}
+	// Slot coverage is an initial-roadmap rule; rewrites get no schedule.
+	schedule, err := initSlotSchedule(coachInput)
+	if err != nil {
+		return nil, fmt.Errorf("slot schedule: %w", err)
+	}
+	if schedule != nil {
+		v = v.withSchedule(schedule)
 	}
 
-	return runWithRetries(nodeCtx, v, attempt, review)
+	res, err := runWithRetries(nodeCtx, v, attempt, review)
+	if err != nil {
+		return nil, err
+	}
+	annotateInjuryCautions(res.Plan, res.Cautions)
+	res.Timezone = coachInput.Timezone
+	if schedule != nil {
+		res.WeekStart = schedule.weekStart(1)
+	}
+	return res, nil
+}
+
+// annotateInjuryCautions appends to each session's reasoning the injury limit
+// of every exercise kept despite an injury (docs/05 §8.2: "ghi cảnh báo trong
+// reasoning"), so the caution does not depend on the model writing it.
+func annotateInjuryCautions(plan *GeneratedPlan, cautions map[string]string) {
+	if plan == nil || len(cautions) == 0 {
+		return
+	}
+	for w := range plan.Weeks {
+		for i := range plan.Weeks[w].Sessions {
+			sp := &plan.Weeks[w].Sessions[i]
+			var notes []string
+			seen := make(map[string]bool)
+			for _, group := range [][]PrescribedExercise{sp.Prescription.WarmUps, sp.Prescription.MainExercises, sp.Prescription.CoolDowns} {
+				for _, ex := range group {
+					if caution, ok := cautions[ex.ExerciseID]; ok && !seen[ex.ExerciseID] {
+						seen[ex.ExerciseID] = true
+						notes = append(notes, ex.ExerciseID+": "+caution)
+					}
+				}
+			}
+			if len(notes) == 0 {
+				continue
+			}
+			note := "Injury caution: " + strings.Join(notes, "; ")
+			if strings.TrimSpace(sp.Reasoning) == "" {
+				sp.Reasoning = note
+			} else {
+				sp.Reasoning += "\n" + note
+			}
+		}
+	}
 }
 
 // reviewPlan returns a planReviewFunc backed by the reviewer agent. The

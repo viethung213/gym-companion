@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"math/rand/v2"
 
+	"github.com/lib/pq"
 	"github.com/viethung213/gym-companion/internal/exercise/application/port"
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// slugConstraint is the unique constraint on exercises.slug (02-exercise.sql).
+const slugConstraint = "uq_exercises_slug"
 
 type PostgresRepository struct {
 	db *gorm.DB
@@ -31,12 +35,6 @@ func (r *PostgresRepository) Save(
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		info := exercise.Info()
 		if err := saveExercise(tx, &info); err != nil {
-			return err
-		}
-		if err := replaceSecondaryMuscles(tx, &info); err != nil {
-			return err
-		}
-		if err := replaceTags(tx, &info); err != nil {
 			return err
 		}
 		if err := insertOutbox(tx, event); err != nil {
@@ -105,55 +103,36 @@ func (r *PostgresRepository) GetRandomAISupported(
 	return r.FindByID(ctx, chosenID)
 }
 
-func (r *PostgresRepository) GetMetadata(ctx context.Context) (port.Metadata, error) {
-	bodyParts, err := queryBodyParts(ctx, r.db)
-	if err != nil {
-		return port.Metadata{}, err
-	}
-	equipments, err := queryEquipments(ctx, r.db)
-	if err != nil {
-		return port.Metadata{}, err
-	}
-	muscles, err := queryMuscles(ctx, r.db)
-	if err != nil {
-		return port.Metadata{}, err
-	}
-	tags, err := queryTags(ctx, r.db)
-	if err != nil {
-		return port.Metadata{}, err
-	}
-
-	return port.Metadata{
-		BodyParts:  bodyParts,
-		Equipments: equipments,
-		Muscles:    muscles,
-		Tags:       tags,
-	}, nil
-}
-
 func saveExercise(tx *gorm.DB, info *domain.Info) error {
 	record := newExerciseRecord(info)
 	err := tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"name",
-			"body_part_id",
-			"equipment_id",
-			"target_muscle_id",
+			"primary_muscle",
+			"secondary_muscles",
+			"equipment",
+			"category",
+			"level",
+			"force",
+			"mechanic",
 			"instructions",
-			"thumbnail_url",
-			"media_url",
+			"images",
 			"video_url",
-			"difficulty",
-			"default_rest_seconds",
-			"status",
-			"has_ai_supported",
 			"measurement_type",
+			"default_rest_seconds",
+			"motion_slug",
+			"has_ai_supported",
+			"status",
 			"archived_at",
 			"updated_at",
 		}),
 	}).Create(&record).Error
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Constraint == slugConstraint {
+			return fmt.Errorf("%w: %s", domain.ErrDuplicateSlug, info.Slug)
+		}
 		return fmt.Errorf("upsert exercise: %w", err)
 	}
 
@@ -176,302 +155,19 @@ func (r *PostgresRepository) rehydrate(
 }
 
 func (r *PostgresRepository) rehydrateBatch(
-	ctx context.Context,
+	_ context.Context,
 	records []exerciseRecord,
 ) ([]*domain.Exercise, error) {
-	if len(records) == 0 {
-		return []*domain.Exercise{}, nil
-	}
-
-	ids := make([]string, len(records))
-	for i := range records {
-		ids[i] = records[i].ID
-	}
-
-	musclesMap, err := querySecondaryMuscleIDs(ctx, r.db, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	tagsMap, err := queryTagIDs(ctx, r.db, ids)
-	if err != nil {
-		return nil, err
-	}
-
 	exercises := make([]*domain.Exercise, 0, len(records))
 	for i := range records {
-		secMuscles := musclesMap[records[i].ID]
-		tags := tagsMap[records[i].ID]
-		exercise, err := domain.RehydrateExercise(records[i].toDomainInfo(secMuscles, tags))
+		exercise, err := domain.RehydrateExercise(records[i].toDomainInfo())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("rehydrate exercise %s: %w", records[i].ID, err)
 		}
 		exercises = append(exercises, exercise)
 	}
 
 	return exercises, nil
-}
-
-// BodyPart CRUD
-func (r *PostgresRepository) CreateBodyPart(ctx context.Context, bp *port.BodyPart) error {
-	record := bodyPartRecord{ID: bp.ID, Name: bp.Name}
-	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return fmt.Errorf("create body part: %w", err)
-	}
-	return nil
-}
-
-func (r *PostgresRepository) GetBodyPart(ctx context.Context, id string) (*port.BodyPart, error) {
-	var record bodyPartRecord
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&record).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrBodyPartNotFound
-		}
-		return nil, fmt.Errorf("get body part: %w", err)
-	}
-	return &port.BodyPart{ID: record.ID, Name: record.Name}, nil
-}
-
-func (r *PostgresRepository) ListBodyParts(ctx context.Context, limit, offset int) ([]port.BodyPart, int, error) {
-	var records []bodyPartRecord
-	var total int64
-
-	if err := r.db.WithContext(ctx).Model(&bodyPartRecord{}).Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count body parts: %w", err)
-	}
-
-	if err := r.db.WithContext(ctx).Order("name").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
-		return nil, 0, fmt.Errorf("list body parts: %w", err)
-	}
-
-	bps := make([]port.BodyPart, 0, len(records))
-	for _, record := range records {
-		bps = append(bps, port.BodyPart{ID: record.ID, Name: record.Name})
-	}
-	return bps, int(total), nil
-}
-
-func (r *PostgresRepository) UpdateBodyPart(ctx context.Context, bp *port.BodyPart) error {
-	result := r.db.WithContext(ctx).Model(&bodyPartRecord{}).Where("id = ?", bp.ID).Update("name", bp.Name)
-	if result.Error != nil {
-		return fmt.Errorf("update body part: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrBodyPartNotFound
-	}
-	return nil
-}
-
-func (r *PostgresRepository) DeleteBodyPart(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).Delete(&bodyPartRecord{}, "id = ?", id)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return domain.ErrBodyPartNotFound
-		}
-		return fmt.Errorf("delete body part: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrBodyPartNotFound
-	}
-	return nil
-}
-
-// Equipment CRUD
-func (r *PostgresRepository) CreateEquipment(ctx context.Context, eq *port.Equipment) error {
-	record := equipmentRecord{ID: eq.ID, Name: eq.Name}
-	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return fmt.Errorf("create equipment: %w", err)
-	}
-	return nil
-}
-
-func (r *PostgresRepository) GetEquipment(ctx context.Context, id string) (*port.Equipment, error) {
-	var record equipmentRecord
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&record).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrEquipmentNotFound
-		}
-		return nil, fmt.Errorf("get equipment: %w", err)
-	}
-	return &port.Equipment{ID: record.ID, Name: record.Name}, nil
-}
-
-func (r *PostgresRepository) ListEquipments(ctx context.Context, limit, offset int) ([]port.Equipment, int, error) {
-	var records []equipmentRecord
-	var total int64
-
-	if err := r.db.WithContext(ctx).Model(&equipmentRecord{}).Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count equipments: %w", err)
-	}
-
-	if err := r.db.WithContext(ctx).Order("name").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
-		return nil, 0, fmt.Errorf("list equipments: %w", err)
-	}
-
-	eqs := make([]port.Equipment, 0, len(records))
-	for _, record := range records {
-		eqs = append(eqs, port.Equipment{ID: record.ID, Name: record.Name})
-	}
-	return eqs, int(total), nil
-}
-
-func (r *PostgresRepository) UpdateEquipment(ctx context.Context, eq *port.Equipment) error {
-	result := r.db.WithContext(ctx).Model(&equipmentRecord{}).Where("id = ?", eq.ID).Update("name", eq.Name)
-	if result.Error != nil {
-		return fmt.Errorf("update equipment: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrEquipmentNotFound
-	}
-	return nil
-}
-
-func (r *PostgresRepository) DeleteEquipment(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).Delete(&equipmentRecord{}, "id = ?", id)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return domain.ErrEquipmentNotFound
-		}
-		return fmt.Errorf("delete equipment: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrEquipmentNotFound
-	}
-	return nil
-}
-
-// Muscle CRUD
-func (r *PostgresRepository) CreateMuscle(ctx context.Context, m *port.Muscle) error {
-	record := muscleRecord{ID: m.ID, Name: m.Name, BodyPartID: m.BodyPartID}
-	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return fmt.Errorf("create muscle: %w", err)
-	}
-	return nil
-}
-
-func (r *PostgresRepository) GetMuscle(ctx context.Context, id string) (*port.Muscle, error) {
-	var record muscleRecord
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&record).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrMuscleNotFound
-		}
-		return nil, fmt.Errorf("get muscle: %w", err)
-	}
-	return &port.Muscle{ID: record.ID, Name: record.Name, BodyPartID: record.BodyPartID}, nil
-}
-
-func (r *PostgresRepository) ListMuscles(ctx context.Context, bodyPartID string, limit, offset int) ([]port.Muscle, int, error) {
-	var records []muscleRecord
-	var total int64
-
-	query := r.db.WithContext(ctx)
-	if bodyPartID != "" {
-		query = query.Where("body_part_id = ?", bodyPartID)
-	}
-
-	if err := query.Model(&muscleRecord{}).Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count muscles: %w", err)
-	}
-
-	if err := query.Order("name").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
-		return nil, 0, fmt.Errorf("list muscles: %w", err)
-	}
-
-	ms := make([]port.Muscle, 0, len(records))
-	for _, record := range records {
-		ms = append(ms, port.Muscle{ID: record.ID, Name: record.Name, BodyPartID: record.BodyPartID})
-	}
-	return ms, int(total), nil
-}
-
-func (r *PostgresRepository) UpdateMuscle(ctx context.Context, m *port.Muscle) error {
-	result := r.db.WithContext(ctx).Model(&muscleRecord{}).Where("id = ?", m.ID).
-		Updates(map[string]interface{}{"name": m.Name, "body_part_id": m.BodyPartID})
-	if result.Error != nil {
-		return fmt.Errorf("update muscle: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrMuscleNotFound
-	}
-	return nil
-}
-
-func (r *PostgresRepository) DeleteMuscle(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).Delete(&muscleRecord{}, "id = ?", id)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return domain.ErrMuscleNotFound
-		}
-		return fmt.Errorf("delete muscle: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrMuscleNotFound
-	}
-	return nil
-}
-
-// Tag CRUD
-func (r *PostgresRepository) CreateTag(ctx context.Context, t *port.Tag) error {
-	record := tagRecord{ID: t.ID, Name: t.Name}
-	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return fmt.Errorf("create tag: %w", err)
-	}
-	return nil
-}
-
-func (r *PostgresRepository) GetTag(ctx context.Context, id string) (*port.Tag, error) {
-	var record tagRecord
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&record).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrTagNotFound
-		}
-		return nil, fmt.Errorf("get tag: %w", err)
-	}
-	return &port.Tag{ID: record.ID, Name: record.Name}, nil
-}
-
-func (r *PostgresRepository) ListTags(ctx context.Context, limit, offset int) ([]port.Tag, int, error) {
-	var records []tagRecord
-	var total int64
-
-	if err := r.db.WithContext(ctx).Model(&tagRecord{}).Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count tags: %w", err)
-	}
-
-	if err := r.db.WithContext(ctx).Order("name").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
-		return nil, 0, fmt.Errorf("list tags: %w", err)
-	}
-
-	ts := make([]port.Tag, 0, len(records))
-	for _, record := range records {
-		ts = append(ts, port.Tag{ID: record.ID, Name: record.Name})
-	}
-	return ts, int(total), nil
-}
-
-func (r *PostgresRepository) UpdateTag(ctx context.Context, t *port.Tag) error {
-	result := r.db.WithContext(ctx).Model(&tagRecord{}).Where("id = ?", t.ID).Update("name", t.Name)
-	if result.Error != nil {
-		return fmt.Errorf("update tag: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrTagNotFound
-	}
-	return nil
-}
-
-func (r *PostgresRepository) DeleteTag(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).Delete(&tagRecord{}, "id = ?", id)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return domain.ErrTagNotFound
-		}
-		return fmt.Errorf("delete tag: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrTagNotFound
-	}
-	return nil
 }
 
 func (r *PostgresRepository) SetAISupportedWithOutboxLog(
@@ -483,7 +179,10 @@ func (r *PostgresRepository) SetAISupportedWithOutboxLog(
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if logRecord != nil && logRecord.EventID != "" {
 			var count int64
-			if err := tx.Model(&outboxLogRecord{}).Where("event_id = ?", logRecord.EventID).Count(&count).Error; err == nil && count > 0 {
+			if err := tx.Model(&outboxLogRecord{}).Where("event_id = ?", logRecord.EventID).Count(&count).Error; err != nil {
+				return fmt.Errorf("check outbox_log: %w", err)
+			}
+			if count > 0 {
 				return nil
 			}
 		}

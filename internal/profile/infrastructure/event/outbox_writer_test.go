@@ -57,7 +57,7 @@ func TestOutboxWriter(t *testing.T) {
 		bio, err := vo.NewBiologicalMetrics(70.0, 175.0, 25, "MALE")
 		require.NoError(t, err)
 
-		inj, _ := entity.NewInjury("inj-compl", "Back", "MILD", "", time.Now())
+		inj, _ := entity.NewInjury("inj-compl", vo.JointRegionLowerBack, "", vo.BodySideBoth, vo.InjurySeverityMild, "", time.Now())
 		ev := domainEvent.NewProfileCompletedEvent("user-ev-1", bio, []string{"FAT_LOSS"}, []*entity.Injury{inj}, []string{"MORNING"}, time.Now())
 		err = writer.RecordEvents(ctx, []any{ev})
 		require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestOutboxWriter(t *testing.T) {
 	})
 
 	t.Run("Publish InjuryReportedEvent", func(t *testing.T) {
-		inj, err := entity.NewInjury("inj-ev-1", "Knee", "MODERATE", "Pain", time.Now())
+		inj, err := entity.NewInjury("inj-ev-1", vo.JointRegionKnee, "", vo.BodySideBoth, vo.InjurySeverityModerate, "Pain", time.Now())
 		require.NoError(t, err)
 
 		ev := domainEvent.NewInjuryReportedEvent("user-ev-1", inj)
@@ -89,7 +89,7 @@ func TestOutboxWriter(t *testing.T) {
 	})
 
 	t.Run("Publish InjuryRecoveredEvent", func(t *testing.T) {
-		inj, err := entity.NewInjury("inj-ev-2", "Shoulder", "SEVERE", "Tear", time.Now())
+		inj, err := entity.NewInjury("inj-ev-2", vo.JointRegionShoulder, "", vo.BodySideBoth, vo.InjurySeveritySevere, "Tear", time.Now())
 		require.NoError(t, err)
 
 		ev := domainEvent.NewInjuryRecoveredEvent("user-ev-1", inj, time.Now())

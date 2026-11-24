@@ -43,6 +43,7 @@ func ensureTablesExist(db *gorm.DB) {
 		target_body_fat_percent NUMERIC(5, 2),
 		completion_rate NUMERIC(5, 2),
 		ai_coach_activated BOOLEAN DEFAULT FALSE,
+		timezone VARCHAR(64) NOT NULL DEFAULT 'UTC',
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`)
@@ -60,7 +61,9 @@ func ensureTablesExist(db *gorm.DB) {
 	db.Exec(`CREATE TABLE IF NOT EXISTS profile.injuries (
 		id VARCHAR(255) PRIMARY KEY,
 		user_id VARCHAR(255) NOT NULL REFERENCES profile.users(user_id) ON DELETE CASCADE,
-		muscle_group VARCHAR(100) NOT NULL,
+		region TEXT NOT NULL,
+		muscle TEXT,
+		side TEXT NOT NULL DEFAULT 'BOTH',
 		severity VARCHAR(50) NOT NULL,
 		notes TEXT,
 		reported_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

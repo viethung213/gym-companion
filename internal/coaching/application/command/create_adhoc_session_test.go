@@ -7,6 +7,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 func TestCreateAdhocSessionHandler_Success(t *testing.T) {
@@ -70,11 +71,11 @@ func TestCreateAdhocSessionHandler_Success(t *testing.T) {
 	mockExercises := &exerciseCatalogMock{
 		fn: func(ctx context.Context, exerciseID string) (port.Exercise, error) {
 			return port.Exercise{
-				ExerciseID:  exerciseID,
-				Name:        "Bench Press",
-				MuscleGroup: "Chest",
-				Equipment:   "Barbell",
-				Difficulty:  "Intermediate",
+				ExerciseID:    exerciseID,
+				Name:          "Bench Press",
+				PrimaryMuscle: taxonomy.MuscleGroupChest,
+				Equipment:     taxonomy.EquipmentBarbell,
+				Level:         taxonomy.LevelIntermediate,
 			}, nil
 		},
 	}
@@ -246,7 +247,7 @@ func (m *roadmapRepositoryMock) FindSessionByID(ctx context.Context, sid string)
 	return nil, nil
 }
 
-func (m *roadmapRepositoryMock) FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error) {
+func (m *roadmapRepositoryMock) FindPendingSessionsStarting(ctx context.Context, from, to time.Time) ([]port.ScheduledSession, error) {
 	return nil, nil
 }
 

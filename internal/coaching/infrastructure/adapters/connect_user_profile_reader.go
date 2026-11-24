@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,9 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/protomap"
 	profilemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
@@ -101,20 +105,33 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 		profile.PrimaryGoal = "hypertrophy"
 	}
 
-	// 3. Map Available Equipment
-	if len(data.GetAvailableEquipment()) > 0 {
-		profile.AvailableEquipment = data.GetAvailableEquipment()
+	// 3. Map Available Equipment; an empty list means a regular gym (docs/05 §8.3).
+	for _, e := range data.GetAvailableEquipment() {
+		code, mapErr := protomap.Equipment(e)
+		if mapErr != nil {
+			warnUnknownProfileValue(ctx, "available_equipment", e.String(), mapErr)
+			continue
+		}
+		profile.AvailableEquipment = append(profile.AvailableEquipment, code)
 	}
 	if len(profile.AvailableEquipment) == 0 {
-		profile.AvailableEquipment = []string{"barbell", "bench", "cable", "dumbbell", "pull-up-bar", "rack"}
+		profile.AvailableEquipment = service.DefaultGymEquipment()
 	}
 
-	// 4. Map Preferred Muscle Groups
-	if len(data.GetPreferredMuscleGroups()) > 0 {
-		profile.PreferredMuscleGroups = data.GetPreferredMuscleGroups()
+	// 4. Map Preferred Muscle Groups; empty means no emphasis.
+	for _, m := range data.GetPreferredMuscleGroups() {
+		code, mapErr := protomap.MuscleGroup(m)
+		if mapErr != nil {
+			warnUnknownProfileValue(ctx, "preferred_muscle_groups", m.String(), mapErr)
+			continue
+		}
+		profile.PreferredMuscleGroups = append(profile.PreferredMuscleGroups, code)
 	}
-	if len(profile.PreferredMuscleGroups) == 0 {
-		profile.PreferredMuscleGroups = []string{"chest", "back", "legs", "shoulders"}
+
+	// Slot times are wall clock in the athlete's zone; an unknown zone falls back to UTC.
+	profile.Location = roadmap.LoadLocation(data.GetTimezone())
+	if tz := data.GetTimezone(); tz != "" && profile.Location.String() != tz {
+		warnUnknownProfileValue(ctx, "timezone", tz, errors.New("unknown IANA zone"))
 	}
 
 	// 5. Parse Preferred Workout Times into AvailableSlots
@@ -130,32 +147,16 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 	}
 
 	// 6. Map Active Injuries
-	if len(data.GetInjuries()) > 0 {
-		injuries := make([]port.InjuryStatus, 0, len(data.GetInjuries()))
-		for _, inj := range data.GetInjuries() {
-			if inj == nil || inj.GetIsRecovered() {
-				continue
-			}
-			repAt := time.Now()
-			if inj.GetReportedAt() != "" {
-				if parsedRep, pErr := time.Parse(time.RFC3339, inj.GetReportedAt()); pErr == nil {
-					repAt = parsedRep
-				}
-			}
-			var recAt *time.Time
-			if inj.GetRecoveredAt() != "" {
-				if parsedRec, rErr := time.Parse(time.RFC3339, inj.GetRecoveredAt()); rErr == nil {
-					recAt = &parsedRec
-				}
-			}
-			injuries = append(injuries, port.InjuryStatus{
-				MuscleGroup: inj.GetMuscleGroup(),
-				ReportedAt:  repAt,
-				RecoveredAt: recAt,
-				Notes:       inj.GetNotes(),
-			})
+	for _, inj := range data.GetInjuries() {
+		if inj == nil || inj.GetIsRecovered() {
+			continue
 		}
-		profile.ActiveInjuries = injuries
+		status, mapErr := mapInjury(inj)
+		if mapErr != nil {
+			warnUnknownProfileValue(ctx, "injuries", inj.GetInjuryId(), mapErr)
+			continue
+		}
+		profile.ActiveInjuries = append(profile.ActiveInjuries, status)
 	}
 
 	// 7. Map UpdatedAt
@@ -169,6 +170,45 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 	}
 
 	return profile, nil
+}
+
+// mapInjury converts one profile injury; region and severity are required.
+func mapInjury(inj *profilemsg.Injury) (port.InjuryStatus, error) {
+	region, err := protomap.JointRegion(inj.GetRegion())
+	if err != nil {
+		return port.InjuryStatus{}, fmt.Errorf("region: %w", err)
+	}
+	muscle, err := protomap.OptionalMuscleGroup(inj.GetMuscle())
+	if err != nil {
+		return port.InjuryStatus{}, fmt.Errorf("muscle: %w", err)
+	}
+	severity, err := protomap.InjurySeverity(inj.GetSeverity())
+	if err != nil {
+		return port.InjuryStatus{}, fmt.Errorf("severity: %w", err)
+	}
+
+	status := port.InjuryStatus{
+		Region:     region,
+		Muscle:     muscle,
+		Severity:   severity,
+		ReportedAt: time.Now(),
+		Notes:      inj.GetNotes(),
+	}
+	if parsed, pErr := time.Parse(time.RFC3339, inj.GetReportedAt()); pErr == nil {
+		status.ReportedAt = parsed
+	}
+	if parsed, rErr := time.Parse(time.RFC3339, inj.GetRecoveredAt()); rErr == nil {
+		status.RecoveredAt = &parsed
+	}
+	return status, nil
+}
+
+// warnUnknownProfileValue logs a profile value outside the vocabulary; the
+// value is dropped (docs/05 §7).
+func warnUnknownProfileValue(ctx context.Context, field, value string, err error) {
+	slog.WarnContext(ctx, "Dropping unknown profile value",
+		slog.String("field", field), slog.String("value", value),
+		slog.String("source", "profile"), slog.String("error", err.Error()))
 }
 
 type rawSlotItem struct {

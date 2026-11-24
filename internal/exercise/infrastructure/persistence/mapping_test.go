@@ -1,58 +1,85 @@
 package persistence
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/exercise/domain"
 )
 
-func TestMappingExerciseRecord(t *testing.T) {
+func TestMappingExerciseRecord_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)
-	domainInfo := domain.Info{
-		ID:                 "ex-123",
-		Name:               "Plank",
-		BodyPartID:         "waist",
-		EquipmentID:        "body-weight",
-		TargetMuscleID:     "abs",
-		Instructions:       "Hold position",
-		SecondaryMuscleIDs: []string{"glutes", "lower-back"},
-		ThumbnailURL:       "https://example.com/thumb.jpg",
-		MediaURL:           "https://example.com/media.gif",
-		VideoURL:           "https://example.com/video.mp4",
-		Difficulty:         "Intermediate",
-		DefaultRestSeconds: 45,
-		TagIDs:             []string{"tag-1", "tag-2"},
-		Status:             domain.StatusActive,
-		HasAISupported:     true,
-		MeasurementType:    domain.MeasurementTypeDuration,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+	tests := []struct {
+		name string
+		give domain.Info
+	}{
+		{
+			name: "all fields",
+			give: domain.Info{
+				ID:                 "ex-123",
+				Slug:               "Plank",
+				Name:               "Plank",
+				PrimaryMuscle:      domain.MuscleGroupAbdominals,
+				SecondaryMuscles:   []domain.MuscleGroup{domain.MuscleGroupGlutes, domain.MuscleGroupLowerBack},
+				Equipment:          domain.EquipmentBodyOnly,
+				Category:           domain.CategoryStrength,
+				Level:              domain.LevelBeginner,
+				Force:              domain.ForceStatic,
+				Mechanic:           domain.MechanicIsolation,
+				Instructions:       []string{"Hold position"},
+				Images:             []string{"Plank/0.jpg", "Plank/1.jpg"},
+				VideoURL:           "https://example.com/video.mp4",
+				MeasurementType:    domain.MeasurementTypeDuration,
+				DefaultRestSeconds: 45,
+				MotionSlug:         "plank",
+				HasAISupported:     true,
+				Source:             domain.SourceFreeExerciseDB,
+				Status:             domain.StatusActive,
+				CreatedAt:          now,
+				UpdatedAt:          now,
+			},
+		},
+		{
+			name: "nullable fields empty",
+			give: domain.Info{
+				ID:              "ex-124",
+				Slug:            "Arm_Circles",
+				Name:            "Arm Circles",
+				PrimaryMuscle:   domain.MuscleGroupShoulders,
+				Equipment:       domain.EquipmentBodyOnly,
+				Category:        domain.CategoryStretching,
+				Level:           domain.LevelBeginner,
+				MeasurementType: domain.MeasurementTypeDuration,
+				Source:          domain.SourceCustom,
+				Status:          domain.StatusDraft,
+				CreatedAt:       now,
+				UpdatedAt:       now,
+			},
+		},
 	}
 
-	record := newExerciseRecord(&domainInfo)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			record := newExerciseRecord(&tt.give)
 
-	if got, want := record.ID, domainInfo.ID; got != want {
-		t.Errorf("got ID %q, want %q", got, want)
-	}
-	if got, want := record.MeasurementType, "DURATION"; got != want {
-		t.Errorf("got MeasurementType %q, want %q", got, want)
-	}
-	if got, want := record.Status, "ACTIVE"; got != want {
-		t.Errorf("got Status %q, want %q", got, want)
-	}
+			if record.SecondaryMuscles == nil || record.Instructions == nil || record.Images == nil {
+				t.Error("TEXT[] columns are NOT NULL; record arrays must not be nil")
+			}
+			if tt.give.Force == "" && record.Force != nil {
+				t.Errorf("empty force must map to NULL, got %q", *record.Force)
+			}
+			if tt.give.MotionSlug == "" && record.MotionSlug != nil {
+				t.Errorf("empty motion slug must map to NULL, got %q", *record.MotionSlug)
+			}
 
-	mappedBack := record.toDomainInfo(domainInfo.SecondaryMuscleIDs, domainInfo.TagIDs)
-
-	if got, want := mappedBack.MeasurementType, domain.MeasurementTypeDuration; got != want {
-		t.Errorf("got MeasurementType %q, want %q", got, want)
-	}
-	if got, want := mappedBack.Name, domainInfo.Name; got != want {
-		t.Errorf("got Name %q, want %q", got, want)
-	}
-	if got, want := mappedBack.HasAISupported, true; got != want {
-		t.Errorf("got HasAISupported %v, want %v", got, want)
+			if got := record.toDomainInfo(); !reflect.DeepEqual(got, tt.give) {
+				t.Errorf("round trip mismatch:\n got %+v\nwant %+v", got, tt.give)
+			}
+		})
 	}
 }

@@ -73,6 +73,12 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 		}
 		sort.Strings(files)
 
+		if dir == "core" {
+			if legacyErr := logLegacyExerciseSchema(ctx, conn); legacyErr != nil {
+				return legacyErr
+			}
+		}
+
 		slog.InfoContext(ctx, "Executing embedded SQL migrations", "count", len(files), "dir", dir)
 
 		for _, file := range files {
@@ -96,6 +102,23 @@ func RunAutoMigrations(ctx context.Context, db *sql.DB, targets ...string) error
 		if seedErr := runSeedsOnConn(ctx, conn); seedErr != nil {
 			return fmt.Errorf("run seeds: %w", seedErr)
 		}
+	}
+
+	return nil
+}
+
+// logLegacyExerciseSchema reports a database created before the exercise
+// catalog refactor (docs/05 D4): migrations are not versioned, so the new
+// exercise schema only applies after a database reset.
+func logLegacyExerciseSchema(ctx context.Context, conn *sql.Conn) error {
+	var legacy bool
+	err := conn.QueryRowContext(ctx, "SELECT to_regclass('exercise.body_parts') IS NOT NULL").Scan(&legacy)
+	if err != nil {
+		return fmt.Errorf("check legacy exercise schema: %w", err)
+	}
+	if legacy {
+		slog.ErrorContext(ctx, "Legacy exercise schema detected (table exercise.body_parts exists); "+
+			"reset the database (docker compose down -v) before starting, see docs/05_exercise_catalog_refactor_spec.md D4")
 	}
 
 	return nil

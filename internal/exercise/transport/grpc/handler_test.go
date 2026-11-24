@@ -36,11 +36,7 @@ func (i *mockIDs) NewID() (string, error) {
 
 func TestNewExerciseServer(t *testing.T) {
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, "",
 	)
 	if srv == nil {
 		t.Fatal("expected non-nil ExerciseServer")
@@ -49,11 +45,7 @@ func TestNewExerciseServer(t *testing.T) {
 
 func TestNewConnectExerciseHandler(t *testing.T) {
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, "",
 	)
 	connectHdlr := NewConnectExerciseHandler(srv)
 	if connectHdlr == nil {
@@ -199,7 +191,7 @@ func TestMeasurementTypeMappers(t *testing.T) {
 			Name:            "Plank",
 			MeasurementType: domain.MeasurementTypeDuration,
 		}
-		protoEx := toProtoExercise(info)
+		protoEx := (&ExerciseServer{}).toProtoExercise(info)
 		if got, want := protoEx.GetMeasurementType(), exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
@@ -242,90 +234,6 @@ func (m *mockRepoForHandler) GetRandomAISupported(_ context.Context) (*domain.Ex
 	return m.exercise, nil
 }
 
-func (m *mockRepoForHandler) GetMetadata(_ context.Context) (port.Metadata, error) {
-	return port.Metadata{}, nil
-}
-
-func (m *mockRepoForHandler) CreateBodyPart(_ context.Context, _ *port.BodyPart) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) GetBodyPart(_ context.Context, _ string) (*port.BodyPart, error) {
-	return nil, nil
-}
-
-func (m *mockRepoForHandler) ListBodyParts(_ context.Context, _, _ int) ([]port.BodyPart, int, error) {
-	return nil, 0, nil
-}
-
-func (m *mockRepoForHandler) UpdateBodyPart(_ context.Context, _ *port.BodyPart) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) DeleteBodyPart(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) CreateEquipment(_ context.Context, _ *port.Equipment) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) GetEquipment(_ context.Context, _ string) (*port.Equipment, error) {
-	return nil, nil
-}
-
-func (m *mockRepoForHandler) ListEquipments(_ context.Context, _, _ int) ([]port.Equipment, int, error) {
-	return nil, 0, nil
-}
-
-func (m *mockRepoForHandler) UpdateEquipment(_ context.Context, _ *port.Equipment) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) DeleteEquipment(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) CreateMuscle(_ context.Context, _ *port.Muscle) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) GetMuscle(_ context.Context, _ string) (*port.Muscle, error) {
-	return nil, nil
-}
-
-func (m *mockRepoForHandler) ListMuscles(_ context.Context, _ string, _, _ int) ([]port.Muscle, int, error) {
-	return nil, 0, nil
-}
-
-func (m *mockRepoForHandler) UpdateMuscle(_ context.Context, _ *port.Muscle) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) DeleteMuscle(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) CreateTag(_ context.Context, _ *port.Tag) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) GetTag(_ context.Context, _ string) (*port.Tag, error) {
-	return nil, nil
-}
-
-func (m *mockRepoForHandler) ListTags(_ context.Context, _, _ int) ([]port.Tag, int, error) {
-	return nil, 0, nil
-}
-
-func (m *mockRepoForHandler) UpdateTag(_ context.Context, _ *port.Tag) error {
-	return nil
-}
-
-func (m *mockRepoForHandler) DeleteTag(_ context.Context, _ string) error {
-	return nil
-}
-
 func (m *mockRepoForHandler) SetAISupportedWithOutboxLog(_ context.Context, _ string, _ bool, _ *port.OutboxLogRecord) error {
 	return nil
 }
@@ -334,13 +242,16 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 	now := time.Now().UTC()
 	ex, err := domain.RehydrateExercise(domain.Info{
 		ID:              "ex-123",
+		Slug:            "Pushups",
 		Name:            "Push-up",
-		Instructions:    "Push up description",
-		BodyPartID:      "chest",
-		EquipmentID:     "none",
-		TargetMuscleID:  "pectoralis",
-		Difficulty:      "BEGINNER",
+		Instructions:    []string{"Push up description"},
+		PrimaryMuscle:   domain.MuscleGroupChest,
+		Equipment:       domain.EquipmentBodyOnly,
+		Category:        domain.CategoryStrength,
+		Level:           domain.LevelBeginner,
+		Source:          domain.SourceFreeExerciseDB,
 		Status:          domain.StatusActive,
+		MotionSlug:      "push_up",
 		HasAISupported:  true,
 		MeasurementType: domain.MeasurementTypeReps,
 		CreatedAt:       now,
@@ -353,11 +264,7 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 	repo := &mockRepoForHandler{exercise: ex}
 	getRandomHdlr := query.NewGetRandomExerciseHandler(repo)
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, getRandomHdlr, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, getRandomHdlr, nil, "",
 	)
 
 	ctx := context.Background()
@@ -384,11 +291,7 @@ func TestExerciseServer_GetRandomExercise(t *testing.T) {
 	// Test Error case
 	repoErr := &mockRepoForHandler{err: domain.ErrExerciseNotFound}
 	srvErr := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, query.NewGetRandomExerciseHandler(repoErr), nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, query.NewGetRandomExerciseHandler(repoErr), nil, "",
 	)
 	_, err = srvErr.GetRandomExercise(ctx, req)
 	if err == nil {
@@ -406,12 +309,14 @@ func TestSearchExercises_TotalCountAndStatus(t *testing.T) {
 	now := time.Now().UTC()
 	ex, err := domain.NewExercise(domain.Info{
 		ID:              "ex-search-1",
+		Slug:            "Barbell_Bench_Press_-_Medium_Grip",
 		Name:            "Barbell Bench Press",
-		BodyPartID:      "bp-chest",
-		EquipmentID:     "eq-barbell",
-		TargetMuscleID:  "m-pectoralis",
-		Instructions:    "Press the bar up",
-		Difficulty:      "INTERMEDIATE",
+		PrimaryMuscle:   domain.MuscleGroupChest,
+		Equipment:       domain.EquipmentBarbell,
+		Category:        domain.CategoryStrength,
+		Level:           domain.LevelIntermediate,
+		Source:          domain.SourceFreeExerciseDB,
+		Instructions:    []string{"Press the bar up"},
 		Status:          domain.StatusActive,
 		MeasurementType: domain.MeasurementTypeReps,
 	}, now)
@@ -422,11 +327,7 @@ func TestSearchExercises_TotalCountAndStatus(t *testing.T) {
 	repo := &mockRepoForHandler{exercise: ex}
 	searchHdlr := query.NewSearchExercisesHandler(repo)
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, nil, nil, nil, searchHdlr,
-		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, searchHdlr, "",
 	)
 
 	req := &exercisemsg.SearchExercisesRequest{
@@ -469,12 +370,14 @@ func TestRestoreExercise_RPC(t *testing.T) {
 
 	ex, err := domain.NewExercise(domain.Info{
 		ID:              "ex-restore-test",
+		Slug:            "Barbell_Squat",
 		Name:            "Barbell Squat",
-		BodyPartID:      "bp-legs",
-		EquipmentID:     "eq-barbell",
-		TargetMuscleID:  "m-quads",
-		Instructions:    "Squat down and stand up",
-		Difficulty:      "INTERMEDIATE",
+		PrimaryMuscle:   domain.MuscleGroupQuadriceps,
+		Equipment:       domain.EquipmentBarbell,
+		Category:        domain.CategoryStrength,
+		Level:           domain.LevelIntermediate,
+		Source:          domain.SourceFreeExerciseDB,
+		Instructions:    []string{"Squat down and stand up"},
 		Status:          domain.StatusArchived,
 		MeasurementType: domain.MeasurementTypeReps,
 	}, now)
@@ -488,11 +391,7 @@ func TestRestoreExercise_RPC(t *testing.T) {
 	restoreHdlr := command.NewRestoreExerciseHandler(repo, clock, ids)
 
 	srv := NewExerciseServer(
-		nil, nil, nil, nil, nil, restoreHdlr, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, restoreHdlr, nil, nil, nil, "",
 	)
 
 	// Admin context

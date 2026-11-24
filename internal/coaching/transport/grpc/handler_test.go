@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
@@ -245,10 +246,10 @@ type testCatalog struct{ exName string }
 
 func (c *testCatalog) GetByID(ctx context.Context, id string) (port.Exercise, error) {
 	return port.Exercise{
-		ExerciseID:  id,
-		Name:        c.exName,
-		MuscleGroup: "Chest",
-		Equipment:   "Barbell",
+		ExerciseID:    id,
+		Name:          c.exName,
+		PrimaryMuscle: taxonomy.MuscleGroupChest,
+		Equipment:     taxonomy.EquipmentBarbell,
 	}, nil
 }
 
@@ -271,7 +272,7 @@ func (r *testRepo) ListByUser(ctx context.Context, uid string, status roadmap.St
 func (r *testRepo) FindSessionByID(ctx context.Context, sid string) (*roadmap.Roadmap, error) {
 	return nil, nil
 }
-func (r *testRepo) FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error) {
+func (r *testRepo) FindPendingSessionsStarting(ctx context.Context, from, to time.Time) ([]port.ScheduledSession, error) {
 	return nil, nil
 }
 

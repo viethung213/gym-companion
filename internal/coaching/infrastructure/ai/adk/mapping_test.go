@@ -46,7 +46,7 @@ func TestMapToDomainRoadmap_GroupsSessionsByDate(t *testing.T) {
 		sessionOf("2026-08-05", "bench-press"),
 	)
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestMapToDomainRoadmap_SetsAllIdentityFields(t *testing.T) {
 	c := mapperFor(t, "bench-press")
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestMapToDomainRoadmap_MintsIdsDeterministically(t *testing.T) {
 	c := mapperFor(t, "bench-press")
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestMapToDomainRoadmap_EnrichesExerciseNamesFromValidator(t *testing.T) {
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 	names := map[string]string{"bench-press": "Barbell Bench Press"}
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, names, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, names, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestMapToDomainRoadmap_FallsBackToCatalogForMissingName(t *testing.T) {
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 
 	// No names map: the mapper must consult the catalog rather than persist "".
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestMapToDomainRoadmap_RejectsMalformedDate(t *testing.T) {
 	c := mapperFor(t, "bench-press")
 	plan := planOf(sessionOf("not-a-date", "bench-press"))
 
-	_, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	_, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err == nil {
 		t.Fatal("got nil error, want a rejection naming the bad date")
 	}
@@ -204,7 +204,7 @@ func TestMapToDomainRoadmap_AnchorsOnEarliestSession(t *testing.T) {
 		sessionOf("2026-08-04", "bench-press"),
 	)
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestMapToDomainRoadmap_NormalisesDatesToUTCMidnight(t *testing.T) {
 	c := mapperFor(t, "bench-press")
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestMapToDomainRoadmap_SurfacesWeeklyCapViolation(t *testing.T) {
 		sessions = append(sessions, sessionOf(date, "bench-press"))
 	}
 
-	_, err := c.mapToDomainRoadmap(context.Background(), planOf(sessions...), nil, "user-1", getMapNow())
+	_, err := c.mapToDomainRoadmap(context.Background(), planOf(sessions...), nil, testPrimaries(planOf(sessions...)), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Errorf("expected no error for 7 sessions, got %v", err)
 	}
@@ -256,7 +256,7 @@ func TestMapToDomainRoadmap_SurfacesWeeklyCapViolation(t *testing.T) {
 func TestMapToDomainRoadmap_EmptyPlanIsRejected(t *testing.T) {
 	c := mapperFor(t)
 
-	_, err := c.mapToDomainRoadmap(context.Background(), &GeneratedPlan{}, nil, "user-1", getMapNow())
+	_, err := c.mapToDomainRoadmap(context.Background(), &GeneratedPlan{}, nil, testPrimaries(&GeneratedPlan{}), "user-1", getMapNow(), time.Time{})
 	if err == nil {
 		t.Fatal("got nil error, want a rejection for a plan with no weeks")
 	}
@@ -290,7 +290,7 @@ func TestMapToDomainRoadmap_FourWeeksPassesValidateFullStructure(t *testing.T) {
 		})
 	}
 
-	rm, err := c.mapToDomainRoadmap(context.Background(), &GeneratedPlan{Weeks: weeks}, nil, "user-1", getMapNow())
+	rm, err := c.mapToDomainRoadmap(context.Background(), &GeneratedPlan{Weeks: weeks}, nil, testPrimaries(&GeneratedPlan{Weeks: weeks}), "user-1", getMapNow(), time.Time{})
 	if err != nil {
 		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
 	}
@@ -312,7 +312,10 @@ func TestMapToRegeneratedSessions_LeavesIdentityFieldsEmpty(t *testing.T) {
 	c := mapperFor(t, "bench-press")
 	plan := planOf(sessionOf("2026-08-03", "bench-press"))
 
-	infos := c.mapToRegeneratedSessions(context.Background(), plan, nil, "user-1", getMapNow())
+	infos, mapErr := c.mapToRegeneratedSessions(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow())
+	if mapErr != nil {
+		t.Fatalf("mapToRegeneratedSessions returned error: %v", mapErr)
+	}
 	if len(infos) != 1 {
 		t.Fatalf("got %d session infos, want 1", len(infos))
 	}
@@ -338,7 +341,10 @@ func TestMapToRegeneratedSessions_SkipsMalformedDate(t *testing.T) {
 		sessionOf("2026-08-05", "bench-press"),
 	)
 
-	infos := c.mapToRegeneratedSessions(context.Background(), plan, nil, "user-1", getMapNow())
+	infos, mapErr := c.mapToRegeneratedSessions(context.Background(), plan, nil, testPrimaries(plan), "user-1", getMapNow())
+	if mapErr != nil {
+		t.Fatalf("mapToRegeneratedSessions returned error: %v", mapErr)
+	}
 	if len(infos) != 1 {
 		t.Fatalf("got %d session infos, want 1: the malformed one must be skipped", len(infos))
 	}
@@ -371,5 +377,50 @@ func TestGroupSessionsByDate_PreservesFirstSeenOrder(t *testing.T) {
 				t.Fatalf("got order %v, want %v", order, want)
 			}
 		}
+	}
+}
+
+// testPrimaries marks every exercise of the plan as validated with a CHEST primary.
+func testPrimaries(plan *GeneratedPlan) map[string]string {
+	out := make(map[string]string)
+	if plan == nil {
+		return out
+	}
+	for _, w := range plan.Weeks {
+		for _, sp := range w.Sessions {
+			for _, group := range [][]PrescribedExercise{sp.Prescription.WarmUps, sp.Prescription.MainExercises, sp.Prescription.CoolDowns} {
+				for _, e := range group {
+					out[e.ExerciseID] = "CHEST"
+				}
+			}
+		}
+	}
+	return out
+}
+
+func TestMapping_TargetMusclesFromValidatedPrimaries(t *testing.T) {
+	c := mapperFor(t, "bench-press", "squat")
+	plan := planOf(sessionOf("2026-08-03", "bench-press", "squat", "bench-press"))
+
+	rm, err := c.mapToDomainRoadmap(context.Background(), plan, nil,
+		map[string]string{"bench-press": "CHEST", "squat": "QUADRICEPS"}, "user-1", getMapNow(), time.Time{})
+	if err != nil {
+		t.Fatalf("mapToDomainRoadmap returned error: %v", err)
+	}
+	got := rm.Weeks()[0].Days()[0].Sessions()[0].Info().TargetMuscleGroups
+	if strings.Join(got, ",") != "CHEST,QUADRICEPS" {
+		t.Errorf("target muscle groups = %v, want [CHEST QUADRICEPS] (codes, deduplicated)", got)
+	}
+}
+
+func TestMapping_MissingValidatedDataIsAnError(t *testing.T) {
+	c := mapperFor(t, "bench-press")
+	plan := planOf(sessionOf("2026-08-03", "bench-press"))
+
+	if _, err := c.mapToDomainRoadmap(context.Background(), plan, nil, nil, "user-1", getMapNow(), time.Time{}); !errors.Is(err, ErrPlanGenerationFailed) {
+		t.Errorf("roadmap: got %v, want ErrPlanGenerationFailed instead of empty target muscles", err)
+	}
+	if _, err := c.mapToRegeneratedSessions(context.Background(), plan, nil, nil, "user-1", getMapNow()); !errors.Is(err, ErrPlanGenerationFailed) {
+		t.Errorf("regenerate: got %v, want ErrPlanGenerationFailed", err)
 	}
 }

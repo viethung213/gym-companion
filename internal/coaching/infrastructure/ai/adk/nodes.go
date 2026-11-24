@@ -1,7 +1,6 @@
 package adk
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,110 +14,6 @@ import (
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/workflow"
 )
-
-func (c *CoachingContextAgent) ensureMetadataLoaded(ctx context.Context) {
-	c.metaMu.RLock()
-	if len(c.equipmentNames) > 0 && len(c.muscleNames) > 0 {
-		c.metaMu.RUnlock()
-		return
-	}
-	c.metaMu.RUnlock()
-
-	reader, ok := c.catalog.(port.CatalogMetadataReader)
-	if !ok || reader == nil {
-		return
-	}
-
-	// Fetch metadata over network without holding the mutex lock.
-	meta, err := reader.GetMetadata(ctx)
-	if err != nil {
-		slog.WarnContext(ctx, "Failed to load in-memory catalog metadata snapshot", slog.String("error", err.Error()))
-		return
-	}
-
-	c.metaMu.Lock()
-	defer c.metaMu.Unlock()
-	if len(c.equipmentNames) > 0 && len(c.muscleNames) > 0 {
-		return
-	}
-
-	c.equipmentNames = meta.EquipmentNames
-	c.muscleNames = meta.MuscleNames
-	c.bodyPartNames = meta.BodyPartNames
-	c.tagNames = meta.TagNames
-	slog.InfoContext(ctx, "Successfully captured in-memory catalog metadata snapshot",
-		slog.Int("equipments", len(c.equipmentNames)),
-		slog.Int("muscles", len(c.muscleNames)),
-		slog.Int("tags", len(c.tagNames)))
-}
-
-func (c *CoachingContextAgent) resolveEquipmentName(ctx context.Context, idOrName string) string {
-	c.ensureMetadataLoaded(ctx)
-	c.metaMu.RLock()
-	defer c.metaMu.RUnlock()
-	if name, ok := c.equipmentNames[idOrName]; ok {
-		return name
-	}
-	return idOrName
-}
-
-func (c *CoachingContextAgent) resolveMuscleName(ctx context.Context, idOrName string) string {
-	c.ensureMetadataLoaded(ctx)
-	c.metaMu.RLock()
-	defer c.metaMu.RUnlock()
-	if name, ok := c.muscleNames[idOrName]; ok {
-		return name
-	}
-	return idOrName
-}
-
-func (c *CoachingContextAgent) resolveBodyPartName(ctx context.Context, idOrName string) string {
-	c.ensureMetadataLoaded(ctx)
-	c.metaMu.RLock()
-	defer c.metaMu.RUnlock()
-	if name, ok := c.bodyPartNames[idOrName]; ok {
-		return name
-	}
-	if name, ok := c.muscleNames[idOrName]; ok {
-		return name
-	}
-	return idOrName
-}
-
-func (c *CoachingContextAgent) resolveTagName(ctx context.Context, idOrName string) string {
-	c.ensureMetadataLoaded(ctx)
-	c.metaMu.RLock()
-	defer c.metaMu.RUnlock()
-	if name, ok := c.tagNames[idOrName]; ok {
-		return name
-	}
-	return idOrName
-}
-
-// difficultyRank maps difficulty/experience labels to an ordered tier.
-// Unknown or empty values return 0 (no cap).
-func difficultyRank(level string) int {
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "beginner":
-		return 1
-	case "intermediate":
-		return 2
-	case "advanced":
-		return 3
-	default:
-		return 0
-	}
-}
-
-// isDifficultyAllowed enforces exercise_difficulty <= user_experience_level.
-func isDifficultyAllowed(exDifficulty, userLevel string) bool {
-	userRank := difficultyRank(userLevel)
-	exRank := difficultyRank(exDifficulty)
-	if userRank == 0 || exRank == 0 {
-		return true
-	}
-	return exRank <= userRank
-}
 
 func (c *CoachingContextAgent) buildNodes() {
 	c.fetchNode = workflow.NewFunctionNode(
@@ -157,14 +52,6 @@ func (c *CoachingContextAgent) buildNodes() {
 				preferredTimes[dayKey] = append(preferredTimes[dayKey], timeSlotStr)
 			}
 
-			injuries := make([]InjuryStatus, len(profile.ActiveInjuries))
-			for i, inj := range profile.ActiveInjuries {
-				injuries[i] = InjuryStatus{
-					MuscleGroup: inj.MuscleGroup,
-					Severity:    "MODERATE",
-				}
-			}
-
 			now := time.Now().UTC()
 			adkSessions := make([]string, len(recent))
 			for i := range recent {
@@ -178,76 +65,44 @@ func (c *CoachingContextAgent) buildNodes() {
 					prs = fetchedPRs
 				}
 			}
+
+			// Pre-select candidates with the shared eligibility rules (docs/05 §8.2-8.4):
+			// hard filters, main work per primary muscle, stretching for warm-up / cool-down.
+			athlete := profile.Athlete()
+			var lists candidateLists
 			var musclePRs map[string][]string
-
-			// Pre-fetch and select candidate exercises via pure 3-stage pipeline:
-			// 1. Hard filters (injuries, difficulty <= ExperienceLevel, equipment)
-			// 2. Dynamic DB muscle groups + user-preferred emphasis
-			// 3. Dedicated warm-up (Mobility & Warm-up) and cool-down (Stretching & Cool-down)
-			candidates := make(map[string][][]string)
-			var warmUps map[string][][]string
-			var coolDowns map[string][][]string
 			if c.catalog != nil {
-				avoidInjuries := make([]string, 0, len(profile.ActiveInjuries))
-				for _, inj := range profile.ActiveInjuries {
-					if inj.MuscleGroup != "" {
-						avoidInjuries = append(avoidInjuries, inj.MuscleGroup)
-					}
+				exList, searchErr := c.catalog.SearchByFilter(nodeCtx, &port.ExerciseFilter{Limit: catalogPrefetchLimit})
+				if searchErr != nil {
+					return CoachInput{}, fmt.Errorf("search exercise catalog: %w", searchErr)
 				}
-
-				exList, err := c.catalog.SearchByFilter(nodeCtx, &port.ExerciseFilter{Limit: 1000})
-				if err == nil {
-					musclePRs = buildMusclePRs(exList, prs, 3)
-					resolver := exerciseMetaResolver{
-						muscle:    func(s string) string { return c.resolveMuscleName(nodeCtx, s) },
-						bodyPart:  func(s string) string { return c.resolveBodyPartName(nodeCtx, s) },
-						equipment: func(s string) string { return c.resolveEquipmentName(nodeCtx, s) },
-						tag:       func(s string) string { return c.resolveTagName(nodeCtx, s) },
-					}
-					eligible := filterEligibleExercises(exList, &profile, avoidInjuries, resolver)
-					var activeBodyParts map[string]bool
-					candidates, activeBodyParts = selectMainCandidates(eligible, &profile, resolver)
-					warmUps, coolDowns = selectRecoveryCandidates(eligible, activeBodyParts, resolver)
-				}
-			}
-
-			availableEquipNames := make([]string, len(profile.AvailableEquipment))
-			for i, eq := range profile.AvailableEquipment {
-				availableEquipNames[i] = c.resolveEquipmentName(nodeCtx, eq)
-			}
-
-			preferredMuscles := make([]string, len(profile.PreferredMuscleGroups))
-			for i, mg := range profile.PreferredMuscleGroups {
-				preferredMuscles[i] = c.resolveMuscleName(nodeCtx, mg)
-			}
-
-			resolvedInjuries := make([]InjuryStatus, len(injuries))
-			for i, inj := range injuries {
-				resolvedInjuries[i] = InjuryStatus{
-					MuscleGroup: c.resolveMuscleName(nodeCtx, inj.MuscleGroup),
-					Severity:    inj.Severity,
-				}
+				musclePRs = buildMusclePRs(exList, prs, 3)
+				lists = buildCandidateLists(exList, &candidatePrefs{
+					PreferredMuscles: profile.PreferredMuscleGroups,
+					PrimaryGoal:      profile.PrimaryGoal,
+				}, &athlete)
 			}
 
 			return CoachInput{
 				Flow:        FlowInitiate4Week,
-				CurrentTime: time.Now().UTC().Format(time.RFC3339),
+				CurrentTime: time.Now().In(profile.Zone()).Format(time.RFC3339),
+				Timezone:    profile.Zone().String(),
 				Profile: UserProfile{
 					UserID:                userID,
 					WeightKg:              profile.WeightKg,
 					ExperienceLevel:       profile.ExperienceLevel,
 					PrimaryGoal:           profile.PrimaryGoal,
-					AvailableEquipment:    availableEquipNames,
-					PreferredMuscleGroups: preferredMuscles,
+					AvailableEquipment:    codeStrings(profile.AvailableEquipment),
+					PreferredMuscleGroups: codeStrings(profile.PreferredMuscleGroups),
 					PreferredWorkoutTimes: preferredTimes,
 					AvailableSlots:        slots,
-					ActiveInjuries:        resolvedInjuries,
+					ActiveInjuries:        injuryDTOs(athlete.Injuries),
 				},
 				RecentSessions:     adkSessions,
 				MusclePRs:          musclePRs,
-				AvailableExercises: candidates,
-				WarmUpExercises:    warmUps,
-				CoolDownExercises:  coolDowns,
+				AvailableExercises: lists.main,
+				RecoveryExercises:  lists.recovery,
+				InjuryLimits:       lists.limits,
 			}, nil
 		},
 		workflow.NodeConfig{},
@@ -269,9 +124,23 @@ func (c *CoachingContextAgent) buildNodes() {
 				return CoachInput{}, fmt.Errorf("find active roadmap: %w", findErr)
 			}
 
-			pending := rm.PendingSessionsFrom(time.Now().UTC().Truncate(24 * time.Hour))
+			// Read the schedule in the athlete's current zone, as the handler does.
+			rm.SetTimezone(in.Timezone)
+			now := time.Now()
+			pending := rm.UpcomingPendingSessions(now)
 			if len(pending) == 0 {
 				return in, nil
+			}
+
+			// A regenerate after the athlete changed their weekly slots moves the
+			// remaining sessions onto the new slots instead of rewriting them in place.
+			if in.Flow == FlowRegenerate {
+				if targets := rescheduleTargets(rm, in.Profile.AvailableSlots, now); targets != nil {
+					in.SessionsToRevise = rescheduledSessions(targets)
+					in.Rescheduled = true
+					in.CurrentRoadmap = &RoadmapSnapshot{RoadmapID: rm.ID(), Phase: currentPhase(rm, pending[0])}
+					return in, nil
+				}
 			}
 
 			in.SessionsToRevise = make([]SessionToRevise, 0, len(pending))
@@ -280,6 +149,7 @@ func (c *CoachingContextAgent) buildNodes() {
 				in.SessionsToRevise = append(in.SessionsToRevise, SessionToRevise{
 					ScheduledDate:            info.ScheduledDate.Format(scheduledDateISO),
 					SlotTime:                 info.SlotTime,
+					SessionKind:              string(info.Kind),
 					EstimatedDurationMinutes: info.EstimatedDurationMinutes,
 					TargetMuscleGroups:       info.TargetMuscleGroups,
 					CurrentPrescription:      prescriptionToDTO(info.Prescription),
@@ -532,10 +402,11 @@ func buildMusclePRs(exList []port.Exercise, prs []port.PersonalRecordSummary, ma
 	grouped := make(map[string][]prEntry)
 	for _, pr := range prs {
 		ex, ok := exByID[pr.ExerciseID]
-		if !ok || ex.MuscleGroup == "" {
+		if !ok {
 			continue
 		}
-		grouped[ex.MuscleGroup] = append(grouped[ex.MuscleGroup], prEntry{
+		muscle := string(ex.PrimaryMuscle)
+		grouped[muscle] = append(grouped[muscle], prEntry{
 			pr:   pr,
 			name: ex.Name,
 		})

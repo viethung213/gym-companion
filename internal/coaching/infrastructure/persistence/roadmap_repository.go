@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"gorm.io/gorm"
@@ -34,6 +36,9 @@ func (r *RoadmapRepository) getDB(ctx context.Context) *gorm.DB {
 
 // Save upserts the roadmap tree in a single call. Callers should already be
 // inside a transaction (TxManager.WithTransaction) when saving alongside outbox.
+// activeRoadmapConstraint is the unique index allowing one ACTIVE roadmap per user.
+const activeRoadmapConstraint = "ux_roadmaps_user_active"
+
 func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error {
 	if rm == nil {
 		return errors.New("nil roadmap")
@@ -44,9 +49,20 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 	if err := db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "roadmap_id"}},
 
-		DoUpdates: clause.AssignmentColumns([]string{"status", "start_date", "end_date", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"status", "start_date", "end_date", "updated_at", "timezone"}),
 	}).Create(toRoadmapRecordPtr(rm)).Error; err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Constraint == activeRoadmapConstraint {
+			// Another node initiated this user's roadmap first.
+			return fmt.Errorf("%w: %s", roadmap.ErrActiveRoadmapExists, rm.UserID())
+		}
 		return fmt.Errorf("upsert roadmap: %w", err)
+	}
+
+	// Delete what a reschedule dropped before upserting its replacements: a new
+	// day may take the date (uq_day_week_date) of a day it emptied.
+	if err := deleteRemovedChildren(db, rm); err != nil {
+		return err
 	}
 
 	for _, w := range rm.Weeks() {
@@ -81,7 +97,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 				if err := db.Clauses(clause.OnConflict{
 					Columns: []clause.Column{{Name: "session_plan_id"}},
 					DoUpdates: clause.AssignmentColumns([]string{
-						"slot_time", "estimated_duration_minutes", "status", "target_muscle_groups", "prescription",
+						"slot_time", "estimated_duration_minutes", "status", "session_kind", "target_muscle_groups", "prescription",
 						"reasoning", "generated_at", "completed_at", "session_scr", "session_delta_rpe",
 					}),
 				}).Create(&sr).Error; err != nil {
@@ -182,37 +198,6 @@ func (r *RoadmapRepository) FindSessionByID(ctx context.Context, sessionPlanID s
 	return r.FindByID(ctx, srec.RoadmapID)
 }
 
-// FindPendingSessionsByDate queries session plans scheduled for targetDate that are PENDING.
-func (r *RoadmapRepository) FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error) {
-	db := r.getDB(ctx)
-
-	var sRecs []sessionPlanRecord
-	startOfDay := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, targetDate.Location()).UTC()
-	endOfDay := startOfDay.Add(24 * time.Hour)
-
-	err := db.Where(
-		"scheduled_date >= ? AND scheduled_date < ? AND status = ?",
-		startOfDay,
-		endOfDay,
-		string(roadmap.SessionPlanStatusPending),
-	).Find(&sRecs).Error
-	if err != nil {
-		return nil, fmt.Errorf("find pending sessions by date: %w", err)
-	}
-
-	out := make([]*roadmap.SessionPlanInfo, 0, len(sRecs))
-	for i := range sRecs {
-		sp, err := fromSessionPlanRecord(&sRecs[i])
-		if err != nil {
-			continue
-		}
-		info := sp.Info()
-		out = append(out, &info)
-	}
-
-	return out, nil
-}
-
 // loadTree loads all descendants of the given roadmap record.
 func (r *RoadmapRepository) loadTree(ctx context.Context, rec *roadmapRecord) (*roadmap.Roadmap, error) {
 	if rec == nil {
@@ -235,7 +220,8 @@ func (r *RoadmapRepository) loadTree(ctx context.Context, rec *roadmapRecord) (*
 
 	var sRecs []sessionPlanRecord
 
-	if err := db.Where("roadmap_id = ?", rec.RoadmapID).Order("scheduled_date ASC").Find(&sRecs).Error; err != nil {
+	// Same-day sessions need a fixed order: callers walk them as the schedule.
+	if err := db.Where("roadmap_id = ?", rec.RoadmapID).Order("scheduled_date ASC, slot_time ASC, session_plan_id ASC").Find(&sRecs).Error; err != nil {
 		return nil, fmt.Errorf("load sessions: %w", err)
 	}
 
@@ -293,4 +279,85 @@ func toRoadmapRecordPtr(rm *roadmap.Roadmap) *roadmapRecord {
 	rec := toRoadmapRecord(rm)
 
 	return &rec
+}
+
+// deleteRemovedChildren deletes the sessions and days the aggregate dropped.
+// Only PENDING sessions are ever dropped; the status guard keeps a session
+// finished concurrently from being lost.
+func deleteRemovedChildren(db *gorm.DB, rm *roadmap.Roadmap) error {
+	sessionIDs, dayIDs := rm.RemovedChildren()
+	if len(sessionIDs) > 0 {
+		if err := db.Where("roadmap_id = ? AND status = ? AND session_plan_id IN ?",
+			rm.ID(), string(roadmap.SessionPlanStatusPending), sessionIDs).
+			Delete(&sessionPlanRecord{}).Error; err != nil {
+			return fmt.Errorf("delete rescheduled sessions: %w", err)
+		}
+	}
+	if len(dayIDs) > 0 {
+		if err := db.Where("roadmap_id = ? AND day_plan_id IN ?", rm.ID(), dayIDs).
+			Where("NOT EXISTS (SELECT 1 FROM coaching.session_plans s WHERE s.day_plan_id = coaching.day_plans.day_plan_id)").
+			Delete(&dayPlanRecord{}).Error; err != nil {
+			return fmt.Errorf("delete emptied day plans: %w", err)
+		}
+	}
+	return nil
+}
+
+// FindPendingSessionsStarting returns PENDING sessions whose start, as wall
+// clock in their roadmap's zone, falls within [from, to]. Candidates are
+// narrowed by scheduled_date a day either side, since no zone is more than a
+// day from UTC.
+func (r *RoadmapRepository) FindPendingSessionsStarting(ctx context.Context, from, to time.Time) ([]port.ScheduledSession, error) {
+	db := r.getDB(ctx)
+
+	var sRecs []sessionPlanRecord
+	err := db.Where("status = ? AND scheduled_date BETWEEN ? AND ? AND roadmap_id IN (SELECT roadmap_id FROM coaching.roadmaps WHERE status = ?)",
+		string(roadmap.SessionPlanStatusPending),
+		roadmap.CalendarDate(from, time.UTC).AddDate(0, 0, -1),
+		roadmap.CalendarDate(to, time.UTC).AddDate(0, 0, 1),
+		string(roadmap.StatusActive)).
+		Find(&sRecs).Error
+	if err != nil {
+		return nil, fmt.Errorf("find pending sessions starting: %w", err)
+	}
+	if len(sRecs) == 0 {
+		return nil, nil
+	}
+
+	roadmapIDs := make([]string, 0, len(sRecs))
+	for i := range sRecs {
+		roadmapIDs = append(roadmapIDs, sRecs[i].RoadmapID)
+	}
+	var zones []struct {
+		RoadmapID string
+		Timezone  string
+	}
+	if err := db.Table("coaching.roadmaps").Select("roadmap_id, timezone").
+		Where("roadmap_id IN ?", roadmapIDs).Scan(&zones).Error; err != nil {
+		return nil, fmt.Errorf("load roadmap zones: %w", err)
+	}
+	zoneOf := make(map[string]*time.Location, len(zones))
+	for _, z := range zones {
+		zoneOf[z.RoadmapID] = roadmap.LoadLocation(z.Timezone)
+	}
+
+	out := make([]port.ScheduledSession, 0, len(sRecs))
+	for i := range sRecs {
+		sp, err := fromSessionPlanRecord(&sRecs[i])
+		if err != nil {
+			slog.WarnContext(ctx, "Skipping unreadable session plan",
+				slog.String("session_plan_id", sRecs[i].SessionPlanID), slog.String("error", err.Error()))
+			continue
+		}
+		loc := zoneOf[sRecs[i].RoadmapID]
+		if loc == nil {
+			loc = time.UTC
+		}
+		at := sp.StartsAt(loc)
+		if at.Before(from) || at.After(to) {
+			continue
+		}
+		out = append(out, port.ScheduledSession{Info: sp.Info(), StartsAt: at, Location: loc})
+	}
+	return out, nil
 }

@@ -78,77 +78,68 @@ func (w *UpcomingWorkoutReminderWorker) runCheck(ctx context.Context) {
 func (w *UpcomingWorkoutReminderWorker) runCheckAt(ctx context.Context, now time.Time) {
 	w.cleanupOldReminders(now)
 
-	sessions, err := w.roadmapRepo.FindPendingSessionsByDate(ctx, now)
+	// Sessions starting 45-75 minutes from now; the repository resolves each
+	// slot's wall clock in its roadmap's zone.
+	sessions, err := w.roadmapRepo.FindPendingSessionsStarting(ctx,
+		now.Add(defaultWorkoutReminderWindow), now.Add(defaultWorkoutReminderWindowMax))
 	if err != nil {
 		slog.ErrorContext(ctx, "Error fetching pending sessions in UpcomingWorkoutReminderWorker", slog.String("error", err.Error()))
 		return
 	}
 
-	for _, session := range sessions {
-		if session == nil || session.Status != roadmap.SessionPlanStatusPending {
+	for i := range sessions {
+		session := &sessions[i].Info
+		if session.Status != roadmap.SessionPlanStatusPending {
+			continue
+		}
+		startsAt := sessions[i].StartsAt
+		reminderKey := fmt.Sprintf("%s:%s", session.SessionPlanID, startsAt.UTC().Format("2006-01-02_15:04"))
+
+		w.mu.Lock()
+		_, alreadySent := w.sentReminders[reminderKey]
+		if !alreadySent {
+			w.sentReminders[reminderKey] = now
+		}
+		w.mu.Unlock()
+
+		if alreadySent {
 			continue
 		}
 
-		workoutTime := parseWorkoutTime(session.ScheduledDate, session.SlotTime)
-		timeDiff := workoutTime.Sub(now)
+		workoutName := getWorkoutNameFromPrescription(session.Prescription)
+		loc := sessions[i].Location
+		if loc == nil {
+			loc = time.UTC
+		}
+		timeStr := startsAt.In(loc).Format("15:04") // the athlete's wall clock
 
-		// Check if session falls into the 60m reminder window (45m to 75m before workout)
-		if timeDiff >= defaultWorkoutReminderWindow && timeDiff <= defaultWorkoutReminderWindowMax {
-			reminderKey := fmt.Sprintf("%s:%s", session.SessionPlanID, workoutTime.Format("2006-01-02_15:04"))
+		reminderEvent := &event.UpcomingWorkoutReminder{
+			UserID:              session.UserID,
+			WorkoutName:         workoutName,
+			ScheduledTime:       timeStr,
+			RemindBeforeMinutes: remindBeforeWorkoutMinutes,
+			Title:               "Nhắc nhở buổi tập ⏰",
+			Body:                fmt.Sprintf("Buổi tập '%s' của bạn sẽ bắt đầu lúc %s (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!", workoutName, timeStr),
+		}
 
+		if err := w.outboxWriter.Enqueue(ctx, session.UserID, reminderEvent); err != nil {
+			// Release the slot so the next tick in the window retries.
 			w.mu.Lock()
-			_, alreadySent := w.sentReminders[reminderKey]
-			if !alreadySent {
-				w.sentReminders[reminderKey] = now
-			}
+			delete(w.sentReminders, reminderKey)
 			w.mu.Unlock()
-
-			if alreadySent {
-				continue
-			}
-
-			workoutName := getWorkoutNameFromPrescription(session.Prescription)
-			timeStr := workoutTime.Format("15:04")
-
-			reminderEvent := &event.UpcomingWorkoutReminder{
-				UserID:              session.UserID,
-				WorkoutName:         workoutName,
-				ScheduledTime:       timeStr,
-				RemindBeforeMinutes: remindBeforeWorkoutMinutes,
-				Title:               "Nhắc nhở buổi tập ⏰",
-				Body:                fmt.Sprintf("Buổi tập '%s' của bạn sẽ bắt đầu lúc %s (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!", workoutName, timeStr),
-			}
-
-			if err := w.outboxWriter.Enqueue(ctx, session.UserID, reminderEvent); err != nil {
-				slog.ErrorContext(ctx, "Error enqueuing reminder for session",
-					slog.String("session_id", session.SessionPlanID),
-					slog.String("user_id", session.UserID),
-					slog.String("error", err.Error()),
-				)
-			} else {
-				slog.InfoContext(ctx, "Enqueued workout reminder for user",
-					slog.String("user_id", session.UserID),
-					slog.String("session_id", session.SessionPlanID),
-					slog.String("time", timeStr),
-				)
-			}
+			slog.ErrorContext(ctx, "Error enqueuing reminder for session",
+				slog.String("session_id", session.SessionPlanID),
+				slog.String("user_id", session.UserID),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			slog.InfoContext(ctx, "Enqueued workout reminder for user",
+				slog.String("user_id", session.UserID),
+				slog.String("session_id", session.SessionPlanID),
+				slog.String("time", timeStr),
+			)
 		}
 	}
-}
-
-func parseWorkoutTime(scheduledDate time.Time, slotTime string) time.Time {
-	year, month, day := scheduledDate.Date()
-	hour, minute := 9, 0 // Default 09:00 if slotTime is empty
-
-	if slotTime != "" {
-		_, _ = fmt.Sscanf(slotTime, "%d:%d", &hour, &minute)
-	}
-
-	wt := time.Date(year, month, day, hour, minute, 0, 0, scheduledDate.Location())
-	if wt.Before(scheduledDate) && scheduledDate.Sub(wt) > 12*time.Hour {
-		wt = wt.AddDate(0, 0, 1)
-	}
-	return wt
 }
 
 func getWorkoutNameFromPrescription(p roadmap.WorkoutPrescription) string {

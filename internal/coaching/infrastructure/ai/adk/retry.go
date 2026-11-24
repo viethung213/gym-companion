@@ -94,6 +94,8 @@ func runWithRetries(
 			if final {
 				return nil, fmt.Errorf("%w: attempt %d: %w", ErrPlanGenerationFailed, n, err)
 			}
+			slog.WarnContext(ctx, "Coaching plan attempt unusable, regenerating",
+				slog.Int("attempt", n), slog.String("error", err.Error()))
 			fb = attemptFeedback{
 				PreviousPlan: fb.PreviousPlan,
 				Issues:       []string{"the previous attempt did not return a usable plan: " + err.Error()},
@@ -113,16 +115,23 @@ func runWithRetries(
 		}
 
 		if !report.Passed && !final {
+			// Each rejection costs a full regeneration; say why so prompts can be tuned.
+			slog.WarnContext(ctx, "Coaching plan rejected by validation, regenerating",
+				slog.Int("attempt", n),
+				slog.Int("issue_count", len(report.Issues)),
+				slog.Any("issues", report.Issues))
 			// Gate 1 failed: send the precise defects back, skip the reviewer.
 			fb = attemptFeedback{PreviousPlan: plan, Issues: report.Issues}
 			continue
 		}
 
 		result := &PlanResult{
-			Plan:     outcome.Plan,
-			Names:    outcome.Names,
-			Degraded: outcome.Degraded,
-			Issues:   report.Issues,
+			Plan:      outcome.Plan,
+			Names:     outcome.Names,
+			Cautions:  outcome.Cautions,
+			Primaries: outcome.Primaries,
+			Degraded:  outcome.Degraded,
+			Issues:    report.Issues,
 		}
 
 		if final && planSessionCount(outcome.Plan) == 0 {

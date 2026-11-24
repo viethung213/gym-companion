@@ -179,48 +179,6 @@ func TestRoadmap_MarkCompleted(t *testing.T) {
 	}
 }
 
-func TestRoadmap_PendingSessionsFrom(t *testing.T) {
-	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-
-	wp1 := newWeek("wp-1", 1, PhaseAccumulation, base, []int{1, 0, 1, 0, 1, 0, 0})
-
-	info := newTestRoadmapInfo()
-
-	r, err := NewRoadmap(&info, []*WeekPlan{wp1}, time.Now())
-
-	if err != nil {
-		t.Fatalf("NewRoadmap: %v", err)
-	}
-
-	// From the beginning: 3 PENDING sessions
-
-	pending := r.PendingSessionsFrom(base)
-
-	if len(pending) != 3 {
-		t.Errorf("expected 3 pending, got %d", len(pending))
-	}
-
-	// Mark first as completed
-
-	_ = pending[0].MarkCompleted(80, 0, time.Now())
-
-	pending2 := r.PendingSessionsFrom(base)
-
-	if len(pending2) != 2 {
-		t.Errorf("expected 2 pending after complete, got %d", len(pending2))
-	}
-
-	// From day 3: skip earlier PENDING → only 2 sessions from day 3 onward (day 3 + day 5)
-
-	from := base.AddDate(0, 0, 2)
-
-	pending3 := r.PendingSessionsFrom(from)
-
-	if len(pending3) != 2 {
-		t.Errorf("expected 2 pending from day 3, got %d", len(pending3))
-	}
-}
-
 func TestRoadmap_FindSession(t *testing.T) {
 	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 

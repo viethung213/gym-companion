@@ -4,20 +4,34 @@ package contracts.supporting.profile.v1.message;
 
 option go_package = "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message;profilev1message";
 
+import "contracts/supporting/exercise/v1/message/taxonomy.proto";
+
+// InjuryInput reports pain by joint region (required). muscle is optional;
+// side UNSPECIFIED means BOTH.
 message InjuryInput {
-  string muscle_group = 1;
-  string severity = 2; // "MILD", "MODERATE", "SEVERE"
+  reserved 1, 2;
+  reserved "muscle_group";
+
   string notes = 3;
+  contracts.supporting.exercise.v1.message.JointRegion region = 4;
+  contracts.supporting.exercise.v1.message.MuscleGroup muscle = 5;
+  contracts.supporting.exercise.v1.message.BodySide side = 6;
+  contracts.supporting.exercise.v1.message.InjurySeverity severity = 7;
 }
 
 message Injury {
+  reserved 2, 3;
+  reserved "muscle_group";
+
   string injury_id = 1;
-  string muscle_group = 2;
-  string severity = 3;
   string notes = 4;
   string reported_at = 5;
   bool is_recovered = 6;
   string recovered_at = 7;
+  contracts.supporting.exercise.v1.message.JointRegion region = 8;
+  contracts.supporting.exercise.v1.message.MuscleGroup muscle = 9;
+  contracts.supporting.exercise.v1.message.BodySide side = 10;
+  contracts.supporting.exercise.v1.message.InjurySeverity severity = 11;
 }
 
 message PeriodicMetric {
@@ -30,6 +44,8 @@ message PeriodicMetric {
 }
 
 message SaveHealthProfileRequest {
+  reserved 9, 10;
+
   float weight_kg = 1;
   float height_cm = 2;
   string date_of_birth = 3; // "YYYY-MM-DD" e.g. "1998-05-15"
@@ -38,12 +54,13 @@ message SaveHealthProfileRequest {
   repeated InjuryInput injuries = 6;
   string experience_level = 7; // "BEGINNER", "INTERMEDIATE", "ADVANCED"
   repeated string preferred_workout_times = 8;
-  repeated string available_equipment = 9;
-  repeated string preferred_muscle_groups = 10;
   string coach_style = 11;
   float target_weight_kg = 12;
   float target_body_fat_percent = 13;
   float body_fat_percent = 14;
+  repeated contracts.supporting.exercise.v1.message.Equipment available_equipment = 15;
+  repeated contracts.supporting.exercise.v1.message.MuscleGroup preferred_muscle_groups = 16;
+  string timezone = 17; // IANA name from the browser, e.g. "Asia/Ho_Chi_Minh"; empty = UTC
 }
 
 message SaveHealthProfileResponse {
@@ -58,6 +75,8 @@ message GetProfileRequest {
 }
 
 message GetProfileResponse {
+  reserved 13, 14;
+
   string user_id = 1;
   float weight_kg = 2;
   float height_cm = 3;
@@ -70,8 +89,6 @@ message GetProfileResponse {
   repeated Injury injuries = 10;
   string created_at = 11;
   string updated_at = 12;
-  repeated string available_equipment = 13;
-  repeated string preferred_muscle_groups = 14;
   string coach_style = 15;
   float target_weight_kg = 16;
   float target_body_fat_percent = 17;
@@ -79,9 +96,14 @@ message GetProfileResponse {
   float body_fat_percent = 19;
   string full_name = 20;
   string avatar_url = 21;
+  repeated contracts.supporting.exercise.v1.message.Equipment available_equipment = 22;
+  repeated contracts.supporting.exercise.v1.message.MuscleGroup preferred_muscle_groups = 23;
+  string timezone = 24; // IANA name; slot times and scheduled dates are wall clock in this zone
 }
 
 message UpdateProfileRequest {
+  reserved 8, 9;
+
   float weight_kg = 1;
   float height_cm = 2;
   string date_of_birth = 3; // "YYYY-MM-DD" e.g. "1998-05-15"
@@ -89,12 +111,13 @@ message UpdateProfileRequest {
   repeated string goals = 5;
   string experience_level = 6;
   repeated string preferred_workout_times = 7;
-  repeated string available_equipment = 8;
-  repeated string preferred_muscle_groups = 9;
   string coach_style = 10;
   float target_weight_kg = 11;
   float target_body_fat_percent = 12;
   float body_fat_percent = 13;
+  repeated contracts.supporting.exercise.v1.message.Equipment available_equipment = 14;
+  repeated contracts.supporting.exercise.v1.message.MuscleGroup preferred_muscle_groups = 15;
+  string timezone = 16; // IANA name; empty keeps the stored zone
 }
 
 message UpdateProfileResponse {
@@ -128,10 +151,17 @@ message GetBodyMetricsHistoryResponse {
   repeated PeriodicMetric metrics = 2;
 }
 
+// ReportInjuryRequest reports pain by joint region (required). muscle is
+// optional; side UNSPECIFIED means BOTH.
 message ReportInjuryRequest {
-  string muscle_group = 1;
-  string severity = 2;
+  reserved 1, 2;
+  reserved "muscle_group";
+
   string notes = 3;
+  contracts.supporting.exercise.v1.message.JointRegion region = 4;
+  contracts.supporting.exercise.v1.message.MuscleGroup muscle = 5;
+  contracts.supporting.exercise.v1.message.BodySide side = 6;
+  contracts.supporting.exercise.v1.message.InjurySeverity severity = 7;
 }
 
 message ReportInjuryResponse {

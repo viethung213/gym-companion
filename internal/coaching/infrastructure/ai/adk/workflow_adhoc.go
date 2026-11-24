@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/workflow"
@@ -57,14 +59,15 @@ func (c *CoachingContextAgent) buildSuggestAdHocAgent(_ context.Context) (agent.
 						slog.Any("decided_muscles", intent.MuscleGroups),
 						slog.Any("decided_equipment", intent.Equipment),
 						slog.Any("avoid_muscles", intent.AvoidMuscles),
+						slog.Any("avoid_regions", intent.AvoidRegions),
 						slog.Int("decided_duration", intent.DurationMinutes),
 						slog.String("intensity_note", intent.IntensityNote))
 
 					if len(intent.MuscleGroups) > 0 {
-						coachInput.AdHocHint.MuscleGroups = intent.MuscleGroups
+						coachInput.AdHocHint.MuscleGroups = codeStrings(intent.MuscleGroups)
 					}
 					if len(intent.Equipment) > 0 {
-						coachInput.AdHocHint.AvailableEquipment = intent.Equipment
+						coachInput.AdHocHint.AvailableEquipment = codeStrings(intent.Equipment)
 					}
 					if intent.DurationMinutes >= 10 && intent.DurationMinutes <= 120 {
 						coachInput.AdHocHint.DurationMinutes = intent.DurationMinutes
@@ -77,32 +80,14 @@ func (c *CoachingContextAgent) buildSuggestAdHocAgent(_ context.Context) (agent.
 							coachInput.AdHocHint.IntensityHint = "Vibe: " + intent.IntensityNote
 						}
 					}
-					for _, avoid := range intent.AvoidMuscles {
-						coachInput.Profile.ActiveInjuries = append(coachInput.Profile.ActiveInjuries, InjuryStatus{
-							MuscleGroup: avoid,
-							Severity:    "MILD",
-						})
-					}
-
-					allAvoid := append([]string(nil), intent.AvoidMuscles...)
-					for _, inj := range coachInput.Profile.ActiveInjuries {
-						if strings.TrimSpace(inj.MuscleGroup) != "" {
-							allAvoid = append(allAvoid, inj.MuscleGroup)
-						}
-					}
 
 					prefetchStart := time.Now()
-					added := c.prefetchAdHocExercises(
-						nodeCtx,
-						coachInput.AdHocHint.MuscleGroups,
-						coachInput.AdHocHint.AvailableEquipment,
-						allAvoid,
-						coachInput.Profile.ExperienceLevel,
-						coachInput.AvailableExercises,
-					)
-					slog.InfoContext(nodeCtx, "[adhoc_trace] prefetch_adhoc completed",
+					if refreshErr := c.applyAdHocIntent(nodeCtx, &coachInput, intent); refreshErr != nil {
+						return nil, refreshErr
+					}
+					slog.InfoContext(nodeCtx, "[adhoc_trace] adhoc candidates rebuilt",
 						slog.Int64("prefetch_ms", time.Since(prefetchStart).Milliseconds()),
-						slog.Int("added_exercises", added))
+						slog.Int("muscle_groups", len(coachInput.AvailableExercises)))
 				} else {
 					slog.InfoContext(nodeCtx, "[adhoc_trace] intent_decision failed",
 						slog.Int64("intent_ms", time.Since(intentStart).Milliseconds()),
@@ -142,4 +127,40 @@ func (c *CoachingContextAgent) buildSuggestAdHocAgent(_ context.Context) (agent.
 			return wf.Run(ic)
 		},
 	})
+}
+
+// applyAdHocIntent rebuilds the candidate lists for the session with the same
+// eligibility rules as the roadmap (docs/05 §8.5): the profile injuries plus
+// the avoided regions and muscles as temporary MODERATE injuries, the intent
+// equipment when given, and the intent muscles as preferred. Injuries and
+// equipment are written into the input so the tools and the validator, which
+// rebuild the athlete from it, apply the same limits.
+func (c *CoachingContextAgent) applyAdHocIntent(ctx context.Context, in *CoachInput, intent *adHocIntent) error {
+	in.Profile.ActiveInjuries = append(in.Profile.ActiveInjuries, injuryDTOs(intent.avoidInjuries())...)
+	if len(intent.Equipment) > 0 {
+		in.Profile.AvailableEquipment = codeStrings(intent.Equipment)
+	}
+	if c.catalog == nil {
+		return nil
+	}
+
+	athlete := athleteFromInput(ctx, in)
+	prefs := candidatePrefs{
+		PreferredMuscles: intent.MuscleGroups,
+		PrimaryGoal:      in.Profile.PrimaryGoal,
+	}
+	if len(prefs.PreferredMuscles) == 0 {
+		prefs.PreferredMuscles = parseLLMValues(ctx, "preferred_muscle_groups", in.Profile.PreferredMuscleGroups,
+			"coach_input", taxonomy.ParseMuscleGroup)
+	}
+
+	exList, err := c.catalog.SearchByFilter(ctx, &port.ExerciseFilter{Limit: catalogPrefetchLimit})
+	if err != nil {
+		return fmt.Errorf("search exercise catalog for ad-hoc session: %w", err)
+	}
+	lists := buildCandidateLists(exList, &prefs, &athlete)
+	in.AvailableExercises = lists.main
+	in.RecoveryExercises = lists.recovery
+	in.InjuryLimits = lists.limits
+	return nil
 }

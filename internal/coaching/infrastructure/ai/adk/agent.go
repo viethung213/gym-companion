@@ -54,12 +54,6 @@ type CoachingContextAgent struct {
 	validator     *planValidator
 	llm           model.LLM
 
-	metaMu         sync.RWMutex
-	equipmentNames map[string]string
-	muscleNames    map[string]string
-	bodyPartNames  map[string]string
-	tagNames       map[string]string
-
 	// runner.Run yields only events, so this is the sole channel out of a node.
 	mu      sync.Mutex
 	results map[string]*PlanResult
@@ -81,19 +75,15 @@ func NewCoachingContextAgent(
 	}
 
 	cca := &CoachingContextAgent{
-		profileReader:  profileReader,
-		sessionReader:  sessionReader,
-		catalog:        catalogReader,
-		roadmaps:       roadmaps,
-		idgen:          idgen,
-		validator:      newPlanValidator(catalogReader),
-		results:        make(map[string]*PlanResult),
-		reasons:        make(map[string]string),
-		hints:          make(map[string]*port.AdHocHint),
-		equipmentNames: make(map[string]string),
-		muscleNames:    make(map[string]string),
-		bodyPartNames:  make(map[string]string),
-		tagNames:       make(map[string]string),
+		profileReader: profileReader,
+		sessionReader: sessionReader,
+		catalog:       catalogReader,
+		roadmaps:      roadmaps,
+		idgen:         idgen,
+		validator:     newPlanValidator(catalogReader),
+		results:       make(map[string]*PlanResult),
+		reasons:       make(map[string]string),
+		hints:         make(map[string]*port.AdHocHint),
 	}
 
 	if err := cca.build(ctx); err != nil {
@@ -137,7 +127,12 @@ func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID strin
 			slog.Any("issues", res.Issues))
 	}
 
-	return c.mapToDomainRoadmap(ctx, res.Plan, res.Names, userID, time.Now().UTC())
+	rm, err := c.mapToDomainRoadmap(ctx, res.Plan, res.Names, res.Primaries, userID, time.Now().UTC(), res.WeekStart)
+	if err != nil {
+		return nil, err
+	}
+	rm.SetTimezone(res.Timezone)
+	return rm, nil
 }
 
 // RegeneratePending satisfies port.CoachAgent. The workflow reads the pending
@@ -148,7 +143,7 @@ func (c *CoachingContextAgent) RegeneratePending(ctx context.Context, userID str
 		return nil, fmt.Errorf("run regenerate workflow: %w", err)
 	}
 
-	return c.mapToRegeneratedSessions(ctx, res.Plan, res.Names, userID, time.Now().UTC()), nil
+	return c.mapToRegeneratedSessions(ctx, res.Plan, res.Names, res.Primaries, userID, time.Now().UTC())
 }
 
 // Adapt satisfies port.CoachAgent.
@@ -158,7 +153,7 @@ func (c *CoachingContextAgent) Adapt(ctx context.Context, userID, decisionReason
 		return nil, fmt.Errorf("run adaptive workflow: %w", err)
 	}
 
-	return c.mapToRegeneratedSessions(ctx, res.Plan, res.Names, userID, time.Now().UTC()), nil
+	return c.mapToRegeneratedSessions(ctx, res.Plan, res.Names, res.Primaries, userID, time.Now().UTC())
 }
 
 // SuggestAdHocSession satisfies port.CoachAgent.
@@ -173,8 +168,12 @@ func (c *CoachingContextAgent) SuggestAdHocSession(ctx context.Context, userID s
 	}
 
 	firstSess := res.Plan.Weeks[0].Sessions[0]
+	muscles, err := sessionTargetMuscles(firstSess.Prescription, res.Primaries)
+	if err != nil {
+		return port.SuggestedSession{}, err
+	}
 	return port.SuggestedSession{
-		MuscleGroups: firstSess.TargetMuscleGroups,
+		MuscleGroups: muscles,
 		Prescription: c.mapPrescriptionToDomain(ctx, firstSess.Prescription, res.Names),
 		Reasoning:    firstSess.Reasoning,
 		EstimatedRPE: defaultEstimatedRPE,

@@ -29,6 +29,14 @@ type TransactionManager interface {
 // TxManager is an alias kept for parity with other bounded contexts.
 type TxManager = TransactionManager
 
+// ScheduledSession is a PENDING session with the instant it starts and the
+// zone its wall-clock slot is in.
+type ScheduledSession struct {
+	Info     roadmap.SessionPlanInfo
+	StartsAt time.Time
+	Location *time.Location
+}
+
 // RoadmapRepository persists the Roadmap aggregate tree.
 type RoadmapRepository interface {
 	Save(ctx context.Context, r *roadmap.Roadmap) error
@@ -36,7 +44,9 @@ type RoadmapRepository interface {
 	FindActiveByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error)
 	ListByUser(ctx context.Context, userID string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error)
 	FindSessionByID(ctx context.Context, sessionPlanID string) (*roadmap.Roadmap, error)
-	FindPendingSessionsByDate(ctx context.Context, targetDate time.Time) ([]*roadmap.SessionPlanInfo, error)
+	// FindPendingSessionsStarting returns PENDING sessions whose start, in their
+	// roadmap's zone, falls within [from, to].
+	FindPendingSessionsStarting(ctx context.Context, from, to time.Time) ([]ScheduledSession, error)
 }
 
 // OutboxRecord mirrors coaching.outbox row structure.

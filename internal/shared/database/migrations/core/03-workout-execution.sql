@@ -3,7 +3,7 @@
 -- Initial Schema, Transactional Outbox, Tables, and Motion Specifications
 -- =====================================================================
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
 CREATE SCHEMA IF NOT EXISTS workout_execution;
 

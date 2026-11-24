@@ -4,12 +4,18 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	exercisemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/exercise/v1/message"
+	profilev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event"
 	profilev1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestProfile_FullLifecycle_E2E(t *testing.T) {
@@ -30,13 +36,13 @@ func TestProfile_FullLifecycle_E2E(t *testing.T) {
 		Goals:                 []string{"BUILD_MUSCLE", "LOSE_FAT"},
 		ExperienceLevel:       "INTERMEDIATE",
 		PreferredWorkoutTimes: []string{"MORNING", "EVENING"},
-		AvailableEquipment:    []string{"BARBELL", "DUMBBELL"},
-		PreferredMuscleGroups: []string{"CHEST", "BACK"},
+		AvailableEquipment:    []exercisemsg.Equipment{exercisemsg.Equipment_EQUIPMENT_BARBELL, exercisemsg.Equipment_EQUIPMENT_DUMBBELL},
+		PreferredMuscleGroups: []exercisemsg.MuscleGroup{exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST, exercisemsg.MuscleGroup_MUSCLE_GROUP_LATS},
 		Injuries: []*profilev1message.InjuryInput{
 			{
-				MuscleGroup: "LOWER_BACK",
-				Severity:    "MILD",
-				Notes:       "Slight strain during deadlifts",
+				Region:   exercisemsg.JointRegion_JOINT_REGION_LOWER_BACK,
+				Severity: exercisemsg.InjurySeverity_INJURY_SEVERITY_MILD,
+				Notes:    "Slight strain during deadlifts",
 			},
 		},
 	})
@@ -64,16 +70,28 @@ func TestProfile_FullLifecycle_E2E(t *testing.T) {
 	if getResp.GetCompletionRate() <= 0 {
 		t.Errorf("Expected CompletionRate > 0, got %v", getResp.GetCompletionRate())
 	}
+	if got := getResp.GetAvailableEquipment(); len(got) != 2 || got[1] != exercisemsg.Equipment_EQUIPMENT_DUMBBELL {
+		t.Errorf("Unexpected available equipment: %v", got)
+	}
+	if got := getResp.GetInjuries(); len(got) != 1 ||
+		got[0].GetRegion() != exercisemsg.JointRegion_JOINT_REGION_LOWER_BACK ||
+		got[0].GetSide() != exercisemsg.BodySide_BODY_SIDE_BOTH {
+		t.Errorf("Unexpected injuries: %v", got)
+	}
 
 	// 3. UpdateProfile Preferences
 	updateResp, err := suite.Client.UpdateProfile(userCtx, &profilev1message.UpdateProfileRequest{
 		Goals:                 []string{"STRENGTH_BUILDING"},
 		PreferredWorkoutTimes: []string{"MORNING"},
-		AvailableEquipment:    []string{"BARBELL", "DUMBBELL", "CABLE"},
-		PreferredMuscleGroups: []string{"CHEST", "LEGS"},
-		CoachStyle:            "MOTIVATIONAL",
-		TargetWeightKg:        80.0,
-		TargetBodyFatPercent:  15.0,
+		AvailableEquipment: []exercisemsg.Equipment{
+			exercisemsg.Equipment_EQUIPMENT_BARBELL, exercisemsg.Equipment_EQUIPMENT_DUMBBELL, exercisemsg.Equipment_EQUIPMENT_CABLE,
+		},
+		PreferredMuscleGroups: []exercisemsg.MuscleGroup{
+			exercisemsg.MuscleGroup_MUSCLE_GROUP_CHEST, exercisemsg.MuscleGroup_MUSCLE_GROUP_QUADRICEPS,
+		},
+		CoachStyle:           "MOTIVATIONAL",
+		TargetWeightKg:       80.0,
+		TargetBodyFatPercent: 15.0,
 	})
 	if err != nil {
 		t.Fatalf("UpdateProfile failed: %v", err)
@@ -118,9 +136,11 @@ func TestProfile_FullLifecycle_E2E(t *testing.T) {
 
 	// 6. ReportInjury & GetInjuryHistory
 	reportInjResp, err := suite.Client.ReportInjury(userCtx, &profilev1message.ReportInjuryRequest{
-		MuscleGroup: "SHOULDER",
-		Severity:    "MODERATE",
-		Notes:       "Right rotator cuff discomfort",
+		Region:   exercisemsg.JointRegion_JOINT_REGION_SHOULDER,
+		Muscle:   exercisemsg.MuscleGroup_MUSCLE_GROUP_SHOULDERS,
+		Side:     exercisemsg.BodySide_BODY_SIDE_RIGHT,
+		Severity: exercisemsg.InjurySeverity_INJURY_SEVERITY_MODERATE,
+		Notes:    "Right rotator cuff discomfort",
 	})
 	if err != nil {
 		t.Fatalf("ReportInjury failed: %v", err)
@@ -129,6 +149,8 @@ func TestProfile_FullLifecycle_E2E(t *testing.T) {
 	if newInjuryID == "" {
 		t.Fatalf("ReportInjury returned empty injury ID")
 	}
+
+	assertInjuryReportedEvent(t, suite, newInjuryID)
 
 	injHistResp, err := suite.Client.GetInjuryHistory(userCtx, &profilev1message.GetInjuryHistoryRequest{
 		UserId: userID,
@@ -198,5 +220,61 @@ func TestProfile_AccessControl_E2E(t *testing.T) {
 	}
 	if adminGetResp.GetUserId() != user1ID {
 		t.Errorf("Admin got profile UserID = %s, want %s", adminGetResp.GetUserId(), user1ID)
+	}
+}
+
+// assertInjuryReportedEvent checks the outbox CloudEvent carries the typed
+// injury location (docs/05 section 6.5, 6.6).
+func assertInjuryReportedEvent(t *testing.T, suite *TestSuite, injuryID string) {
+	t.Helper()
+
+	var payloads [][]byte
+	if err := suite.DB.Table("profile.outbox").
+		Where("event_type = ?", "contracts.supporting.profile.v1.event.InjuryReported").
+		Pluck("payload", &payloads).Error; err != nil {
+		t.Fatalf("query InjuryReported outbox: %v", err)
+	}
+
+	for _, payload := range payloads {
+		var envelope struct {
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(payload, &envelope); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		var event profilev1event.InjuryReported
+		if err := protojson.Unmarshal(envelope.Data, &event); err != nil {
+			t.Fatalf("unmarshal InjuryReported: %v", err)
+		}
+		if event.GetInjury().GetInjuryId() != injuryID {
+			continue
+		}
+
+		inj := event.GetInjury()
+		if inj.GetRegion() != exercisemsg.JointRegion_JOINT_REGION_SHOULDER ||
+			inj.GetMuscle() != exercisemsg.MuscleGroup_MUSCLE_GROUP_SHOULDERS ||
+			inj.GetSide() != exercisemsg.BodySide_BODY_SIDE_RIGHT ||
+			inj.GetSeverity() != exercisemsg.InjurySeverity_INJURY_SEVERITY_MODERATE {
+			t.Errorf("unexpected InjuryReported payload: %v", inj)
+		}
+		return
+	}
+	t.Errorf("no InjuryReported event for injury %s in %d outbox rows", injuryID, len(payloads))
+}
+
+func TestProfile_ReportInjuryRejectsUnspecifiedRegion_E2E(t *testing.T) {
+	suite := SetupE2ESuite(t)
+	defer suite.StopServer()
+
+	userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-user-id", uuid.NewString(), "x-user-role", "User"))
+	if _, err := suite.Client.SaveHealthProfile(userCtx, &profilev1message.SaveHealthProfileRequest{WeightKg: 70, HeightCm: 170}); err != nil {
+		t.Fatalf("SaveHealthProfile failed: %v", err)
+	}
+
+	_, err := suite.Client.ReportInjury(userCtx, &profilev1message.ReportInjuryRequest{
+		Severity: exercisemsg.InjurySeverity_INJURY_SEVERITY_MILD,
+	})
+	if got := status.Code(err); got != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", got)
 	}
 }

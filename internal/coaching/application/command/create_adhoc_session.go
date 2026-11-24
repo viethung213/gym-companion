@@ -176,12 +176,12 @@ func exercisesToPrescribed(exercises []port.Exercise) []roadmap.PrescribedExerci
 	return out
 }
 
-// uniqueMuscleGroups extracts and deduplicates muscle groups from exercises.
+// uniqueMuscleGroups lists the exercises' primary MuscleGroup codes once each.
 func uniqueMuscleGroups(exercises []port.Exercise) []string {
 	seen := make(map[string]bool)
 	out := make([]string, 0, len(exercises))
 	for i := range exercises {
-		mg := exercises[i].MuscleGroup
+		mg := string(exercises[i].PrimaryMuscle)
 		if !seen[mg] {
 			seen[mg] = true
 			out = append(out, mg)

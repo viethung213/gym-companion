@@ -35,7 +35,7 @@ func (m *memRepo) FindSessionByID(context.Context, string) (*roadmap.Roadmap, er
 	return nil, roadmap.ErrSessionNotFound
 }
 
-func (m *memRepo) FindPendingSessionsByDate(context.Context, time.Time) ([]*roadmap.SessionPlanInfo, error) {
+func (m *memRepo) FindPendingSessionsStarting(context.Context, time.Time, time.Time) ([]port.ScheduledSession, error) {
 	return nil, nil
 }
 

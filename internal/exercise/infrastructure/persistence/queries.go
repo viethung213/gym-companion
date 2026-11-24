@@ -9,111 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
-func replaceSecondaryMuscles(tx *gorm.DB, info *domain.Info) error {
-	var currentIDs []string
-	err := tx.Model(&exerciseSecondaryMuscleRecord{}).
-		Where("exercise_id = ?", info.ID).
-		Pluck("muscle_id", &currentIDs).
-		Error
-	if err != nil {
-		return fmt.Errorf("load current secondary muscles for diff: %w", err)
-	}
-
-	currentMap := make(map[string]bool, len(currentIDs))
-	for _, id := range currentIDs {
-		currentMap[id] = true
-	}
-
-	newMap := make(map[string]bool, len(info.SecondaryMuscleIDs))
-	for _, id := range info.SecondaryMuscleIDs {
-		newMap[id] = true
-	}
-
-	var toAdd []string
-	for _, id := range info.SecondaryMuscleIDs {
-		if !currentMap[id] {
-			toAdd = append(toAdd, id)
-		}
-	}
-
-	var toDelete []string
-	for _, id := range currentIDs {
-		if !newMap[id] {
-			toDelete = append(toDelete, id)
-		}
-	}
-
-	if len(toDelete) > 0 {
-		err := tx.Where("exercise_id = ? AND muscle_id IN ?", info.ID, toDelete).
-			Delete(&exerciseSecondaryMuscleRecord{}).
-			Error
-		if err != nil {
-			return fmt.Errorf("delete secondary muscles: %w", err)
-		}
-	}
-
-	if len(toAdd) > 0 {
-		records := newSecondaryMuscleRecords(info.ID, toAdd)
-		if err := tx.Create(&records).Error; err != nil {
-			return fmt.Errorf("insert secondary muscles: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func replaceTags(tx *gorm.DB, info *domain.Info) error {
-	var currentIDs []string
-	err := tx.Model(&exerciseTagRecord{}).
-		Where("exercise_id = ?", info.ID).
-		Pluck("tag_id", &currentIDs).
-		Error
-	if err != nil {
-		return fmt.Errorf("load current exercise tags for diff: %w", err)
-	}
-
-	currentMap := make(map[string]bool, len(currentIDs))
-	for _, id := range currentIDs {
-		currentMap[id] = true
-	}
-
-	newMap := make(map[string]bool, len(info.TagIDs))
-	for _, id := range info.TagIDs {
-		newMap[id] = true
-	}
-
-	var toAdd []string
-	for _, id := range info.TagIDs {
-		if !currentMap[id] {
-			toAdd = append(toAdd, id)
-		}
-	}
-
-	var toDelete []string
-	for _, id := range currentIDs {
-		if !newMap[id] {
-			toDelete = append(toDelete, id)
-		}
-	}
-
-	if len(toDelete) > 0 {
-		err := tx.Where("exercise_id = ? AND tag_id IN ?", info.ID, toDelete).
-			Delete(&exerciseTagRecord{}).
-			Error
-		if err != nil {
-			return fmt.Errorf("delete exercise tags: %w", err)
-		}
-	}
-
-	if len(toAdd) > 0 {
-		records := newTagRecords(info.ID, toAdd)
-		if err := tx.Create(&records).Error; err != nil {
-			return fmt.Errorf("insert exercise tags: %w", err)
-		}
-	}
-
-	return nil
-}
+const (
+	defaultSearchLimit = 50
+	maxSearchLimit     = 2000
+)
 
 func (r *PostgresRepository) buildSearchQuery(
 	ctx context.Context,
@@ -129,78 +28,64 @@ func (r *PostgresRepository) buildSearchQuery(
 		}
 	}
 
-	if filters.BodyPartID != "" {
-		query = query.Where("e.body_part_id = ?", filters.BodyPartID)
+	if len(filters.PrimaryMuscles) > 0 {
+		query = query.Where("e.primary_muscle IN ?", codes(filters.PrimaryMuscles))
 	}
-	if filters.EquipmentID != "" {
-		query = query.Where("e.equipment_id = ?", filters.EquipmentID)
+	if len(filters.SecondaryMuscles) > 0 {
+		query = query.Where("e.secondary_muscles && ?::text[]", toTextArray(filters.SecondaryMuscles))
 	}
-	if filters.TargetMuscleID != "" {
-		query = query.Where("e.target_muscle_id = ?", filters.TargetMuscleID)
+	if len(filters.Equipment) > 0 {
+		query = query.Where("e.equipment IN ?", codes(filters.Equipment))
+	}
+	if len(filters.Categories) > 0 {
+		query = query.Where("e.category IN ?", codes(filters.Categories))
+	}
+	if len(filters.Levels) > 0 {
+		query = query.Where("e.level IN ?", codes(filters.Levels))
+	}
+	if filters.Force != "" {
+		query = query.Where("e.force = ?", string(filters.Force))
+	}
+	if filters.Mechanic != "" {
+		query = query.Where("e.mechanic = ?", string(filters.Mechanic))
+	}
+	if len(filters.ExcludeMuscles) > 0 {
+		excluded := toTextArray(filters.ExcludeMuscles)
+		query = query.Where(
+			"e.primary_muscle <> ALL(?::text[]) AND NOT (e.secondary_muscles && ?::text[])",
+			excluded, excluded,
+		)
+	}
+	if filters.HasAISupported != nil {
+		query = query.Where("e.has_ai_supported = ?", *filters.HasAISupported)
 	}
 	if filters.Keyword != "" {
 		query = query.Where("e.name ILIKE '%' || ? || '%'", filters.Keyword)
-	}
-	if filters.Difficulty != "" {
-		query = query.Where("e.difficulty = ?", filters.Difficulty)
 	}
 	if filters.MeasurementType != "" {
 		query = query.Where("e.measurement_type = ?", filters.MeasurementType)
 	}
 	if filters.HasMotionSpec != nil {
-		if *filters.HasMotionSpec {
-			query = query.Where(
-				`EXISTS (
-					SELECT 1 FROM workout_execution.motion_specifications ms
-					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.local_rules_url), '') <> ''
-				)`,
-			)
-		} else {
-			query = query.Where(
-				`NOT EXISTS (
-					SELECT 1 FROM workout_execution.motion_specifications ms
-					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.local_rules_url), '') <> ''
-				)`,
-			)
-		}
+		query = query.Where(specExistsClause(*filters.HasMotionSpec, "local_rules_url"))
 	}
 	if filters.HasVoiceSpec != nil {
-		if *filters.HasVoiceSpec {
-			query = query.Where(
-				`EXISTS (
-					SELECT 1 FROM workout_execution.motion_specifications ms
-					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.dialogue_engine_url), '') <> ''
-				)`,
-			)
-		} else {
-			query = query.Where(
-				`NOT EXISTS (
-					SELECT 1 FROM workout_execution.motion_specifications ms
-					WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.dialogue_engine_url), '') <> ''
-				)`,
-			)
-		}
-	}
-	for _, muscleID := range filters.SecondaryMuscleIDs {
-		query = query.Where(
-			`EXISTS (
-				SELECT 1 FROM exercise.exercise_secondary_muscles esm
-				WHERE esm.exercise_id = e.id AND esm.muscle_id = ?
-			)`,
-			muscleID,
-		)
-	}
-	for _, tagID := range filters.TagIDs {
-		query = query.Where(
-			`EXISTS (
-				SELECT 1 FROM exercise.exercise_tags et
-				WHERE et.exercise_id = e.id AND et.tag_id = ?
-			)`,
-			tagID,
-		)
+		query = query.Where(specExistsClause(*filters.HasVoiceSpec, "dialogue_engine_url"))
 	}
 
 	return query
+}
+
+// specExistsClause filters on a non-blank motion specification URL column.
+func specExistsClause(exists bool, column string) string {
+	operator := "EXISTS"
+	if !exists {
+		operator = "NOT EXISTS"
+	}
+
+	return operator + ` (
+		SELECT 1 FROM workout_execution.motion_specifications ms
+		WHERE ms.exercise_id = e.id AND COALESCE(BTRIM(ms.` + column + `), '') <> ''
+	)`
 }
 
 func (r *PostgresRepository) searchActiveRecords(
@@ -215,10 +100,10 @@ func (r *PostgresRepository) searchActiveRecords(
 
 	limit := filters.Limit
 	if limit <= 0 {
-		limit = 50
+		limit = defaultSearchLimit
 	}
-	if limit > 2000 {
-		limit = 2000
+	if limit > maxSearchLimit {
+		limit = maxSearchLimit
 	}
 
 	dataQuery := r.buildSearchQuery(ctx, filters).
@@ -237,118 +122,11 @@ func (r *PostgresRepository) searchActiveRecords(
 	return records, int32(totalCount), nil
 }
 
-func querySecondaryMuscleIDs(
-	ctx context.Context,
-	db *gorm.DB,
-	exerciseIDs []string,
-) (map[string][]string, error) {
-	if len(exerciseIDs) == 0 {
-		return make(map[string][]string), nil
+func codes[T ~string](values []T) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = string(v)
 	}
 
-	var records []exerciseSecondaryMuscleRecord
-	err := db.WithContext(ctx).
-		Model(&exerciseSecondaryMuscleRecord{}).
-		Where("exercise_id IN ?", exerciseIDs).
-		Order("muscle_id").
-		Find(&records).
-		Error
-	if err != nil {
-		return nil, fmt.Errorf("load secondary muscles: %w", err)
-	}
-
-	result := make(map[string][]string, len(exerciseIDs))
-	for _, rec := range records {
-		result[rec.ExerciseID] = append(result[rec.ExerciseID], rec.MuscleID)
-	}
-
-	return result, nil
-}
-
-func queryTagIDs(
-	ctx context.Context,
-	db *gorm.DB,
-	exerciseIDs []string,
-) (map[string][]string, error) {
-	if len(exerciseIDs) == 0 {
-		return make(map[string][]string), nil
-	}
-
-	var records []exerciseTagRecord
-	err := db.WithContext(ctx).
-		Model(&exerciseTagRecord{}).
-		Where("exercise_id IN ?", exerciseIDs).
-		Order("tag_id").
-		Find(&records).
-		Error
-	if err != nil {
-		return nil, fmt.Errorf("load tags: %w", err)
-	}
-
-	result := make(map[string][]string, len(exerciseIDs))
-	for _, rec := range records {
-		result[rec.ExerciseID] = append(result[rec.ExerciseID], rec.TagID)
-	}
-
-	return result, nil
-}
-
-func queryBodyParts(ctx context.Context, db *gorm.DB) ([]port.BodyPart, error) {
-	var records []bodyPartRecord
-	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("query body parts: %w", err)
-	}
-
-	bodyParts := make([]port.BodyPart, 0, len(records))
-	for _, record := range records {
-		bodyParts = append(bodyParts, port.BodyPart{ID: record.ID, Name: record.Name})
-	}
-
-	return bodyParts, nil
-}
-
-func queryEquipments(ctx context.Context, db *gorm.DB) ([]port.Equipment, error) {
-	var records []equipmentRecord
-	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("query equipments: %w", err)
-	}
-
-	equipments := make([]port.Equipment, 0, len(records))
-	for _, record := range records {
-		equipments = append(equipments, port.Equipment{ID: record.ID, Name: record.Name})
-	}
-
-	return equipments, nil
-}
-
-func queryMuscles(ctx context.Context, db *gorm.DB) ([]port.Muscle, error) {
-	var records []muscleRecord
-	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("query muscles: %w", err)
-	}
-
-	muscles := make([]port.Muscle, 0, len(records))
-	for _, record := range records {
-		muscles = append(muscles, port.Muscle{
-			ID:         record.ID,
-			Name:       record.Name,
-			BodyPartID: record.BodyPartID,
-		})
-	}
-
-	return muscles, nil
-}
-
-func queryTags(ctx context.Context, db *gorm.DB) ([]port.Tag, error) {
-	var records []tagRecord
-	if err := db.WithContext(ctx).Order("name").Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("query tags: %w", err)
-	}
-
-	tags := make([]port.Tag, 0, len(records))
-	for _, record := range records {
-		tags = append(tags, port.Tag{ID: record.ID, Name: record.Name})
-	}
-
-	return tags, nil
+	return out
 }

@@ -15,390 +15,259 @@ import (
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
 )
 
-//go:embed data/catalog_metadata_seed.json
-var catalogMetadataSeedJSON []byte
+// upstreamExercisesJSON is free-exercise-db dist/exercises.json at the commit
+// pinned in data/upstream/free-exercise-db/UPSTREAM.md.
+//
+//go:embed data/upstream/free-exercise-db/exercises.json
+var upstreamExercisesJSON []byte
 
-//go:embed data/exercises_seed.json
-var exercisesSeedJSON []byte
+// aiMotionMapJSON maps each AI motion_slug to the source exercise ids it
+// covers (docs/05 §8.8).
+//
+//go:embed data/ai_motion_map.json
+var aiMotionMapJSON []byte
 
-// catalogMetadataSeed defines the structure of master lookup tables.
-type catalogMetadataSeed struct {
-	BodyParts  []catalogItem       `json:"body_parts"`
-	Equipments []catalogItem       `json:"equipments"`
-	Muscles    []catalogMuscleItem `json:"muscles"`
-	Tags       []catalogItem       `json:"tags"`
+const (
+	stretchingRestSeconds = 15
+	compoundRestSeconds   = 90
+	defaultRestSeconds    = 60
+)
+
+// upstreamExercise is one free-exercise-db record; nullable fields are pointers.
+type upstreamExercise struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Force            *string  `json:"force"`
+	Level            string   `json:"level"`
+	Mechanic         *string  `json:"mechanic"`
+	Equipment        *string  `json:"equipment"`
+	PrimaryMuscles   []string `json:"primaryMuscles"`
+	SecondaryMuscles []string `json:"secondaryMuscles"`
+	Instructions     []string `json:"instructions"`
+	Category         string   `json:"category"`
+	Images           []string `json:"images"`
 }
 
-type catalogItem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type catalogMuscleItem struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	BodyPartID string `json:"body_part_id"`
-}
-
-// exerciseSeedRecord defines the JSON structure for an exercise seed item.
-type exerciseSeedRecord struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
-	BodyPartID         string   `json:"body_part_id"`
-	EquipmentID        string   `json:"equipment_id"`
-	TargetMuscleID     string   `json:"target_muscle_id"`
-	SecondaryMuscleIDs []string `json:"secondary_muscle_ids"`
-	Instructions       string   `json:"instructions"`
-	ThumbnailURL       string   `json:"thumbnail_url"`
-	MediaURL           string   `json:"media_url"`
-	VideoURL           string   `json:"video_url"`
-	Difficulty         string   `json:"difficulty"`
-	DefaultRestSeconds int32    `json:"default_rest_seconds"`
-	TagIDs             []string `json:"tag_ids"`
-	MeasurementType    string   `json:"measurement_type"`
-}
-
-// ExerciseRegistrar defines the interface required to create exercises and catalog metadata.
-// Implemented by *exerciseGRPC.ExerciseServer and exercisev1service.ExerciseServiceServer.
+// ExerciseRegistrar creates catalog exercises through the Exercise service, so
+// seeding keeps the aggregate invariants and the outbox events.
 type ExerciseRegistrar interface {
 	CreateExercise(ctx context.Context, req *exercisemsg.CreateExerciseRequest) (*exercisemsg.CreateExerciseResponse, error)
-	CreateBodyPart(ctx context.Context, req *exercisemsg.CreateBodyPartRequest) (*exercisemsg.CreateBodyPartResponse, error)
-	CreateEquipment(ctx context.Context, req *exercisemsg.CreateEquipmentRequest) (*exercisemsg.CreateEquipmentResponse, error)
-	CreateMuscle(ctx context.Context, req *exercisemsg.CreateMuscleRequest) (*exercisemsg.CreateMuscleResponse, error)
-	CreateTag(ctx context.Context, req *exercisemsg.CreateTagRequest) (*exercisemsg.CreateTagResponse, error)
 }
 
-// SeedExercises seeds both the catalog metadata and the catalog of exercises via the Exercise Service API:
-// 1. Seeds body parts, equipments, muscles, tags via API (or maps existing records) to satisfy Foreign Key constraints.
-// 2. Checks if exercises are already populated in exercise.exercises; skips if all exist.
-// 3. Pre-loads existing exercise names to ensure idempotent execution.
-// 4. Calls exerciseService.CreateExercise with an Admin context and MeasurementType for each record.
+// SeedExercises imports the pinned free-exercise-db catalog, skipping
+// exercises whose slug already exists. Exercises with images are created
+// ACTIVE, the others DRAFT.
 func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegistrar) error {
 	if exerciseService == nil {
 		return errors.New("exerciseService cannot be nil")
 	}
 
-	// Chuẩn bị context có quyền Admin để vượt qua middleware.RequireAdmin
+	var records []upstreamExercise
+	if err := json.Unmarshal(upstreamExercisesJSON, &records); err != nil {
+		return fmt.Errorf("unmarshal upstream exercises: %w", err)
+	}
+	motionSlugs, err := loadAIMotionMap()
+	if err != nil {
+		return err
+	}
+	existing, err := existingExerciseSlugs(ctx, db)
+	if err != nil {
+		return err
+	}
+
 	adminCtx := context.WithValue(ctx, middleware.UserIDKey, "system-seeder-admin")
 	adminCtx = context.WithValue(adminCtx, middleware.UserRoleKey, "Admin")
 
-	// 1. Seed hoặc ánh xạ Metadata danh mục (Body Parts, Equipments, Muscles, Tags) qua API
-	idMap, err := seedCatalogMetadata(adminCtx, db, exerciseService)
-	if err != nil {
-		return fmt.Errorf("seed catalog metadata: %w", err)
-	}
-
-	var records []exerciseSeedRecord
-	if err := json.Unmarshal(exercisesSeedJSON, &records); err != nil {
-		return fmt.Errorf("unmarshal exercise seed json: %w", err)
-	}
-
-	totalRecords := len(records)
-	if totalRecords == 0 {
-		slog.InfoContext(ctx, "No exercise seed records found. Skipping")
-		return nil
-	}
-
-	// 2. Kiểm tra nhanh: nếu số lượng bài tập trong DB đã đầy đủ thì bỏ qua
-	existingNames := make(map[string]bool, totalRecords)
-	if db != nil {
-		var currentCount int
-		err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM exercise.exercises`).Scan(&currentCount)
-		if err == nil && currentCount >= totalRecords {
-			slog.InfoContext(ctx, "Exercise catalog already fully seeded, skipping exercise seeder",
-				slog.Int("current_count", currentCount),
-			)
-			return nil
-		}
-
-		// Nạp danh sách tên bài tập hiện có vào map để kiểm tra trùng lặp
-		rows, err := db.QueryContext(ctx, `SELECT LOWER(name) FROM exercise.exercises`)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var name string
-				if scanErr := rows.Scan(&name); scanErr == nil {
-					existingNames[name] = true
-				}
-			}
-		}
-	}
-
 	slog.InfoContext(ctx, "Starting Exercise catalog seeding",
-		slog.Int("total_records", totalRecords),
-		slog.Int("already_existing", len(existingNames)),
+		slog.Int("total_records", len(records)),
+		slog.Int("already_existing", len(existing)),
 	)
 
+	var failures []error
 	createdCount := 0
 	for i := range records {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		record := &records[i]
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		trimmedName := strings.TrimSpace(record.Name)
-		if existingNames[strings.ToLower(trimmedName)] {
+		if existing[record.ID] {
 			continue
 		}
 
-		mType := exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS
-		if strings.EqualFold(record.MeasurementType, "DURATION") {
-			mType = exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION
-		}
-
-		// Ánh xạ sang ID mới từ Metadata Seeder
-		bodyPartID := idMap[record.BodyPartID]
-		if bodyPartID == "" {
-			bodyPartID = record.BodyPartID
-		}
-
-		equipmentID := idMap[record.EquipmentID]
-		if equipmentID == "" {
-			equipmentID = record.EquipmentID
-		}
-
-		targetMuscleID := idMap[record.TargetMuscleID]
-		if targetMuscleID == "" {
-			targetMuscleID = record.TargetMuscleID
-		}
-
-		var secondaryMuscleIDs []string
-		for _, smID := range record.SecondaryMuscleIDs {
-			mappedID := idMap[smID]
-			if mappedID != "" {
-				secondaryMuscleIDs = append(secondaryMuscleIDs, mappedID)
-			} else if smID != "" {
-				secondaryMuscleIDs = append(secondaryMuscleIDs, smID)
-			}
-		}
-
-		var tagIDs []string
-		for _, tID := range record.TagIDs {
-			mappedID := idMap[tID]
-			if mappedID != "" {
-				tagIDs = append(tagIDs, mappedID)
-			} else if tID != "" {
-				tagIDs = append(tagIDs, tID)
-			}
-		}
-		if recTagID := classifyRecoveryTagID(trimmedName, idMap); recTagID != "" {
-			tagIDs = appendUniqueString(tagIDs, recTagID)
-		}
-
-		req := &exercisemsg.CreateExerciseRequest{
-			Name:               trimmedName,
-			BodyPartId:         bodyPartID,
-			EquipmentId:        equipmentID,
-			TargetMuscleId:     targetMuscleID,
-			Instructions:       record.Instructions,
-			SecondaryMuscleIds: secondaryMuscleIDs,
-			ThumbnailUrl:       record.ThumbnailURL,
-			MediaUrl:           record.MediaURL,
-			VideoUrl:           record.VideoURL,
-			Difficulty:         record.Difficulty,
-			DefaultRestSeconds: record.DefaultRestSeconds,
-			TagIds:             tagIDs,
-			MeasurementType:    mType,
-			Status:             exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE,
-		}
-
-		_, err := exerciseService.CreateExercise(adminCtx, req)
+		req, err := newCreateExerciseRequest(record, motionSlugs[record.ID])
 		if err != nil {
-			slog.WarnContext(adminCtx, "Failed to seed exercise",
-				slog.String("name", record.Name),
-				slog.String("error", err.Error()),
-			)
+			return err
+		}
+		if _, err := exerciseService.CreateExercise(adminCtx, req); err != nil {
+			failures = append(failures, fmt.Errorf("create exercise %s: %w", record.ID, err))
 			continue
 		}
 
-		existingNames[strings.ToLower(trimmedName)] = true
+		existing[record.ID] = true
 		createdCount++
 
-		// Throttling nhẹ nhàng sau mỗi 25 bài để giải phóng scheduler và tránh nghẽn connection pool
+		// Yield briefly every 25 inserts so the seeder does not starve the connection pool.
 		if createdCount%25 == 0 {
 			time.Sleep(5 * time.Millisecond)
-		}
-
-		// Log tiến độ định kỳ mỗi 200 bài
-		if (i+1)%200 == 0 || i+1 == totalRecords {
-			slog.InfoContext(ctx, "Seeding exercises progress",
-				slog.Int("progress", i+1),
-				slog.Int("total", totalRecords),
-				slog.Int("newly_inserted", createdCount),
-			)
 		}
 	}
 
 	slog.InfoContext(ctx, "Completed Exercise catalog seeding",
 		slog.Int("new_exercises_created", createdCount),
-		slog.Int("total_catalog", len(existingNames)),
+		slog.Int("failed", len(failures)),
 	)
-	return nil
+
+	return errors.Join(failures...)
 }
 
-// seedCatalogMetadata ensures body parts, equipments, muscles, and tags are populated via API,
-// returning a map of [oldSeedUUID] => [liveDatabaseUUID].
-func seedCatalogMetadata(ctx context.Context, db *sql.DB, registrar ExerciseRegistrar) (map[string]string, error) {
-	var meta catalogMetadataSeed
-	if err := json.Unmarshal(catalogMetadataSeedJSON, &meta); err != nil {
-		return nil, fmt.Errorf("unmarshal catalog metadata json: %w", err)
+// loadAIMotionMap returns source exercise id -> motion_slug.
+func loadAIMotionMap() (map[string]string, error) {
+	var bySlug map[string][]string
+	if err := json.Unmarshal(aiMotionMapJSON, &bySlug); err != nil {
+		return nil, fmt.Errorf("unmarshal ai motion map: %w", err)
 	}
 
-	idMap := make(map[string]string)
-
-	existingBodyParts := queryExistingMap(ctx, db, "exercise.body_parts")
-	existingEquipments := queryExistingMap(ctx, db, "exercise.equipments")
-	existingMuscles := queryExistingMap(ctx, db, "exercise.muscles")
-	existingTags := queryExistingMap(ctx, db, "exercise.tags")
-
-	// 1. Seed Body Parts
-	for _, bp := range meta.BodyParts {
-		lowerName := strings.ToLower(strings.TrimSpace(bp.Name))
-		if liveID, ok := existingBodyParts[lowerName]; ok {
-			idMap[bp.ID] = liveID
-			continue
+	byExercise := make(map[string]string)
+	for motionSlug, exerciseIDs := range bySlug {
+		for _, id := range exerciseIDs {
+			byExercise[id] = motionSlug
 		}
-
-		resp, err := registrar.CreateBodyPart(ctx, &exercisemsg.CreateBodyPartRequest{Name: bp.Name})
-		if err != nil {
-			return nil, fmt.Errorf("create body part %q via API: %w", bp.Name, err)
-		}
-		idMap[bp.ID] = resp.BodyPart.Id
-		existingBodyParts[lowerName] = resp.BodyPart.Id
 	}
 
-	// 2. Seed Equipments
-	for _, eq := range meta.Equipments {
-		lowerName := strings.ToLower(strings.TrimSpace(eq.Name))
-		if liveID, ok := existingEquipments[lowerName]; ok {
-			idMap[eq.ID] = liveID
-			continue
-		}
-
-		resp, err := registrar.CreateEquipment(ctx, &exercisemsg.CreateEquipmentRequest{Name: eq.Name})
-		if err != nil {
-			return nil, fmt.Errorf("create equipment %q via API: %w", eq.Name, err)
-		}
-		idMap[eq.ID] = resp.Equipment.Id
-		existingEquipments[lowerName] = resp.Equipment.Id
-	}
-
-	// 3. Seed Muscles (depends on Body Parts)
-	for _, m := range meta.Muscles {
-		lowerName := strings.ToLower(strings.TrimSpace(m.Name))
-		if liveID, ok := existingMuscles[lowerName]; ok {
-			idMap[m.ID] = liveID
-			continue
-		}
-
-		targetBPID := idMap[m.BodyPartID]
-		if targetBPID == "" {
-			targetBPID = m.BodyPartID
-		}
-
-		resp, err := registrar.CreateMuscle(ctx, &exercisemsg.CreateMuscleRequest{
-			Name:       m.Name,
-			BodyPartId: targetBPID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create muscle %q via API: %w", m.Name, err)
-		}
-		idMap[m.ID] = resp.Muscle.Id
-		existingMuscles[lowerName] = resp.Muscle.Id
-	}
-
-	// 4. Seed Tags
-	for _, t := range meta.Tags {
-		lowerName := strings.ToLower(strings.TrimSpace(t.Name))
-		if liveID, ok := existingTags[lowerName]; ok {
-			idMap[t.ID] = liveID
-			continue
-		}
-
-		resp, err := registrar.CreateTag(ctx, &exercisemsg.CreateTagRequest{Name: t.Name})
-		if err != nil {
-			return nil, fmt.Errorf("create tag %q via API: %w", t.Name, err)
-		}
-		idMap[t.ID] = resp.Tag.Id
-		existingTags[lowerName] = resp.Tag.Id
-	}
-
-	return idMap, nil
+	return byExercise, nil
 }
 
-// queryExistingMap retrieves an existing [lowerName] => [id] map from a lookup table.
-func queryExistingMap(ctx context.Context, db *sql.DB, tableName string) map[string]string {
-	result := make(map[string]string)
+func existingExerciseSlugs(ctx context.Context, db *sql.DB) (map[string]bool, error) {
+	slugs := make(map[string]bool)
 	if db == nil {
-		return result
+		return slugs, nil
 	}
 
-	query := "SELECT id, LOWER(name) FROM " + tableName
-	rows, err := db.QueryContext(ctx, query)
+	rows, err := db.QueryContext(ctx, `SELECT slug FROM exercise.exercises`)
 	if err != nil {
-		return result
+		return nil, fmt.Errorf("query existing exercise slugs: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var id, name string
-		if err := rows.Scan(&id, &name); err == nil {
-			result[name] = id
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, fmt.Errorf("scan exercise slug: %w", err)
 		}
+		slugs[slug] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate exercise slugs: %w", err)
 	}
 
-	return result
+	return slugs, nil
 }
 
-const (
-	seedMobilityWarmUpTagID     = "1b328731-e62e-445e-bc1b-f0d5dc34aa5e"
-	seedStretchingCoolDownTagID = "9f7a2c10-8e4b-4c5d-9a1e-6b3f2d4e8c91"
-)
-
-func isMobilityWarmUpExercise(lowerName string) bool {
-	switch lowerName {
-	case "ankle circles",
-		"wrist circles",
-		"circles knee stretch",
-		"dynamic chest stretch (male)",
-		"world greatest stretch",
-		"high knee against wall",
-		"jack jump (male)",
-		"walking high knees lunge",
-		"swing 360",
-		"glute bridge march":
-		return true
-	default:
-		return false
+// newCreateExerciseRequest normalizes one source record (docs/05 §4, §5.1):
+// null equipment -> BODY_ONLY; extra primary muscles move to secondary;
+// stretching or static -> DURATION; rest 15s stretching, 90s compound, else
+// 60s; no images -> DRAFT. Duplicate secondary muscles are dropped by the
+// Exercise aggregate.
+func newCreateExerciseRequest(rec *upstreamExercise, motionSlug string) (*exercisemsg.CreateExerciseRequest, error) {
+	if len(rec.PrimaryMuscles) == 0 {
+		return nil, fmt.Errorf("exercise %s has no primary muscle", rec.ID)
 	}
+
+	primary, err := upstreamEnum(exercisemsg.MuscleGroup_value, "MUSCLE_GROUP_", rec.PrimaryMuscles[0])
+	if err != nil {
+		return nil, fmt.Errorf("exercise %s: %w", rec.ID, err)
+	}
+	extraMuscles := append(append([]string(nil), rec.PrimaryMuscles[1:]...), rec.SecondaryMuscles...)
+	secondary := make([]exercisemsg.MuscleGroup, 0, len(extraMuscles))
+	for _, m := range extraMuscles {
+		v, muscleErr := upstreamEnum(exercisemsg.MuscleGroup_value, "MUSCLE_GROUP_", m)
+		if muscleErr != nil {
+			return nil, fmt.Errorf("exercise %s: %w", rec.ID, muscleErr)
+		}
+		secondary = append(secondary, exercisemsg.MuscleGroup(v))
+	}
+
+	equipment := "body only"
+	if rec.Equipment != nil {
+		equipment = *rec.Equipment
+	}
+	equipmentValue, err := upstreamEnum(exercisemsg.Equipment_value, "EQUIPMENT_", equipment)
+	if err != nil {
+		return nil, fmt.Errorf("exercise %s: %w", rec.ID, err)
+	}
+	category, err := upstreamEnum(exercisemsg.ExerciseCategory_value, "EXERCISE_CATEGORY_", rec.Category)
+	if err != nil {
+		return nil, fmt.Errorf("exercise %s: %w", rec.ID, err)
+	}
+	level, err := upstreamEnum(exercisemsg.ExerciseLevel_value, "EXERCISE_LEVEL_", rec.Level)
+	if err != nil {
+		return nil, fmt.Errorf("exercise %s: %w", rec.ID, err)
+	}
+	force, err := optionalUpstreamEnum(exercisemsg.ExerciseForce_value, "EXERCISE_FORCE_", rec.Force)
+	if err != nil {
+		return nil, fmt.Errorf("exercise %s: %w", rec.ID, err)
+	}
+	mechanic, err := optionalUpstreamEnum(exercisemsg.ExerciseMechanic_value, "EXERCISE_MECHANIC_", rec.Mechanic)
+	if err != nil {
+		return nil, fmt.Errorf("exercise %s: %w", rec.ID, err)
+	}
+
+	isStretching := exercisemsg.ExerciseCategory(category) == exercisemsg.ExerciseCategory_EXERCISE_CATEGORY_STRETCHING
+	measurementType := exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_REPS
+	if isStretching || exercisemsg.ExerciseForce(force) == exercisemsg.ExerciseForce_EXERCISE_FORCE_STATIC {
+		measurementType = exercisemsg.ExerciseMeasurementType_EXERCISE_MEASUREMENT_TYPE_DURATION
+	}
+
+	restSeconds := int32(defaultRestSeconds)
+	switch {
+	case isStretching:
+		restSeconds = stretchingRestSeconds
+	case exercisemsg.ExerciseMechanic(mechanic) == exercisemsg.ExerciseMechanic_EXERCISE_MECHANIC_COMPOUND:
+		restSeconds = compoundRestSeconds
+	}
+
+	status := exercisemsg.ExerciseStatus_EXERCISE_STATUS_ACTIVE
+	if len(rec.Images) == 0 {
+		status = exercisemsg.ExerciseStatus_EXERCISE_STATUS_DRAFT
+	}
+
+	return &exercisemsg.CreateExerciseRequest{
+		Slug:               rec.ID,
+		Name:               strings.TrimSpace(rec.Name),
+		PrimaryMuscle:      exercisemsg.MuscleGroup(primary),
+		SecondaryMuscles:   secondary,
+		Equipment:          exercisemsg.Equipment(equipmentValue),
+		Category:           exercisemsg.ExerciseCategory(category),
+		Level:              exercisemsg.ExerciseLevel(level),
+		Force:              exercisemsg.ExerciseForce(force),
+		Mechanic:           exercisemsg.ExerciseMechanic(mechanic),
+		Instructions:       rec.Instructions,
+		Images:             rec.Images,
+		MeasurementType:    measurementType,
+		DefaultRestSeconds: restSeconds,
+		MotionSlug:         motionSlug,
+		Status:             status,
+	}, nil
 }
 
-func classifyRecoveryTagID(name string, idMap map[string]string) string {
-	lower := strings.ToLower(strings.TrimSpace(name))
-	if isMobilityWarmUpExercise(lower) {
-		if mapped := idMap[seedMobilityWarmUpTagID]; mapped != "" {
-			return mapped
-		}
-		return seedMobilityWarmUpTagID
+// upstreamEnum resolves a source value ("lower back", "e-z curl bar") to the
+// contract enum number named prefix + code ("LOWER_BACK", "EZ_CURL_BAR").
+func upstreamEnum(values map[string]int32, prefix, raw string) (int32, error) {
+	code := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(raw), "-", ""), " ", "_"))
+	v, ok := values[prefix+code]
+	if !ok || v == 0 {
+		return 0, fmt.Errorf("unknown source value %q for %s", raw, strings.TrimSuffix(prefix, "_"))
 	}
-	if strings.Contains(lower, "stretch") &&
-		!strings.Contains(lower, "outstretched") &&
-		!strings.Contains(lower, "weighted stretch lunge") {
-		if mapped := idMap[seedStretchingCoolDownTagID]; mapped != "" {
-			return mapped
-		}
-		return seedStretchingCoolDownTagID
-	}
-	return ""
+
+	return v, nil
 }
 
-func appendUniqueString(slice []string, val string) []string {
-	for _, s := range slice {
-		if s == val {
-			return slice
-		}
+// optionalUpstreamEnum maps a null source value to UNSPECIFIED.
+func optionalUpstreamEnum(values map[string]int32, prefix string, raw *string) (int32, error) {
+	if raw == nil {
+		return 0, nil
 	}
-	return append(slice, val)
+
+	return upstreamEnum(values, prefix, *raw)
 }

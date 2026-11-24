@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // athlete IANA zones must resolve on hosts without a zoneinfo database
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"

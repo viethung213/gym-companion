@@ -26,13 +26,14 @@ type ApplyAdaptiveCycleResult struct {
 
 // ApplyAdaptiveCycleHandler orchestrates BR-AC-04 Trigger A.
 type ApplyAdaptiveCycleHandler struct {
-	tx     port.TransactionManager
-	repo   port.RoadmapRepository
-	agent  port.CoachAgent
-	guard  *guardrail.Engine
-	outbox port.OutboxWriter
-	clock  port.Clock
-	engine *service.AdaptiveCoachEngine
+	tx       port.TransactionManager
+	repo     port.RoadmapRepository
+	agent    port.CoachAgent
+	guard    *guardrail.Engine
+	profiles port.UserProfileReader
+	outbox   port.OutboxWriter
+	clock    port.Clock
+	engine   *service.AdaptiveCoachEngine
 }
 
 // NewApplyAdaptiveCycleHandler wires the handler.
@@ -41,6 +42,7 @@ func NewApplyAdaptiveCycleHandler(
 	repo port.RoadmapRepository,
 	agent port.CoachAgent,
 	guard *guardrail.Engine,
+	profiles port.UserProfileReader,
 	outbox port.OutboxWriter,
 	clock port.Clock,
 	engine *service.AdaptiveCoachEngine,
@@ -50,13 +52,14 @@ func NewApplyAdaptiveCycleHandler(
 	}
 
 	return &ApplyAdaptiveCycleHandler{
-		tx:     tx,
-		repo:   repo,
-		agent:  agent,
-		guard:  guard,
-		outbox: outbox,
-		clock:  clock,
-		engine: engine,
+		tx:       tx,
+		repo:     repo,
+		agent:    agent,
+		guard:    guard,
+		profiles: profiles,
+		outbox:   outbox,
+		clock:    clock,
+		engine:   engine,
 	}
 }
 
@@ -73,56 +76,46 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	}
 
 	rm, err := h.repo.FindActiveByUser(ctx, cmd.UserID)
-
 	if err != nil {
 		return nil, err
 	}
 
-	now := h.clock.Now()
+	// Read the schedule in the athlete's current zone, as the agent does.
+	profile, err := h.profiles.GetProfile(ctx, cmd.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load profile for adaptive cycle: %w", err)
+	}
+	rm.SetTimezone(profile.Zone().String())
 
-	pending := rm.PendingSessionsFrom(now)
-
-	if len(pending) == 0 {
+	// Same set the agent revises (adk pendingNode): PENDING sessions not yet started.
+	if len(rm.UpcomingPendingSessions(h.clock.Now())) == 0 {
 		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
 	}
 
 	drafts, err := h.agent.Adapt(ctx, cmd.UserID, decision.Reason)
-
 	if err != nil {
 		return nil, fmt.Errorf("agent adapt: %w", err)
 	}
 
-	// One draft per pending session, in the same order (D3 invariant).
+	// Generation takes a while; sessions that started meanwhile are left alone.
+	now := h.clock.Now()
+	pending := rm.UpcomingPendingSessions(now)
 
-	if len(drafts) != len(pending) {
-		return nil, fmt.Errorf("agent returned %d drafts for %d pending sessions", len(drafts), len(pending))
+	// An adaptation only rewrites prescriptions; it never moves a session.
+	aligned, ok := alignDrafts(pending, drafts)
+	if !ok {
+		return nil, fmt.Errorf("agent moved sessions instead of adapting the %d pending ones", len(pending))
 	}
-
-	applied := 0
-
-	for i, d := range drafts {
-		if d == nil {
-			continue
-		}
-
-		s := pending[i]
-
-		if s.Status() != roadmap.SessionPlanStatusPending {
-			continue
-		}
-
-		if rwErr := s.RewritePrescription(d.Prescription, d.TargetMuscleGroups, d.Reasoning, now); rwErr != nil {
-			return nil, rwErr
-		}
-
-		applied++
+	applied, err := rewriteInPlace(pending, aligned, now)
+	if err != nil {
+		return nil, err
 	}
-
 	if applied == 0 {
 		return nil, fmt.Errorf("no session was adapted out of %d pending", len(pending))
 	}
 
-	if result := h.guard.Check(rm); result.Status != guardrail.StatusApproved {
+	injuries := profile.Athlete().Injuries
+	if result := h.guard.Check(rm, injuries, now); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected adaptive cycle: %+v", result.Violations)
 	}
 

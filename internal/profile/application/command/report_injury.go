@@ -8,14 +8,17 @@ import (
 	"github.com/viethung213/gym-companion/internal/profile/application/port"
 	"github.com/viethung213/gym-companion/internal/profile/domain/entity"
 	"github.com/viethung213/gym-companion/internal/profile/domain/repository"
+	"github.com/viethung213/gym-companion/internal/profile/domain/vo"
 )
 
 type ReportInjuryCommand struct {
-	InjuryID    string
-	UserID      string
-	MuscleGroup string
-	Severity    string
-	Notes       string
+	InjuryID string
+	UserID   string
+	Region   vo.JointRegion
+	Muscle   vo.MuscleGroup
+	Side     vo.BodySide
+	Severity vo.InjurySeverity
+	Notes    string
 }
 
 type ReportInjuryHandler struct {
@@ -43,7 +46,9 @@ func (h *ReportInjuryHandler) Handle(ctx context.Context, cmd ReportInjuryComman
 		return "", fmt.Errorf("find profile to report injury: %w", err)
 	}
 
-	inj, createErr := entity.NewInjury(cmd.InjuryID, cmd.MuscleGroup, cmd.Severity, cmd.Notes, time.Now())
+	inj, createErr := entity.NewInjury(
+		cmd.InjuryID, cmd.Region, cmd.Muscle, cmd.Side, cmd.Severity, cmd.Notes, time.Now(),
+	)
 	if createErr != nil {
 		return "", fmt.Errorf("create injury entity: %w", createErr)
 	}

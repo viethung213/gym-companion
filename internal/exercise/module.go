@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
+	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/config"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
@@ -45,7 +46,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 
 	createHandler := command.NewCreateExerciseHandler(repo, clock, ids)
 	updateHandler := command.NewUpdateExerciseHandler(repo, clock)
-	submitForApprovalHandler := command.NewSubmitExerciseForApprovalHandler(repo, clock, ids)
 	approveHandler := command.NewApproveExerciseHandler(repo, clock, ids)
 	archiveHandler := command.NewArchiveExerciseHandler(repo, clock, ids)
 	restoreHandler := command.NewRestoreExerciseHandler(repo, clock, ids)
@@ -54,65 +54,20 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	getHandler := query.NewGetExerciseHandler(repo)
 	getRandomHandler := query.NewGetRandomExerciseHandler(repo)
 	searchHandler := query.NewSearchExercisesHandler(repo)
-	metadataHandler := query.NewGetCatalogMetadataHandler(repo)
 
-	// Catalog CRUD handlers
-	createBodyPartHandler := command.NewCreateBodyPartHandler(repo, ids)
-	updateBodyPartHandler := command.NewUpdateBodyPartHandler(repo)
-	deleteBodyPartHandler := command.NewDeleteBodyPartHandler(repo)
-	getBodyPartHandler := query.NewGetBodyPartHandler(repo)
-	listBodyPartsHandler := query.NewListBodyPartsHandler(repo)
-
-	createEquipmentHandler := command.NewCreateEquipmentHandler(repo, ids)
-	updateEquipmentHandler := command.NewUpdateEquipmentHandler(repo)
-	deleteEquipmentHandler := command.NewDeleteEquipmentHandler(repo)
-	getEquipmentHandler := query.NewGetEquipmentHandler(repo)
-	listEquipmentsHandler := query.NewListEquipmentsHandler(repo)
-
-	createMuscleHandler := command.NewCreateMuscleHandler(repo, ids)
-	updateMuscleHandler := command.NewUpdateMuscleHandler(repo)
-	deleteMuscleHandler := command.NewDeleteMuscleHandler(repo)
-	getMuscleHandler := query.NewGetMuscleHandler(repo)
-	listMusclesHandler := query.NewListMusclesHandler(repo)
-
-	createTagHandler := command.NewCreateTagHandler(repo, ids)
-	updateTagHandler := command.NewUpdateTagHandler(repo)
-	deleteTagHandler := command.NewDeleteTagHandler(repo)
-	getTagHandler := query.NewGetTagHandler(repo)
-	listTagsHandler := query.NewListTagsHandler(repo)
+	cfg := config.LoadConfig()
 
 	// Initialize gRPC Handler and Register Service
 	grpcHandler := exerciseGRPC.NewExerciseServer(
 		createHandler,
 		updateHandler,
-		submitForApprovalHandler,
 		approveHandler,
 		archiveHandler,
 		restoreHandler,
 		getHandler,
 		getRandomHandler,
 		searchHandler,
-		metadataHandler,
-		createBodyPartHandler,
-		updateBodyPartHandler,
-		deleteBodyPartHandler,
-		getBodyPartHandler,
-		listBodyPartsHandler,
-		createEquipmentHandler,
-		updateEquipmentHandler,
-		deleteEquipmentHandler,
-		getEquipmentHandler,
-		listEquipmentsHandler,
-		createMuscleHandler,
-		updateMuscleHandler,
-		deleteMuscleHandler,
-		getMuscleHandler,
-		listMusclesHandler,
-		createTagHandler,
-		updateTagHandler,
-		deleteTagHandler,
-		getTagHandler,
-		listTagsHandler,
+		cfg.MediaBaseURL,
 	)
 
 	// Start Background Worker for Outbox Pattern & Kafka
