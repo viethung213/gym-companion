@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -16,7 +15,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
 	nutritionAdk "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/ai/adk"
-	nutritionConfig "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/config"
 	nutritionEvent "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/event"
 	nutritionKafka "github.com/viethung213/gym-companion/internal/nutrition/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/nutrition/infrastructure/persistence"
@@ -119,20 +117,17 @@ func NewModule(
 	var profileEventConsumer *nutritionConsumer.ProfileEventConsumer
 
 	if kafkaRegistry != nil {
-		cfg := nutritionConfig.LoadConfig()
-		brokers := strings.Split(cfg.KafkaBrokers, ",")
-
-		writer, wErr := kafkaRegistry.GetWriter("nutrition.events", brokers)
+		writer, wErr := kafkaRegistry.GetWriter("nutrition.events")
 		if wErr == nil && writer != nil {
 			kafkaPub = nutritionKafka.NewPublisher(writer)
 		}
 
-		reader, rErr := kafkaRegistry.GetReader("nutrition-workout-completed-group", "workout_execution.events", brokers)
+		reader, rErr := kafkaRegistry.GetReader("nutrition-workout-completed-group", "workout_execution.events")
 		if rErr == nil && reader != nil {
 			kafkaConsumer = nutritionKafka.NewConsumer(reader, rebalanceWorkoutHdlr, outboxLogRepo)
 		}
 
-		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events", brokers)
+		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events")
 		if pErr == nil && profileEventReader != nil {
 			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, outboxLogRepo, genPlanHdlr).
 				WithUserAllergyRepository(allergyRepo)

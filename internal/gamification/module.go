@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -119,35 +117,29 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	)
 
 	if deps.KafkaRegistry != nil {
-		kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-		if kafkaBrokers == "" {
-			kafkaBrokers = "localhost:9092"
-		}
-		brokers := strings.Split(kafkaBrokers, ",")
-
-		if writer, wErr := deps.KafkaRegistry.GetWriter("gamification.events", brokers); wErr == nil {
+		if writer, wErr := deps.KafkaRegistry.GetWriter("gamification.events"); wErr == nil {
 			kafkaPub = infraKafka.NewPublisher(writer)
 		} else {
 			slog.Warn("Failed to create Kafka writer", slog.String("module", "gamification"), slog.Any("error", wErr))
 		}
 
-		if authReader, aErr := deps.KafkaRegistry.GetReader("gamification-user-registered-group", "auth.events", brokers); aErr == nil {
+		if authReader, aErr := deps.KafkaRegistry.GetReader("gamification-user-registered-group", "auth.events"); aErr == nil {
 			userRegisteredConsumer = consumer.NewUserRegisteredConsumer(authReader, initUserGamificationHandler, outboxLogRepo)
 		}
 
-		if workoutReader, woErr := deps.KafkaRegistry.GetReader("gamification-workout-group", "workout_execution.events", brokers); woErr == nil {
+		if workoutReader, woErr := deps.KafkaRegistry.GetReader("gamification-workout-group", "workout_execution.events"); woErr == nil {
 			workoutEventConsumer = consumer.NewWorkoutEventConsumer(workoutReader, coordinator, outboxLogRepo)
 		}
 
-		if prReader, prErr := deps.KafkaRegistry.GetReader("gamification-pr-group", "workout_execution.events", brokers); prErr == nil {
+		if prReader, prErr := deps.KafkaRegistry.GetReader("gamification-pr-group", "workout_execution.events"); prErr == nil {
 			personalRecordConsumer = consumer.NewPersonalRecordConsumer(prReader, prCoordinatorAdapter{coordinator: coordinator}, outboxLogRepo)
 		}
 
-		if nutritionReader, nErr := deps.KafkaRegistry.GetReader("gamification-nutrition-group", "nutrition.events", brokers); nErr == nil {
+		if nutritionReader, nErr := deps.KafkaRegistry.GetReader("gamification-nutrition-group", "nutrition.events"); nErr == nil {
 			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, nutritionCoordinatorAdapter{coordinator: coordinator}, outboxLogRepo)
 		}
 
-		if profileReader, pErr := deps.KafkaRegistry.GetReader("gamification-profile-group", "profile.events", brokers); pErr == nil {
+		if profileReader, pErr := deps.KafkaRegistry.GetReader("gamification-profile-group", "profile.events"); pErr == nil {
 			userIdentityUpdatedConsumer = consumer.NewUserIdentityUpdatedConsumer(profileReader, syncUserSnapshotHandler, outboxLogRepo)
 		}
 	}

@@ -17,7 +17,6 @@ type Config struct {
 	GroqFallbackModels   string
 	GeminiModel          string
 	GeminiFallbackModels string
-	KafkaBrokers         string
 	GoogleAPIKey         string
 	MaxOutputTokens      int
 }
@@ -53,11 +52,6 @@ func LoadConfig() Config {
 	fallbackModels := os.Getenv("GEMINI_FALLBACK_MODELS")
 	if fallbackModels == "" {
 		fallbackModels = "gemini-3.5-flash-lite"
-	}
-
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokers == "" {
-		kafkaBrokers = "localhost:9092"
 	}
 
 	apiKey := os.Getenv("GOOGLE_API_KEY_NUTRITION")
@@ -104,7 +98,6 @@ func LoadConfig() Config {
 		GroqFallbackModels:   groqFallbackModels,
 		GeminiModel:          geminiModel,
 		GeminiFallbackModels: fallbackModels,
-		KafkaBrokers:         kafkaBrokers,
 		GoogleAPIKey:         apiKey,
 		MaxOutputTokens:      maxOutputTokens,
 	}

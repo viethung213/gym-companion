@@ -3,6 +3,7 @@ package kafka
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,6 +19,7 @@ import (
 // Registry manages and isolates database connection pools and kafka readers/writers for all modules.
 type Registry struct {
 	mu      sync.RWMutex
+	brokers []string
 	writers map[string]*kafka.Writer
 	readers map[string]*kafka.Reader
 }
@@ -32,7 +34,19 @@ var (
 // GetRegistry returns the singleton instance of the connection Registry.
 func GetRegistry() *Registry {
 	once.Do(func() {
+		brokersStr := getFirstEnv("KAFKA_BROKERS", "KAFKA_BOOTSTRAP_SERVERS")
+		if brokersStr == "" {
+			brokersStr = "localhost:9092"
+		}
+		var brokers []string
+		for _, b := range strings.Split(brokersStr, ",") {
+			b = strings.TrimSpace(b)
+			if b != "" {
+				brokers = append(brokers, b)
+			}
+		}
 		instance = &Registry{
+			brokers: brokers,
 			writers: make(map[string]*kafka.Writer),
 			readers: make(map[string]*kafka.Reader),
 		}
@@ -40,10 +54,33 @@ func GetRegistry() *Registry {
 	return instance
 }
 
+// GetBrokers returns a copy of the default configured brokers.
+func (r *Registry) GetBrokers() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res := make([]string, len(r.brokers))
+	copy(res, r.brokers)
+	return res
+}
+
+func (r *Registry) resolveBrokers(brokers ...[]string) ([]string, error) {
+	if len(brokers) > 0 && len(brokers[0]) > 0 {
+		return brokers[0], nil
+	}
+	r.mu.RLock()
+	defaultBrokers := r.brokers
+	r.mu.RUnlock()
+	if len(defaultBrokers) > 0 {
+		return defaultBrokers, nil
+	}
+	return nil, errors.New("no kafka brokers configured")
+}
+
 // GetWriter retrieves or instantiates a kafka.Writer dedicated to a specific module.
-func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, error) {
-	if len(brokers) == 0 {
-		return nil, fmt.Errorf("no brokers provided for module %s", module)
+func (r *Registry) GetWriter(module string, brokers ...[]string) (*kafka.Writer, error) {
+	targetBrokers, err := r.resolveBrokers(brokers...)
+	if err != nil {
+		return nil, fmt.Errorf("resolve brokers for module %s: %w", module, err)
 	}
 
 	r.mu.RLock()
@@ -67,10 +104,10 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 		return nil, fmt.Errorf("build security config for writer (%s): %w", module, err)
 	}
 
-	ensureTopicExists(brokers, module)
+	ensureTopicExists(targetBrokers, module)
 
 	w = &kafka.Writer{
-		Addr:                   kafka.TCP(brokers...),
+		Addr:                   kafka.TCP(targetBrokers...),
 		Topic:                  module,
 		Balancer:               &kafka.Hash{},
 		AllowAutoTopicCreation: true,
@@ -85,9 +122,10 @@ func (r *Registry) GetWriter(module string, brokers []string) (*kafka.Writer, er
 }
 
 // GetReader retrieves or instantiates a kafka.Reader dedicated to a consumer group and topic.
-func (r *Registry) GetReader(consumerGroup, topic string, brokers []string) (*kafka.Reader, error) {
-	if len(brokers) == 0 {
-		return nil, fmt.Errorf("no brokers provided for topic %s", topic)
+func (r *Registry) GetReader(consumerGroup, topic string, brokers ...[]string) (*kafka.Reader, error) {
+	targetBrokers, err := r.resolveBrokers(brokers...)
+	if err != nil {
+		return nil, fmt.Errorf("resolve brokers for topic %s: %w", topic, err)
 	}
 
 	key := fmt.Sprintf("%s:%s", consumerGroup, topic)
@@ -107,7 +145,7 @@ func (r *Registry) GetReader(consumerGroup, topic string, brokers []string) (*ka
 		return reader, nil
 	}
 
-	ensureTopicExists(brokers, topic)
+	ensureTopicExists(targetBrokers, topic)
 
 	dialer, _, err := buildSecurityConfig()
 	if err != nil {
@@ -115,7 +153,7 @@ func (r *Registry) GetReader(consumerGroup, topic string, brokers []string) (*ka
 	}
 
 	readerConfig := kafka.ReaderConfig{
-		Brokers:     brokers,
+		Brokers:     targetBrokers,
 		GroupID:     consumerGroup,
 		Topic:       topic,
 		MinBytes:    10,

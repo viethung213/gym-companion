@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -16,7 +15,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/ai/adk"
-	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	coachingEvent "github.com/viethung213/gym-companion/internal/coaching/infrastructure/event"
 	coachingKafka "github.com/viethung213/gym-companion/internal/coaching/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/persistence"
@@ -201,11 +199,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	var workoutConsumerCancel context.CancelFunc
 
 	if deps.KafkaRegistry != nil {
-		cfg := config.LoadConfig()
-		brokers := strings.Split(cfg.KafkaBrokers, ",")
-
 		if outboxRepo != nil {
-			writer, wErr := deps.KafkaRegistry.GetWriter("coaching.events", brokers)
+			writer, wErr := deps.KafkaRegistry.GetWriter("coaching.events")
 			if wErr == nil && writer != nil {
 				kafkaPub := coachingKafka.NewPublisher(writer)
 				outboxWorker = worker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
@@ -217,7 +212,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		// Subscribe to profile.events for auto-initiation / regeneration of roadmaps.
 		if initiateHandler != nil && outboxRepo != nil {
 			reader, rErr := deps.KafkaRegistry.GetReader(
-				"coaching-profile-completed-group", "profile.events", brokers,
+				"coaching-profile-completed-group", "profile.events",
 			)
 			if rErr == nil && reader != nil {
 				profileConsumer = consumer.NewProfileCompletedConsumer(reader, initiateHandler, regenerateHandler, outboxRepo)
@@ -235,7 +230,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		// Subscribe to workout_execution.events for session completion / abortion.
 		if completeSessionHandler != nil && abortSessionHandler != nil && outboxRepo != nil {
 			weReader, weErr := deps.KafkaRegistry.GetReader(
-				"coaching-workout-execution-group", "workout_execution.events", brokers,
+				"coaching-workout-execution-group", "workout_execution.events",
 			)
 			if weErr == nil && weReader != nil {
 				workoutConsumer = consumer.NewWorkoutExecutionConsumer(

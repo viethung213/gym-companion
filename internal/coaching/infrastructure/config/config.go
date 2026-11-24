@@ -17,10 +17,10 @@ type Config struct {
 	GroqFallbackModels   string
 	GeminiModel          string
 	GeminiFallbackModels string
-	KafkaBrokers         string
 	CoachPromptDumpDir   string
 	GoogleAPIKey         string
 	MaxOutputTokens      int
+	EnableReview         bool
 }
 
 // LoadConfig loads environment variables for the Coaching module with default fallbacks.
@@ -54,11 +54,6 @@ func LoadConfig() Config {
 	fallbackModels := os.Getenv("GEMINI_FALLBACK_MODELS")
 	if fallbackModels == "" {
 		fallbackModels = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
-	}
-
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokers == "" {
-		kafkaBrokers = "localhost:9092"
 	}
 
 	apiKey := os.Getenv("GOOGLE_API_KEY_COACHING")
@@ -97,6 +92,8 @@ func LoadConfig() Config {
 		slog.String("key_status", masked),
 	)
 
+	enableReview := strings.EqualFold(os.Getenv("COACHING_ENABLE_REVIEW"), "true")
+
 	return Config{
 		AIProvider:           aiProvider,
 		GroqAPIKey:           groqAPIKey,
@@ -105,9 +102,9 @@ func LoadConfig() Config {
 		GroqFallbackModels:   groqFallbackModels,
 		GeminiModel:          geminiModel,
 		GeminiFallbackModels: fallbackModels,
-		KafkaBrokers:         kafkaBrokers,
 		CoachPromptDumpDir:   os.Getenv("COACH_PROMPT_DUMP_DIR"),
 		GoogleAPIKey:         apiKey,
 		MaxOutputTokens:      maxOutputTokens,
+		EnableReview:         enableReview,
 	}
 }

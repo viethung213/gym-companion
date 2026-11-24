@@ -7,7 +7,6 @@ import (
 
 // Config holds all environmental parameters dedicated to the Workout Execution module.
 type Config struct {
-	KafkaBrokers           string
 	S3BucketName           string
 	S3Region               string
 	S3AccessKey            string
@@ -15,16 +14,10 @@ type Config struct {
 	S3Endpoint             string
 	DefaultONNXDetectorURL string
 	DefaultONNXSkeletonURL string
-	RedisAddr              string
 }
 
 // LoadConfig loads environment variables for the Workout Execution module with default fallbacks.
 func LoadConfig() Config {
-	brokersStr := os.Getenv("KAFKA_BROKERS")
-	if brokersStr == "" {
-		brokersStr = "localhost:9092"
-	}
-
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
 		bucket = "gym-companion-assets"
@@ -36,13 +29,7 @@ func LoadConfig() Config {
 		region = "us-east-1"
 	}
 
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
-	}
-
 	return Config{
-		KafkaBrokers:           brokersStr,
 		S3BucketName:           bucket,
 		S3Region:               region,
 		S3AccessKey:            os.Getenv("AWS_ACCESS_KEY_ID"),
@@ -50,6 +37,5 @@ func LoadConfig() Config {
 		S3Endpoint:             endpoint,
 		DefaultONNXDetectorURL: os.Getenv("DEFAULT_ONNX_DETECTOR_URL"),
 		DefaultONNXSkeletonURL: os.Getenv("DEFAULT_ONNX_SKELETON_URL"),
-		RedisAddr:              redisAddr,
 	}
 }

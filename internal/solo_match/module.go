@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +18,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/solo_match/application/command"
 	"github.com/viethung213/gym-companion/internal/solo_match/application/query"
 	"github.com/viethung213/gym-companion/internal/solo_match/domain/service"
+	"github.com/viethung213/gym-companion/internal/solo_match/infrastructure/config"
 	infraEvent "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/event"
 	exerciseclient "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/exercise_client"
 	soloMatchKafka "github.com/viethung213/gym-companion/internal/solo_match/infrastructure/kafka"
@@ -78,12 +77,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	}
 	exerciseProvider := exerciseclient.NewExerciseClient(deps.ExerciseServer)
 
-	botTimeout := 15 * time.Second
-	if envTimeout := os.Getenv("SOLO_BOT_FALLBACK_TIMEOUT"); envTimeout != "" {
-		if d, err := time.ParseDuration(envTimeout); err == nil && d > 0 {
-			botTimeout = d
-		}
-	}
+	cfg := config.LoadConfig()
 
 	// Matchmaker Queue Port (Pure Redis In-Memory)
 	queuePort := matchmaker.NewRedisMatchmakerAdapter(
@@ -93,7 +87,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		exerciseProvider,
 		eventRecorder,
 		250*time.Millisecond,
-		botTimeout,
+		cfg.BotFallbackTimeout,
 	)
 
 	// Application Command & Query Handlers
@@ -119,19 +113,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	)
 
 	// Kafka Setup
-	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
-	var kafkaBrokers []string
-	if kafkaBrokersStr != "" {
-		for _, b := range strings.Split(kafkaBrokersStr, ",") {
-			if trimmed := strings.TrimSpace(b); trimmed != "" {
-				kafkaBrokers = append(kafkaBrokers, trimmed)
-			}
-		}
-	}
-
 	var kafkaWriter *kafka.Writer
-	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
-		writer, wErr := deps.KafkaRegistry.GetWriter("solo_match.events", kafkaBrokers)
+	if deps.KafkaRegistry != nil {
+		writer, wErr := deps.KafkaRegistry.GetWriter("solo_match.events")
 		if wErr == nil && writer != nil {
 			kafkaWriter = writer
 		} else {
@@ -174,7 +158,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 	}()
 
 	// 3. Kafka Consumers (Workout & User events)
-	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
+	if deps.KafkaRegistry != nil {
 		workoutCompletedConsumer := consumer.NewWorkoutCompletedConsumer(recordResultHandler, outboxLogRepo)
 		workoutAbortedConsumer := consumer.NewWorkoutAbortedConsumer(recordAbortHandler, outboxLogRepo)
 		soloMatchRoomReadyConsumer := consumer.NewSoloMatchRoomReadyConsumer(matchRepo, outboxLogRepo)
@@ -183,7 +167,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		xpEarnedConsumer := consumer.NewXpEarnedConsumer(syncSnapshotHandler, outboxLogRepo)
 
 		// Consumer 3A: Workout Execution Events
-		workoutReader, rErr := deps.KafkaRegistry.GetReader("solo_match_workout_consumer", "workout_execution.events", kafkaBrokers)
+		workoutReader, rErr := deps.KafkaRegistry.GetReader("solo_match_workout_consumer", "workout_execution.events")
 		if rErr == nil && workoutReader != nil {
 			workoutWorker := worker.NewKafkaConsumerWorker(
 				"Workout Events Consumer",
@@ -202,7 +186,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		}
 
 		// Consumer 3B: Auth Events (User Registered)
-		authReader, aErr := deps.KafkaRegistry.GetReader("solo_match_user_consumer", "auth.events", kafkaBrokers)
+		authReader, aErr := deps.KafkaRegistry.GetReader("solo_match_user_consumer", "auth.events")
 		if aErr == nil && authReader != nil {
 			authWorker := worker.NewKafkaConsumerWorker(
 				"Auth Events Consumer",
@@ -219,7 +203,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		}
 
 		// Consumer 3C: Profile Events (User Identity Updated)
-		profileReader, pErr := deps.KafkaRegistry.GetReader("solo_match_profile_consumer", "profile.events", kafkaBrokers)
+		profileReader, pErr := deps.KafkaRegistry.GetReader("solo_match_profile_consumer", "profile.events")
 		if pErr == nil && profileReader != nil {
 			profileWorker := worker.NewKafkaConsumerWorker(
 				"Profile Events Consumer",
@@ -236,7 +220,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*grpc.Handler, func(), er
 		}
 
 		// Consumer 3D: Gamification Events (XP Earned)
-		gamificationReader, gErr := deps.KafkaRegistry.GetReader("solo_match_gamification_consumer", "gamification.events", kafkaBrokers)
+		gamificationReader, gErr := deps.KafkaRegistry.GetReader("solo_match_gamification_consumer", "gamification.events")
 		if gErr == nil && gamificationReader != nil {
 			gamificationWorker := worker.NewKafkaConsumerWorker(
 				"Gamification Events Consumer",

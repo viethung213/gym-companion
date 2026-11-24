@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/profile/application/command"
 	"github.com/viethung213/gym-companion/internal/profile/application/query"
-	profileConfig "github.com/viethung213/gym-companion/internal/profile/infrastructure/config"
 	profileEvent "github.com/viethung213/gym-companion/internal/profile/infrastructure/event"
 	profileKafka "github.com/viethung213/gym-companion/internal/profile/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/profile/infrastructure/persistence"
@@ -56,15 +54,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 	var userRegisteredConsumer *profileConsumer.UserRegisteredConsumer
 
 	if deps.KafkaRegistry != nil {
-		cfg := profileConfig.LoadConfig()
-		brokers := strings.Split(cfg.KafkaBrokers, ",")
-
-		writer, wErr := deps.KafkaRegistry.GetWriter("profile.events", brokers)
+		writer, wErr := deps.KafkaRegistry.GetWriter("profile.events")
 		if wErr == nil && writer != nil {
 			kafkaPub = profileKafka.NewPublisher(writer)
 		}
 
-		reader, rErr := deps.KafkaRegistry.GetReader("profile-user-registered-group", "auth.events", brokers)
+		reader, rErr := deps.KafkaRegistry.GetReader("profile-user-registered-group", "auth.events")
 		if rErr == nil && reader != nil {
 			userRegisteredConsumer = profileConsumer.NewUserRegisteredConsumer(reader, userRepo, outboxLogRepo, txManager)
 		}

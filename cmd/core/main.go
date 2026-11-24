@@ -172,6 +172,7 @@ func run() error {
 	socialGRPCHandler, shutdownSocial, err := social.Initialize(ctx, social.ModuleDeps{
 		DB:            socialDB,
 		KafkaRegistry: kafkaRegistry,
+		RedisClient:   redisClient,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize social module: %w", err)
