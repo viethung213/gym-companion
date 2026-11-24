@@ -10,22 +10,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
-// promptDumpDirEnv names a directory that receives two JSON files per model
-// call — the request and the response. Unset disables both.
+// promptDump captures LLM requests and responses to JSON files when
+// CoachPromptDumpDir is configured. Unset disables both.
 //
 // ADK logs neither side, so without this an agent whose history filter admits
 // more than intended looks identical to one that behaves. The file count also
 // doubles as a per-run tally of model calls, which is what bounds the free
 // tier's daily quota.
-const promptDumpDirEnv = "COACH_PROMPT_DUMP_DIR"
-
-// promptDump is one captured model request.
 type promptDump struct {
 	Agent string `json:"agent"`
 	Model string `json:"model"`
@@ -117,7 +115,7 @@ func afterModelCallbacks(agentName string) []llmagent.AfterModelCallback {
 // newModelDumper returns nil when dumping is switched off, so a disabled dumper
 // costs nothing at all rather than being a callback that returns early.
 func newModelDumper(agentName string) *modelDumper {
-	dir := strings.TrimSpace(os.Getenv(promptDumpDirEnv))
+	dir := strings.TrimSpace(config.LoadConfig().CoachPromptDumpDir)
 	if dir == "" {
 		return nil
 	}

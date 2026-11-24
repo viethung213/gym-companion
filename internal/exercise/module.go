@@ -6,14 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/viethung213/gym-companion/internal/exercise/application/command"
 	"github.com/viethung213/gym-companion/internal/exercise/application/query"
-	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/config"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/persistence"
 	"github.com/viethung213/gym-companion/internal/exercise/infrastructure/worker"
@@ -118,10 +116,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	)
 
 	// Start Background Worker for Outbox Pattern & Kafka
-	cfg := config.LoadConfig()
-	kafkaBrokers := strings.Split(cfg.KafkaBrokers, ",")
-
-	writer, err := deps.KafkaRegistry.GetWriter("exercise.events", kafkaBrokers)
+	writer, err := deps.KafkaRegistry.GetWriter("exercise.events")
 	if err != nil {
 		return nil, nil, fmt.Errorf("get exercise kafka writer: %w", err)
 	}
@@ -148,8 +143,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 	}()
 
 	// Start MotionSpec event consumer worker (listening to topic 'workout_execution.events')
-	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
-		motionSpecReader, err := deps.KafkaRegistry.GetReader("exercise_motion_spec_consumer", "workout_execution.events", kafkaBrokers)
+	if deps.KafkaRegistry != nil {
+		motionSpecReader, err := deps.KafkaRegistry.GetReader("exercise_motion_spec_consumer", "workout_execution.events")
 		if err == nil && motionSpecReader != nil {
 			wg.Add(1)
 			go func() {

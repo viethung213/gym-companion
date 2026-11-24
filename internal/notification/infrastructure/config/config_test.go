@@ -77,9 +77,6 @@ func TestLoadConfig_Success(t *testing.T) {
 	if got, want := cfg.FCMServerKey, "test-server-key"; got != want {
 		t.Errorf("got FCMServerKey %s, want %s", got, want)
 	}
-	if got, want := cfg.KafkaBrokers, "localhost:9092"; got != want {
-		t.Errorf("got KafkaBrokers %s, want %s", got, want)
-	}
 
 	// Email config should be loaded directly without defaults
 	if got, want := cfg.EmailProvider, "smtp"; got != want {

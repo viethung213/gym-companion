@@ -5,12 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/social/v1/service/socialv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
@@ -30,6 +29,7 @@ import (
 type ModuleDeps struct {
 	DB            *sql.DB
 	KafkaRegistry *sharedKafka.Registry
+	RedisClient   *redis.Client
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, func(), error) {
@@ -53,10 +53,15 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	var followDebounceBuffer port.FollowDebounceBuffer
 	var notifDeduplicator port.NotificationDeduplicator
 
-	redisClient, rErr := sharedRedis.GetRegistry().GetClient()
-	if rErr != nil {
-		log.Printf("Warning: failed to get redis client for social caching/debounce: %v", rErr)
-	} else if redisClient != nil {
+	redisClient := deps.RedisClient
+	if redisClient == nil {
+		var rErr error
+		redisClient, rErr = sharedRedis.GetRegistry().GetClient()
+		if rErr != nil {
+			log.Printf("Warning: failed to get redis client for social caching/debounce: %v", rErr)
+		}
+	}
+	if redisClient != nil {
 		bloomFilter = socialRedis.NewBloomFeedFilter(redisClient)
 		trendingCache = socialRedis.NewTrendingPoolCache(redisClient)
 		reactionDebounceBuffer = socialRedis.NewReactionDebounceBuffer(redisClient)
@@ -147,35 +152,29 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 	var userRoleUpdatedConsumer *socialConsumer.UserRoleUpdatedConsumer
 
 	if deps.KafkaRegistry != nil {
-		kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-		if kafkaBrokers == "" {
-			kafkaBrokers = "localhost:9092"
-		}
-		brokers := strings.Split(kafkaBrokers, ",")
-
-		notifWriter, nErr := deps.KafkaRegistry.GetWriter("notification.events.normal-priority", brokers)
+		notifWriter, nErr := deps.KafkaRegistry.GetWriter("notification.events.normal-priority")
 		if nErr != nil {
 			log.Printf("Warning: failed to get kafka writer for notification topic: %v", nErr)
 		} else if notifWriter != nil {
 			kafkaPub = socialKafka.NewPublisher(notifWriter)
 		}
 
-		workoutReader, rErr := deps.KafkaRegistry.GetReader("social-workout-shared-group", "workout_execution.events", brokers)
+		workoutReader, rErr := deps.KafkaRegistry.GetReader("social-workout-shared-group", "workout_execution.events")
 		if rErr == nil && workoutReader != nil {
 			workoutSharedConsumer = socialConsumer.NewWorkoutSharedConsumer(workoutReader, ingestWorkoutActivityHandler, outboxLogRepo, txManager)
 		}
 
-		authReader, aErr := deps.KafkaRegistry.GetReader("social-user-registered-group", "auth.events", brokers)
+		authReader, aErr := deps.KafkaRegistry.GetReader("social-user-registered-group", "auth.events")
 		if aErr == nil && authReader != nil {
 			userRegisteredConsumer = socialConsumer.NewUserRegisteredConsumer(authReader, syncUserSnapshotHandler, outboxLogRepo)
 		}
 
-		authRoleReader, arErr := deps.KafkaRegistry.GetReader("social-user-role-updated-group", "auth.events", brokers)
+		authRoleReader, arErr := deps.KafkaRegistry.GetReader("social-user-role-updated-group", "auth.events")
 		if arErr == nil && authRoleReader != nil {
 			userRoleUpdatedConsumer = socialConsumer.NewUserRoleUpdatedConsumer(authRoleReader, updateUserRoleHandler, outboxLogRepo)
 		}
 
-		profileReader, pErr := deps.KafkaRegistry.GetReader("social-user-identity-updated-group", "profile.events", brokers)
+		profileReader, pErr := deps.KafkaRegistry.GetReader("social-user-identity-updated-group", "profile.events")
 		if pErr == nil && profileReader != nil {
 			userIdentityUpdatedConsumer = socialConsumer.NewUserIdentityUpdatedConsumer(profileReader, syncUserSnapshotHandler, outboxLogRepo)
 		}

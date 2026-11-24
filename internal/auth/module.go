@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -148,22 +146,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	}(workerCtx)
 
 	// 8. Initialize and start Kafka Publisher and Outbox Worker
-	kafkaBrokersStr := os.Getenv("AUTH_KAFKA_BROKERS")
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = os.Getenv("KAFKA_BROKERS")
-	}
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = "localhost:9092"
-	}
-	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
-
-	writer, err := deps.KafkaRegistry.GetWriter("auth.events", kafkaBrokers)
+	writer, err := deps.KafkaRegistry.GetWriter("auth.events")
 	if err != nil {
 		cancelWorkers()
 		return nil, nil, fmt.Errorf("get auth kafka writer: %w", err)
 	}
 
-	highPriorityWriter, hpErr := deps.KafkaRegistry.GetWriter("notification.events.high-priority", kafkaBrokers)
+	highPriorityWriter, hpErr := deps.KafkaRegistry.GetWriter("notification.events.high-priority")
 	if hpErr != nil {
 		slog.Warn("Failed to get high-priority notification kafka writer", slog.String("error", hpErr.Error()))
 	}

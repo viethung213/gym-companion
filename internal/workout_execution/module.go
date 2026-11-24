@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/port"
 	"github.com/viethung213/gym-companion/internal/workout_execution/application/query"
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/service"
-	workoutConfig "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/config"
 	workoutEvent "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/event"
 	workoutKafka "github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/workout_execution/infrastructure/persistence"
@@ -135,12 +133,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	)
 
 	// Kafka Setup
-	appCfg := workoutConfig.LoadConfig()
-	kafkaBrokers := strings.Split(appCfg.KafkaBrokers, ",")
-
 	var kafkaPub *workoutKafka.Publisher
-	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
-		writer, err := deps.KafkaRegistry.GetWriter("workout_execution.events", kafkaBrokers)
+	if deps.KafkaRegistry != nil {
+		writer, err := deps.KafkaRegistry.GetWriter("workout_execution.events")
 		if err == nil && writer != nil {
 			kafkaPub = workoutKafka.NewPublisher(writer)
 		}
@@ -191,8 +186,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 	}()
 
 	// Start ExerciseCreated event consumer worker (listening to topic 'exercise.events')
-	if deps.KafkaRegistry != nil && len(kafkaBrokers) > 0 {
-		exerciseReader, err := deps.KafkaRegistry.GetReader("workout_execution_exercise_consumer", "exercise.events", kafkaBrokers)
+	if deps.KafkaRegistry != nil {
+		exerciseReader, err := deps.KafkaRegistry.GetReader("workout_execution_exercise_consumer", "exercise.events")
 		if err == nil && exerciseReader != nil {
 
 			wg.Add(1)
@@ -238,7 +233,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		}
 
 		// Start WorkoutSessionCompleted event consumer worker (listening to topic 'workout_execution.events')
-		sessionCompletedReader, err := deps.KafkaRegistry.GetReader("workout_execution_pr_consumer", "workout_execution.events", kafkaBrokers)
+		sessionCompletedReader, err := deps.KafkaRegistry.GetReader("workout_execution_pr_consumer", "workout_execution.events")
 		if err == nil && sessionCompletedReader != nil {
 			wg.Add(1)
 			go func() {
@@ -283,7 +278,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		}
 
 		// Start SoloMatchStarted event consumer worker (listening to topic 'solo_match.events')
-		soloMatchReader, err := deps.KafkaRegistry.GetReader("workout_execution_solo_match_consumer", "solo_match.events", kafkaBrokers)
+		soloMatchReader, err := deps.KafkaRegistry.GetReader("workout_execution_solo_match_consumer", "solo_match.events")
 		if err == nil && soloMatchReader != nil {
 			wg.Add(1)
 			go func() {

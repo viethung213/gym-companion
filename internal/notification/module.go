@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -87,11 +86,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	ctxWorkers, cancelWorkers := context.WithCancel(ctx)
 
 	var kafkaPub *notificationKafka.Publisher
-	if deps.KafkaRegistry != nil && cfg.KafkaBrokers != "" {
-		brokers := strings.Split(cfg.KafkaBrokers, ",")
-
+	if deps.KafkaRegistry != nil {
 		// Outbound Outbox Worker Publisher
-		writer, wErr := deps.KafkaRegistry.GetWriter("notification.events", brokers)
+		writer, wErr := deps.KafkaRegistry.GetWriter("notification.events")
 		if wErr == nil && writer != nil {
 			kafkaPub = notificationKafka.NewPublisher(writer)
 			outboxWorker := notificationWorker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
@@ -104,7 +101,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 
 		// 1. HIGH-PRIORITY Notification Consumer: Dedicated group & Multi-worker pool for instant dispatch
 		highTopic := "notification.events.high-priority"
-		highReader, highErr := deps.KafkaRegistry.GetReader("notification-group-high", highTopic, brokers)
+		highReader, highErr := deps.KafkaRegistry.GetReader("notification-group-high", highTopic)
 		if highErr == nil && highReader != nil {
 			highConsumer := notificationConsumer.NewNotificationEventConsumer(highReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
 			const highWorkers = 3
@@ -118,7 +115,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 
 		// 2. NORMAL-PRIORITY Notification Consumer: Dedicated group for background/standard dispatch
 		normalTopic := "notification.events.normal-priority"
-		normalReader, normalErr := deps.KafkaRegistry.GetReader("notification-group-normal", normalTopic, brokers)
+		normalReader, normalErr := deps.KafkaRegistry.GetReader("notification-group-normal", normalTopic)
 		if normalErr == nil && normalReader != nil {
 			normalConsumer := notificationConsumer.NewNotificationEventConsumer(normalReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
 			go normalConsumer.Start(ctxWorkers)
@@ -134,7 +131,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 			"workout_execution.events",
 		}
 		for _, topic := range coreTopics {
-			reader, rErr := deps.KafkaRegistry.GetReader("notification-group-core", topic, brokers)
+			reader, rErr := deps.KafkaRegistry.GetReader("notification-group-core", topic)
 			if rErr == nil && reader != nil {
 				consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
 				go consumer.Start(ctxWorkers)

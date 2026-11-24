@@ -16,7 +16,6 @@ type Config struct {
 	FCMPrivateKeyID string
 	FCMClientID     string
 	FCMServerKey    string
-	KafkaBrokers    string
 
 	// Email Provider selection ("smtp" or "mock")
 	EmailProvider string
@@ -61,7 +60,6 @@ func LoadConfig() (Config, error) {
 		FCMPrivateKeyID: os.Getenv("FCM_PRIVATE_KEY_ID"),
 		FCMClientID:     os.Getenv("FCM_CLIENT_ID"),
 		FCMServerKey:    os.Getenv("FCM_SERVER_KEY"),
-		KafkaBrokers:    os.Getenv("KAFKA_BROKERS"),
 		EmailProvider:   emailProvider,
 		SMSProvider:     smsProvider,
 	}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"os"
 
+	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/workflow"
@@ -25,7 +25,7 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 			}
 			coachInput.Flow = FlowInitiate4Week
 
-			enableReview := os.Getenv("COACHING_ENABLE_REVIEW") == "true"
+			enableReview := config.LoadConfig().EnableReview
 			res, genErr := c.generateValidatedPlan(nodeCtx, &coachInput, enableReview)
 			if genErr != nil {
 				return nil, genErr
