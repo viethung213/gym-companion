@@ -39,7 +39,16 @@ type RollOverResult struct {
 	Active *roadmap.Roadmap
 	// RolledOver is set when the current roadmap had ended and was completed.
 	RolledOver bool
+	// StartFresh is set when the athlete was left without a roadmap and should
+	// get a new one: the block that ended was trained in and ended within
+	// freshStartWindow. A block long over (an athlete gone for months) or never
+	// trained in gets no new generation; the app offers one when they return.
+	StartFresh bool
 }
+
+// freshStartWindow is how long after a block ended a new one is still started
+// for the athlete without them asking.
+const freshStartWindow = 7 * 24 * time.Hour
 
 // Handle completes the user's ACTIVE roadmap once it has ended and activates
 // the block planned to follow it.
@@ -73,12 +82,14 @@ func (h *RollOverHandler) Handle(ctx context.Context, userID string) (*RollOverR
 
 		next, err := h.rotation.FindPlannedByUser(txCtx, userID)
 		if errors.Is(err, roadmap.ErrRoadmapNotFound) {
+			res.StartFresh = startFresh(current, now)
 			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("find planned roadmap: %w", err)
 		}
 		if !next.Follows(current) {
+			res.StartFresh = startFresh(current, now)
 			return h.rotation.DeletePlannedRoadmap(txCtx, next.ID())
 		}
 		if activateErr := next.Activate(now); activateErr != nil {
@@ -96,6 +107,12 @@ func (h *RollOverHandler) Handle(ctx context.Context, userID string) (*RollOverR
 		return nil, fmt.Errorf("roll over roadmap for user %s: %w", userID, err)
 	}
 	return res, nil
+}
+
+// startFresh reports whether an athlete whose block ended unplanned gets a new
+// roadmap without asking (see RollOverResult.StartFresh).
+func startFresh(ended *roadmap.Roadmap, now time.Time) bool {
+	return ended.Trained() && now.Sub(ended.EndsAt()) <= freshStartWindow
 }
 
 // completeRoadmap closes every week still open and marks the roadmap COMPLETED.

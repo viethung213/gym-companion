@@ -56,3 +56,19 @@ func (r *Roadmap) Activate(now time.Time) error {
 func (r *Roadmap) Follows(prev *Roadmap) bool {
 	return CalendarDate(r.info.StartDate, time.UTC).Equal(CalendarDate(prev.info.EndDate, time.UTC))
 }
+
+// Trained reports whether the athlete completed at least one session of this
+// roadmap, scheduled or their own. A block nobody trained in is not followed
+// by another: planning one would only spend generations on an absent athlete.
+func (r *Roadmap) Trained() bool {
+	for _, w := range r.weeks {
+		for _, d := range w.Days() {
+			for _, s := range d.Sessions() {
+				if s.Status() == SessionPlanStatusCompleted {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

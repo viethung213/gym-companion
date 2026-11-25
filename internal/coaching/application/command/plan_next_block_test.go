@@ -166,8 +166,42 @@ func newPlanHandler(repo *rotationRepo, planner *stubPlanner, now time.Time) *Pl
 }
 
 // blockA runs 2026-11-02 to 2026-11-30; its final week starts 2026-11-23.
+// The athlete trained its first session.
 func blockA(t *testing.T) *roadmap.Roadmap {
+	t.Helper()
+	rm := untrainedBlockA(t)
+	s, _ := rm.FindSession("a-w1-s")
+	if err := s.MarkCompleted(100, 0, time.Date(2026, 11, 2, 19, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	return rm
+}
+
+// untrainedBlockA is blockA with no session completed.
+func untrainedBlockA(t *testing.T) *roadmap.Roadmap {
 	return blockStarting(t, "a", time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC))
+}
+
+// A block nobody trained in is not followed by another: no generation.
+func TestPlanNextBlock_SkipsABlockNeverTrainedIn(t *testing.T) {
+	repo := newRotationRepo(untrainedBlockA(t))
+	planner := &stubPlanner{t: t}
+
+	got, err := newPlanHandler(repo, planner, time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)).Handle(context.Background(), "a")
+	if err != nil || got != nil || planner.calls != 0 {
+		t.Fatalf("got %v err %v calls %d; want nothing planned for an absent athlete", got, err, planner.calls)
+	}
+}
+
+// A block already over is the roll-over's business, not the planner's.
+func TestPlanNextBlock_SkipsAnEndedBlock(t *testing.T) {
+	repo := newRotationRepo(blockA(t))
+	planner := &stubPlanner{t: t}
+
+	got, err := newPlanHandler(repo, planner, time.Date(2026, 11, 30, 1, 0, 0, 0, time.UTC)).Handle(context.Background(), "a")
+	if err != nil || got != nil || planner.calls != 0 {
+		t.Fatalf("got %v err %v calls %d; want nothing planned once the block ended", got, err, planner.calls)
+	}
 }
 
 func TestPlanNextBlock_WaitsForTheFinalWeek(t *testing.T) {
@@ -319,6 +353,38 @@ func TestRollOver_WithoutAPlanCompletesTheBlock(t *testing.T) {
 	}
 }
 
+// A new roadmap is started without asking only for an athlete who trained in
+// the block that just ended; a block long over or never trained in is not
+// followed by a generation (the first run after a deploy finds many such).
+func TestRollOver_StartFreshOnlyForARecentTrainedBlock(t *testing.T) {
+	justEnded := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		block func(*testing.T) *roadmap.Roadmap
+		now   time.Time
+		want  bool
+	}{
+		{"trained, just ended", blockA, justEnded, true},
+		{"never trained in", untrainedBlockA, justEnded, false},
+		{"ended months ago", blockA, time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC), false},
+	}
+	for _, tt := range tests {
+		res, err := newRollOver(newRotationRepo(tt.block(t)), &captureOutbox{}, tt.now).Handle(context.Background(), "u-1")
+		if err != nil || !res.RolledOver || res.Active != nil || res.StartFresh != tt.want {
+			t.Errorf("%s: got %+v err %v; want rolled over, StartFresh %v", tt.name, res, err, tt.want)
+		}
+	}
+
+	next := blockStarting(t, "b", time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC))
+	if err := next.HoldUntilStart(); err != nil {
+		t.Fatal(err)
+	}
+	res, err := newRollOver(newRotationRepo(blockA(t), next), &captureOutbox{}, justEnded).Handle(context.Background(), "u-1")
+	if err != nil || res.StartFresh {
+		t.Errorf("with a planned successor: got %+v err %v; want no fresh start", res, err)
+	}
+}
+
 // Seen before the fix: once the block ended, starting a free workout failed
 // ("date is outside the roadmap") and the app's fallback could not create a
 // roadmap because the ended one was still ACTIVE.
@@ -343,16 +409,49 @@ func TestCreateAdhoc_AfterTheBlockEndedLandsInTheNextOne(t *testing.T) {
 	}
 }
 
+// Seen in review: "today" came from the profile's zone while the roll-over
+// decides by the roadmap's. With the profile 7h ahead of a roadmap stored in
+// UTC, 21:00 UTC the day before the end was "after the end" for the session
+// but not for the roll-over, and the session was refused for 7 hours. Both now
+// read the roadmap's zone: the block has not ended, the session lands in it.
+func TestCreateAdhoc_ZonesAgreeOnTheBlockEnd(t *testing.T) {
+	hcm, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		t.Skip("tzdata unavailable")
+	}
+	next := blockStarting(t, "b", time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC))
+	if err := next.HoldUntilStart(); err != nil {
+		t.Fatal(err)
+	}
+	repo := newRotationRepo(blockA(t), next) // stored in UTC
+	now := time.Date(2026, 11, 29, 21, 0, 0, 0, time.UTC)
+	n := 0
+	h := NewCreateAdhocSessionHandler(fakeTx{}, repo, benchOnly(), zoneProfiles{loc: hcm},
+		&idGeneratorMock{fn: func() string { n++; return fmt.Sprintf("id-%d", n) }}, &clockMock{now: now}).
+		WithRollover(newRollOver(repo, &captureOutbox{}, now))
+
+	res, err := h.Handle(context.Background(), CreateAdhocSessionCommand{UserID: "u-1", ExerciseIDs: []string{"ex-1"}})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if got := res.SessionPlan.Info().RoadmapID; got != "a" {
+		t.Errorf("session placed in roadmap %s, want the current block a", got)
+	}
+}
+
 // A profile change after the next block was planned discards it, so it is
-// planned again from the current profile; an older change keeps it.
+// planned again from the current profile; an older change keeps it. A change
+// whose time is unknown (zero ChangedAt) is taken as newer than the plan.
 func TestRegenerate_DiscardsAPlanDraftedBeforeTheProfileChange(t *testing.T) {
 	for _, tt := range []struct {
-		name      string
-		changedBy time.Duration // relative to when the plan was drafted
-		discard   bool
+		name        string
+		changedBy   time.Duration // relative to when the plan was drafted
+		unknownTime bool
+		discard     bool
 	}{
-		{"change after the plan", time.Hour, true},
-		{"change before the plan", -time.Hour, false},
+		{"change after the plan", time.Hour, false, true},
+		{"change before the plan", -time.Hour, false, false},
+		{"change at an unknown time", 0, true, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			next := blockStarting(t, "b", time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC))
@@ -360,13 +459,19 @@ func TestRegenerate_DiscardsAPlanDraftedBeforeTheProfileChange(t *testing.T) {
 				t.Fatal(err)
 			}
 			repo := newRotationRepo(blockA(t), next)
+			now := time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+			changedAt := next.Info().CreatedAt.Add(tt.changedBy)
+			if tt.unknownTime {
+				now = next.Info().CreatedAt.Add(time.Hour) // a plan is always drafted before now
+				changedAt = time.Time{}
+			}
 			h := NewRegenerateScheduleHandler(fakeTx{}, repo, &draftAgent{},
 				guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), zoneProfiles{loc: time.UTC},
-				&captureOutbox{}, &fakeClock{t: time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)}, &incrIDs{}).
+				&captureOutbox{}, &fakeClock{t: now}, &incrIDs{}).
 				WithPlannedBlocks(repo)
 
 			_, _ = h.Handle(context.Background(), RegenerateScheduleCommand{
-				UserID: "u-1", Reason: "injury_reported", ChangedAt: next.Info().CreatedAt.Add(tt.changedBy),
+				UserID: "u-1", Reason: "injury_reported", ChangedAt: changedAt,
 			})
 			_, err := repo.FindPlannedByUser(context.Background(), "u-1")
 			if discarded := errors.Is(err, roadmap.ErrRoadmapNotFound); discarded != tt.discard {

@@ -18,7 +18,8 @@ type RegenerateScheduleCommand struct {
 	UserID string
 	Reason string // "profile_updated", "injury_reported", "injury_recovered", ...
 	// ChangedAt is when the profile change happened. A roadmap planned after it
-	// already reflects it, so nothing is regenerated. Zero always regenerates.
+	// already reflects it, so nothing is regenerated. Zero (an event without a
+	// usable time) always regenerates and discards the planned next block.
 	ChangedAt time.Time
 }
 
@@ -175,8 +176,14 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 // before the profile change: it may hold an exercise a new injury rules out or
 // sit on slots the athlete gave up. The next block is then planned again.
 func (h *RegenerateScheduleHandler) discardStalePlan(ctx context.Context, cmd RegenerateScheduleCommand) error {
-	if h.rotation == nil || cmd.ChangedAt.IsZero() {
+	if h.rotation == nil {
 		return nil
+	}
+	changedAt := cmd.ChangedAt
+	if changedAt.IsZero() {
+		// Unknown time: assume the change is newer than any plan, as the
+		// active roadmap does (zero always regenerates).
+		changedAt = h.clock.Now()
 	}
 	planned, err := h.rotation.FindPlannedByUser(ctx, cmd.UserID)
 	if errors.Is(err, roadmap.ErrRoadmapNotFound) {
@@ -185,7 +192,7 @@ func (h *RegenerateScheduleHandler) discardStalePlan(ctx context.Context, cmd Re
 	if err != nil {
 		return fmt.Errorf("find planned roadmap: %w", err)
 	}
-	if !planned.Info().CreatedAt.Before(cmd.ChangedAt) {
+	if !planned.Info().CreatedAt.Before(changedAt) {
 		return nil
 	}
 	slog.InfoContext(ctx, "Profile changed after the next block was planned; discarding it to plan again",

@@ -46,15 +46,18 @@ func NewPlanNextBlockHandler(
 
 // Handle plans the successor of an ACTIVE roadmap in its final week and
 // returns the block it planned. It returns nil when it planned nothing: the
-// roadmap is not in its final week yet, or a successor is already planned
-// (kept as is). A planned block that does not follow the roadmap (left over
-// from an earlier one) is replaced.
+// roadmap is not in its final week yet, has already ended (the roll-over's
+// job), was never trained in (Roadmap.Trained), or a successor is already
+// planned (kept as is). A planned block that does not follow the roadmap
+// (left over from an earlier one) is replaced.
 func (h *PlanNextBlockHandler) Handle(ctx context.Context, roadmapID string) (*roadmap.Roadmap, error) {
 	current, err := h.repo.FindByID(ctx, roadmapID)
 	if err != nil {
 		return nil, fmt.Errorf("load roadmap %s: %w", roadmapID, err)
 	}
-	if current.Status() != roadmap.StatusActive || h.clock.Now().Before(current.FinalWeekStartsAt()) {
+	now := h.clock.Now()
+	if current.Status() != roadmap.StatusActive || now.Before(current.FinalWeekStartsAt()) ||
+		!now.Before(current.EndsAt()) || !current.Trained() {
 		return nil, nil
 	}
 

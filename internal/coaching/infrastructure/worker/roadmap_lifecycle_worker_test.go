@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -133,14 +134,15 @@ func TestRoadmapLifecycleWorker_RunOnce(t *testing.T) {
 	}
 }
 
-// unplannedRollOver ends every roadmap; users in "planned" get a successor.
-type unplannedRollOver struct{ planned map[string]bool }
+// unplannedRollOver ends every roadmap; users in "planned" get a successor,
+// users in "absent" are judged not worth a fresh roadmap.
+type unplannedRollOver struct{ planned, absent map[string]bool }
 
 func (f unplannedRollOver) Handle(_ context.Context, userID string) (*command.RollOverResult, error) {
 	if f.planned[userID] {
 		return &command.RollOverResult{RolledOver: true, Active: &roadmap.Roadmap{}}, nil
 	}
-	return &command.RollOverResult{RolledOver: true}, nil
+	return &command.RollOverResult{RolledOver: true, StartFresh: !f.absent[userID]}, nil
 }
 
 type recInitiator struct {
@@ -156,17 +158,53 @@ func (r *recInitiator) Handle(_ context.Context, cmd command.InitiateRoadmapComm
 }
 
 // An athlete whose block ended with no successor gets a fresh roadmap in the
-// same tick; one rolled over to a planned block does not.
+// same tick when the roll-over says so (StartFresh); one rolled over to a
+// planned block, or one the roll-over judged absent, does not.
 func TestRoadmapLifecycleWorker_StartsFreshWhenNothingWasPlanned(t *testing.T) {
-	q := &fakeLifecycleQueue{ended: []string{"left-empty", "has-plan"}}
+	q := &fakeLifecycleQueue{ended: []string{"left-empty", "has-plan", "gone"}}
 	rec := newRecorder()
 	init := &recInitiator{}
-	w := NewRoadmapLifecycleWorker(q, unplannedRollOver{planned: map[string]bool{"has-plan": true}},
+	w := NewRoadmapLifecycleWorker(q, unplannedRollOver{planned: map[string]bool{"has-plan": true}, absent: map[string]bool{"gone": true}},
 		recReviewer{rec}, recPlanner{rec}, time.Hour).WithInitiator(init)
 
 	w.RunOnce(context.Background(), time.Now())
 
 	if len(init.users) != 1 || init.users[0] != "left-empty" {
 		t.Errorf("fresh roadmaps started for %v, want only left-empty", init.users)
+	}
+}
+
+// failingPlanner fails every call and counts them.
+type failingPlanner struct{ calls *atomic.Int32 }
+
+func (f failingPlanner) Handle(context.Context, string) (*roadmap.Roadmap, error) {
+	f.calls.Add(1)
+	return nil, errors.New("guardrail rejected")
+}
+
+// A block that failed to plan is not generated again every tick: the next
+// attempt waits planRetryDelay. Success or the roadmap leaving the list
+// clears the wait.
+func TestRoadmapLifecycleWorker_SpacesOutFailedPlanning(t *testing.T) {
+	q := &fakeLifecycleQueue{toPlan: []string{"rm-1"}}
+	rec := newRecorder()
+	var calls atomic.Int32
+	w := NewRoadmapLifecycleWorker(q, recRollOver{rec}, recReviewer{rec}, failingPlanner{&calls}, time.Hour)
+
+	t0 := time.Now()
+	w.RunOnce(context.Background(), t0)
+	w.RunOnce(context.Background(), t0.Add(30*time.Minute))
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("planner called %d times within the retry delay, want 1", got)
+	}
+	w.RunOnce(context.Background(), t0.Add(planRetryDelay))
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("planner called %d times after the retry delay, want 2", got)
+	}
+
+	q.toPlan = nil
+	w.RunOnce(context.Background(), t0.Add(planRetryDelay+time.Minute))
+	if n := len(w.planGate.next); n != 0 {
+		t.Errorf("retry gate remembers %d roadmaps no longer listed, want 0", n)
 	}
 }

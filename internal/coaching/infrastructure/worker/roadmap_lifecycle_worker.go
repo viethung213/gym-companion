@@ -24,6 +24,14 @@ const (
 	// stays within the provider's rate limits while users are not served one
 	// by one.
 	maxConcurrentGenerations = 3
+
+	// planRetryDelay spaces out retries of a block that failed to plan: the
+	// final week leaves room for a few attempts a day.
+	planRetryDelay = 6 * time.Hour
+
+	// reviewRetryDelay spaces out retries of a failed adaptation, which the
+	// review retries only during its 12h window.
+	reviewRetryDelay = 2 * time.Hour
 )
 
 // The handlers the worker drives, as interfaces so the loop tests without them.
@@ -49,7 +57,8 @@ type (
 //     successors (database only, so it runs first and nobody waits on a model);
 //  2. review: close finished weeks and adapt the rest of the block (BR-AC-04);
 //  3. plan: draft the next block of roadmaps in their final week;
-//  4. start fresh: a new roadmap for athletes whose block ended unplanned.
+//  4. start fresh: a new roadmap for athletes whose block ended unplanned,
+//     when the roll-over says so (they trained in it and it just ended).
 //
 // Steps 2 to 4 call the model and run up to maxConcurrentGenerations
 // roadmaps at once. The steps stay sequential, so a roadmap is never reviewed
@@ -61,11 +70,14 @@ type RoadmapLifecycleWorker struct {
 	planner  blockPlanner
 	// initiator, when set, starts a fresh roadmap for an athlete whose block
 	// ended with no successor planned (generation kept failing, or the plan was
-	// discarded by a late profile change).
+	// discarded by a late profile change) and RollOverResult.StartFresh is set.
 	initiator roadmapInitiator
 	interval  time.Duration
-	stopOnce  sync.Once
-	stop      chan struct{}
+	// reviewGate and planGate space out retries of failed model-backed jobs.
+	reviewGate *retryGate
+	planGate   *retryGate
+	stopOnce   sync.Once
+	stop       chan struct{}
 }
 
 // NewRoadmapLifecycleWorker constructs the worker.
@@ -82,6 +94,7 @@ func NewRoadmapLifecycleWorker(
 	return &RoadmapLifecycleWorker{
 		queue: queue, rollOver: rollOver, reviewer: reviewer, planner: planner,
 		interval: interval, stop: make(chan struct{}),
+		reviewGate: newRetryGate(reviewRetryDelay), planGate: newRetryGate(planRetryDelay),
 	}
 }
 
@@ -119,7 +132,7 @@ func (w *RoadmapLifecycleWorker) Stop() { w.stopOnce.Do(func() { close(w.stop) }
 func (w *RoadmapLifecycleWorker) RunOnce(ctx context.Context, now time.Time) {
 	horizon := now.AddDate(0, 0, 1)
 
-	var unplanned []string // athletes left without a roadmap by the roll-over
+	var unplanned []string // athletes to start a fresh roadmap for (RollOverResult.StartFresh)
 	if ended, err := w.queue.ActiveRoadmapsEndingBy(ctx, horizon); err != nil {
 		slog.ErrorContext(ctx, "Roadmap lifecycle: listing ended roadmaps failed", slog.Any("error", err))
 	} else {
@@ -133,7 +146,9 @@ func (w *RoadmapLifecycleWorker) RunOnce(ctx context.Context, now time.Time) {
 	if ids, err := w.queue.RoadmapIDsWithOpenWeekEndingBy(ctx, horizon); err != nil {
 		slog.ErrorContext(ctx, "Roadmap lifecycle: listing weeks to review failed", slog.Any("error", err))
 	} else {
-		forEachBounded(ctx, ids, w.review)
+		forEachBounded(ctx, w.reviewGate.due(ids, now), func(jobCtx context.Context, id string) {
+			w.reviewGate.record(id, now, w.review(jobCtx, id))
+		})
 	}
 
 	// A roadmap is in its final week from 7 days before it ends; the planner
@@ -145,7 +160,9 @@ func (w *RoadmapLifecycleWorker) RunOnce(ctx context.Context, now time.Time) {
 		for _, ref := range ending {
 			ids = append(ids, ref.RoadmapID)
 		}
-		forEachBounded(ctx, ids, w.plan)
+		forEachBounded(ctx, w.planGate.due(ids, now), func(jobCtx context.Context, id string) {
+			w.planGate.record(id, now, w.plan(jobCtx, id))
+		})
 	}
 
 	// Best effort: if this fails too, the app offers to start a roadmap when the
@@ -155,9 +172,9 @@ func (w *RoadmapLifecycleWorker) RunOnce(ctx context.Context, now time.Time) {
 	}
 }
 
-// rollOverUser rolls the athlete over and reports whether they were left with
-// no roadmap.
-func (w *RoadmapLifecycleWorker) rollOverUser(ctx context.Context, userID string) (unplanned bool) {
+// rollOverUser rolls the athlete over and reports whether they should get a
+// fresh roadmap (RollOverResult.StartFresh).
+func (w *RoadmapLifecycleWorker) rollOverUser(ctx context.Context, userID string) (startFresh bool) {
 	jobCtx, cancel := context.WithTimeout(ctx, rolloverTimeout)
 	defer cancel()
 	res, err := w.rollOver.Handle(jobCtx, userID)
@@ -167,8 +184,9 @@ func (w *RoadmapLifecycleWorker) rollOverUser(ctx context.Context, userID string
 	case !res.RolledOver:
 		// Listed a day ahead; not over yet in the athlete's zone.
 	case res.Active == nil:
-		slog.InfoContext(ctx, "Roadmap completed; no next block was planned", slog.String("user_id", userID))
-		return true
+		slog.InfoContext(ctx, "Roadmap completed; no next block was planned",
+			slog.String("user_id", userID), slog.Bool("start_fresh", res.StartFresh))
+		return res.StartFresh
 	default:
 		slog.InfoContext(ctx, "Roadmap rolled over to the planned block",
 			slog.String("user_id", userID), slog.String("roadmap_id", res.Active.ID()))
@@ -190,13 +208,14 @@ func (w *RoadmapLifecycleWorker) startFresh(ctx context.Context, userID string) 
 		slog.String("user_id", userID), slog.String("roadmap_id", res.Roadmap.ID()))
 }
 
-func (w *RoadmapLifecycleWorker) review(ctx context.Context, roadmapID string) {
+// review closes the roadmap's finished weeks; it reports false on a failure.
+func (w *RoadmapLifecycleWorker) review(ctx context.Context, roadmapID string) (ok bool) {
 	res, err := w.reviewer.Handle(ctx, roadmapID)
 	if err != nil {
 		slog.ErrorContext(ctx, "Week review failed", slog.String("roadmap_id", roadmapID), slog.Any("error", err))
 	}
 	if res == nil || len(res.DueWeeks) == 0 {
-		return
+		return err == nil
 	}
 
 	attrs := []any{slog.String("roadmap_id", roadmapID), slog.Any("weeks", res.DueWeeks), slog.Bool("adaptation_deferred", res.Deferred)}
@@ -213,19 +232,22 @@ func (w *RoadmapLifecycleWorker) review(ctx context.Context, roadmapID string) {
 		msg = "Training week review deferred: adaptation will be retried"
 	}
 	slog.InfoContext(ctx, msg, attrs...)
+	return err == nil
 }
 
-func (w *RoadmapLifecycleWorker) plan(ctx context.Context, roadmapID string) {
+// plan drafts the roadmap's next block; it reports false on a failure.
+func (w *RoadmapLifecycleWorker) plan(ctx context.Context, roadmapID string) (ok bool) {
 	planned, err := w.planner.Handle(ctx, roadmapID)
 	switch {
 	case err != nil:
-		slog.ErrorContext(ctx, "Planning the next block failed; retried next tick",
-			slog.String("roadmap_id", roadmapID), slog.Any("error", err))
+		slog.ErrorContext(ctx, "Planning the next block failed; retried later",
+			slog.String("roadmap_id", roadmapID), slog.Duration("retry_after", planRetryDelay), slog.Any("error", err))
 	case planned != nil:
 		slog.InfoContext(ctx, "Next block planned", slog.String("roadmap_id", roadmapID),
 			slog.String("planned_roadmap_id", planned.ID()),
 			slog.String("starts", planned.Info().StartDate.Format(time.DateOnly)))
 	}
+	return err == nil
 }
 
 // forEachBounded runs job for every id, at most maxConcurrentGenerations at a
