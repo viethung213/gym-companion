@@ -93,14 +93,7 @@ func (c *CoachingContextAgent) mapToDomainRoadmap(
 				if err != nil {
 					return nil, fmt.Errorf("session on %s: %w", key, err)
 				}
-				dur := sp.EstimatedDurationMinutes
-				if dur <= 0 {
-					dur = 45
-				}
-				slotTime := sp.SlotTime
-				if slotTime == "" {
-					slotTime = "07:00"
-				}
+				prescription := c.mapPrescriptionToDomain(ctx, sp.Prescription, names)
 
 				s, err := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
 					SessionPlanID:            c.idgen.NewID(),
@@ -109,13 +102,13 @@ func (c *CoachingContextAgent) mapToDomainRoadmap(
 					RoadmapID:                roadmapID,
 					UserID:                   userID,
 					ScheduledDate:            bucket.date,
-					SlotTime:                 slotTime,
-					EstimatedDurationMinutes: dur,
+					SlotTime:                 sp.SlotTime,
+					EstimatedDurationMinutes: prescription.EstimatedMinutes(),
 					Status:                   roadmap.SessionPlanStatusPending,
 					Source:                   roadmap.SessionPlanSourceScheduled,
 					Kind:                     sessionKind(sp.SessionKind),
 					TargetMuscleGroups:       targets,
-					Prescription:             c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
+					Prescription:             prescription,
 					Reasoning:                sp.Reasoning,
 					GeneratedAt:              now,
 				}, now)
@@ -171,25 +164,17 @@ func (c *CoachingContextAgent) mapToRegeneratedSessions(
 			if err != nil {
 				return nil, fmt.Errorf("session on %s: %w", sp.ScheduledDate, err)
 			}
-
-			dur := sp.EstimatedDurationMinutes
-			if dur <= 0 {
-				dur = 45
-			}
-			slotTime := sp.SlotTime
-			if slotTime == "" {
-				slotTime = "07:00"
-			}
+			prescription := c.mapPrescriptionToDomain(ctx, sp.Prescription, names)
 
 			infos = append(infos, &roadmap.SessionPlanInfo{
 				UserID:                   userID,
 				ScheduledDate:            scheduledTime.UTC(),
-				SlotTime:                 slotTime,
-				EstimatedDurationMinutes: dur,
+				SlotTime:                 sp.SlotTime,
+				EstimatedDurationMinutes: prescription.EstimatedMinutes(),
 				Status:                   roadmap.SessionPlanStatusPending,
 				Kind:                     sessionKind(sp.SessionKind),
 				TargetMuscleGroups:       targets,
-				Prescription:             c.mapPrescriptionToDomain(ctx, sp.Prescription, names),
+				Prescription:             prescription,
 				Reasoning:                sp.Reasoning,
 				GeneratedAt:              now,
 			})
@@ -202,67 +187,31 @@ func (c *CoachingContextAgent) mapPrescriptionToDomain(
 	ctx context.Context, p WorkoutPrescription, names map[string]string,
 ) roadmap.WorkoutPrescription {
 	return roadmap.WorkoutPrescription{
-		WarmUps:       c.mapExercisesToDomain(ctx, p.WarmUps, names, true),
-		MainExercises: c.mapExercisesToDomain(ctx, p.MainExercises, names, false),
-		CoolDowns:     c.mapExercisesToDomain(ctx, p.CoolDowns, names, true),
+		WarmUps:       c.mapExercisesToDomain(ctx, p.WarmUps, names),
+		MainExercises: c.mapExercisesToDomain(ctx, p.MainExercises, names),
+		CoolDowns:     c.mapExercisesToDomain(ctx, p.CoolDowns, names),
 	}
 }
 
+// mapExercisesToDomain copies validated lines: the validator already made each
+// one fit its exercise's measurement type and every limit, so nothing is
+// filled in here.
 func (c *CoachingContextAgent) mapExercisesToDomain(
-	ctx context.Context, exs []PrescribedExercise, names map[string]string, isWarmup ...bool,
+	ctx context.Context, exs []PrescribedExercise, names map[string]string,
 ) []roadmap.PrescribedExercise {
 	if len(exs) == 0 {
 		return nil
 	}
 
-	isWarmupCoolDown := false
-	if len(isWarmup) > 0 {
-		isWarmupCoolDown = isWarmup[0]
-	}
-
 	out := make([]roadmap.PrescribedExercise, len(exs))
 	for i, e := range exs {
-		name, measType := c.resolveExerciseDetails(ctx, e.ExerciseID, names)
-		targetReps := int32(e.TargetReps)
-		durationSec := int32(e.DurationSeconds)
-		targetWeight := float32(e.TargetWeightKg)
-
-		if measType == "DURATION" {
-			// Bài tập tính theo thời gian (Cardio, Isometric, Planks...)
-			if durationSec <= 0 {
-				switch {
-				case e.TargetReps > 0:
-					// Quy đổi nếu AI lỡ điền reps (ví dụ 15 reps * 3 -> ~45s)
-					scaled := int32(e.TargetReps * 3)
-					if scaled < 30 {
-						scaled = 30
-					} else if scaled > 60 {
-						scaled = 60
-					}
-					durationSec = scaled
-				case isWarmupCoolDown:
-					durationSec = 30 // Fallback mặc định cho khởi động/hạ nhiệt
-				default:
-					durationSec = 45 // Fallback mặc định cho bài chính
-				}
-			}
-			targetReps = 0   // Triệt tiêu reps thừa
-			targetWeight = 0 // Bodyweight cardio không mang tạ
-		} else {
-			// Bài tập tính theo số lần (REPS)
-			if targetReps <= 0 {
-				targetReps = 10 // Fallback mặc định
-			}
-			durationSec = 0 // Triệt tiêu duration thừa
-		}
-
 		out[i] = roadmap.PrescribedExercise{
 			ExerciseID:      e.ExerciseID,
-			ExerciseName:    name,
+			ExerciseName:    c.exerciseName(ctx, e.ExerciseID, names),
 			TargetSets:      int32(e.TargetSets),
-			TargetReps:      targetReps,
-			TargetWeight:    targetWeight,
-			DurationSeconds: durationSec,
+			TargetReps:      int32(e.TargetReps),
+			TargetWeight:    float32(e.TargetWeightKg),
+			DurationSeconds: int32(e.DurationSeconds),
 			TargetRPE:       float32(e.TargetRPE),
 			RestSetSec:      int32(e.RestSetSec),
 			RestExerciseSec: defaultRestExerciseSec,
@@ -291,29 +240,19 @@ func sessionTargetMuscles(p WorkoutPrescription, primaries map[string]string) ([
 	return out, nil
 }
 
-// resolveExerciseDetails returns the catalog name and measurement type ("REPS" | "DURATION").
-func (c *CoachingContextAgent) resolveExerciseDetails(
-	ctx context.Context, exerciseID string, names map[string]string,
-) (name, measurementType string) {
-	name = names[exerciseID]
-	if c.catalog == nil {
-		return name, "REPS"
+// exerciseName is the catalog name validation resolved. A name missing there
+// is looked up once more; failing that it stays empty, which the application
+// layer rejects as an unvalidated exercise.
+func (c *CoachingContextAgent) exerciseName(ctx context.Context, exerciseID string, names map[string]string) string {
+	if name := names[exerciseID]; name != "" || c.catalog == nil {
+		return name
 	}
 	ex, err := c.catalog.GetByID(ctx, exerciseID)
 	if err != nil {
-		if name == "" {
-			slog.WarnContext(ctx, "No catalog entry for exercise", slog.String("exercise_id", exerciseID), slog.Any("error", err))
-		}
-		return name, "REPS"
+		slog.WarnContext(ctx, "No catalog entry for exercise", slog.String("exercise_id", exerciseID), slog.Any("error", err))
+		return ""
 	}
-	if name == "" {
-		name = ex.Name
-	}
-	measType := ex.MeasurementType
-	if measType == "" {
-		measType = "REPS"
-	}
-	return name, measType
+	return ex.Name
 }
 
 // prescriptionToDTO converts a stored prescription back into the agent's shape.

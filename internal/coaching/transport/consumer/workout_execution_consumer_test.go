@@ -26,7 +26,7 @@ func (s *stubOutbox) ProcessBatch(ctx context.Context, _ int, publishFn func(con
 	return publishFn(ctx, nil)
 }
 
-func (s *stubOutbox) LogProcessed(_ context.Context, eventID, _, _ string, _ []byte) (bool, error) {
+func (s *stubOutbox) ClaimEvent(_ context.Context, eventID, _ string, _ []byte) (bool, error) {
 	if s.seen == nil {
 		s.seen = map[string]bool{}
 	}
@@ -38,6 +38,13 @@ func (s *stubOutbox) LogProcessed(_ context.Context, eventID, _, _ string, _ []b
 	s.seen[eventID] = true
 
 	return true, nil
+}
+
+func (s *stubOutbox) CompleteEvent(context.Context, string) error { return nil }
+
+func (s *stubOutbox) ReleaseEvent(_ context.Context, eventID string) error {
+	delete(s.seen, eventID)
+	return nil
 }
 
 func makeCE(t *testing.T, id, typeStr string, dataObj any) []byte {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/config"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
@@ -24,6 +26,10 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 				return nil, fetchErr
 			}
 			coachInput.Flow = FlowInitiate4Week
+			// A block planned ahead is laid out from its first day, as if planned then.
+			if start, ok := c.takePlanStart(nodeCtx.SessionID()); ok {
+				coachInput.CurrentTime = planStartInstant(start, coachInput.Timezone).Format(time.RFC3339)
+			}
 
 			schedule, scheduleErr := initSlotSchedule(&coachInput)
 			if scheduleErr != nil {
@@ -75,4 +81,10 @@ func (c *CoachingContextAgent) buildInitWorkflowAgent(_ context.Context) (agent.
 			return wf.Run(ic)
 		},
 	})
+}
+
+// planStartInstant is midnight of the calendar date startDate in the zone.
+func planStartInstant(startDate time.Time, zone string) time.Time {
+	y, m, d := startDate.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, roadmap.LoadLocation(zone))
 }

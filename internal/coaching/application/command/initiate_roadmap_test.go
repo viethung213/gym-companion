@@ -66,7 +66,7 @@ func (m *memRepo) FindActiveByUser(_ context.Context, userID string) (*roadmap.R
 	return nil, roadmap.ErrRoadmapNotFound
 }
 
-func (m *memRepo) ListByUser(_ context.Context, _ string, _ roadmap.Status, _, _ int) ([]*roadmap.Roadmap, error) {
+func (m *memRepo) ListByUser(_ context.Context, _ string, _ []roadmap.Status, _, _ int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 
@@ -136,7 +136,7 @@ func (f *fakeCoachAgent) RegeneratePending(_ context.Context, _ string, _ []stri
 	return nil, nil
 }
 
-func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ string) ([]*roadmap.SessionPlanInfo, error) {
+func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ *service.AdaptationDecision) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
 }
 

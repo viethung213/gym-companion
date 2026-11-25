@@ -1,9 +1,17 @@
-// Package guardrail is the deterministic Go guardrail layer applied AFTER
-// (and optionally alongside) the LLM CoachAgent. Enforces BR-AC-01 (weekly
-// cap), BR-AC-02 (±30% weight band), BR-AC-09 (injury exclusion / protection).
+// Package guardrail is the deterministic hard gate a roadmap the coach plans or
+// rewrites (initial plan, regeneration, adaptation) passes before it is saved,
+// whatever the model wrote. It enforces:
 //
-// D6: The engine is designed stateless + pure so it can also be exposed as an
-// MCP tool for the Generator/Evaluator to consult during generation.
+//   - BR-AC-01: at most MaxSessionsPerWeek TRAINING sessions a week;
+//   - BR-AC-02: a loaded main exercise at most 30% above the athlete's record;
+//   - BR-AC-09: no exercise an active injury excludes, none above its RPE cap;
+//   - BR-AC-10: scheduled main work inside its phase's RPE window;
+//   - BR-AC-11: the DELOAD week below DeloadVolumeRatio of PEAK's volume;
+//   - BR-AC-12: every exercise exists in the catalog;
+//   - BR-AC-13: every line within the hard prescription limits.
+//
+// The engine keeps no state between checks. It reads the catalog and the
+// athlete's records through the ports it is given.
 package guardrail
 
 import (
@@ -24,15 +32,6 @@ const (
 
 	StatusRejected Status = "REJECTED"
 )
-
-// deloadVolumeRatio is the share of PEAK working sets a DELOAD week may keep.
-const deloadVolumeRatio = 0.7
-
-// rpeBand is the inclusive intensity window allowed for a phase's main work.
-type rpeBand struct {
-	min float32
-	max float32
-}
 
 // Severity of an individual violation.
 type Severity string
@@ -57,10 +56,10 @@ type ReviewResult struct {
 	Violations []Violation
 }
 
-// PRLookup returns the personal-record baseline weight for a given exercise
-// (typically supplied by ExerciseCatalogReader + WorkoutSessionReader in the
-// concrete adapter). Return baseline<=0 when no history exists.
-type PRLookup func(exerciseID string) float64
+// PRLookup returns a user's personal-record baseline weight per exercise id
+// (port.WeightBaselines over the workout history). An exercise without history
+// is absent; a nil map means none is known.
+type PRLookup func(ctx context.Context, userID string) map[string]float64
 
 // Engine applies all guardrail checks against a Roadmap.
 type Engine struct {
@@ -76,7 +75,7 @@ func NewEngine(overload *service.OverloadValidator, catalog port.ExerciseCatalog
 	}
 
 	if prs == nil {
-		prs = func(string) float64 { return 0 }
+		prs = func(context.Context, string) map[string]float64 { return nil }
 	}
 
 	return &Engine{overload: overload, catalog: catalog, prs: prs}
@@ -88,7 +87,7 @@ func NewEngine(overload *service.OverloadValidator, catalog port.ExerciseCatalog
 // change: PENDING sessions that have not started at from, the same set as
 // Roadmap.UpcomingPendingSessions. Finished and past sessions are history. A
 // zero from covers every pending session, as for a freshly drafted roadmap.
-func (e *Engine) Check(r *roadmap.Roadmap, injuries []service.Injury, from time.Time) ReviewResult {
+func (e *Engine) Check(ctx context.Context, r *roadmap.Roadmap, injuries []service.Injury, from time.Time) ReviewResult {
 	if r == nil {
 		return ReviewResult{
 			Status: StatusRejected,
@@ -102,14 +101,16 @@ func (e *Engine) Check(r *roadmap.Roadmap, injuries []service.Injury, from time.
 		return s.Status() == roadmap.SessionPlanStatusPending && (from.IsZero() || s.StartsAt(loc).After(from))
 	}
 
-	traits, catalogViolations := e.checkExerciseCatalogExistence(r, inScope)
+	traits, catalogViolations := e.checkExerciseCatalogExistence(ctx, r, inScope)
 	verdicts := injuryVerdicts(traits, injuries)
 
 	var vs []Violation
 
 	vs = append(vs, e.checkWeeklyCap(r)...)
 
-	vs = append(vs, e.checkWeightBand(r)...)
+	vs = append(vs, checkPrescriptionLimits(r, inScope)...)
+
+	vs = append(vs, e.checkWeightBand(ctx, r, inScope)...)
 
 	vs = append(vs, checkInjuryExclusion(r, verdicts, inScope)...)
 
@@ -129,7 +130,7 @@ func (e *Engine) Check(r *roadmap.Roadmap, injuries []service.Injury, from time.
 // checkExerciseCatalogExistence enforces BR-AC-12 and returns the traits of
 // every exercise it found, keyed by exercise id.
 func (e *Engine) checkExerciseCatalogExistence(
-	r *roadmap.Roadmap, inScope func(*roadmap.SessionPlan) bool,
+	ctx context.Context, r *roadmap.Roadmap, inScope func(*roadmap.SessionPlan) bool,
 ) (map[string]service.ExerciseTraits, []Violation) {
 	var vs []Violation
 	traits := make(map[string]service.ExerciseTraits)
@@ -166,7 +167,7 @@ func (e *Engine) checkExerciseCatalogExistence(
 					}
 					if _, ok := traits[ex.ExerciseID]; !ok {
 						if _, known := missing[ex.ExerciseID]; !known {
-							e.lookup(ex.ExerciseID, traits, missing)
+							e.lookup(ctx, ex.ExerciseID, traits, missing)
 						}
 					}
 					if reason, bad := missing[ex.ExerciseID]; bad {
@@ -186,8 +187,8 @@ func (e *Engine) checkExerciseCatalogExistence(
 }
 
 // lookup memoizes one catalog read: a 4-week plan repeats ~15 distinct ids.
-func (e *Engine) lookup(id string, traits map[string]service.ExerciseTraits, missing map[string]string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+func (e *Engine) lookup(ctx context.Context, id string, traits map[string]service.ExerciseTraits, missing map[string]string) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
 	ex, err := e.catalog.GetByID(ctx, id)
@@ -239,27 +240,72 @@ func (e *Engine) checkWeeklyCap(r *roadmap.Roadmap) []Violation {
 	return vs
 }
 
-// checkWeightBand enforces BR-AC-02.
-func (e *Engine) checkWeightBand(r *roadmap.Roadmap) []Violation {
+// checkPrescriptionLimits rejects numbers no sane prescription carries (sets,
+// reps, duration, rest, RPE, load), whatever the model wrote.
+func checkPrescriptionLimits(r *roadmap.Roadmap, inScope func(*roadmap.SessionPlan) bool) []Violation {
 	var vs []Violation
 
 	for _, w := range r.Weeks() {
 		for _, d := range w.Days() {
 			for _, s := range d.Sessions() {
+				if !inScope(s) {
+					continue
+				}
+				if reason := roadmap.SessionDurationIssue(s.Info().EstimatedDurationMinutes); reason != "" {
+					vs = append(vs, Violation{
+						Code: "BR-AC-13", Description: reason,
+						Path: "sessions." + s.ID(), Severity: SeverityBlocker,
+					})
+				}
+				for i, ex := range allExercises(s) {
+					if reason := ex.LimitIssue(); reason != "" {
+						vs = append(vs, Violation{
+							Code:        "BR-AC-13",
+							Description: "exercise " + ex.ExerciseID + ": " + reason,
+							Path:        "sessions." + s.ID() + "[" + itoa(i) + "]",
+							Severity:    SeverityBlocker,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return vs
+}
+
+// checkWeightBand enforces BR-AC-02 on sessions still in scope: a loaded main
+// exercise with a personal record must stay at most 30% above it. History is
+// left alone, since the record may have moved since it was planned.
+func (e *Engine) checkWeightBand(ctx context.Context, r *roadmap.Roadmap, inScope func(*roadmap.SessionPlan) bool) []Violation {
+	baselines := e.prs(ctx, r.UserID())
+	if len(baselines) == 0 {
+		return nil
+	}
+
+	var vs []Violation
+
+	for _, w := range r.Weeks() {
+		for _, d := range w.Days() {
+			for _, s := range d.Sessions() {
+				if !inScope(s) {
+					continue
+				}
 				presc := s.Info().Prescription
 
 				for i, ex := range presc.MainExercises {
-					baseline := e.prs(ex.ExerciseID)
+					baseline := baselines[ex.ExerciseID]
 
-					if baseline <= 0 {
+					// No record, or no load prescribed (bodyweight, timed work).
+					if baseline <= 0 || ex.TargetWeight <= 0 {
 						continue
 					}
 
-					if !e.overload.Within(float64(ex.TargetWeight), baseline) {
+					if float64(ex.TargetWeight) > e.overload.Ceiling(baseline) {
 						vs = append(vs, Violation{
 							Code: "BR-AC-02",
 
-							Description: "target weight outside ±30% of PR/baseline",
+							Description: "target weight more than 30% above the athlete's record",
 
 							Path: "sessions." + s.ID() + ".main[" + itoa(i) + "]",
 
@@ -325,8 +371,8 @@ func checkInjuryExclusion(
 
 // checkPhaseRPEBand enforces BR-AC-10: main work must sit inside its phase's
 // intensity window, so a PEAK-intensity session cannot hide inside a DELOAD
-// week. An injury RPE cap lowers the window of sessions still in scope:
-// safety wins over periodization.
+// week. Only sessions still in scope are checked, and an injury RPE cap lowers
+// their window: safety wins over periodization.
 //
 // Warm-ups and cool-downs are excluded on purpose: they are prescribed at
 // RPE 2-3 by design, so holding them to the phase window would reject every
@@ -337,17 +383,29 @@ func checkPhaseRPEBand(
 	var vs []Violation
 
 	for _, w := range r.Weeks() {
-		phaseBand, known := rpeBandFor(w.Phase())
+		phaseBand, known := roadmap.PhaseRPEBand(w.Phase())
 		if !known {
 			continue // an unknown phase is ErrInvalidPhase's problem, not this rule's
 		}
 
 		for _, d := range w.Days() {
 			for _, s := range d.Sessions() {
+				// Periodization governs the scheduled program. An ad-hoc or solo
+				// session is the athlete's own pick: holding it to the week's window
+				// would make every later regeneration of the roadmap fail.
+				if s.Info().Source != roadmap.SessionPlanSourceScheduled {
+					continue
+				}
+				// A past, completed or skipped session cannot be rewritten. One
+				// legally lowered by an injury cap would otherwise fail the window
+				// once it leaves scope and block every later rewrite.
+				if !inScope(s) {
+					continue
+				}
 				// Recovery sessions follow their own ceiling, not the phase window.
 				sessionBand := phaseBand
 				if s.Kind() == roadmap.SessionKindRecovery {
-					sessionBand = recoveryBand()
+					sessionBand = roadmap.RecoveryRPEBand()
 				}
 				for i, ex := range s.Info().Prescription.MainExercises {
 					// A zero RPE means the model omitted the field rather than
@@ -357,11 +415,8 @@ func checkPhaseRPEBand(
 						continue
 					}
 
-					band := sessionBand
-					if inScope(s) {
-						band = sessionBand.capped(verdicts[ex.ExerciseID].MaxRPE)
-					}
-					if ex.TargetRPE < band.min || ex.TargetRPE > band.max {
+					band := sessionBand.Capped(float32(verdicts[ex.ExerciseID].MaxRPE))
+					if !band.Contains(ex.TargetRPE) {
 						vs = append(vs, Violation{
 							Code: "BR-AC-10",
 
@@ -380,26 +435,12 @@ func checkPhaseRPEBand(
 	return vs
 }
 
-// capped lowers the band to an injury RPE cap; a cap below the band's floor
-// accepts any RPE up to the cap.
-func (b rpeBand) capped(maxRPE float64) rpeBand {
-	limit := float32(maxRPE)
-	if limit <= 0 || limit >= b.max {
-		return b
-	}
-	b.max = limit
-	if b.min > limit {
-		b.min = 0
-	}
-	return b
-}
-
 func ftoa(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // checkDeloadVolume enforces BR-AC-11: the DELOAD week must actually unload,
-// carrying at most deloadVolumeRatio of the PEAK week's working sets.
+// carrying at most roadmap.DeloadVolumeRatio of the PEAK week's working sets.
 //
 // Dropping RPE while keeping volume intact passes BR-AC-10 and still leaves
 // the athlete without a recovery week, which is what this rule catches.
@@ -414,7 +455,7 @@ func (e *Engine) checkDeloadVolume(r *roadmap.Roadmap) []Violation {
 
 	deload := workingSets(r, roadmap.PhaseDeload)
 
-	allowed := float64(peak) * deloadVolumeRatio
+	allowed := float64(peak) * roadmap.DeloadVolumeRatio
 	if float64(deload) <= allowed {
 		return nil
 	}
@@ -442,8 +483,11 @@ func workingSets(r *roadmap.Roadmap, phase roadmap.Phase) int {
 
 		for _, d := range w.Days() {
 			for _, s := range d.Sessions() {
-				if s.Kind() == roadmap.SessionKindRecovery {
-					continue // recovery work is not training volume
+				// Only the scheduled program counts: recovery work is not training
+				// volume, and an ad-hoc or solo session is the athlete's own pick, so
+				// counting it could lock every later rewrite of the roadmap.
+				if s.Kind() == roadmap.SessionKindRecovery || s.Info().Source != roadmap.SessionPlanSourceScheduled {
+					continue
 				}
 				for _, ex := range s.Info().Prescription.MainExercises {
 					total += int(ex.TargetSets)
@@ -453,23 +497,6 @@ func workingSets(r *roadmap.Roadmap, phase roadmap.Phase) int {
 	}
 
 	return total
-}
-
-// rpeBandFor returns the inclusive RPE window for a phase, mirroring the
-// phase table the generator prompt instructs the model to follow.
-func rpeBandFor(p roadmap.Phase) (rpeBand, bool) {
-	switch p {
-	case roadmap.PhaseAccumulation:
-		return rpeBand{min: 6.0, max: 7.0}, true
-	case roadmap.PhaseOverload:
-		return rpeBand{min: 7.0, max: 8.0}, true
-	case roadmap.PhasePeak:
-		return rpeBand{min: 8.0, max: 9.0}, true
-	case roadmap.PhaseDeload:
-		return rpeBand{min: 5.0, max: 6.0}, true
-	default:
-		return rpeBand{}, false
-	}
 }
 
 func itoa(n int) string {
@@ -507,9 +534,6 @@ func itoa(n int) string {
 
 	return string(buf[i:])
 }
-
-// recoveryBand is the RPE window of an active-recovery session.
-func recoveryBand() rpeBand { return rpeBand{min: 1, max: roadmap.RecoveryMaxRPE} }
 
 // rpeWindowName describes the RPE window a session's exercises must respect.
 func rpeWindowName(s *roadmap.SessionPlan, phase roadmap.Phase) string {

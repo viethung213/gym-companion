@@ -150,13 +150,25 @@ func (s *SessionPlan) ScheduledDate() time.Time { return s.info.ScheduledDate }
 
 // MarkCompleted transitions PENDING → COMPLETED and records execution metrics.
 // scr is Session Completion Rate (0-100); deltaRPE is scalar per D7.
+// A SKIPPED session may still complete: a workout reported after its week was
+// closed did happen, and dropping the report would lose it.
 // Idempotent: calling on an already-COMPLETED session is a no-op.
 func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error {
+	return s.complete(scr, &deltaRPE, now)
+}
+
+// MarkCompletedUnrated completes a session whose effort was not reported: its
+// ΔRPE stays unmeasured instead of reading as "far too easy".
+func (s *SessionPlan) MarkCompletedUnrated(scr float32, now time.Time) error {
+	return s.complete(scr, nil, now)
+}
+
+func (s *SessionPlan) complete(scr float32, deltaRPE *float32, now time.Time) error {
 	if s.info.Status == SessionPlanStatusCompleted {
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending {
+	if s.info.Status != SessionPlanStatusPending && s.info.Status != SessionPlanStatusSkipped {
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusCompleted)
 	}
 
@@ -168,11 +180,13 @@ func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error 
 
 	scrCopy := scr
 
-	deltaCopy := deltaRPE
-
 	s.info.SessionSCR = &scrCopy
 
-	s.info.SessionDeltaRPE = &deltaCopy
+	s.info.SessionDeltaRPE = nil
+	if deltaRPE != nil {
+		deltaCopy := *deltaRPE
+		s.info.SessionDeltaRPE = &deltaCopy
+	}
 
 	return nil
 }

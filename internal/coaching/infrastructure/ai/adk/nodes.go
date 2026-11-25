@@ -150,6 +150,7 @@ func (c *CoachingContextAgent) buildNodes() {
 					ScheduledDate:            info.ScheduledDate.Format(scheduledDateISO),
 					SlotTime:                 info.SlotTime,
 					SessionKind:              string(info.Kind),
+					Phase:                    currentPhase(rm, s),
 					EstimatedDurationMinutes: info.EstimatedDurationMinutes,
 					TargetMuscleGroups:       info.TargetMuscleGroups,
 					CurrentPrescription:      prescriptionToDTO(info.Prescription),

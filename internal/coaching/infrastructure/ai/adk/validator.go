@@ -76,6 +76,18 @@ type planValidator struct {
 	// revise, set for rewrite flows, holds the sessions being revised: results
 	// take their date, slot and kind by position.
 	revise []SessionToRevise
+
+	// loads, when set, bounds every prescribed weight to the athlete.
+	loads *loadLimits
+}
+
+// loadLimits are the athlete-specific bounds on a prescribed weight.
+type loadLimits struct {
+	// baselines maps exercise_id to the athlete's personal-record weight: a
+	// prescription may be at most 30% above it (BR-AC-02).
+	baselines map[string]float64
+	// bodyWeightKg caps the load of an exercise with no record yet; 0 = unknown.
+	bodyWeightKg float64
 }
 
 func newPlanValidator(catalog port.ExerciseCatalogReader) *planValidator {
@@ -106,23 +118,90 @@ func (v *planValidator) withRevise(revise []SessionToRevise) *planValidator {
 	return &cp
 }
 
-// pinKinds sets every session's kind (and, for rewrites, its date and slot)
-// from what the backend scheduled: the model never decides them.
+func (v *planValidator) withLoads(loads *loadLimits) *planValidator {
+	cp := *v
+	cp.loads = loads
+	return &cp
+}
+
+// pinKinds sets every session's kind and phase (and, for rewrites, its date
+// and slot) from what the backend scheduled: the model never decides them.
+// An initial roadmap's weeks take their phase and RPE window from their
+// number, so the model cannot skip the PEAK or DELOAD week.
 func (v *planValidator) pinKinds(plan *GeneratedPlan) {
 	if v.revise != nil {
 		pinRewriteSlots(plan, v.revise)
 	} else {
 		for w := range plan.Weeks {
-			for i := range plan.Weeks[w].Sessions {
-				sp := &plan.Weeks[w].Sessions[i]
+			wp := &plan.Weeks[w]
+			if v.schedule != nil {
+				pinWeekPhase(wp)
+			}
+			for i := range wp.Sessions {
+				sp := &wp.Sessions[i]
 				sp.SessionKind = kindTraining
 				if v.schedule != nil {
 					sp.SessionKind = v.schedule.kindOf(sp.ScheduledDate, sp.SlotTime)
+					sp.phase = roadmap.Phase(wp.Phase)
 				}
 			}
 		}
 	}
 	capRecoveryRPE(plan)
+}
+
+// pinWeekPhase sets a week's phase and RPE window from its number; a number
+// outside the block is left for weekNumberIssues to report.
+func pinWeekPhase(wp *WeekPlan) {
+	phase := roadmap.PhaseForWeek(wp.WeekNumber)
+	band, ok := roadmap.PhaseRPEBand(phase)
+	if !ok {
+		return
+	}
+	wp.Phase = string(phase)
+	wp.TargetRPEMin = float64(band.Min)
+	wp.TargetRPEMax = float64(band.Max)
+}
+
+// weekNumberIssues reports an initial roadmap whose weeks are not numbered
+// 1..4 exactly once. In salvage mode it also renumbers the plan: the first
+// week claiming a number keeps it, the rest are dropped (their sessions sat
+// in another week's dates and validateSlot would drop them anyway), and a
+// missing week is added empty so the roadmap still has all four.
+func weekNumberIssues(plan *GeneratedPlan, salvage bool) []planIssue {
+	var issues []planIssue
+	byNumber := make(map[int]WeekPlan, roadmap.WeeksPerRoadmap)
+	for _, wp := range plan.Weeks {
+		if roadmap.PhaseForWeek(wp.WeekNumber) == "" {
+			issues = append(issues, planIssue{WeekNumber: wp.WeekNumber, SessionIdx: -1,
+				Reason: fmt.Sprintf("week_number must be 1 to %d", roadmap.WeeksPerRoadmap)})
+			continue
+		}
+		if _, dup := byNumber[wp.WeekNumber]; dup {
+			issues = append(issues, planIssue{WeekNumber: wp.WeekNumber, SessionIdx: -1,
+				Reason: "appears twice; list each week once"})
+			continue
+		}
+		byNumber[wp.WeekNumber] = wp
+	}
+	for n := 1; n <= roadmap.WeeksPerRoadmap; n++ {
+		if _, ok := byNumber[n]; !ok {
+			issues = append(issues, planIssue{WeekNumber: n, SessionIdx: -1,
+				Reason: "is missing; the roadmap always has weeks 1 to 4"})
+		}
+	}
+	if salvage && len(issues) > 0 {
+		weeks := make([]WeekPlan, 0, roadmap.WeeksPerRoadmap)
+		for n := 1; n <= roadmap.WeeksPerRoadmap; n++ {
+			wp, ok := byNumber[n]
+			if !ok {
+				wp = WeekPlan{WeekNumber: n}
+			}
+			weeks = append(weeks, wp)
+		}
+		plan.Weeks = weeks
+	}
+	return issues
 }
 
 // exerciseResolver returns the catalog exercise, or nil when the id is unknown.
@@ -150,6 +229,12 @@ func (v *planValidator) validate(
 			}, nil
 		}
 	}
+	var issues []planIssue
+	degraded := false
+	if v.schedule != nil {
+		issues = weekNumberIssues(plan, dropInvalid)
+		degraded = dropInvalid && len(issues) > 0
+	}
 	v.pinKinds(plan)
 
 	names := make(map[string]string)
@@ -157,7 +242,6 @@ func (v *planValidator) validate(
 	lookupErr := make(map[string]bool) // exercise_id -> known-missing
 	cautions := make(map[string]string)
 	primaries := make(map[string]string)
-	var issues []planIssue
 
 	// Memoized: a 4-week plan spans ~96 slots but only ~15 distinct IDs.
 	resolve := func(id string) (*port.Exercise, error) {
@@ -184,7 +268,6 @@ func (v *planValidator) validate(
 	}
 
 	out := &GeneratedPlan{}
-	degraded := false
 	usedSlots := make(map[string]struct{}) // "date slot-start" already scheduled
 
 	for _, wp := range plan.Weeks {
@@ -211,7 +294,19 @@ func (v *planValidator) validate(
 	}
 
 	if !dropInvalid {
+		if v.schedule != nil {
+			if issue := deloadVolumeIssue(plan, false); issue != nil {
+				issues = append(issues, *issue)
+			}
+		}
 		return validationOutcome{Plan: plan, Names: names, Cautions: cautions, Primaries: primaries, Issues: issues}, nil
+	}
+
+	if v.schedule != nil {
+		if issue := deloadVolumeIssue(out, true); issue != nil {
+			issues = append(issues, *issue)
+			degraded = true
+		}
 	}
 
 	if len(out.Weeks) != len(plan.Weeks) {
@@ -273,37 +368,20 @@ func (v *planValidator) validateWeek(
 		kept = append(kept, *cleaned)
 	}
 
-	// Count survivors so salvage does not flag a cap that dropping resolved.
-	counted := wp.Sessions
-	datesFor := countDistinctDates(wp.Sessions)
-	if dropInvalid {
-		counted = kept
-		datesFor = len(distinctDates)
-	}
-
-	if training := countTraining(counted); training > maxSessionsPerWeek {
-		issues = append(issues, planIssue{
-			WeekNumber: wp.WeekNumber,
-			SessionIdx: -1,
-			Reason: fmt.Sprintf("has %d training sessions, exceeding the limit of %d per week",
-				training, maxSessionsPerWeek),
-		})
-	}
-	if len(counted) > maxSlotsPerWeek {
-		issues = append(issues, planIssue{
-			WeekNumber: wp.WeekNumber,
-			SessionIdx: -1,
-			Reason: fmt.Sprintf("has %d sessions, exceeding the limit of %d per week",
-				len(counted), maxSlotsPerWeek),
-		})
-	}
-	if datesFor > maxDaysPerWeek {
-		issues = append(issues, planIssue{
-			WeekNumber: wp.WeekNumber,
-			SessionIdx: -1,
-			Reason: fmt.Sprintf("spans %d distinct dates, exceeding the limit of %d per week",
-				datesFor, maxDaysPerWeek),
-		})
+	// The weekly caps hold for weeks the model lays out. A rewrite lists every
+	// revised session under one entry, possibly spanning several weeks, and
+	// the backend pins each one to its existing date and slot: the roadmap's
+	// weeks already respect the caps, so counting that entry as one week would
+	// reject every rewrite of more than six sessions.
+	if v.revise == nil {
+		// Count survivors so salvage does not flag a cap that dropping resolved.
+		counted := wp.Sessions
+		datesFor := countDistinctDates(wp.Sessions)
+		if dropInvalid {
+			counted = kept
+			datesFor = len(distinctDates)
+		}
+		issues = append(issues, weekCapIssues(wp.WeekNumber, counted, datesFor)...)
 	}
 
 	if shortfall := v.weekShortfall(wp.WeekNumber, onOpenSlot); shortfall != nil {
@@ -424,51 +502,61 @@ func (v *planValidator) validateSession(
 
 	cleanedSlots := make([][]PrescribedExercise, len(slots))
 	for i, slot := range slots {
-		for _, ex := range slot.exs {
-			catalogEx, resolveErr := resolve(ex.ExerciseID)
+		for j := range slot.exs {
+			catalogEx, resolveErr := resolve(slot.exs[j].ExerciseID)
 			if resolveErr != nil {
 				return nil, nil, resolveErr
 			}
-			loc := planIssue{WeekNumber: weekNumber, SessionIdx: idx, Slot: slot.name, ExerciseID: ex.ExerciseID}
+			loc := planIssue{WeekNumber: weekNumber, SessionIdx: idx, Slot: slot.name, ExerciseID: slot.exs[j].ExerciseID}
 			if catalogEx == nil {
 				loc.Reason = "is not in the exercise catalog"
 				issues = append(issues, loc)
 				continue
 			}
+			// On the plan itself, not a copy: a plan that passes as it is ships as
+			// it is, and must not carry reps on a timed exercise.
+			dropStrayMeasureFields(&slot.exs[j], catalogEx.MeasurementType)
+			ex := slot.exs[j]
 			if sp.SessionKind == kindRecovery {
 				if !recoveryCategory(catalogEx.Category) {
-					loc.Reason = fmt.Sprintf("is a %s exercise; a RECOVERY session uses only STRETCHING or light CARDIO exercises",
+					loc.Reason = fmt.Sprintf("is a %s exercise; a RECOVERY session takes every exercise from recovery_exercises",
 						catalogEx.Category)
 					issues = append(issues, loc)
 					continue
 				}
 			}
 
-			if v.athlete == nil {
-				cleanedSlots[i] = append(cleanedSlots[i], ex)
-				continue
-			}
-			traits := catalogEx.Traits()
-			if !service.EquipmentAvailable(traits.Equipment, v.athlete.Equipment) {
-				loc.Reason = "needs equipment " + string(traits.Equipment) +
-					" the athlete does not have; pick an exercise using profile.available_equipment"
-				issues = append(issues, loc)
-				continue
-			}
-			verdict := service.EvaluateInjuries(&traits, v.athlete.Injuries)
-			if verdict.Excluded {
-				loc.Reason = "conflicts with an active injury (" + verdict.Reason() +
-					"); replace it with an eligible exercise or drop it"
-				issues = append(issues, loc)
-				continue
-			}
-			if verdict.MaxRPE > 0 {
-				cautions[ex.ExerciseID] = injuryLimitText(&verdict)
-				if ex.TargetRPE > verdict.MaxRPE {
-					loc.Reason = fmt.Sprintf("target_rpe %.1f exceeds the injury cap: %s", ex.TargetRPE, injuryLimitText(&verdict))
+			var injuryCap float64
+			if v.athlete != nil {
+				traits := catalogEx.Traits()
+				if !service.EquipmentAvailable(traits.Equipment, v.athlete.Equipment) {
+					loc.Reason = "needs equipment " + string(traits.Equipment) +
+						" the athlete does not have; pick an exercise using profile.available_equipment"
 					issues = append(issues, loc)
-					ex.TargetRPE = verdict.MaxRPE // salvage keeps the exercise at its cap
+					continue
 				}
+				verdict := service.EvaluateInjuries(&traits, v.athlete.Injuries)
+				if verdict.Excluded {
+					loc.Reason = "conflicts with an active injury (" + verdict.Reason() +
+						"); replace it with an eligible exercise or drop it"
+					issues = append(issues, loc)
+					continue
+				}
+				if verdict.MaxRPE > 0 {
+					injuryCap = verdict.MaxRPE
+					cautions[ex.ExerciseID] = injuryLimitText(&verdict)
+					if ex.TargetRPE > verdict.MaxRPE {
+						loc.Reason = fmt.Sprintf("target_rpe %.1f exceeds the injury cap: %s", ex.TargetRPE, injuryLimitText(&verdict))
+						issues = append(issues, loc)
+						ex.TargetRPE = verdict.MaxRPE // salvage keeps the exercise at its cap
+					}
+				}
+			}
+
+			// Numbers last: salvage keeps the line, clamped to every limit.
+			for _, reason := range v.clampLine(&ex, slot.name == "main_exercises", catalogEx.MeasurementType, sp, injuryCap) {
+				loc.Reason = reason
+				issues = append(issues, loc)
 			}
 			cleanedSlots[i] = append(cleanedSlots[i], ex)
 		}
@@ -483,12 +571,15 @@ func (v *planValidator) validateSession(
 		})
 	}
 
-	if sp.EstimatedDurationMinutes <= 0 {
+	duration := sp.EstimatedDurationMinutes
+	if duration < roadmap.MinSessionMinutes || duration > roadmap.MaxSessionMinutes {
 		issues = append(issues, planIssue{
 			WeekNumber: weekNumber,
 			SessionIdx: idx,
-			Reason:     "estimated_duration_minutes is missing or invalid; must be a positive integer in minutes",
+			Reason: fmt.Sprintf("estimated_duration_minutes %d is invalid; must be %d to %d minutes",
+				duration, roadmap.MinSessionMinutes, roadmap.MaxSessionMinutes),
 		})
+		duration = min(max(duration, roadmap.MinSessionMinutes), roadmap.MaxSessionMinutes)
 	}
 
 	if !dropInvalid {
@@ -501,6 +592,7 @@ func (v *planValidator) validateSession(
 	}
 
 	cleaned := *sp
+	cleaned.EstimatedDurationMinutes = duration
 	cleaned.Prescription = WorkoutPrescription{
 		WarmUps:       cleanedSlots[0],
 		MainExercises: cleanedSlots[1],
@@ -563,4 +655,23 @@ func capRecoveryRPE(plan *GeneratedPlan) {
 			}
 		}
 	}
+}
+
+// weekCapIssues reports the weekly caps a laid-out week breaks: TRAINING
+// sessions (BR-AC-01), all sessions, and distinct dates.
+func weekCapIssues(weekNumber int, sessions []SessionPlan, dates int) []planIssue {
+	var issues []planIssue
+	week := func(reason string) {
+		issues = append(issues, planIssue{WeekNumber: weekNumber, SessionIdx: -1, Reason: reason})
+	}
+	if training := countTraining(sessions); training > maxSessionsPerWeek {
+		week(fmt.Sprintf("has %d training sessions, exceeding the limit of %d per week", training, maxSessionsPerWeek))
+	}
+	if len(sessions) > maxSlotsPerWeek {
+		week(fmt.Sprintf("has %d sessions, exceeding the limit of %d per week", len(sessions), maxSlotsPerWeek))
+	}
+	if dates > maxDaysPerWeek {
+		week(fmt.Sprintf("spans %d distinct dates, exceeding the limit of %d per week", dates, maxDaysPerWeek))
+	}
+	return issues
 }

@@ -32,9 +32,13 @@ func (s *stubOutbox) ProcessBatch(ctx context.Context, _ int, publishFn func(con
 	return publishFn(ctx, s.records)
 }
 
-func (s *stubOutbox) LogProcessed(context.Context, string, string, string, []byte) (bool, error) {
+func (s *stubOutbox) ClaimEvent(context.Context, string, string, []byte) (bool, error) {
 	return true, nil
 }
+
+func (s *stubOutbox) CompleteEvent(context.Context, string) error { return nil }
+
+func (s *stubOutbox) ReleaseEvent(context.Context, string) error { return nil }
 
 func TestOutboxWriter_Enqueue_CloudEventsEnvelope(t *testing.T) {
 	stub := &stubOutbox{}

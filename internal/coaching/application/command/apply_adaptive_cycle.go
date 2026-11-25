@@ -92,11 +92,14 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
 	}
 
-	drafts, err := h.agent.Adapt(ctx, cmd.UserID, decision.Reason)
+	drafts, err := h.agent.Adapt(ctx, cmd.UserID, &decision)
 	if err != nil {
 		return nil, fmt.Errorf("agent adapt: %w", err)
 	}
 
+	if rm, err = reloadForRewrite(ctx, h.repo, rm, profile.Zone().String()); err != nil {
+		return nil, err
+	}
 	// Generation takes a while; sessions that started meanwhile are left alone.
 	now := h.clock.Now()
 	pending := rm.UpcomingPendingSessions(now)
@@ -115,7 +118,7 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	}
 
 	injuries := profile.Athlete().Injuries
-	if result := h.guard.Check(rm, injuries, now); result.Status != guardrail.StatusApproved {
+	if result := h.guard.Check(ctx, rm, injuries, now); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected adaptive cycle: %+v", result.Violations)
 	}
 

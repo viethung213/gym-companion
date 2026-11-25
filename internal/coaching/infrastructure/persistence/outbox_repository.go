@@ -230,27 +230,59 @@ func (r *OutboxRepository) ProcessBatch(
 	return r.MarkPublished(ctx, ids)
 }
 
-// LogProcessed records an inbound event in coaching.outbox_log. Returns
-// (fresh=true, nil) on first record, (fresh=false, nil) on duplicate event_id (D9).
-func (r *OutboxRepository) LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte) (bool, error) {
+// Inbound event states in coaching.outbox_log.
+const (
+	eventProcessing = "PROCESSING"
+	eventProcessed  = "SUCCESS"
+)
+
+// ClaimEvent records an inbound event as PROCESSING. A conflicting PROCESSING
+// row is taken over: a partition is read by one consumer at a time, one
+// message after the other, and the offset is committed only after handling,
+// so an unfinished claim is normally an attempt that never finished (the
+// process died) and this delivery is its redelivery. During a consumer-group
+// rebalance the previous owner may still be finishing it, so the event can
+// run twice; handlers tolerate that (completion is idempotent, roadmap saves
+// are version-checked). A SUCCESS row is a duplicate.
+func (r *OutboxRepository) ClaimEvent(ctx context.Context, eventID, eventType string, payload []byte) (bool, error) {
+	now := time.Now().UTC()
 	rec := outboxLogRecord{
-		ID:           eventID, // Use event_id as PK to make retries idempotent.
-		EventID:      eventID,
-		EventType:    eventType,
-		Payload:      payload,
-		PartitionKey: partitionKey,
-		ProcessedAt:  time.Now().UTC(),
-		Status:       "SUCCESS",
+		ID:          eventID, // event_id as PK keeps redeliveries on one row
+		EventID:     eventID,
+		EventType:   eventType,
+		Payload:     payload,
+		ProcessedAt: now,
+		Status:      eventProcessing,
 	}
 
 	res := r.getDB(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "event_id"}},
-		DoNothing: true,
+		DoUpdates: clause.Assignments(map[string]any{"status": eventProcessing, "processed_at": now}),
+		Where: clause.Where{Exprs: []clause.Expression{
+			clause.Expr{SQL: "coaching.outbox_log.status = ?", Vars: []any{eventProcessing}},
+		}},
 	}).Create(&rec)
-
 	if err := res.Error; err != nil {
-		return false, fmt.Errorf("log processed: %w", err)
+		return false, fmt.Errorf("claim event %s: %w", eventID, err)
 	}
-
 	return res.RowsAffected > 0, nil
+}
+
+// CompleteEvent marks a claimed event processed.
+func (r *OutboxRepository) CompleteEvent(ctx context.Context, eventID string) error {
+	err := r.getDB(ctx).Model(&outboxLogRecord{}).Where("event_id = ?", eventID).
+		Updates(map[string]any{"status": eventProcessed, "processed_at": time.Now().UTC()}).Error
+	if err != nil {
+		return fmt.Errorf("complete event %s: %w", eventID, err)
+	}
+	return nil
+}
+
+// ReleaseEvent deletes the claim of an event whose handling failed.
+func (r *OutboxRepository) ReleaseEvent(ctx context.Context, eventID string) error {
+	err := r.getDB(ctx).Where("event_id = ? AND status = ?", eventID, eventProcessing).Delete(&outboxLogRecord{}).Error
+	if err != nil {
+		return fmt.Errorf("release event %s: %w", eventID, err)
+	}
+	return nil
 }

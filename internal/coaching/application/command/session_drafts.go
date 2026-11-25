@@ -1,10 +1,12 @@
 package command
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
@@ -67,4 +69,20 @@ func rewriteInPlace(pending []*roadmap.SessionPlan, aligned []*roadmap.SessionPl
 		applied++
 	}
 	return applied, nil
+}
+
+// reloadForRewrite reads the roadmap again once the model has answered, so the
+// drafts land on what is stored now rather than on the copy read before the
+// generation: workouts completed in the meantime are kept. A roadmap no longer
+// ACTIVE is not rewritten.
+func reloadForRewrite(ctx context.Context, repo port.RoadmapRepository, rm *roadmap.Roadmap, zone string) (*roadmap.Roadmap, error) {
+	fresh, err := repo.FindByID(ctx, rm.ID())
+	if err != nil {
+		return nil, fmt.Errorf("reload roadmap %s: %w", rm.ID(), err)
+	}
+	if fresh.Status() != roadmap.StatusActive {
+		return nil, fmt.Errorf("%w: roadmap %s is %s now", roadmap.ErrRoadmapChanged, rm.ID(), fresh.Status())
+	}
+	fresh.SetTimezone(zone)
+	return fresh, nil
 }

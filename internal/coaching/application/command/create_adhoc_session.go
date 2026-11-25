@@ -8,7 +8,16 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 )
+
+// ErrExerciseExcludedByInjury is returned when the athlete picks an exercise
+// an active injury rules out (BR-AC-09 applies to ad-hoc sessions too).
+var ErrExerciseExcludedByInjury = errors.New("exercise is excluded by an active injury")
+
+// adHocTargetRPE is the intensity of a user-built session line; an injury cap
+// lowers it.
+const adHocTargetRPE = 7.0
 
 // CreateAdhocSessionCommand is the input for Flow 2.1 (ad-hoc session creation).
 type CreateAdhocSessionCommand struct {
@@ -21,21 +30,26 @@ type CreateAdhocSessionResult struct {
 	SessionPlan *roadmap.SessionPlan
 }
 
-// CreateAdhocSessionHandler creates an ad-hoc session plan and adds it to
-// today's DayPlan (or the last day if today has no plan).
+// CreateAdhocSessionHandler adds a user-built session to today's DayPlan of the
+// active roadmap, today being the athlete's local date.
 type CreateAdhocSessionHandler struct {
 	tx        port.TransactionManager
 	repo      port.RoadmapRepository
 	exercises port.ExerciseCatalogReader
+	profiles  port.UserProfileReader
 	idgen     port.IDGenerator
 	clock     port.Clock
 }
+
+// errRoadmapEnded marks a session asked for after the active roadmap ended.
+var errRoadmapEnded = fmt.Errorf("active roadmap has ended: %w", roadmap.ErrDateOutsideRoadmap)
 
 // NewCreateAdhocSessionHandler wires the handler.
 func NewCreateAdhocSessionHandler(
 	tx port.TransactionManager,
 	repo port.RoadmapRepository,
 	exercises port.ExerciseCatalogReader,
+	profiles port.UserProfileReader,
 	idgen port.IDGenerator,
 	clock port.Clock,
 ) *CreateAdhocSessionHandler {
@@ -43,12 +57,14 @@ func NewCreateAdhocSessionHandler(
 		tx:        tx,
 		repo:      repo,
 		exercises: exercises,
+		profiles:  profiles,
 		idgen:     idgen,
 		clock:     clock,
 	}
 }
 
-// Handle executes the ad-hoc session creation.
+// Handle executes the ad-hoc session creation. An exercise an active injury
+// excludes is refused; one it only limits is kept at the injury's RPE cap.
 func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocSessionCommand) (*CreateAdhocSessionResult, error) {
 	if cmd.UserID == "" {
 		return nil, errors.New("user_id is required")
@@ -58,78 +74,85 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 		return nil, errors.New("at least one exercise_id is required")
 	}
 
+	// Remote reads stay outside the transaction.
+	profile, err := h.profiles.GetProfile(ctx, cmd.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load profile for ad-hoc session: %w", err)
+	}
+	exercises := make([]port.Exercise, 0, len(cmd.ExerciseIDs))
+	for _, exID := range cmd.ExerciseIDs {
+		ex, getErr := h.exercises.GetByID(ctx, exID)
+		if getErr != nil {
+			return nil, fmt.Errorf("get exercise %s: %w", exID, getErr)
+		}
+		exercises = append(exercises, ex)
+	}
+
+	athlete := profile.Athlete()
+	mains, err := adHocLines(exercises, athlete.Injuries)
+	if err != nil {
+		return nil, err
+	}
+
+	now := h.clock.Now()
+	today := roadmap.CalendarDate(now, profile.Zone())
+
+	return h.place(ctx, cmd.UserID, today, now, mains, exercises)
+}
+
+// place adds the session to today's DayPlan of the user's active roadmap.
+func (h *CreateAdhocSessionHandler) place(
+	ctx context.Context, userID string, today, now time.Time,
+	mains []roadmap.PrescribedExercise, exercises []port.Exercise,
+) (*CreateAdhocSessionResult, error) {
 	var out *CreateAdhocSessionResult
-
 	err := h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		rm, err := h.repo.FindActiveByUser(txCtx, cmd.UserID)
-		if err != nil {
-			if errors.Is(err, roadmap.ErrRoadmapNotFound) {
-				return fmt.Errorf("no active roadmap for user: %w", err)
+		rm, findErr := h.repo.FindActiveByUser(txCtx, userID)
+		if findErr != nil {
+			if errors.Is(findErr, roadmap.ErrRoadmapNotFound) {
+				return fmt.Errorf("no active roadmap for user: %w", findErr)
 			}
-			return fmt.Errorf("find active roadmap: %w", err)
+			return fmt.Errorf("find active roadmap: %w", findErr)
 		}
 
-		// Find the DayPlan for today (or the last day in the roadmap).
-		today := h.clock.Now().Truncate(24 * time.Hour)
-		dayPlan := findOrFallbackDayPlan(rm, today)
-		if dayPlan == nil {
-			return errors.New("no day plan found for today or as fallback")
-		}
-
-		// Resolve exercise details.
-		exercises := make([]port.Exercise, 0, len(cmd.ExerciseIDs))
-		for _, exID := range cmd.ExerciseIDs {
-			ex, getErr := h.exercises.GetByID(txCtx, exID)
-			if getErr != nil {
-				return fmt.Errorf("get exercise %s: %w", exID, getErr)
+		// The session belongs to today; a roadmap that does not cover today
+		// cannot take it (it used to land on the roadmap's last day instead).
+		dayPlan, dayErr := rm.DayOn(today, h.idgen.NewID)
+		if dayErr != nil {
+			if errors.Is(dayErr, roadmap.ErrDateOutsideRoadmap) && !today.Before(roadmap.CalendarDate(rm.Info().EndDate, time.UTC)) {
+				return errRoadmapEnded
 			}
-			exercises = append(exercises, ex)
+			return fmt.Errorf("place ad-hoc session: %w", dayErr)
 		}
 
-		// Build a minimal prescription from the exercises.
-		// For ad-hoc sessions, all exercises are main exercises (no warm-up/cool-down).
-		prescription := roadmap.WorkoutPrescription{
-			MainExercises: exercisesToPrescribed(exercises),
-		}
-
-		// Collect target muscle groups.
-		muscleGroups := uniqueMuscleGroups(exercises)
-
-		now := h.clock.Now()
-
-		// Create the SessionPlan with USER_ADHOC source.
-		sessionPlan, err := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
+		sessionPlan, newErr := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
 			SessionPlanID:      h.idgen.NewID(),
 			DayPlanID:          dayPlan.ID(),
 			WeekPlanID:         dayPlan.Info().WeekPlanID,
 			RoadmapID:          rm.ID(),
-			UserID:             cmd.UserID,
+			UserID:             userID,
 			ScheduledDate:      today,
 			SlotTime:           "",
 			Source:             roadmap.SessionPlanSourceAdHoc,
-			TargetMuscleGroups: muscleGroups,
-			Prescription:       prescription,
+			TargetMuscleGroups: uniqueMuscleGroups(exercises),
+			Prescription:       roadmap.WorkoutPrescription{MainExercises: mains},
 			Reasoning:          "ad-hoc session created by user",
 		}, now)
-
-		if err != nil {
-			return fmt.Errorf("create session plan: %w", err)
+		if newErr != nil {
+			return fmt.Errorf("create session plan: %w", newErr)
 		}
 
-		// Add the session to the day plan.
-		if err := dayPlan.AddSession(sessionPlan); err != nil {
-			return fmt.Errorf("add session to day plan: %w", err)
+		if addErr := dayPlan.AddSession(sessionPlan); addErr != nil {
+			return fmt.Errorf("add session to day plan: %w", addErr)
 		}
 
-		// Persist the updated roadmap.
-		if err := h.repo.Save(txCtx, rm); err != nil {
-			return fmt.Errorf("save roadmap: %w", err)
+		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
+			return fmt.Errorf("save roadmap: %w", saveErr)
 		}
 
 		out = &CreateAdhocSessionResult{SessionPlan: sessionPlan}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -137,43 +160,36 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 	return out, nil
 }
 
-// findOrFallbackDayPlan finds a DayPlan for the given date.
-// If no exact match, returns the last day in the roadmap.
-func findOrFallbackDayPlan(rm *roadmap.Roadmap, date time.Time) *roadmap.DayPlan {
-	var lastDay *roadmap.DayPlan
-
-	targetDateStr := date.Format("2006-01-02")
-	for _, w := range rm.Weeks() {
-		for _, d := range w.Days() {
-			lastDay = d
-			if d.Info().ScheduledDate.Format("2006-01-02") == targetDateStr {
-				return d
-			}
-		}
-	}
-
-	return lastDay
-}
-
-// exercisesToPrescribed converts exercise details to PrescribedExercise items.
-func exercisesToPrescribed(exercises []port.Exercise) []roadmap.PrescribedExercise {
+// adHocLines builds the main exercises of a user-built session. Every exercise
+// is held to the athlete's injuries: excluded ones fail the request, limited
+// ones are prescribed at their RPE cap with the reason in Notes.
+func adHocLines(exercises []port.Exercise, injuries []service.Injury) ([]roadmap.PrescribedExercise, error) {
 	out := make([]roadmap.PrescribedExercise, len(exercises))
 	for i := range exercises {
 		ex := &exercises[i]
-		out[i] = roadmap.PrescribedExercise{
+		line := roadmap.PrescribedExercise{
 			ExerciseID:      ex.ExerciseID,
 			ExerciseName:    ex.Name,
 			TargetSets:      3,
 			TargetReps:      8,
-			TargetWeight:    0,
-			DurationSeconds: 0,
-			Notes:           "",
 			RestSetSec:      90,
 			RestExerciseSec: 120,
-			TargetRPE:       7.0,
+			TargetRPE:       adHocTargetRPE,
 		}
+		if len(injuries) > 0 {
+			traits := ex.Traits()
+			verdict := service.EvaluateInjuries(&traits, injuries)
+			if verdict.Excluded {
+				return nil, fmt.Errorf("%w: %s (%s)", ErrExerciseExcludedByInjury, ex.Name, verdict.Reason())
+			}
+			if verdict.MaxRPE > 0 {
+				line.TargetRPE = float32(min(adHocTargetRPE, verdict.MaxRPE))
+				line.Notes = "Injury caution: " + verdict.Reason()
+			}
+		}
+		out[i] = line
 	}
-	return out
+	return out, nil
 }
 
 // uniqueMuscleGroups lists the exercises' primary MuscleGroup codes once each.

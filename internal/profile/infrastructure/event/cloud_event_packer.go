@@ -181,7 +181,7 @@ func PackCloudEvent(ev any) (*OutboxRecordData, error) {
 		ID:              eventID,
 		Source:          "services/profile-service",
 		Type:            eventType,
-		Time:            occurredAt.Format(time.RFC3339),
+		Time:            occurredAt.Format(time.RFC3339Nano),
 		DataContentType: "application/json",
 		Data:            json.RawMessage(payloadBytes),
 	}

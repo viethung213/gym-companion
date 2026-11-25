@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
@@ -15,6 +17,9 @@ import (
 type RegenerateScheduleCommand struct {
 	UserID string
 	Reason string // "profile_updated", "injury_reported", "injury_recovered", ...
+	// ChangedAt is when the profile change happened. A roadmap planned after it
+	// already reflects it, so nothing is regenerated. Zero always regenerates.
+	ChangedAt time.Time
 }
 
 // RegenerateScheduleResult echoes the updated roadmap.
@@ -73,6 +78,15 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 		return nil, err
 	}
 
+	// Onboarding emits the injuries with ProfileCompleted: the roadmap planned
+	// from that profile already holds them, and rewriting it would cost a
+	// second generation for nothing.
+	if !cmd.ChangedAt.IsZero() && !rm.Info().CreatedAt.Before(cmd.ChangedAt) {
+		slog.InfoContext(ctx, "Profile change predates the active roadmap; already reflected, not regenerating",
+			slog.String("user_id", cmd.UserID), slog.String("reason", cmd.Reason))
+		return &RegenerateScheduleResult{Roadmap: rm}, nil
+	}
+
 	// The schedule is read in the athlete's current zone, the same zone the
 	// agent plans in, so both see the same upcoming sessions.
 	profile, err := h.profiles.GetProfile(ctx, cmd.UserID)
@@ -96,6 +110,10 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 		return nil, fmt.Errorf("agent regenerate: %w", err)
 	}
 
+	if rm, err = reloadForRewrite(ctx, h.repo, rm, profile.Zone().String()); err != nil {
+		return nil, err
+	}
+
 	// Generation takes a while: a session may have started meanwhile, and a
 	// started session is never touched.
 	now := h.clock.Now()
@@ -114,7 +132,7 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	}
 
 	athlete := profile.Athlete()
-	if result := h.guard.Check(rm, athlete.Injuries, now); result.Status != guardrail.StatusApproved {
+	if result := h.guard.Check(ctx, rm, athlete.Injuries, now); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected regen: %+v", result.Violations)
 	}
 

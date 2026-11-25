@@ -47,9 +47,6 @@ func (h *CreateExerciseHandler) Handle(
 	now := h.clock.Now()
 	info := cmd.Info
 	info.ID = id
-	if info.Status == "" {
-		info.Status = domain.StatusDraft
-	}
 	// A caller-supplied slug is the free-exercise-db id; otherwise the
 	// exercise is custom and its slug comes from the name.
 	info.Source = domain.SourceFreeExerciseDB

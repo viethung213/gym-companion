@@ -1,6 +1,7 @@
 package guardrail
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -16,10 +17,10 @@ func TestGuardrail_CatalogCheckSkipsHistory(t *testing.T) {
 	missing := &fakeCatalogReader{validIDs: map[string]bool{}}
 	afterRoadmap := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 
-	if got := NewEngine(nil, missing, nil).Check(r, nil, afterRoadmap); got.Status != StatusApproved {
+	if got := NewEngine(nil, missing, nil).Check(context.Background(), r, nil, afterRoadmap); got.Status != StatusApproved {
 		t.Fatalf("only past sessions reference the missing exercise: status = %s, violations = %+v", got.Status, got.Violations)
 	}
-	assertViolation(t, NewEngine(nil, missing, nil).Check(r, nil, time.Time{}), "BR-AC-12")
+	assertViolation(t, NewEngine(nil, missing, nil).Check(context.Background(), r, nil, time.Time{}), "BR-AC-12")
 }
 
 // A session later today has not started, so a regenerate may rewrite it and
@@ -53,11 +54,27 @@ func TestGuardrail_LaterTodayIsInScope(t *testing.T) {
 
 	severeChest := []service.Injury{{Region: taxonomy.JointRegionChest, Severity: taxonomy.InjurySeveritySevere}}
 	morning := date.Add(10 * time.Hour) // 10:00 UTC that Friday
-	got := NewEngine(nil, benchCatalog(), func(string) float64 { return 60 }).Check(r, severeChest, morning)
+	got := NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, severeChest, morning)
 	for _, v := range got.Violations {
 		if v.Code == "BR-AC-09" && v.Path == "sessions.sp-fri[0]" {
 			return
 		}
 	}
 	t.Fatalf("the 18:00 session must be injury-checked at 10:00; violations = %+v", got.Violations)
+}
+
+// A session that can no longer change must not block a rewrite of the ones
+// that can. An injury lowers the RPE of a session legally (the cap applies
+// while it is in scope); once that session is past it would otherwise fail
+// BR-AC-10 forever, and every later adaptation or regeneration with it.
+func TestGuardrail_PhaseWindowSkipsHistory(t *testing.T) {
+	lowered := validRPE()
+	lowered[1] = 6 // OVERLOAD week trained below its window, as an injury cap allows
+	r := buildRoadmap(t, lowered, validSets())
+	afterWeek2 := r.Weeks()[2].Info().StartDate
+
+	if got := NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, afterWeek2); got.Status != StatusApproved {
+		t.Fatalf("only a past week is outside its window: status = %s, violations = %+v", got.Status, got.Violations)
+	}
+	assertViolation(t, NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, time.Time{}), "BR-AC-10")
 }

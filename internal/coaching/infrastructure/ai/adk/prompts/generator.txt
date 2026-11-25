@@ -21,7 +21,7 @@ Your task is to generate or adapt a workout plan based on the input flow.
 - **SLOT TIME**: `slot_time` MUST be set for every session (e.g., "06:00-07:30" or "06:00"), matching an available slot for that day in `preferred_workout_times`.
 - **EVERY SELECTED SLOT IS A SESSION (INITIATE_4_WEEK only)**: Each entry of `preferred_workout_times` is one slot, and every slot becomes exactly one session per week. Two slots on the same day mean two sessions on that date, each with its own `slot_time`.
   * `week_slots` lists, for each week, the slots still ahead of `current_time` (`scheduled_date` + `slot_time` + `session_kind`) and `expected_sessions`. Week N MUST contain exactly `expected_sessions` sessions: one per listed slot, copying `scheduled_date`, `slot_time` and `session_kind` verbatim. Do not choose or drop slots: the backend already picked them.
-  * `session_kind` `TRAINING` is a normal workout (at most 6 a week). `session_kind` `RECOVERY` is ACTIVE RECOVERY: 20-30 minutes, set `estimated_duration_minutes` accordingly, every exercise from `recovery_exercises` (stretching) or a CARDIO exercise from `available_exercises`, `target_rpe` 2-4, no strength work. Put 2-4 mobility/stretching or light cardio movements in `main_exercises`, plus the usual warm-up and cool-down.
+  * `session_kind` `TRAINING` is a normal workout (at most 6 a week). `session_kind` `RECOVERY` is ACTIVE RECOVERY: 20-30 minutes, set `estimated_duration_minutes` accordingly, every exercise (warm-ups, main and cool-downs) taken from `recovery_exercises` only, never from `available_exercises` (that list is training work: a strength pick there is rejected, and its Cardio entries are rarely light enough), `target_rpe` 2-4. Put 2-4 mobility/stretching movements in `main_exercises`, plus the usual warm-up and cool-down.
   * NEVER use the same slot (same `scheduled_date` and `slot_time`) twice, and NEVER schedule a slot that has already started at `current_time`: week 1 holds only the slots still ahead.
   * This applies to all four weeks: DELOAD reduces sets, not sessions.
   * Slot coverage takes precedence over spacing: when slots fall on consecutive days or twice on one day, vary the muscle groups between those sessions instead of dropping a slot.
@@ -52,6 +52,10 @@ user already has, not planning fresh ones.
 - Keep every entry's `scheduled_date`, `slot_time` and `session_kind` exactly; the
   system pins them to the entry anyway. A `RECOVERY` entry stays active recovery
   (see the RECOVERY rules above), whatever the adaptation asks.
+- Each entry carries its own `phase`: the roadmap week it falls in. Every TRAINING
+  main exercise must keep `target_rpe` inside that phase's window from the phase
+  table above (an injury limit may lower it further), even when the entries span
+  several weeks; `current_roadmap.phase` is only the first entry's phase.
 - When `rescheduled` is true the athlete changed their weekly slots: the entries
   are new sessions on the new slots with an empty `current_prescription`. Design
   each one fresh, as the next sessions of the current roadmap phase, balancing
@@ -130,8 +134,8 @@ Each exercise object must contain: exercise_id, target_sets, target_rpe, rest_se
    - `target_muscle_groups` uses the muscle group codes of `available_exercises` keys; the system recomputes it from the main exercises.
 
    - **Reps vs. Duration**:
-     * `measurement_type == "DURATION"`: Emit `duration_seconds` (omitted defaults to 45s). Do NOT emit `target_reps` or `target_weight_kg`.
-     * `measurement_type == "REPS"`: Emit `target_reps` (omitted defaults to 10 reps). Do NOT emit `duration_seconds`.
+     * `measurement_type == "DURATION"`: Emit `duration_seconds` (required: a timed line without it is rejected). Do NOT emit `target_reps` or `target_weight_kg`.
+     * `measurement_type == "REPS"`: Emit `target_reps` (required: a repetition line without it is rejected). Do NOT emit `duration_seconds`.
      * Recommend prescribing tailored values suited to the athlete instead of leaving them blank.
      * When `profile.primary_goal` is `ENDURANCE` or `FAT_LOSS`: Program high-density work capacity with shorter rest (45-60s).
 

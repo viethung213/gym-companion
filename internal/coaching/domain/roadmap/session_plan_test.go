@@ -159,10 +159,13 @@ func TestSessionPlan_MarkSkipped_Idempotent(t *testing.T) {
 		t.Errorf("expected no-op on second MarkSkipped, got %v", err)
 	}
 
-	// Cannot complete after skipped
+	// A workout reported after its week closed still completes the session.
 
-	if err := sp.MarkCompleted(90, 0, now); !errors.Is(err, ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	if err := sp.MarkCompleted(90, 0, now); err != nil {
+		t.Fatalf("late completion of a skipped session: %v", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().SessionSCR == nil {
+		t.Errorf("status %s, SCR %v: want COMPLETED with metrics", sp.Status(), sp.Info().SessionSCR)
 	}
 }
 

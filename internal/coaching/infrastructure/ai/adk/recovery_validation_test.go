@@ -63,7 +63,7 @@ func TestValidator_RecoverySessionTakesOnlyStretchingOrCardio(t *testing.T) {
 	}
 	found := false
 	for _, is := range out.Issues {
-		found = found || strings.Contains(is.Reason, "RECOVERY session uses only STRETCHING or light CARDIO")
+		found = found || strings.Contains(is.Reason, "RECOVERY session takes every exercise from recovery_exercises")
 	}
 	if !found {
 		t.Fatalf("issues = %+v, want a recovery-category issue for a strength exercise", out.Issues)

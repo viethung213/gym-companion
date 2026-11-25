@@ -1,6 +1,7 @@
 package guardrail
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -41,11 +42,8 @@ func addSessions(t *testing.T, r *roadmap.Roadmap, firstDay, n int, kind roadmap
 	}
 }
 
-func benchWeight(id string) float64 {
-	if id == "ex-bench" {
-		return 60
-	}
-	return 0
+func benchWeight(context.Context, string) map[string]float64 {
+	return map[string]float64{"ex-bench": 60}
 }
 
 func TestGuardrail_RecoverySessionsDoNotCountTowardWeeklyCap(t *testing.T) {
@@ -53,7 +51,7 @@ func TestGuardrail_RecoverySessionsDoNotCountTowardWeeklyCap(t *testing.T) {
 	addSessions(t, r, 3, 3, roadmap.SessionKindTraining, 6.5) // Thu-Sat
 	addSessions(t, r, 6, 1, roadmap.SessionKindRecovery, 3)   // Sun
 
-	got := NewEngine(nil, nil, benchWeight).Check(r, nil, time.Time{})
+	got := NewEngine(nil, nil, benchWeight).Check(context.Background(), r, nil, time.Time{})
 	if got.Status != StatusApproved {
 		t.Fatalf("6 training + 1 recovery: status = %s, violations = %+v", got.Status, got.Violations)
 	}
@@ -63,5 +61,5 @@ func TestGuardrail_RecoverySessionHasItsOwnRPECeiling(t *testing.T) {
 	r := buildValidRoadmap(t)
 	addSessions(t, r, 6, 1, roadmap.SessionKindRecovery, 7) // phase-valid, too hard for recovery
 
-	assertViolation(t, NewEngine(nil, nil, benchWeight).Check(r, nil, time.Time{}), "BR-AC-10")
+	assertViolation(t, NewEngine(nil, nil, benchWeight).Check(context.Background(), r, nil, time.Time{}), "BR-AC-10")
 }

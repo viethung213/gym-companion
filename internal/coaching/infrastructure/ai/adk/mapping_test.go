@@ -113,8 +113,9 @@ func TestMapToDomainRoadmap_SetsAllIdentityFields(t *testing.T) {
 	if info.SlotTime != "06:00-07:30" {
 		t.Errorf("got SlotTime %q, want 06:00-07:30", info.SlotTime)
 	}
-	if info.EstimatedDurationMinutes != 60 {
-		t.Errorf("got EstimatedDurationMinutes %d, want 60", info.EstimatedDurationMinutes)
+	// The length follows the prescription, not the model's own figure (60).
+	if want := info.Prescription.EstimatedMinutes(); info.EstimatedDurationMinutes != want {
+		t.Errorf("got EstimatedDurationMinutes %d, want %d from the prescription", info.EstimatedDurationMinutes, want)
 	}
 }
 

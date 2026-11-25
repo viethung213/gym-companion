@@ -48,7 +48,11 @@ func rescheduleTargets(rm *roadmap.Roadmap, slots []WorkoutSlot, now time.Time) 
 		open := slotOccurrences(slots,
 			roadmap.CalendarDate(info.StartDate, time.UTC), roadmap.CalendarDate(info.EndDate, time.UTC), now, loc)
 		trainingBudget := max(0, roadmap.MaxSessionsPerWeek-keptTraining)
-		targets = append(targets, assignKinds(open[:min(budget, len(open))], trainingBudget)...)
+		weekTargets := assignKinds(open[:min(budget, len(open))], trainingBudget)
+		for i := range weekTargets {
+			weekTargets[i].Phase = string(w.Phase())
+		}
+		targets = append(targets, weekTargets...)
 	}
 
 	current := make([]string, 0, len(upcoming))
@@ -74,6 +78,7 @@ func rescheduledSessions(targets []DatedSlot) []SessionToRevise {
 			ScheduledDate:            t.ScheduledDate,
 			SlotTime:                 t.SlotTime,
 			SessionKind:              t.SessionKind,
+			Phase:                    t.Phase,
 			EstimatedDurationMinutes: slotMinutes(t.SlotTime),
 		})
 	}
@@ -118,6 +123,7 @@ func pinRewriteSlots(plan *GeneratedPlan, revise []SessionToRevise) {
 			sp.ScheduledDate = revise[i].ScheduledDate
 			sp.SlotTime = revise[i].SlotTime
 			sp.SessionKind = revise[i].SessionKind
+			sp.phase = roadmap.Phase(revise[i].Phase)
 			if sp.SessionKind == "" {
 				sp.SessionKind = kindTraining
 			}

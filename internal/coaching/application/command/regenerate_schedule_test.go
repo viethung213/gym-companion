@@ -240,3 +240,38 @@ func TestRegenerateSchedule_SessionStartedDuringGenerationIsKept(t *testing.T) {
 		t.Fatal("the still-upcoming Monday session should be replaced")
 	}
 }
+
+// Onboarding with an injury emits InjuryReported next to ProfileCompleted. The
+// roadmap planned from that profile already holds the injury: regenerating it
+// would cost a second generation for nothing. A later change still regenerates.
+func TestRegenerateSchedule_SkipsChangesTheRoadmapAlreadyReflects(t *testing.T) {
+	drafts := []*roadmap.SessionPlanInfo{
+		{ScheduledDate: date(time.November, 26), SlotTime: "17:30-19:00", Reasoning: "new thu"},
+		{ScheduledDate: date(time.November, 30), SlotTime: "17:30-19:00", Reasoning: "new mon"},
+	}
+
+	rm := regenFixture(t)
+	plannedAt := rm.Info().CreatedAt
+	h, _, outbox := newRegenHandler(t, rm, drafts, time.UTC)
+	_, err := h.Handle(context.Background(), RegenerateScheduleCommand{
+		UserID: "u-1", Reason: "injury_reported", ChangedAt: plannedAt.Add(-time.Second),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(outbox.events) != 0 {
+		t.Fatalf("a change older than the roadmap regenerated it (%d events)", len(outbox.events))
+	}
+
+	rm = regenFixture(t)
+	h, _, outbox = newRegenHandler(t, rm, drafts, time.UTC)
+	_, err = h.Handle(context.Background(), RegenerateScheduleCommand{
+		UserID: "u-1", Reason: "injury_reported", ChangedAt: plannedAt.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(outbox.events) == 0 {
+		t.Fatal("a change made after the roadmap was planned must regenerate it")
+	}
+}
