@@ -124,7 +124,11 @@ type SessionToRevise struct {
 	SessionKind   string `json:"session_kind"`
 	// Phase is the phase of the roadmap week the session falls in: its TRAINING
 	// main work must sit in that phase's RPE window.
-	Phase                    string              `json:"phase,omitempty"`
+	Phase string `json:"phase,omitempty"`
+	// TargetRPEMin and TargetRPEMax are that phase's window for a TRAINING
+	// entry, written out so the model never looks it up from another entry.
+	TargetRPEMin             float32             `json:"target_rpe_min,omitempty"`
+	TargetRPEMax             float32             `json:"target_rpe_max,omitempty"`
 	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
 	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
 	CurrentPrescription      WorkoutPrescription `json:"current_prescription"`

@@ -295,6 +295,20 @@ func currentPhase(rm *roadmap.Roadmap, s *roadmap.SessionPlan) string {
 	return ""
 }
 
+// withRPEWindows writes each TRAINING entry's phase RPE window onto it.
+func withRPEWindows(entries []SessionToRevise) []SessionToRevise {
+	for i := range entries {
+		e := &entries[i]
+		if e.SessionKind == kindRecovery {
+			continue
+		}
+		if band, ok := roadmap.PhaseRPEBand(roadmap.Phase(e.Phase)); ok {
+			e.TargetRPEMin, e.TargetRPEMax = band.Min, band.Max
+		}
+	}
+	return entries
+}
+
 // dayBucket collects the sessions the model scheduled on one date.
 type dayBucket struct {
 	date     time.Time

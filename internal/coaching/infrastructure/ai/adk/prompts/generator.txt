@@ -55,10 +55,14 @@ user already has, not planning fresh ones.
 - Keep every entry's `scheduled_date`, `slot_time` and `session_kind` exactly; the
   system pins them to the entry anyway. A `RECOVERY` entry stays active recovery
   (see the RECOVERY rules above), whatever the adaptation asks.
-- Each entry carries its own `phase`: the roadmap week it falls in. Every TRAINING
-  main exercise must keep `target_rpe` inside that phase's window from the phase
-  table above (an injury limit may lower it further), even when the entries span
-  several weeks; `current_roadmap.phase` is only the first entry's phase.
+- Each entry carries its own `phase` (the roadmap week it falls in) and, when it
+  is TRAINING, that phase's window as `target_rpe_min` and `target_rpe_max`.
+  Every main exercise of that entry MUST keep `target_rpe` between the entry's own
+  `target_rpe_min` and `target_rpe_max` (an injury limit may lower it further).
+  The entries often span several phases: take the window from each entry, never
+  from the first entry, `current_roadmap.phase` or the week you emit them under.
+  Example: an OVERLOAD entry (7.0-8.0) after ACCUMULATION ones (6.0-7.0) gets
+  7.0-8.0, so 6.5 there is wrong.
 - When `rescheduled` is true the athlete changed their weekly slots: the entries
   are new sessions on the new slots with an empty `current_prescription`. Design
   each one fresh, as the next sessions of the current roadmap phase, balancing
@@ -68,8 +72,9 @@ user already has, not planning fresh ones.
   `estimated_duration_minutes` or update it appropriately.
 - `adaptation_reason` says why the change was asked for. Honour it: a fatigue or
   injury signal means reduce volume or intensity, not merely reshuffle exercises.
-- Emit these under a single week entry; `week_number` and `phase` are ignored for
-  these flows.
+- Emit these under a single week entry; its `week_number`, `phase`,
+  `target_rpe_min` and `target_rpe_max` are ignored for these flows and say
+  nothing about any session's RPE.
 
 ### Output Schema (REQUIRED JSON FORMAT)
 ```json
