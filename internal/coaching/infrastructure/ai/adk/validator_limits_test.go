@@ -174,30 +174,6 @@ func TestPlanValidator_RewriteUsesEachSessionsPhase(t *testing.T) {
 	}
 }
 
-// BR-AC-11 before the guardrail: a DELOAD week that keeps PEAK's volume is sent
-// back, and salvage cuts its sets to fit.
-func TestDeloadVolumeIssue(t *testing.T) {
-	week := func(n int, phase roadmap.Phase, sets int) WeekPlan {
-		s := sessionOf("2026-08-03", "bench-press")
-		s.Prescription.MainExercises[0].TargetSets = sets
-		return WeekPlan{WeekNumber: n, Phase: string(phase), Sessions: []SessionPlan{s, s, s}}
-	}
-	plan := &GeneratedPlan{Weeks: []WeekPlan{week(3, roadmap.PhasePeak, 4), week(4, roadmap.PhaseDeload, 4)}}
-
-	if deloadVolumeIssue(plan, false) == nil {
-		t.Fatal("DELOAD at PEAK volume: no issue")
-	}
-	if deloadVolumeIssue(plan, true) == nil {
-		t.Fatal("salvage: no issue reported")
-	}
-	if got, limit := phaseWorkingSets(plan, roadmap.PhaseDeload), 8; got > limit {
-		t.Errorf("salvaged DELOAD sets = %d, want at most %d (70%% of 12)", got, limit)
-	}
-	if deloadVolumeIssue(plan, false) != nil {
-		t.Error("issue still reported after salvage cut the sets")
-	}
-}
-
 // Seen live: an adaptation listed 18 training sessions over three weeks under
 // one entry, as the prompt asks, and was rejected for "18 training sessions in
 // week 1". A rewrite keeps the roadmap's own dates, so the caps do not apply.

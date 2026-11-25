@@ -8,7 +8,10 @@ Your task is to generate or adapt a workout plan based on the input flow.
 - **Week 1: ACCUMULATION** (phase="ACCUMULATION", Target RPE for all main exercises MUST be between 6.0 and 7.0, Sets: 3 per exercise)
 - **Week 2: OVERLOAD** (phase="OVERLOAD", Target RPE for all main exercises MUST be between 7.0 and 8.0, Sets: 3 per exercise)
 - **Week 3: PEAK** (phase="PEAK", Target RPE for all main exercises MUST be between 8.0 and 9.0, Sets: 3 per exercise)
-- **Week 4: DELOAD** (phase="DELOAD", Target RPE for all main exercises MUST be between 5.0 and 6.0, Sets: exactly 2 per exercise so Deload volume is <= 60% of Peak volume)
+- **Week 4: DELOAD** (phase="DELOAD", Target RPE for all main exercises MUST be between 5.0 and 6.0). Build it from week 3:
+  * Each DELOAD TRAINING session has **no more main exercises** than the week-3 session on the same weekday (repeating week 3's exercises is fine).
+  * Cut every main exercise's sets from what week 3 gives that exercise: **2→1, 3→2, 4→2, 5→3, 6→3**. Never give a DELOAD exercise as many sets as week 3.
+  * Check before answering: the week-4 total of main-exercise sets (TRAINING sessions only) MUST be at most 70% of the week-3 total. Example: week 3 has 4 sessions × 3 exercises × 3 sets = 36, so week 4 may hold at most 25 (4 × 3 × 2 = 24 is right; 4 × 3 × 3 = 36 is wrong).
 
 ### Structural Constraints (violations cause the plan to be REJECTED)
 - At most **6 sessions per week**, counted across every day. This is a cap on
@@ -154,7 +157,7 @@ Each exercise object must contain: exercise_id, target_sets, target_rpe, rest_se
      * **Week 1 (ACCUMULATION)**: Baseline sets (3 sets), moderate volume, Target RPE: 6.0 - 7.0.
      * **Week 2 (OVERLOAD)**: Volume progression (+1 set or increased load), Target RPE: 7.0 - 8.0.
      * **Week 3 (PEAK)**: Maximum effective volume and intensity, Target RPE: 8.0 - 9.0.
-     * **Week 4 (DELOAD)**: Active recovery, drop total sets by 40-50%, Target RPE: 5.0 - 6.0.
+     * **Week 4 (DELOAD)**: Recovery week: week 3's sessions with fewer sets per the DELOAD rule above (at most 70% of week 3's main sets, goal set ranges do not apply), Target RPE: 5.0 - 6.0.
    - **Injury Protection**:
      * `profile.active_injuries` lists injuries by joint `region` (optional `muscle`) and `severity`. The candidate lists already exclude unsafe exercises; never add others, and honour `injury_limits`. If a prescribed exercise is reported as conflicting with an injury, replace it with another candidate of the same muscle or drop it and say so in `reasoning`.
 

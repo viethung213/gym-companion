@@ -293,20 +293,11 @@ func (v *planValidator) validate(
 		out.Weeks = append(out.Weeks, kept)
 	}
 
+	// BR-AC-11 (DELOAD volume) is not checked here: the domain cuts the DELOAD
+	// sets to fit before the guardrail, so a heavy DELOAD week never costs a
+	// retry (roadmap.FitDeloadVolume).
 	if !dropInvalid {
-		if v.schedule != nil {
-			if issue := deloadVolumeIssue(plan, false); issue != nil {
-				issues = append(issues, *issue)
-			}
-		}
 		return validationOutcome{Plan: plan, Names: names, Cautions: cautions, Primaries: primaries, Issues: issues}, nil
-	}
-
-	if v.schedule != nil {
-		if issue := deloadVolumeIssue(out, true); issue != nil {
-			issues = append(issues, *issue)
-			degraded = true
-		}
 	}
 
 	if len(out.Weeks) != len(plan.Weeks) {

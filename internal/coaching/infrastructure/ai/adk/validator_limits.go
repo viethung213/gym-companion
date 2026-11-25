@@ -120,59 +120,6 @@ func (v *planValidator) clampLoad(ex *PrescribedExercise) string {
 	return ""
 }
 
-// deloadVolumeIssue enforces BR-AC-11 on an initial roadmap: the DELOAD week
-// keeps at most roadmap.DeloadVolumeRatio of the PEAK week's main working sets.
-// In salvage mode it scales the DELOAD sets down to fit.
-func deloadVolumeIssue(plan *GeneratedPlan, salvage bool) *planIssue {
-	peak := phaseWorkingSets(plan, roadmap.PhasePeak)
-	deload := phaseWorkingSets(plan, roadmap.PhaseDeload)
-	if peak == 0 || float64(deload) <= float64(peak)*roadmap.DeloadVolumeRatio {
-		return nil
-	}
-
-	allowed := int(float64(peak) * roadmap.DeloadVolumeRatio)
-	issue := &planIssue{
-		WeekNumber: roadmap.WeeksPerRoadmap,
-		SessionIdx: -1,
-		Reason: fmt.Sprintf("the DELOAD week has %d main working sets but may keep at most %d "+
-			"(%.0f%% of the PEAK week's %d); cut sets per exercise", deload, allowed, roadmap.DeloadVolumeRatio*100, peak),
-	}
-	if salvage {
-		scale := float64(allowed) / float64(deload)
-		forPhaseMainWork(plan, roadmap.PhaseDeload, func(ex *PrescribedExercise) {
-			ex.TargetSets = max(1, int(float64(ex.TargetSets)*scale))
-		})
-	}
-	return issue
-}
-
-// phaseWorkingSets totals the main-exercise sets of TRAINING sessions in the
-// phase's weeks; recovery work is not training volume.
-func phaseWorkingSets(plan *GeneratedPlan, phase roadmap.Phase) int {
-	total := 0
-	forPhaseMainWork(plan, phase, func(ex *PrescribedExercise) { total += ex.TargetSets })
-	return total
-}
-
-// forPhaseMainWork visits every main exercise of the TRAINING sessions in the
-// weeks of the given phase.
-func forPhaseMainWork(plan *GeneratedPlan, phase roadmap.Phase, visit func(*PrescribedExercise)) {
-	for w := range plan.Weeks {
-		if roadmap.Phase(plan.Weeks[w].Phase) != phase {
-			continue
-		}
-		for s := range plan.Weeks[w].Sessions {
-			sp := &plan.Weeks[w].Sessions[s]
-			if sp.SessionKind == kindRecovery {
-				continue
-			}
-			for i := range sp.Prescription.MainExercises {
-				visit(&sp.Prescription.MainExercises[i])
-			}
-		}
-	}
-}
-
 const (
 	// Timed lines without a duration get these in salvage: a warm-up or
 	// cool-down hold, or a main-work interval.
