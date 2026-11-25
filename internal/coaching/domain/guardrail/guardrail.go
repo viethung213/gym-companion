@@ -1,6 +1,6 @@
 // Package guardrail is the deterministic hard gate a roadmap the coach plans or
-// rewrites (initial plan, regeneration, adaptation) passes before it is saved,
-// whatever the model wrote. It enforces:
+// rewrites (initial plan, next block, regeneration, adaptation) passes before
+// it is saved, whatever the model wrote. It enforces:
 //
 //   - BR-AC-01: at most MaxSessionsPerWeek TRAINING sessions a week;
 //   - BR-AC-02: a loaded main exercise at most 30% above the athlete's record;

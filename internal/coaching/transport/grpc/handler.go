@@ -422,6 +422,9 @@ func domainStatusToPB(s roadmap.Status) pbmsg.RoadmapStatus {
 	case roadmap.StatusCompleted:
 		return pbmsg.RoadmapStatus_ROADMAP_STATUS_COMPLETED
 
+	case roadmap.StatusPlanned:
+		return pbmsg.RoadmapStatus_ROADMAP_STATUS_PLANNED
+
 	default:
 		return pbmsg.RoadmapStatus_ROADMAP_STATUS_UNSPECIFIED
 	}
@@ -472,6 +475,9 @@ func pbStatusToDomain(s pbmsg.RoadmapStatus) roadmap.Status {
 
 	case pbmsg.RoadmapStatus_ROADMAP_STATUS_COMPLETED:
 		return roadmap.StatusCompleted
+
+	case pbmsg.RoadmapStatus_ROADMAP_STATUS_PLANNED:
+		return roadmap.StatusPlanned
 
 	default:
 		return "" // no filter

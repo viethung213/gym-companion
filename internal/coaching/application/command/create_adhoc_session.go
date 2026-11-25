@@ -39,10 +39,24 @@ type CreateAdhocSessionHandler struct {
 	profiles  port.UserProfileReader
 	idgen     port.IDGenerator
 	clock     port.Clock
+	// rollover, when set, moves the athlete to their next block when the
+	// active roadmap has ended, so the session lands in the right one.
+	rollover roadmapRollover
+}
+
+// roadmapRollover is the RollOverHandler contract.
+type roadmapRollover interface {
+	Handle(ctx context.Context, userID string) (*RollOverResult, error)
 }
 
 // errRoadmapEnded marks a session asked for after the active roadmap ended.
 var errRoadmapEnded = fmt.Errorf("active roadmap has ended: %w", roadmap.ErrDateOutsideRoadmap)
+
+// WithRollover enables moving to the next block when the active one ended.
+func (h *CreateAdhocSessionHandler) WithRollover(r roadmapRollover) *CreateAdhocSessionHandler {
+	h.rollover = r
+	return h
+}
 
 // NewCreateAdhocSessionHandler wires the handler.
 func NewCreateAdhocSessionHandler(
@@ -95,14 +109,25 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 	}
 
 	now := h.clock.Now()
-	today := roadmap.CalendarDate(now, profile.Zone())
-
-	return h.place(ctx, cmd.UserID, today, now, mains, exercises)
+	out, err := h.place(ctx, cmd.UserID, now, mains, exercises)
+	if errors.Is(err, errRoadmapEnded) && h.rollover != nil {
+		if _, rollErr := h.rollover.Handle(ctx, cmd.UserID); rollErr != nil {
+			return nil, rollErr
+		}
+		out, err = h.place(ctx, cmd.UserID, now, mains, exercises)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // place adds the session to today's DayPlan of the user's active roadmap.
+// "Today" and "the roadmap has ended" are both read in the roadmap's zone,
+// the zone its sessions are dated in and the roll-over decides by, so a
+// session refused as "after the end" is always one the roll-over moves on.
 func (h *CreateAdhocSessionHandler) place(
-	ctx context.Context, userID string, today, now time.Time,
+	ctx context.Context, userID string, now time.Time,
 	mains []roadmap.PrescribedExercise, exercises []port.Exercise,
 ) (*CreateAdhocSessionResult, error) {
 	var out *CreateAdhocSessionResult
@@ -117,9 +142,10 @@ func (h *CreateAdhocSessionHandler) place(
 
 		// The session belongs to today; a roadmap that does not cover today
 		// cannot take it (it used to land on the roadmap's last day instead).
+		today := roadmap.CalendarDate(now, rm.Location())
 		dayPlan, dayErr := rm.DayOn(today, h.idgen.NewID)
 		if dayErr != nil {
-			if errors.Is(dayErr, roadmap.ErrDateOutsideRoadmap) && !today.Before(roadmap.CalendarDate(rm.Info().EndDate, time.UTC)) {
+			if errors.Is(dayErr, roadmap.ErrDateOutsideRoadmap) && !now.Before(rm.EndsAt()) {
 				return errRoadmapEnded
 			}
 			return fmt.Errorf("place ad-hoc session: %w", dayErr)

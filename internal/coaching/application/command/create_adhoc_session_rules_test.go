@@ -68,7 +68,8 @@ func adHocHandler(rm *roadmap.Roadmap, profiles port.UserProfileReader, now time
 }
 
 // At 23:30 UTC it is already the next morning in Ho Chi Minh City: the session
-// belongs to the athlete's day, on a DayPlan created for it.
+// belongs to the athlete's day, on a DayPlan created for it. The day is read in
+// the roadmap's zone, the athlete's zone its sessions are dated in.
 func TestCreateAdhoc_UsesAthletesLocalDate(t *testing.T) {
 	hcm, err := time.LoadLocation("Asia/Ho_Chi_Minh")
 	if err != nil {
@@ -76,6 +77,7 @@ func TestCreateAdhoc_UsesAthletesLocalDate(t *testing.T) {
 	}
 	start := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	rm := oneWeekRoadmap(t, start)
+	rm.SetTimezone(hcm.String())
 	now := time.Date(2026, 3, 10, 23, 30, 0, 0, time.UTC) // Wed 06:30 in HCM
 
 	res, err := adHocHandler(rm, injuredProfiles{loc: hcm}, now).

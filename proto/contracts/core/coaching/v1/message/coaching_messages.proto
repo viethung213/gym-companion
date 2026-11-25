@@ -11,6 +11,7 @@ enum RoadmapStatus {
   ROADMAP_STATUS_UNSPECIFIED = 0;
   ROADMAP_STATUS_ACTIVE = 1;
   ROADMAP_STATUS_COMPLETED = 2;
+  ROADMAP_STATUS_PLANNED = 3; // next block drafted ahead, starts when the active one ends
 }
 
 enum SessionPlanStatus {

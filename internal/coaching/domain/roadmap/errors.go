@@ -28,4 +28,6 @@ var (
 	ErrRoadmapChanged = errors.New("roadmap changed since it was read")
 	// ErrDateOutsideRoadmap is returned when a date falls in none of the roadmap's weeks.
 	ErrDateOutsideRoadmap = errors.New("date is outside the roadmap")
+	// ErrPlannedRoadmapExists is returned when the user already has a next block planned.
+	ErrPlannedRoadmapExists = errors.New("user already has a planned roadmap")
 )
