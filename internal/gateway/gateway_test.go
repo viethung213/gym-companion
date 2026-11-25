@@ -157,6 +157,52 @@ func TestGateway_E2ERoutingAndTokenTranslation(t *testing.T) {
 		assert.Equal(t, "usr-gold-999", claims.UserID)
 		assert.Equal(t, "Trainer", claims.Role)
 	})
+
+	t.Run("external client sending X-Internal-Token is rejected with 403 Forbidden", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodPost, gatewayServer.URL+"/contracts.supporting.exercise.v1.service.ExerciseService/SearchExercises", nil)
+		require.NoError(t, err)
+		req.Header.Set("X-Internal-Token", "forged-token-attempt")
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("internal handler with valid X-Internal-Token succeeds and routes to backend", func(t *testing.T) {
+		internalServer := httptest.NewServer(gw.InternalHandler())
+		defer internalServer.Close()
+
+		tokenStr, err := internaltoken.Generate("svc-ai", "system", "trace-ai-1", time.Minute, internalSecret)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest(http.MethodPost, internalServer.URL+"/contracts.supporting.exercise.v1.service.ExerciseService/SearchExercises", nil)
+		require.NoError(t, err)
+		req.Header.Set("X-Internal-Token", tokenStr)
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.NotEmpty(t, receivedInternalToken)
+		assert.Equal(t, tokenStr, receivedInternalToken)
+	})
+
+	t.Run("internal handler without X-Internal-Token is rejected with 401", func(t *testing.T) {
+		internalServer := httptest.NewServer(gw.InternalHandler())
+		defer internalServer.Close()
+
+		req, err := http.NewRequest(http.MethodPost, internalServer.URL+"/contracts.supporting.exercise.v1.service.ExerciseService/SearchExercises", nil)
+		require.NoError(t, err)
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
 }
 
 func TestGateway_StrictH2C_EnforcesHTTP2Only(t *testing.T) {

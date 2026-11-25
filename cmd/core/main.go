@@ -113,9 +113,13 @@ func run() error {
 		slog.Info("Initialized isolated Workout Execution Database Pool successfully")
 	}
 
+	appEnv := os.Getenv("APP_ENV")
 	internalSecret := os.Getenv("INTERNAL_SECRET")
 	if internalSecret == "" {
-		internalSecret = "gym-companion-internal-secret-2026-key"
+		return errors.New("INTERNAL_SECRET environment variable is required")
+	}
+	if strings.EqualFold(appEnv, "production") && internalSecret == "gym-companion-internal-secret-2026-key" {
+		return errors.New("hardcoded default INTERNAL_SECRET is forbidden in production")
 	}
 
 	// Initialize Auth Module
