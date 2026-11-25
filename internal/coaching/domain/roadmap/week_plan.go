@@ -17,6 +17,9 @@ type WeekPlanInfo struct {
 	StartDate       time.Time
 	EndDate         time.Time
 	MuscleSplitType string
+	// ReviewedAt is when the week was closed and its results fed to the
+	// adaptive cycle (BR-AC-04); nil while it is open.
+	ReviewedAt *time.Time
 }
 
 // WeekPlan is an entity holding 7 DayPlans for one training week.

@@ -93,3 +93,11 @@ type OutboxWriter interface {
 type BrokerPublisher interface {
 	PublishBatch(ctx context.Context, records []*OutboxRecord) error
 }
+
+// WeekReviewQueue finds the roadmaps that hold a week ready to be closed.
+type WeekReviewQueue interface {
+	// RoadmapIDsWithOpenWeekEndingBy returns the ACTIVE roadmaps with an
+	// unreviewed week whose end_date is on or before the given calendar date.
+	// Callers decide the exact cut-off in each roadmap's zone.
+	RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, date time.Time) ([]string, error)
+}
