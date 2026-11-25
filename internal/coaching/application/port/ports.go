@@ -42,7 +42,9 @@ type RoadmapRepository interface {
 	Save(ctx context.Context, r *roadmap.Roadmap) error
 	FindByID(ctx context.Context, roadmapID string) (*roadmap.Roadmap, error)
 	FindActiveByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error)
-	ListByUser(ctx context.Context, userID string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error)
+	// ListByUser lists the user's roadmaps whose status is one of statuses,
+	// newest first; an empty list matches every status.
+	ListByUser(ctx context.Context, userID string, statuses []roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error)
 	FindSessionByID(ctx context.Context, sessionPlanID string) (*roadmap.Roadmap, error)
 	// FindPendingSessionsStarting returns PENDING sessions whose start, in their
 	// roadmap's zone, falls within [from, to].
@@ -70,10 +72,15 @@ type OutboxRepository interface {
 	ClaimBatch(ctx context.Context, limit int, lockDuration time.Duration) ([]*OutboxRecord, error)
 	MarkPublished(ctx context.Context, ids []string) error
 	ProcessBatch(ctx context.Context, limit int, publishFn func(ctx context.Context, records []*OutboxRecord) error) error
-	// LogProcessed records that an inbound event has been consumed (D9 idempotency).
-	// Returns (true, nil) if this is a new event that was recorded, (false, nil) if
-	// the event_id was already present (duplicate delivery), or an error.
-	LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte) (fresh bool, err error)
+	// ClaimEvent takes an inbound event for processing (D9 idempotency). It
+	// returns true for a new event or one whose earlier attempt never finished
+	// (redelivered after a crash), false for one already processed.
+	ClaimEvent(ctx context.Context, eventID, eventType string, payload []byte) (claimed bool, err error)
+	// CompleteEvent marks a claimed event processed, for good.
+	CompleteEvent(ctx context.Context, eventID string) error
+	// ReleaseEvent drops a claim whose handling failed, so the event is retried
+	// instead of being skipped as a duplicate.
+	ReleaseEvent(ctx context.Context, eventID string) error
 }
 
 // OutboxWriter is a convenience port for enqueueing domain events into the outbox

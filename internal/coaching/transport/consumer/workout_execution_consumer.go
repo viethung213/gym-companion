@@ -1,6 +1,7 @@
 // Package consumer routes inbound events (Kafka CloudEvents) to command handlers.
-// Idempotency is enforced by coaching.outbox_log (D9): consumer checks event_id
-// before dispatching, and records the event after successful processing.
+// Idempotency is enforced by coaching.outbox_log (D9); see handleOnce: an event
+// is claimed before it is dispatched, marked processed on success and released
+// for retry on failure.
 package consumer
 
 import (
@@ -21,6 +22,7 @@ import (
 type cloudEventEnvelope struct {
 	SpecVersion string          `json:"specversion"`
 	ID          string          `json:"id"`
+	Time        string          `json:"time"`
 	Source      string          `json:"source"`
 	Type        string          `json:"type"`
 	Data        json.RawMessage `json:"data"`
@@ -406,7 +408,9 @@ func (c *WorkoutExecutionConsumer) Start(ctx context.Context) {
 				return
 			}
 
-			msg, err := c.reader.ReadMessage(ctx)
+			// Fetch, not Read: the offset is committed only once the message is
+			// handled, so a crash mid-handling redelivers it after restart.
+			msg, err := c.reader.FetchMessage(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
 					return
@@ -419,6 +423,10 @@ func (c *WorkoutExecutionConsumer) Start(ctx context.Context) {
 
 			if processErr := c.processWithRetry(ctx, &msg); processErr != nil {
 				slog.ErrorContext(ctx, "Exhausted retries processing workout execution event", slog.Any("error", processErr))
+			}
+			if commitErr := c.reader.CommitMessages(ctx, msg); commitErr != nil {
+				slog.ErrorContext(ctx, "Commit offset failed; the message will be delivered again",
+					slog.Int64("offset", msg.Offset), slog.Any("error", commitErr))
 			}
 		}
 	}
@@ -456,17 +464,11 @@ func (c *WorkoutExecutionConsumer) HandleMessage(ctx context.Context, rawValue [
 		return errors.New("missing event id")
 	}
 
-	// D9: idempotency check via coaching.outbox_log
-	fresh, err := c.outbox.LogProcessed(ctx, env.ID, env.Type, "", rawValue)
-	if err != nil {
-		return fmt.Errorf("log processed: %w", err)
-	}
+	return handleOnce(ctx, c.outbox, &env, rawValue, func() error { return c.dispatch(ctx, &env) })
+}
 
-	if !fresh {
-		slog.DebugContext(ctx, "Duplicate event skipped", slog.String("event_id", env.ID), slog.String("event_type", env.Type))
-		return nil
-	}
-
+// dispatch routes one decoded event to its handler.
+func (c *WorkoutExecutionConsumer) dispatch(ctx context.Context, env *cloudEventEnvelope) error {
 	switch env.Type {
 	case "contracts.core.workout_execution.v1.workoutSessionCompleted",
 		"contracts.core.workout_execution.v1.event.WorkoutSessionCompleted":
@@ -504,6 +506,7 @@ func (c *WorkoutExecutionConsumer) handleCompleted(ctx context.Context, data []b
 
 	_, err := c.complete.Handle(ctx, command.CompleteSessionCommand{
 		SessionPlanID:       p.PlanID,
+		UserID:              p.UserID,
 		TotalActualSets:     int(p.TotalSets),
 		TotalPrescribedSets: 0, // Best-effort: recomputed inside handler if available.
 		AverageActualRPE:    float64(p.AverageRPE),
@@ -531,6 +534,7 @@ func (c *WorkoutExecutionConsumer) handleAborted(ctx context.Context, data []byt
 
 	err := c.abort.Handle(ctx, command.AbortSessionCommand{
 		SessionPlanID: p.PlanID,
+		UserID:        p.UserID,
 		Reason:        p.Reason,
 	})
 
@@ -554,13 +558,7 @@ func (c *WorkoutExecutionConsumer) handleSoloCompleted(ctx context.Context, data
 		return nil
 	}
 
-	_, err := c.complete.Handle(ctx, command.CompleteSessionCommand{
-		SessionPlanID:       p.PlanID,
-		TotalActualSets:     1,
-		TotalPrescribedSets: 0,
-		AverageActualRPE:    8.0,
-		CompletedAt:         p.CompletedAt,
-	})
+	_, err := c.complete.Handle(ctx, command.SoloMatchCompletion(p.PlanID, p.UserID, p.CompletedAt))
 
 	if errors.Is(err, roadmap.ErrSessionNotFound) {
 		slog.WarnContext(ctx, "SoloTrackingCompleted references unknown plan_id; ignoring", slog.String("plan_id", p.PlanID))
@@ -583,6 +581,7 @@ func (c *WorkoutExecutionConsumer) handleSoloAborted(ctx context.Context, data [
 
 	err := c.abort.Handle(ctx, command.AbortSessionCommand{
 		SessionPlanID: p.PlanID,
+		UserID:        p.UserID,
 		Reason:        p.Reason,
 	})
 

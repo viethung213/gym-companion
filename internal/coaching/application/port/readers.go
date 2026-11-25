@@ -97,15 +97,6 @@ type WorkoutSession struct {
 	AbortReason      string
 }
 
-// SetLog is a minimal set-level record used by 1RM estimation.
-type SetLog struct {
-	ExerciseID  string
-	Weight      float64
-	Reps        int
-	RPE         float64
-	CompletedAt time.Time
-}
-
 // PersonalRecordSummary is a compact PR record for one exercise.
 type PersonalRecordSummary struct {
 	ExerciseID string

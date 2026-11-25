@@ -34,6 +34,8 @@ func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
 		UpdatedAt: info.UpdatedAt,
 
 		Timezone: cmp.Or(info.Timezone, roadmap.DefaultTimezone),
+
+		Version: info.Version,
 	}
 }
 
@@ -51,6 +53,7 @@ func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.
 		CreatedAt: rec.CreatedAt,
 		UpdatedAt: rec.UpdatedAt,
 		Timezone:  rec.Timezone,
+		Version:   rec.Version,
 	}, weeks)
 }
 

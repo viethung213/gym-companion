@@ -105,6 +105,8 @@ func (h *InitiateRoadmapHandler) initiate(ctx context.Context, cmd InitiateRoadm
 		return nil, roadmap.ErrActiveRoadmapExists
 	}
 
+	// Taken before the agent reads the profile: the plan reflects every profile
+	// change made before this instant.
 	now := h.clock.Now()
 
 	draft, err := h.agent.GenerateRoadmap(ctx, cmd.UserID)
@@ -112,23 +114,12 @@ func (h *InitiateRoadmapHandler) initiate(ctx context.Context, cmd InitiateRoadm
 	if err != nil {
 		return nil, fmt.Errorf("agent generate: %w", err)
 	}
-
-	if valErr := draft.ValidateFullStructure(); valErr != nil {
-		return nil, fmt.Errorf("draft structure: %w", valErr)
+	if stampErr := draft.StampPlannedAt(now); stampErr != nil {
+		return nil, stampErr
 	}
 
-	if valErr := validateExercisesResolved(draft); valErr != nil {
-		return nil, valErr
-	}
-
-	injuries, err := activeInjuries(ctx, h.profiles, cmd.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Every session of a fresh draft is new, so all of them are checked.
-	if result := h.guard.Check(draft, injuries, time.Time{}); result.Status != guardrail.StatusApproved {
-		return nil, fmt.Errorf("guardrail rejected: %+v", result.Violations)
+	if vetErr := vetDraft(ctx, h.guard, h.profiles, draft); vetErr != nil {
+		return nil, vetErr
 	}
 
 	var out *InitiateRoadmapResult
@@ -193,6 +184,30 @@ func validateExercisesResolved(rm *roadmap.Roadmap) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// vetDraft holds a freshly generated roadmap to every rule before it is saved:
+// four weeks, catalog-resolved exercises, and the guardrail against the
+// athlete's current injuries. Every session of a fresh draft is new, so all of
+// them are checked.
+func vetDraft(ctx context.Context, guard *guardrail.Engine, profiles port.UserProfileReader, draft *roadmap.Roadmap) error {
+	if err := draft.ValidateFullStructure(); err != nil {
+		return fmt.Errorf("draft structure: %w", err)
+	}
+	if err := validateExercisesResolved(draft); err != nil {
+		return err
+	}
+	injuries, err := activeInjuries(ctx, profiles, draft.UserID())
+	if err != nil {
+		return err
+	}
+	if fitErr := fitDeloadVolume(ctx, draft, time.Time{}); fitErr != nil {
+		return fitErr
+	}
+	if result := guard.Check(ctx, draft, injuries, time.Time{}); result.Status != guardrail.StatusApproved {
+		return fmt.Errorf("guardrail rejected: %+v", result.Violations)
 	}
 	return nil
 }

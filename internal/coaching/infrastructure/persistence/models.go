@@ -15,6 +15,7 @@ type roadmapRecord struct {
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 	Timezone  string    `gorm:"column:timezone;not null"`
+	Version   int64     `gorm:"column:version;not null"`
 }
 
 func (roadmapRecord) TableName() string { return "coaching.roadmaps" }

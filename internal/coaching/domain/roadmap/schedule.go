@@ -156,6 +156,17 @@ func (r *Roadmap) ReschedulePending(now time.Time, drafts []*SessionPlanInfo, ne
 	return nil
 }
 
+// DayOn returns the DayPlan for a calendar date (encoded as CalendarDate does),
+// creating it in the week that holds the date. A date no week holds fails
+// with ErrDateOutsideRoadmap.
+func (r *Roadmap) DayOn(date time.Time, newID func() string) (*DayPlan, error) {
+	w := r.weekContaining(date)
+	if w == nil {
+		return nil, fmt.Errorf("%w: %s", ErrDateOutsideRoadmap, date.Format(time.DateOnly))
+	}
+	return w.dayOn(date, newID)
+}
+
 // weekContaining returns the week whose [StartDate, EndDate) holds date.
 func (r *Roadmap) weekContaining(date time.Time) *WeekPlan {
 	for _, w := range r.weeks {

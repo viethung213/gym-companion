@@ -45,6 +45,9 @@ type SessionPlanExecuted struct {
 	ExecutedAt      time.Time `json:"executedAt"`
 	SessionSCR      float32   `json:"sessionScr"`
 	SessionDeltaRPE float32   `json:"sessionDeltaRpe"`
+	// EffortReported is false when no RPE was reported; SessionDeltaRPE is
+	// then unmeasured rather than on target.
+	EffortReported bool `json:"effortReported"`
 }
 
 // EventName returns the CloudEvent type identifier.

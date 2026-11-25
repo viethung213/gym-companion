@@ -42,6 +42,34 @@ func TestNewSessionPlan_DefaultsToPending(t *testing.T) {
 	}
 }
 
+// Seen live: an ad-hoc session was saved as 0 minutes because nothing gave it
+// a length. A session without one takes its prescription's.
+func TestNewSessionPlan_LengthFollowsThePrescription(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	info := newTestSessionInfo()
+	info.Prescription = WorkoutPrescription{MainExercises: []PrescribedExercise{
+		{TargetSets: 3, TargetReps: 10, RestSetSec: 90, RestExerciseSec: 120},
+		{TargetSets: 3, TargetReps: 10, RestSetSec: 90, RestExerciseSec: 120},
+	}}
+
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sp.Info().EstimatedDurationMinutes, info.Prescription.EstimatedMinutes(); got != want || got <= 0 {
+		t.Errorf("length %d, want %d from the prescription", got, want)
+	}
+
+	info.EstimatedDurationMinutes = 45
+	sp, err = NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Info().EstimatedDurationMinutes; got != 45 {
+		t.Errorf("length %d, want the given 45 kept", got)
+	}
+}
+
 func TestNewSessionPlan_NilChecks(t *testing.T) {
 	if _, err := NewSessionPlan(nil, time.Now()); err == nil {
 		t.Errorf("expected error for nil SessionPlanInfo")
@@ -159,10 +187,13 @@ func TestSessionPlan_MarkSkipped_Idempotent(t *testing.T) {
 		t.Errorf("expected no-op on second MarkSkipped, got %v", err)
 	}
 
-	// Cannot complete after skipped
+	// A workout reported after its week closed still completes the session.
 
-	if err := sp.MarkCompleted(90, 0, now); !errors.Is(err, ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	if err := sp.MarkCompleted(90, 0, now); err != nil {
+		t.Fatalf("late completion of a skipped session: %v", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().SessionSCR == nil {
+		t.Errorf("status %s, SCR %v: want COMPLETED with metrics", sp.Status(), sp.Info().SessionSCR)
 	}
 }
 
@@ -333,5 +364,49 @@ func TestNewSessionPlan_SoloMatchSource(t *testing.T) {
 
 	if got := rehydrated.Info().Source; got != SessionPlanSourceSoloMatch {
 		t.Errorf("got rehydrated source %s, want %s", got, SessionPlanSourceSoloMatch)
+	}
+}
+
+// A rewritten session takes the length of what it now prescribes: a session
+// the adaptive cycle shortens must show its new length, and a length stored
+// out of bounds by an older plan is corrected rather than kept.
+func TestSessionPlan_RewritePrescription_UpdatesLength(t *testing.T) {
+	now := time.Now()
+	info := newTestSessionInfo()
+	info.EstimatedDurationMinutes = 240 // out of bounds, stored by an older plan
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	short := WorkoutPrescription{MainExercises: []PrescribedExercise{
+		{ExerciseID: "ex-1", TargetSets: 2, TargetReps: 8, RestSetSec: 90, RestExerciseSec: 90},
+		{ExerciseID: "ex-2", TargetSets: 2, TargetReps: 8, RestSetSec: 90, RestExerciseSec: 90},
+	}}
+	if err := sp.RewritePrescription(short, []string{"chest"}, "express", now); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sp.Info().EstimatedDurationMinutes, short.EstimatedMinutes(); got != want {
+		t.Errorf("EstimatedDurationMinutes = %d, want %d from the new prescription", got, want)
+	}
+}
+
+// An abort reported after the week was closed still lands; a completed
+// session is never turned into an aborted one.
+func TestSessionPlan_MarkAborted_AfterSkip(t *testing.T) {
+	now := time.Now()
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
+	if err := sp.MarkSkipped(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sp.MarkAborted(); err != nil || sp.Status() != SessionPlanStatusAborted {
+		t.Fatalf("abort after skip: err %v, status %s", err, sp.Status())
+	}
+
+	done, _ := NewSessionPlan(&info, now)
+	_ = done.MarkCompleted(100, 0, now)
+	if err := done.MarkAborted(); !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("abort after completion: err %v, want ErrInvalidTransition", err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/viethung213/gym-companion/internal/coaching/application/athlete"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
@@ -67,6 +68,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	if deps.ProfileReader == nil {
 		deps.ProfileReader = adapters.NewConnectUserProfileReader(deps.GatewayURL, deps.InternalSecret, nil)
 	}
+	// Every flow sees the same assumptions for fields a profile leaves empty.
+	deps.ProfileReader = athlete.WithProfileDefaults(deps.ProfileReader)
 
 	if deps.SessionReader == nil {
 		deps.SessionReader = adapters.NewConnectWorkoutSessionReader(deps.GatewayURL, deps.InternalSecret, nil)
@@ -108,7 +111,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	// One engine for all users: each Check receives the user's injuries.
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, athlete.PRBaselines(deps.SessionReader))
 	clock := realClock{}
 
 	// Wire gRPC Command & Query Handlers
@@ -145,10 +148,14 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 			txMgr,
 			deps.RoadmapRepo,
 			deps.CatalogReader,
+			deps.ProfileReader,
 			deps.IDGenerator,
 			clock,
 		)
 	}
+
+	// Wiring rule: a handler's required collaborators are constructor
+	// parameters; an optional one that switches a behaviour on is a WithX setter.
 
 	var queriesHandler *query.Handlers
 	if deps.RoadmapRepo != nil {

@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS coaching.roadmaps (
 
 -- IANA zone the schedule's scheduled_date / slot_time wall clock is in.
 ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
+-- Optimistic lock: a save must start from the stored version (see Roadmap.Version).
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON coaching.roadmaps(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
 

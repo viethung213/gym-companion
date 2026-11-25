@@ -10,6 +10,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/workflow"
@@ -59,6 +60,8 @@ type CoachingContextAgent struct {
 	results map[string]*PlanResult
 	reasons map[string]string
 	hints   map[string]*port.AdHocHint
+	// planStarts holds the start date of an initial roadmap planned ahead.
+	planStarts map[string]time.Time
 }
 
 // NewCoachingContextAgent initializes LLM agents, tools, skills, callbacks, and workflow nodes.
@@ -84,6 +87,7 @@ func NewCoachingContextAgent(
 		results:       make(map[string]*PlanResult),
 		reasons:       make(map[string]string),
 		hints:         make(map[string]*port.AdHocHint),
+		planStarts:    make(map[string]time.Time),
 	}
 
 	if err := cca.build(ctx); err != nil {
@@ -113,9 +117,17 @@ func (c *CoachingContextAgent) AdaptiveCycleAgent() agent.Agent {
 	return c.adaptiveCycleAgent
 }
 
-// GenerateRoadmap satisfies port.CoachAgent.
+// GenerateRoadmap satisfies port.CoachAgent: a 4-week draft starting now.
 func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID string) (*roadmap.Roadmap, error) {
-	res, err := c.runInitWorkflow(ctx, userID)
+	return c.generateRoadmap(ctx, userID, time.Time{})
+}
+
+// generateRoadmap drafts a roadmap starting now, or on startDate when set.
+func (c *CoachingContextAgent) generateRoadmap(ctx context.Context, userID string, startDate time.Time) (*roadmap.Roadmap, error) {
+	// Provisional dating; the application stamps the authoritative planning
+	// time with its clock (Roadmap.StampPlannedAt).
+	plannedAt := time.Now().UTC()
+	res, err := c.runWorkflow(ctx, c.initRoadmapWorkflowAgent, userID, runOptions{planStart: startDate})
 	if err != nil {
 		return nil, fmt.Errorf("run initiate workflow: %w", err)
 	}
@@ -127,7 +139,13 @@ func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID strin
 			slog.Any("issues", res.Issues))
 	}
 
-	rm, err := c.mapToDomainRoadmap(ctx, res.Plan, res.Names, res.Primaries, userID, time.Now().UTC(), res.WeekStart)
+	weekStart := res.WeekStart
+	if weekStart.IsZero() && !startDate.IsZero() {
+		// No slot schedule (the athlete picked no slot): a block planned ahead
+		// still starts the day it was planned for.
+		weekStart = roadmap.CalendarDate(startDate, time.UTC)
+	}
+	rm, err := c.mapToDomainRoadmap(ctx, res.Plan, res.Names, res.Primaries, userID, plannedAt, weekStart)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +156,7 @@ func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID strin
 // RegeneratePending satisfies port.CoachAgent. The workflow reads the pending
 // sessions itself; results come back in the same order.
 func (c *CoachingContextAgent) RegeneratePending(ctx context.Context, userID string, _ []string) ([]*roadmap.SessionPlanInfo, error) {
-	res, err := c.runWorkflow(ctx, c.regeneratePendingAgent, userID, "")
+	res, err := c.runWorkflow(ctx, c.regeneratePendingAgent, userID, runOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("run regenerate workflow: %w", err)
 	}
@@ -147,8 +165,10 @@ func (c *CoachingContextAgent) RegeneratePending(ctx context.Context, userID str
 }
 
 // Adapt satisfies port.CoachAgent.
-func (c *CoachingContextAgent) Adapt(ctx context.Context, userID, decisionReason string) ([]*roadmap.SessionPlanInfo, error) {
-	res, err := c.runWorkflow(ctx, c.adaptiveCycleAgent, userID, decisionReason)
+func (c *CoachingContextAgent) Adapt(
+	ctx context.Context, userID string, decision *service.AdaptationDecision,
+) ([]*roadmap.SessionPlanInfo, error) {
+	res, err := c.runWorkflow(ctx, c.adaptiveCycleAgent, userID, runOptions{reason: adaptationInstruction(decision)})
 	if err != nil {
 		return nil, fmt.Errorf("run adaptive workflow: %w", err)
 	}

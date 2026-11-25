@@ -136,7 +136,7 @@ func (c *CoachingContextAgent) buildNodes() {
 			// remaining sessions onto the new slots instead of rewriting them in place.
 			if in.Flow == FlowRegenerate {
 				if targets := rescheduleTargets(rm, in.Profile.AvailableSlots, now); targets != nil {
-					in.SessionsToRevise = rescheduledSessions(targets)
+					in.SessionsToRevise = withRPEWindows(rescheduledSessions(targets))
 					in.Rescheduled = true
 					in.CurrentRoadmap = &RoadmapSnapshot{RoadmapID: rm.ID(), Phase: currentPhase(rm, pending[0])}
 					return in, nil
@@ -150,12 +150,15 @@ func (c *CoachingContextAgent) buildNodes() {
 					ScheduledDate:            info.ScheduledDate.Format(scheduledDateISO),
 					SlotTime:                 info.SlotTime,
 					SessionKind:              string(info.Kind),
+					Phase:                    currentPhase(rm, s),
 					EstimatedDurationMinutes: info.EstimatedDurationMinutes,
 					TargetMuscleGroups:       info.TargetMuscleGroups,
 					CurrentPrescription:      prescriptionToDTO(info.Prescription),
 					CurrentReasoning:         info.Reasoning,
 				})
 			}
+
+			in.SessionsToRevise = withRPEWindows(in.SessionsToRevise)
 
 			in.CurrentRoadmap = &RoadmapSnapshot{
 				RoadmapID: rm.ID(),

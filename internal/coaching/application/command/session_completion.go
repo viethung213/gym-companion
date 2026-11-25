@@ -13,11 +13,29 @@ import (
 
 // CompleteSessionCommand is the input from WorkoutSessionCompleted event.
 type CompleteSessionCommand struct {
-	SessionPlanID       string
+	SessionPlanID string
+	// UserID is who the workout service says trained. The plan id comes from the
+	// client, so a session owned by someone else is treated as not found.
+	UserID              string
 	TotalActualSets     int
 	TotalPrescribedSets int
 	AverageActualRPE    float64
 	CompletedAt         string // RFC3339 timestamp for logging
+}
+
+// SoloMatchCompletion is the completion of a solo-challenge session. A
+// challenge is one effort that was either finished or not, so a finished one
+// counts as fully done (SCR 100%); it reports no RPE, so ΔRPE stays
+// unmeasured. Solo sessions are not part of the scheduled program and never
+// feed the weekly adaptation.
+func SoloMatchCompletion(planID, userID, completedAt string) CompleteSessionCommand {
+	return CompleteSessionCommand{
+		SessionPlanID:       planID,
+		UserID:              userID,
+		TotalActualSets:     1,
+		TotalPrescribedSets: 1,
+		CompletedAt:         completedAt,
+	}
 }
 
 // CompleteSessionResult echoes state.
@@ -76,7 +94,7 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 
 		session, ok := rm.FindSession(cmd.SessionPlanID)
 
-		if !ok {
+		if !ok || !ownedBy(rm, cmd.UserID) {
 			return roadmap.ErrSessionNotFound
 		}
 
@@ -90,16 +108,20 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 
 		scrPct := float32(h.scr.SCR(cmd.TotalActualSets, totalPrescribedSets))
 
-		// Target RPE lives in the WeekPlan; find it.
-
-		targetRPE := findTargetRPEForSession(rm, cmd.SessionPlanID)
-
-		delta := float32(h.scr.DeltaRPE(cmd.AverageActualRPE, float64(targetRPE)))
-
 		now := h.clock.Now()
 
-		if err := session.MarkCompleted(scrPct, delta, now); err != nil {
-			return fmt.Errorf("mark completed: %w", err)
+		// No RPE reported (0) leaves ΔRPE unmeasured: read as 0 - target it
+		// would say "far too easy" and skew the week's adaptation.
+		var delta float32
+		var markErr error
+		if cmd.AverageActualRPE > 0 {
+			delta = float32(h.scr.DeltaRPE(cmd.AverageActualRPE, float64(sessionTargetRPE(rm, session))))
+			markErr = session.MarkCompleted(scrPct, delta, now)
+		} else {
+			markErr = session.MarkCompletedUnrated(scrPct, now)
+		}
+		if markErr != nil {
+			return fmt.Errorf("mark completed: %w", markErr)
 		}
 
 		rm.Touch(now)
@@ -115,6 +137,7 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 			ExecutedAt:      now,
 			SessionSCR:      scrPct,
 			SessionDeltaRPE: delta,
+			EffortReported:  cmd.AverageActualRPE > 0,
 		}
 
 		if err := h.outbox.Enqueue(txCtx, rm.UserID(), evt); err != nil {
@@ -137,6 +160,7 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 // AbortSessionCommand corresponds to WorkoutSessionAborted event.
 type AbortSessionCommand struct {
 	SessionPlanID string
+	UserID        string // see CompleteSessionCommand.UserID
 	Reason        string
 }
 
@@ -179,7 +203,7 @@ func (h *AbortSessionHandler) Handle(ctx context.Context, cmd AbortSessionComman
 
 		session, ok := rm.FindSession(cmd.SessionPlanID)
 
-		if !ok {
+		if !ok || !ownedBy(rm, cmd.UserID) {
 			return roadmap.ErrSessionNotFound
 		}
 
@@ -204,19 +228,36 @@ func (h *AbortSessionHandler) Handle(ctx context.Context, cmd AbortSessionComman
 	})
 }
 
-// findTargetRPEForSession finds the target RPE from the WeekPlan containing
-// the given session. Returns 0 if not found.
-func findTargetRPEForSession(rm *roadmap.Roadmap, sessionPlanID string) float32 {
-	for _, w := range rm.Weeks() {
-		for _, d := range w.Days() {
-			for _, s := range d.Sessions() {
-				if s.ID() == sessionPlanID {
-					return w.Info().TargetRPE
-				}
-			}
+// ownedBy reports whether the roadmap belongs to userID. An empty userID comes
+// from an event that predates the field and is accepted as before.
+func ownedBy(rm *roadmap.Roadmap, userID string) bool {
+	return userID == "" || rm.UserID() == userID
+}
+
+// sessionTargetRPE is the intensity the athlete was asked for in this session:
+// the mean target RPE of its main exercises. ΔRPE compares the reported RPE
+// against it, so a RECOVERY session (RPE ≤ 4) inside a PEAK week (RPE 8-9) is
+// not scored as "far too easy". Falls back to the week's target when the
+// session prescribes none.
+func sessionTargetRPE(rm *roadmap.Roadmap, session *roadmap.SessionPlan) float32 {
+	var sum float32
+	n := 0
+	for _, ex := range session.Info().Prescription.MainExercises {
+		if ex.TargetRPE > 0 {
+			sum += ex.TargetRPE
+			n++
 		}
 	}
+	if n > 0 {
+		return sum / float32(n)
+	}
 
+	weekID := session.Info().WeekPlanID
+	for _, w := range rm.Weeks() {
+		if w.ID() == weekID {
+			return w.Info().TargetRPE
+		}
+	}
 	return 0
 }
 

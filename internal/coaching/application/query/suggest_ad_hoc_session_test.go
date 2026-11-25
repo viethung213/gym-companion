@@ -7,6 +7,7 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 )
 
 type fakeClock struct{ t time.Time }
@@ -27,7 +28,7 @@ func (m *memRepo) FindActiveByUser(context.Context, string) (*roadmap.Roadmap, e
 	return nil, roadmap.ErrRoadmapNotFound
 }
 
-func (m *memRepo) ListByUser(context.Context, string, roadmap.Status, int, int) ([]*roadmap.Roadmap, error) {
+func (m *memRepo) ListByUser(context.Context, string, []roadmap.Status, int, int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 
@@ -49,7 +50,7 @@ func (f *fakeCoachAgent) RegeneratePending(_ context.Context, _ string, _ []stri
 	return nil, nil
 }
 
-func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ string) ([]*roadmap.SessionPlanInfo, error) {
+func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ *service.AdaptationDecision) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
 }
 

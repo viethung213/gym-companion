@@ -127,7 +127,7 @@ type failOutbox struct {
 	stubOutbox
 }
 
-func (f *failOutbox) LogProcessed(context.Context, string, string, string, []byte) (bool, error) {
+func (f *failOutbox) ClaimEvent(context.Context, string, string, []byte) (bool, error) {
 	return false, errors.New("outbox db error")
 }
 
@@ -142,7 +142,7 @@ func TestProfileCompletedConsumer_OutboxError(t *testing.T) {
 		t.Errorf("expected error from outbox failure")
 	}
 
-	if got, want := err.Error(), "log processed"; !contains(got, want) {
+	if got, want := err.Error(), "claim event"; !contains(got, want) {
 		t.Errorf("error = %q, want containing %q", got, want)
 	}
 }
@@ -159,7 +159,7 @@ func (alwaysExistsRepo) Save(context.Context, *roadmap.Roadmap) error { return n
 func (alwaysExistsRepo) FindByID(context.Context, string) (*roadmap.Roadmap, error) {
 	return nil, roadmap.ErrRoadmapNotFound
 }
-func (alwaysExistsRepo) ListByUser(context.Context, string, roadmap.Status, int, int) ([]*roadmap.Roadmap, error) {
+func (alwaysExistsRepo) ListByUser(context.Context, string, []roadmap.Status, int, int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 func (alwaysExistsRepo) FindSessionByID(context.Context, string) (*roadmap.Roadmap, error) {

@@ -54,7 +54,8 @@ type SessionPlan struct {
 	info SessionPlanInfo
 }
 
-// NewSessionPlan constructs a SessionPlan in PENDING status.
+// NewSessionPlan constructs a SessionPlan in PENDING status. A session built
+// without a length (an ad-hoc pick) takes the one its prescription needs.
 func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) {
 	if info == nil {
 		return nil, fmt.Errorf("%w: nil SessionPlanInfo", ErrInvalidRoadmap)
@@ -63,6 +64,10 @@ func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) 
 	normInfo := normalizeSessionInfo(info)
 
 	normInfo.Status = SessionPlanStatusPending
+
+	if normInfo.EstimatedDurationMinutes <= 0 {
+		normInfo.EstimatedDurationMinutes = normInfo.Prescription.EstimatedMinutes()
+	}
 
 	if normInfo.Source == "" {
 		normInfo.Source = SessionPlanSourceScheduled
@@ -150,13 +155,25 @@ func (s *SessionPlan) ScheduledDate() time.Time { return s.info.ScheduledDate }
 
 // MarkCompleted transitions PENDING → COMPLETED and records execution metrics.
 // scr is Session Completion Rate (0-100); deltaRPE is scalar per D7.
+// A SKIPPED session may still complete: a workout reported after its week was
+// closed did happen, and dropping the report would lose it.
 // Idempotent: calling on an already-COMPLETED session is a no-op.
 func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error {
+	return s.complete(scr, &deltaRPE, now)
+}
+
+// MarkCompletedUnrated completes a session whose effort was not reported: its
+// ΔRPE stays unmeasured instead of reading as "far too easy".
+func (s *SessionPlan) MarkCompletedUnrated(scr float32, now time.Time) error {
+	return s.complete(scr, nil, now)
+}
+
+func (s *SessionPlan) complete(scr float32, deltaRPE *float32, now time.Time) error {
 	if s.info.Status == SessionPlanStatusCompleted {
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending {
+	if s.info.Status != SessionPlanStatusPending && s.info.Status != SessionPlanStatusSkipped {
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusCompleted)
 	}
 
@@ -168,11 +185,13 @@ func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error 
 
 	scrCopy := scr
 
-	deltaCopy := deltaRPE
-
 	s.info.SessionSCR = &scrCopy
 
-	s.info.SessionDeltaRPE = &deltaCopy
+	s.info.SessionDeltaRPE = nil
+	if deltaRPE != nil {
+		deltaCopy := *deltaRPE
+		s.info.SessionDeltaRPE = &deltaCopy
+	}
 
 	return nil
 }
@@ -195,14 +214,15 @@ func (s *SessionPlan) MarkSkipped() error {
 }
 
 // MarkAborted transitions PENDING → ABORTED for mid-workout cancellations
-// or 4-hour inactivity timeouts (WorkoutSessionAborted event).
+// or 4-hour inactivity timeouts (WorkoutSessionAborted event). A SKIPPED
+// session may be aborted too: the week was closed before the late event came.
 // Idempotent: calling on an already-ABORTED session is a no-op.
 func (s *SessionPlan) MarkAborted() error {
 	if s.info.Status == SessionPlanStatusAborted {
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending {
+	if s.info.Status != SessionPlanStatusPending && s.info.Status != SessionPlanStatusSkipped {
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusAborted)
 	}
 
@@ -213,12 +233,14 @@ func (s *SessionPlan) MarkAborted() error {
 
 // RewritePrescription replaces the prescription content in-place while the
 // session is still PENDING (D3: Regenerate touches only PENDING sessions).
+// The session's length follows the new prescription.
 func (s *SessionPlan) RewritePrescription(p WorkoutPrescription, muscleGroups []string, reasoning string, now time.Time) error {
 	if s.info.Status != SessionPlanStatusPending {
 		return fmt.Errorf("%w: cannot rewrite session in status %s", ErrSessionAlreadyFinal, s.info.Status)
 	}
 
 	s.info.Prescription = copyPrescription(p)
+	s.info.EstimatedDurationMinutes = p.EstimatedMinutes()
 
 	s.info.TargetMuscleGroups = copyStringSlice(muscleGroups)
 

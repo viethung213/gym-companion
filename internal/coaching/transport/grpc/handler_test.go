@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
@@ -70,6 +71,7 @@ func TestServer_CreateAdhocSessionPlan(t *testing.T) {
 		mockTx,
 		mockRepo,
 		mockCatalog,
+		testProfiles{},
 		mockIDGen,
 		mockClock,
 	)
@@ -266,7 +268,7 @@ func (r *testRepo) Save(ctx context.Context, rm *roadmap.Roadmap) error { return
 func (r *testRepo) FindByID(ctx context.Context, id string) (*roadmap.Roadmap, error) {
 	return nil, nil
 }
-func (r *testRepo) ListByUser(ctx context.Context, uid string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
+func (r *testRepo) ListByUser(ctx context.Context, uid string, statuses []roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 func (r *testRepo) FindSessionByID(ctx context.Context, sid string) (*roadmap.Roadmap, error) {
@@ -292,7 +294,7 @@ func (a *testCoachAgent) GenerateRoadmap(ctx context.Context, userID string) (*r
 func (a *testCoachAgent) RegeneratePending(ctx context.Context, userID string, sessionIDs []string) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
 }
-func (a *testCoachAgent) Adapt(ctx context.Context, userID string, decisionReason string) ([]*roadmap.SessionPlanInfo, error) {
+func (a *testCoachAgent) Adapt(ctx context.Context, userID string, decision *service.AdaptationDecision) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
 }
 func (a *testCoachAgent) SuggestAdHocSession(ctx context.Context, userID string, hint *port.AdHocHint) (port.SuggestedSession, error) {
@@ -377,4 +379,11 @@ func TestPBSourceToDomain(t *testing.T) {
 			}
 		})
 	}
+}
+
+// testProfiles serves a UTC profile with no injuries.
+type testProfiles struct{}
+
+func (testProfiles) GetProfile(_ context.Context, userID string) (port.Profile, error) {
+	return port.Profile{UserID: userID}, nil
 }

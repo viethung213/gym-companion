@@ -1,12 +1,14 @@
 package adapters
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,7 +16,6 @@ import (
 	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
-	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/protomap"
 	profilemsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/message"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/service/profilev1serviceconnect"
@@ -44,6 +45,8 @@ func NewConnectUserProfileReader(gatewayURL, internalSecret string, httpClient *
 }
 
 // GetProfile retrieves user profile through ConnectRPC over API Gateway.
+// It reports only what the profile holds; empty fields stay empty and
+// port.WithProfileDefaults decides what coaching assumes for them.
 func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string) (port.Profile, error) {
 	if userID == "" {
 		return port.Profile{}, errors.New("user id cannot be empty")
@@ -76,36 +79,12 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 	if profile.UserID == "" {
 		profile.UserID = userID
 	}
-	if profile.WeightKg <= 0 {
-		profile.WeightKg = 75.0
-	}
-	if profile.HeightCm <= 0 {
-		profile.HeightCm = 170.0
-	}
-
-	// 1. Calculate Age if missing but DateOfBirth provided
-	if profile.Age <= 0 && data.GetDateOfBirth() != "" {
-		if dob, parseErr := time.Parse("2006-01-02", data.GetDateOfBirth()); parseErr == nil {
-			now := time.Now()
-			age := now.Year() - dob.Year()
-			if now.YearDay() < dob.YearDay() {
-				age--
-			}
-			if age > 0 {
-				profile.Age = age
-			}
-		}
-	}
-
 	// 2. Map Goals
 	if len(data.GetGoals()) > 0 && strings.TrimSpace(data.GetGoals()[0]) != "" {
 		profile.PrimaryGoal = data.GetGoals()[0]
 	}
-	if profile.PrimaryGoal == "" {
-		profile.PrimaryGoal = "hypertrophy"
-	}
 
-	// 3. Map Available Equipment; an empty list means a regular gym (docs/05 §8.3).
+	// 3. Map Available Equipment.
 	for _, e := range data.GetAvailableEquipment() {
 		code, mapErr := protomap.Equipment(e)
 		if mapErr != nil {
@@ -113,9 +92,6 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 			continue
 		}
 		profile.AvailableEquipment = append(profile.AvailableEquipment, code)
-	}
-	if len(profile.AvailableEquipment) == 0 {
-		profile.AvailableEquipment = service.DefaultGymEquipment()
 	}
 
 	// 4. Map Preferred Muscle Groups; empty means no emphasis.
@@ -136,13 +112,11 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 
 	// 5. Parse Preferred Workout Times into AvailableSlots
 	if len(data.GetPreferredWorkoutTimes()) > 0 {
-		profile.AvailableSlots = parseWorkoutTimesList(data.GetPreferredWorkoutTimes())
-	}
-	if len(profile.AvailableSlots) == 0 {
-		profile.AvailableSlots = []port.Slot{
-			{DayOfWeek: time.Monday, StartTime: "06:00", EndTime: "07:30"},
-			{DayOfWeek: time.Wednesday, StartTime: "06:00", EndTime: "07:30"},
-			{DayOfWeek: time.Friday, StartTime: "06:00", EndTime: "07:30"},
+		slots, unreadable := parseWorkoutTimesList(data.GetPreferredWorkoutTimes())
+		profile.AvailableSlots = slots
+		for _, item := range unreadable {
+			warnUnknownProfileValue(ctx, "preferred_workout_times", item,
+				errors.New("not a day and an HH:MM-HH:MM range"))
 		}
 	}
 
@@ -165,9 +139,6 @@ func (c *ConnectUserProfileReader) GetProfile(ctx context.Context, userID string
 			profile.UpdatedAt = parsedUpdated
 		}
 	}
-	if profile.UpdatedAt.IsZero() {
-		profile.UpdatedAt = time.Now()
-	}
 
 	return profile, nil
 }
@@ -188,11 +159,10 @@ func mapInjury(inj *profilemsg.Injury) (port.InjuryStatus, error) {
 	}
 
 	status := port.InjuryStatus{
-		Region:     region,
-		Muscle:     muscle,
-		Severity:   severity,
-		ReportedAt: time.Now(),
-		Notes:      inj.GetNotes(),
+		Region:   region,
+		Muscle:   muscle,
+		Severity: severity,
+		Notes:    inj.GetNotes(),
 	}
 	if parsed, pErr := time.Parse(time.RFC3339, inj.GetReportedAt()); pErr == nil {
 		status.ReportedAt = parsed
@@ -220,78 +190,87 @@ type rawSlotItem struct {
 	End       string `json:"end"`
 }
 
-func parseWorkoutTimesList(rawList []string) []port.Slot {
-	var slots []port.Slot
-
+// parseWorkoutTimesList reads the profile's preferred workout times. Each item
+// is one of: a JSON map {"mon": ["06:00-07:30"]}, a JSON list
+// [{"day_of_week":1,"start_time":"06:00","end_time":"07:30"}], or a day and a
+// range ("mon:06:00-07:30", the format the app sends, or "MON 06:00-07:30").
+// Items that yield no valid slot are returned in unreadable so the caller can
+// report them; planning then falls back to the default slots.
+func parseWorkoutTimesList(rawList []string) (slots []port.Slot, unreadable []string) {
 	for _, item := range rawList {
-		itemTrimmed := strings.TrimSpace(item)
-		if itemTrimmed == "" {
+		item = strings.TrimSpace(item)
+		if item == "" {
 			continue
 		}
+		parsed := parseWorkoutTime(item)
+		valid := slices.DeleteFunc(parsed, func(s port.Slot) bool { return !validSlot(s) })
+		if len(valid) == 0 {
+			unreadable = append(unreadable, item)
+			continue
+		}
+		slots = append(slots, valid...)
+	}
+	return slots, unreadable
+}
 
-		// Check if item is a JSON object or array
-		if strings.HasPrefix(itemTrimmed, "{") {
-			// Try JSON Map: {"mon": ["06:00-07:30"]}
-			var mapSlots map[string][]string
-			if err := json.Unmarshal([]byte(itemTrimmed), &mapSlots); err == nil && len(mapSlots) > 0 {
-				for dayStr, slotStrs := range mapSlots {
-					if wd, ok := dayCodeToWeekday(dayStr); ok {
-						for _, slotStr := range slotStrs {
-							start, end := splitSlotRange(slotStr)
-							slots = append(slots, port.Slot{
-								DayOfWeek: wd,
-								StartTime: start,
-								EndTime:   end,
-							})
-						}
-					}
+func parseWorkoutTime(item string) []port.Slot {
+	var slots []port.Slot
+	if strings.HasPrefix(item, "{") {
+		var mapSlots map[string][]string
+		if err := json.Unmarshal([]byte(item), &mapSlots); err == nil {
+			for dayStr, slotStrs := range mapSlots {
+				wd, ok := dayCodeToWeekday(dayStr)
+				if !ok {
+					continue
 				}
-				continue
-			}
-		}
-
-		if strings.HasPrefix(itemTrimmed, "[") {
-			// Try rawSlot slice: [{"day_of_week":1, "start_time":"06:00", "end_time":"07:30"}]
-			var rawSlots []rawSlotItem
-			if err := json.Unmarshal([]byte(itemTrimmed), &rawSlots); err == nil && len(rawSlots) > 0 {
-				for _, s := range rawSlots {
-					day := s.DayOfWeek
-					if day == 0 && s.Day != 0 {
-						day = s.Day
-					}
-					startTime := s.StartTime
-					if startTime == "" {
-						startTime = s.Start
-					}
-					endTime := s.EndTime
-					if endTime == "" {
-						endTime = s.End
-					}
-					slots = append(slots, port.Slot{
-						DayOfWeek: time.Weekday(day),
-						StartTime: startTime,
-						EndTime:   endTime,
-					})
+				for _, slotStr := range slotStrs {
+					start, end := splitSlotRange(slotStr)
+					slots = append(slots, port.Slot{DayOfWeek: wd, StartTime: start, EndTime: end})
 				}
-				continue
 			}
 		}
-
-		// Direct format: "mon: 06:00-07:30" or "Monday: 18:00-19:30"
-		parts := strings.SplitN(itemTrimmed, ":", 2)
-		if len(parts) == 2 {
-			if wd, ok := dayCodeToWeekday(parts[0]); ok {
-				start, end := splitSlotRange(parts[1])
-				slots = append(slots, port.Slot{
-					DayOfWeek: wd,
-					StartTime: start,
-					EndTime:   end,
-				})
-			}
-		}
+		return slots
 	}
 
-	return slots
+	if strings.HasPrefix(item, "[") {
+		var rawSlots []rawSlotItem
+		if err := json.Unmarshal([]byte(item), &rawSlots); err == nil {
+			for _, s := range rawSlots {
+				day := s.DayOfWeek
+				if day == 0 && s.Day != 0 {
+					day = s.Day
+				}
+				startTime := cmp.Or(s.StartTime, s.Start)
+				endTime := cmp.Or(s.EndTime, s.End)
+				slots = append(slots, port.Slot{DayOfWeek: time.Weekday(day), StartTime: startTime, EndTime: endTime})
+			}
+		}
+		return slots
+	}
+
+	// "mon:06:00-07:30" splits at the first colon; "MON 06:00-07:30" at the space.
+	day, rng, found := strings.Cut(item, ":")
+	if wd, ok := dayCodeToWeekday(day); found && ok {
+		start, end := splitSlotRange(rng)
+		return []port.Slot{{DayOfWeek: wd, StartTime: start, EndTime: end}}
+	}
+	if fields := strings.Fields(item); len(fields) == 2 {
+		if wd, ok := dayCodeToWeekday(fields[0]); ok {
+			start, end := splitSlotRange(fields[1])
+			return []port.Slot{{DayOfWeek: wd, StartTime: start, EndTime: end}}
+		}
+	}
+	return nil
+}
+
+// validSlot reports whether a slot names a weekday and two HH:MM clock times.
+func validSlot(s port.Slot) bool {
+	if s.DayOfWeek < time.Sunday || s.DayOfWeek > time.Saturday {
+		return false
+	}
+	_, errStart := time.Parse("15:04", s.StartTime)
+	_, errEnd := time.Parse("15:04", s.EndTime)
+	return errStart == nil && errEnd == nil
 }
 
 func dayCodeToWeekday(code string) (time.Weekday, bool) {

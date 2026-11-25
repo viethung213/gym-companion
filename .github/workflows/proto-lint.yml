@@ -27,6 +27,10 @@ jobs:
 
       - name: Setup Buf CLI
         uses: bufbuild/buf-setup-action@v1
+        with:
+          # Authenticated requests: the anonymous GitHub API quota is shared by
+          # every job on the runner's IP and regularly runs out.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Buf Schema Dependencies
         run: buf dep update proto

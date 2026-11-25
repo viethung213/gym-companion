@@ -73,12 +73,10 @@ func (c *ConnectWorkoutSessionReader) GetRecentSessions(ctx context.Context, use
 		if sess == nil {
 			continue
 		}
-		var completedAt time.Time
-		if sess.GetDate() != nil {
-			completedAt = sess.GetDate().AsTime()
-		} else {
-			completedAt = time.Now()
+		if sess.GetDate() == nil {
+			continue // undated: it cannot be placed in the recent window
 		}
+		completedAt := sess.GetDate().AsTime()
 
 		if !since.IsZero() && completedAt.Before(since) {
 			continue
@@ -99,61 +97,6 @@ func (c *ConnectWorkoutSessionReader) GetRecentSessions(ctx context.Context, use
 	}
 
 	return sessions, nil
-}
-
-// GetSetLogs fetches recent set logs for a user and exerciseID via personal records.
-func (c *ConnectWorkoutSessionReader) GetSetLogs(ctx context.Context, userID, exerciseID string, _ int) ([]port.SetLog, error) {
-	if userID == "" || exerciseID == "" {
-		return []port.SetLog{}, nil
-	}
-
-	tokenStr, err := internaltoken.Generate(userID, "Admin", "ai-coaching", time.Minute, c.internalSecret)
-	if err != nil {
-		return nil, fmt.Errorf("generate internal token: %w", err)
-	}
-
-	req := &workoutexecutionmsg.AdminGetPersonalRecordsRequest{
-		UserId:      userID,
-		ExerciseIds: []string{exerciseID},
-	}
-	ctx, info := connect.NewClientContext(ctx)
-	info.RequestHeader().Set(middleware.HeaderInternalToken, tokenStr)
-
-	res, err := c.client.AdminGetPersonalRecords(ctx, req)
-	if err != nil {
-		if connect.CodeOf(err) == connect.CodeNotFound {
-			return []port.SetLog{}, nil
-		}
-		return nil, fmt.Errorf("gateway get personal records for coaching user %s: %w", userID, err)
-	}
-
-	records := res.GetRecords()
-	if len(records) == 0 {
-		return []port.SetLog{}, nil
-	}
-
-	for _, pr := range records {
-		if pr == nil || pr.GetExerciseId() != exerciseID {
-			continue
-		}
-		if pr.GetWeight() > 0 {
-			achievedAt := time.Now()
-			if pr.GetAchievedAt() != nil {
-				achievedAt = pr.GetAchievedAt().AsTime()
-			}
-			return []port.SetLog{
-				{
-					ExerciseID:  exerciseID,
-					Weight:      float64(pr.GetWeight()),
-					Reps:        int(pr.GetReps()),
-					RPE:         8.0,
-					CompletedAt: achievedAt,
-				},
-			}, nil
-		}
-	}
-
-	return []port.SetLog{}, nil
 }
 
 // GetPersonalRecords fetches all personal records for a user in a single RPC call.

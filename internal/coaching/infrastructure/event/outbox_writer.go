@@ -113,6 +113,7 @@ func (w *OutboxWriter) marshalPayload(ev domainevent.Event) ([]byte, error) {
 			ExecutedAt:      timestamppb.New(e.ExecutedAt),
 			SessionScr:      e.SessionSCR,
 			SessionDeltaRpe: e.SessionDeltaRPE,
+			EffortReported:  e.EffortReported,
 		}
 		return protojson.Marshal(protoEv)
 

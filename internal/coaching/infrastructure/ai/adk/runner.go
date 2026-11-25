@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	athletefacts "github.com/viethung213/gym-companion/internal/coaching/application/athlete"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/runner"
@@ -63,7 +66,7 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 	}
 
 	athlete := athleteFromInput(nodeCtx, coachInput)
-	v := c.validator.withAthlete(&athlete)
+	v := c.validator.withAthlete(&athlete).withLoads(c.loadLimits(nodeCtx, coachInput))
 	if n := len(coachInput.SessionsToRevise); n > 0 {
 		v = v.expecting(n).withRevise(coachInput.SessionsToRevise)
 	}
@@ -86,6 +89,24 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 		res.WeekStart = schedule.weekStart(1)
 	}
 	return res, nil
+}
+
+// loadLimits reads the athlete's personal records once per generation, so the
+// validator can hold every prescribed weight to them. Unreadable records leave
+// only the bodyweight and absolute limits; the guardrail re-reads them anyway.
+func (c *CoachingContextAgent) loadLimits(ctx context.Context, in *CoachInput) *loadLimits {
+	limits := &loadLimits{bodyWeightKg: in.Profile.WeightKg}
+	if c.sessionReader == nil {
+		return limits
+	}
+	prs, err := c.sessionReader.GetPersonalRecords(ctx, in.Profile.UserID)
+	if err != nil {
+		slog.WarnContext(ctx, "Personal records unavailable; prescribed loads checked against bodyweight only",
+			slog.String("user_id", in.Profile.UserID), slog.Any("error", err))
+		return limits
+	}
+	limits.baselines = athletefacts.WeightBaselines(prs)
+	return limits
 }
 
 // annotateInjuryCautions appends to each session's reasoning the injury limit
@@ -217,6 +238,22 @@ func (c *CoachingContextAgent) takeReason(sessionID string) string {
 	return reason
 }
 
+func (c *CoachingContextAgent) putPlanStart(sessionID string, start time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.planStarts[sessionID] = start
+}
+
+// takePlanStart returns and forgets the run's plan start; ok is false when
+// the roadmap starts now.
+func (c *CoachingContextAgent) takePlanStart(sessionID string) (start time.Time, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	start, ok = c.planStarts[sessionID]
+	delete(c.planStarts, sessionID)
+	return start, ok
+}
+
 func (c *CoachingContextAgent) putHint(sessionID string, hint *port.AdHocHint) {
 	if hint == nil {
 		return
@@ -234,11 +271,19 @@ func (c *CoachingContextAgent) takeHint(sessionID string) *port.AdHocHint {
 	return hint
 }
 
+// runOptions are the per-run inputs a workflow node cannot receive through
+// its prompt, which only carries the user id.
+type runOptions struct {
+	reason    string    // adaptation instruction (rewrite flows)
+	planStart time.Time // calendar date an initial roadmap starts on; zero = now
+}
+
 // runWorkflow executes a workflow agent and collects the plan its node produced.
 func (c *CoachingContextAgent) runWorkflow(
 	ctx context.Context,
 	wfAgent agent.Agent,
-	userID, reason string,
+	userID string,
+	opts runOptions,
 ) (*PlanResult, error) {
 	r, err := runner.NewInMemory("coaching-app", wfAgent)
 	if err != nil {
@@ -248,9 +293,13 @@ func (c *CoachingContextAgent) runWorkflow(
 	sessionID := uuid.NewString()
 	defer c.takeResult(sessionID) // ensure the slot is freed even on failure
 	defer c.takeReason(sessionID)
+	defer c.takePlanStart(sessionID)
 
-	if reason != "" {
-		c.putReason(sessionID, reason)
+	if opts.reason != "" {
+		c.putReason(sessionID, opts.reason)
+	}
+	if !opts.planStart.IsZero() {
+		c.putPlanStart(sessionID, opts.planStart)
 	}
 
 	prompt := &genai.Content{
@@ -305,8 +354,4 @@ func (c *CoachingContextAgent) runAdHocWorkflow(
 		return nil, fmt.Errorf("%w: workflow produced no plan", ErrPlanGenerationFailed)
 	}
 	return res, nil
-}
-
-func (c *CoachingContextAgent) runInitWorkflow(ctx context.Context, userID string) (*PlanResult, error) {
-	return c.runWorkflow(ctx, c.initRoadmapWorkflowAgent, userID, "")
 }

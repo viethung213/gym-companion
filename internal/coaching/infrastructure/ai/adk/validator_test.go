@@ -52,10 +52,10 @@ func (f *fakeCatalog) GetByID(_ context.Context, exerciseID string) (port.Exerci
 
 var _ port.ExerciseCatalogReader = (*fakeCatalog)(nil)
 
-// ex builds a PrescribedExercise with only the ID set; the numeric fields are
-// irrelevant to validation.
+// ex builds a PrescribedExercise for the ID with numbers inside every limit
+// (RPE 6.5 sits in the ACCUMULATION window planOf uses).
 func ex(id string) PrescribedExercise {
-	return PrescribedExercise{ExerciseID: id, TargetSets: 3, TargetReps: 8}
+	return PrescribedExercise{ExerciseID: id, TargetSets: 3, TargetReps: 8, TargetRPE: 6.5}
 }
 
 // session builds a one-week-friendly SessionPlan whose main exercises are the

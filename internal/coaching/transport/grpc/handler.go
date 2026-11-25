@@ -232,6 +232,10 @@ func mapDomainErr(err error) error {
 	case errors.Is(err, roadmap.ErrActiveRoadmapExists):
 		return status.Error(codes.AlreadyExists, err.Error())
 
+	// Another writer saved the roadmap first: re-read and retry.
+	case errors.Is(err, roadmap.ErrRoadmapChanged):
+		return status.Error(codes.Aborted, err.Error())
+
 	case errors.Is(err, roadmap.ErrInvalidRoadmap),
 
 		errors.Is(err, roadmap.ErrInvalidStatus),
@@ -242,7 +246,11 @@ func mapDomainErr(err error) error {
 
 		errors.Is(err, roadmap.ErrWeeklyCapExceeded),
 
-		errors.Is(err, roadmap.ErrSessionAlreadyFinal):
+		errors.Is(err, roadmap.ErrSessionAlreadyFinal),
+
+		errors.Is(err, roadmap.ErrDateOutsideRoadmap),
+
+		errors.Is(err, command.ErrExerciseExcludedByInjury):
 		return status.Error(codes.FailedPrecondition, err.Error())
 
 	default:

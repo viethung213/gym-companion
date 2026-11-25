@@ -46,17 +46,28 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 
 	db := r.getDB(ctx)
 
-	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "roadmap_id"}},
-
-		DoUpdates: clause.AssignmentColumns([]string{"status", "start_date", "end_date", "updated_at", "timezone"}),
-	}).Create(toRoadmapRecordPtr(rm)).Error; err != nil {
+	// Optimistic lock: the row is written only if it still holds the version
+	// this copy was read at, so a writer working from a stale copy (one that
+	// waited on the model, say) cannot erase what others saved meanwhile.
+	rec := toRoadmapRecordPtr(rm)
+	rec.Version = rm.Version() + 1
+	res := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "roadmap_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"status", "start_date", "end_date", "updated_at", "timezone", "version"}),
+		Where: clause.Where{Exprs: []clause.Expression{
+			clause.Expr{SQL: "coaching.roadmaps.version = ?", Vars: []any{rm.Version()}},
+		}},
+	}).Create(rec)
+	if err := res.Error; err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Constraint == activeRoadmapConstraint {
 			// Another node initiated this user's roadmap first.
 			return fmt.Errorf("%w: %s", roadmap.ErrActiveRoadmapExists, rm.UserID())
 		}
 		return fmt.Errorf("upsert roadmap: %w", err)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("%w: %s at version %d", roadmap.ErrRoadmapChanged, rm.ID(), rm.Version())
 	}
 
 	// Delete what a reschedule dropped before upserting its replacements: a new
@@ -107,6 +118,8 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 		}
 	}
 
+	rm.MarkSaved(rec.Version)
+
 	return nil
 }
 
@@ -144,14 +157,19 @@ func (r *RoadmapRepository) FindActiveByUser(ctx context.Context, userID string)
 	return r.loadTree(ctx, &rec)
 }
 
-// ListByUser returns roadmaps for a user with optional status filter.
-func (r *RoadmapRepository) ListByUser(ctx context.Context, userID string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
+// ListByUser returns a user's roadmaps whose status is one of statuses (all
+// when empty), newest first.
+func (r *RoadmapRepository) ListByUser(ctx context.Context, userID string, statuses []roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
 	db := r.getDB(ctx)
 
 	q := db.Where("user_id = ?", userID)
 
-	if status != "" {
-		q = q.Where("status = ?", string(status))
+	if len(statuses) > 0 {
+		names := make([]string, len(statuses))
+		for i, s := range statuses {
+			names[i] = string(s)
+		}
+		q = q.Where("status IN ?", names)
 	}
 
 	if limit <= 0 {
