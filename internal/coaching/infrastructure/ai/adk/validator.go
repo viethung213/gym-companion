@@ -571,16 +571,8 @@ func (v *planValidator) validateSession(
 		})
 	}
 
-	duration := sp.EstimatedDurationMinutes
-	if duration < roadmap.MinSessionMinutes || duration > roadmap.MaxSessionMinutes {
-		issues = append(issues, planIssue{
-			WeekNumber: weekNumber,
-			SessionIdx: idx,
-			Reason: fmt.Sprintf("estimated_duration_minutes %d is invalid; must be %d to %d minutes",
-				duration, roadmap.MinSessionMinutes, roadmap.MaxSessionMinutes),
-		})
-		duration = min(max(duration, roadmap.MinSessionMinutes), roadmap.MaxSessionMinutes)
-	}
+	// estimated_duration_minutes is not checked: the stored length is computed
+	// from the prescription (roadmap.WorkoutPrescription.EstimatedMinutes).
 
 	if !dropInvalid {
 		return issues, nil, nil
@@ -592,7 +584,6 @@ func (v *planValidator) validateSession(
 	}
 
 	cleaned := *sp
-	cleaned.EstimatedDurationMinutes = duration
 	cleaned.Prescription = WorkoutPrescription{
 		WarmUps:       cleanedSlots[0],
 		MainExercises: cleanedSlots[1],

@@ -203,6 +203,9 @@ func vetDraft(ctx context.Context, guard *guardrail.Engine, profiles port.UserPr
 	if err != nil {
 		return err
 	}
+	if fitErr := fitDeloadVolume(ctx, draft, time.Time{}); fitErr != nil {
+		return fitErr
+	}
 	if result := guard.Check(ctx, draft, injuries, time.Time{}); result.Status != guardrail.StatusApproved {
 		return fmt.Errorf("guardrail rejected: %+v", result.Violations)
 	}

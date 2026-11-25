@@ -131,6 +131,9 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 		return nil, fmt.Errorf("reschedule pending sessions: %w", rsErr)
 	}
 
+	if fitErr := fitDeloadVolume(ctx, rm, now); fitErr != nil {
+		return nil, fitErr
+	}
 	athlete := profile.Athlete()
 	if result := h.guard.Check(ctx, rm, athlete.Injuries, now); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected regen: %+v", result.Violations)

@@ -116,7 +116,7 @@ func (e *Engine) Check(ctx context.Context, r *roadmap.Roadmap, injuries []servi
 
 	vs = append(vs, checkPhaseRPEBand(r, verdicts, inScope)...)
 
-	vs = append(vs, e.checkDeloadVolume(r)...)
+	vs = append(vs, e.checkDeloadVolume(r, inScope)...)
 
 	vs = append(vs, catalogViolations...)
 
@@ -444,19 +444,44 @@ func ftoa(f float64) string {
 //
 // Dropping RPE while keeping volume intact passes BR-AC-10 and still leaves
 // the athlete without a recovery week, which is what this rule catches.
-func (e *Engine) checkDeloadVolume(r *roadmap.Roadmap) []Violation {
-	peak := workingSets(r, roadmap.PhasePeak)
-
+//
+// Only a breach a rewrite can still fix blocks: if the DELOAD week stays over
+// with every rewritable line at one set (its finished sessions alone exceed
+// the allowance), rejecting would lock every later rewrite of the roadmap.
+func (e *Engine) checkDeloadVolume(r *roadmap.Roadmap, inScope func(*roadmap.SessionPlan) bool) []Violation {
 	// No PEAK week means no baseline to unload from; ValidateFullStructure
 	// owns the "is this roadmap shaped correctly" question.
-	if peak == 0 {
+	allowed, ok := r.DeloadAllowance()
+	if !ok {
 		return nil
 	}
 
-	deload := workingSets(r, roadmap.PhaseDeload)
+	deload := r.WorkingSets(roadmap.PhaseDeload)
+	if deload <= allowed {
+		return nil
+	}
 
-	allowed := float64(peak) * roadmap.DeloadVolumeRatio
-	if float64(deload) <= allowed {
+	least := 0 // DELOAD sets with every rewritable line cut to one set
+	for _, w := range r.Weeks() {
+		if w.Phase() != roadmap.PhaseDeload {
+			continue
+		}
+		for _, d := range w.Days() {
+			for _, s := range d.Sessions() {
+				if !s.IsTrainingVolume() {
+					continue
+				}
+				for _, ex := range s.Info().Prescription.MainExercises {
+					if inScope(s) {
+						least++
+					} else {
+						least += int(ex.TargetSets)
+					}
+				}
+			}
+		}
+	}
+	if least > allowed {
 		return nil
 	}
 
@@ -464,39 +489,12 @@ func (e *Engine) checkDeloadVolume(r *roadmap.Roadmap) []Violation {
 		Code: "BR-AC-11",
 
 		Description: "DELOAD week carries " + itoa(deload) + " working sets, above the " +
-			itoa(int(allowed)) + " allowed against PEAK's " + itoa(peak),
+			itoa(allowed) + " allowed against PEAK's " + itoa(r.WorkingSets(roadmap.PhasePeak)),
 
 		Path: "weeks.DELOAD",
 
 		Severity: SeverityBlocker,
 	}}
-}
-
-// workingSets totals the main-exercise sets across every week in the phase.
-func workingSets(r *roadmap.Roadmap, phase roadmap.Phase) int {
-	total := 0
-
-	for _, w := range r.Weeks() {
-		if w.Phase() != phase {
-			continue
-		}
-
-		for _, d := range w.Days() {
-			for _, s := range d.Sessions() {
-				// Only the scheduled program counts: recovery work is not training
-				// volume, and an ad-hoc or solo session is the athlete's own pick, so
-				// counting it could lock every later rewrite of the roadmap.
-				if s.Kind() == roadmap.SessionKindRecovery || s.Info().Source != roadmap.SessionPlanSourceScheduled {
-					continue
-				}
-				for _, ex := range s.Info().Prescription.MainExercises {
-					total += int(ex.TargetSets)
-				}
-			}
-		}
-	}
-
-	return total
 }
 
 func itoa(n int) string {

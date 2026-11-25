@@ -117,6 +117,9 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 		return nil, fmt.Errorf("no session was adapted out of %d pending", len(pending))
 	}
 
+	if fitErr := fitDeloadVolume(ctx, rm, now); fitErr != nil {
+		return nil, fitErr
+	}
 	injuries := profile.Athlete().Injuries
 	if result := h.guard.Check(ctx, rm, injuries, now); result.Status != guardrail.StatusApproved {
 		return nil, fmt.Errorf("guardrail rejected adaptive cycle: %+v", result.Violations)

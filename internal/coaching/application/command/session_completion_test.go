@@ -107,8 +107,12 @@ func TestCompleteSession_MarksCompletedAndEmitsEvent(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(outbox.events))
 	}
 
-	if _, ok := outbox.events[0].(*domainevent.SessionPlanExecuted); !ok {
-		t.Errorf("expected SessionPlanExecuted, got %T", outbox.events[0])
+	evt, ok := outbox.events[0].(*domainevent.SessionPlanExecuted)
+	if !ok {
+		t.Fatalf("expected SessionPlanExecuted, got %T", outbox.events[0])
+	}
+	if !evt.EffortReported || evt.SessionDeltaRPE != 0.5 {
+		t.Errorf("event effort reported %v ΔRPE %v, want true and 0.5", evt.EffortReported, evt.SessionDeltaRPE)
 	}
 }
 
@@ -215,7 +219,8 @@ func TestSessionTargetRPE_UsesSessionPrescription(t *testing.T) {
 func TestCompleteSession_UnratedLeavesDeltaUnmeasured(t *testing.T) {
 	repo := newMemRepo()
 	seedRoadmap(t, repo)
-	h := NewCompleteSessionHandler(fakeTx{}, repo, service.NewSCRCalculator(), &captureOutbox{},
+	outbox := &captureOutbox{}
+	h := NewCompleteSessionHandler(fakeTx{}, repo, service.NewSCRCalculator(), outbox,
 		&fakeClock{t: time.Date(2026, 8, 3, 8, 0, 0, 0, time.UTC)})
 
 	res, err := h.Handle(context.Background(), CompleteSessionCommand{
@@ -230,6 +235,9 @@ func TestCompleteSession_UnratedLeavesDeltaUnmeasured(t *testing.T) {
 	}
 	if res.SCR != 100 || info.SessionSCR == nil || *info.SessionSCR != 100 {
 		t.Errorf("SCR = %v, want 100 recorded", res.SCR)
+	}
+	if evt, ok := outbox.events[0].(*domainevent.SessionPlanExecuted); !ok || evt.EffortReported {
+		t.Errorf("event %T reports an effort; want SessionPlanExecuted with EffortReported false", outbox.events[0])
 	}
 }
 

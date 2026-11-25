@@ -338,3 +338,47 @@ func TestNewSessionPlan_SoloMatchSource(t *testing.T) {
 		t.Errorf("got rehydrated source %s, want %s", got, SessionPlanSourceSoloMatch)
 	}
 }
+
+// A rewritten session takes the length of what it now prescribes: a session
+// the adaptive cycle shortens must show its new length, and a length stored
+// out of bounds by an older plan is corrected rather than kept.
+func TestSessionPlan_RewritePrescription_UpdatesLength(t *testing.T) {
+	now := time.Now()
+	info := newTestSessionInfo()
+	info.EstimatedDurationMinutes = 240 // out of bounds, stored by an older plan
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	short := WorkoutPrescription{MainExercises: []PrescribedExercise{
+		{ExerciseID: "ex-1", TargetSets: 2, TargetReps: 8, RestSetSec: 90, RestExerciseSec: 90},
+		{ExerciseID: "ex-2", TargetSets: 2, TargetReps: 8, RestSetSec: 90, RestExerciseSec: 90},
+	}}
+	if err := sp.RewritePrescription(short, []string{"chest"}, "express", now); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sp.Info().EstimatedDurationMinutes, short.EstimatedMinutes(); got != want {
+		t.Errorf("EstimatedDurationMinutes = %d, want %d from the new prescription", got, want)
+	}
+}
+
+// An abort reported after the week was closed still lands; a completed
+// session is never turned into an aborted one.
+func TestSessionPlan_MarkAborted_AfterSkip(t *testing.T) {
+	now := time.Now()
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
+	if err := sp.MarkSkipped(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sp.MarkAborted(); err != nil || sp.Status() != SessionPlanStatusAborted {
+		t.Fatalf("abort after skip: err %v, status %s", err, sp.Status())
+	}
+
+	done, _ := NewSessionPlan(&info, now)
+	_ = done.MarkCompleted(100, 0, now)
+	if err := done.MarkAborted(); !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("abort after completion: err %v, want ErrInvalidTransition", err)
+	}
+}

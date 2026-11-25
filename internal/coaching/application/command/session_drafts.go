@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -85,4 +86,19 @@ func reloadForRewrite(ctx context.Context, repo port.RoadmapRepository, rm *road
 	}
 	fresh.SetTimezone(zone)
 	return fresh, nil
+}
+
+// fitDeloadVolume cuts the upcoming DELOAD sessions down to BR-AC-11 before
+// the guardrail checks the roadmap: the model is not told the week's budget,
+// and a rewrite of earlier weeks can shrink the PEAK volume it is measured by.
+func fitDeloadVolume(ctx context.Context, rm *roadmap.Roadmap, now time.Time) error {
+	changed, err := rm.FitDeloadVolume(now)
+	if err != nil {
+		return err
+	}
+	if changed {
+		slog.InfoContext(ctx, "DELOAD week cut to its volume allowance (BR-AC-11)",
+			slog.String("roadmap_id", rm.ID()), slog.Int("deload_sets", rm.WorkingSets(roadmap.PhaseDeload)))
+	}
+	return nil
 }

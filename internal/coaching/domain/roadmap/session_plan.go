@@ -209,14 +209,15 @@ func (s *SessionPlan) MarkSkipped() error {
 }
 
 // MarkAborted transitions PENDING → ABORTED for mid-workout cancellations
-// or 4-hour inactivity timeouts (WorkoutSessionAborted event).
+// or 4-hour inactivity timeouts (WorkoutSessionAborted event). A SKIPPED
+// session may be aborted too: the week was closed before the late event came.
 // Idempotent: calling on an already-ABORTED session is a no-op.
 func (s *SessionPlan) MarkAborted() error {
 	if s.info.Status == SessionPlanStatusAborted {
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending {
+	if s.info.Status != SessionPlanStatusPending && s.info.Status != SessionPlanStatusSkipped {
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusAborted)
 	}
 
@@ -227,12 +228,14 @@ func (s *SessionPlan) MarkAborted() error {
 
 // RewritePrescription replaces the prescription content in-place while the
 // session is still PENDING (D3: Regenerate touches only PENDING sessions).
+// The session's length follows the new prescription.
 func (s *SessionPlan) RewritePrescription(p WorkoutPrescription, muscleGroups []string, reasoning string, now time.Time) error {
 	if s.info.Status != SessionPlanStatusPending {
 		return fmt.Errorf("%w: cannot rewrite session in status %s", ErrSessionAlreadyFinal, s.info.Status)
 	}
 
 	s.info.Prescription = copyPrescription(p)
+	s.info.EstimatedDurationMinutes = p.EstimatedMinutes()
 
 	s.info.TargetMuscleGroups = copyStringSlice(muscleGroups)
 

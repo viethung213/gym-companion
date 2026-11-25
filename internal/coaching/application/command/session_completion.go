@@ -137,6 +137,7 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 			ExecutedAt:      now,
 			SessionSCR:      scrPct,
 			SessionDeltaRPE: delta,
+			EffortReported:  cmd.AverageActualRPE > 0,
 		}
 
 		if err := h.outbox.Enqueue(txCtx, rm.UserID(), evt); err != nil {

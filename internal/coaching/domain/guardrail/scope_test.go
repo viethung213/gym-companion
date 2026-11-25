@@ -78,3 +78,18 @@ func TestGuardrail_PhaseWindowSkipsHistory(t *testing.T) {
 	}
 	assertViolation(t, NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, time.Time{}), "BR-AC-10")
 }
+
+// A DELOAD week already trained cannot be rewritten, so its volume no longer
+// blocks rewrites of what is left; an upcoming one still must unload.
+func TestGuardrail_DeloadVolumeOnlyBlocksWhatCanChange(t *testing.T) {
+	r := buildRoadmap(t, validRPE(), [4]int32{3, 3, 3, 3}) // DELOAD holds PEAK volume
+	afterTheBlock := r.Weeks()[3].Info().EndDate
+
+	got := NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, afterTheBlock)
+	for _, v := range got.Violations {
+		if v.Code == "BR-AC-11" {
+			t.Fatalf("the DELOAD week is history but still blocks: %+v", got.Violations)
+		}
+	}
+	assertViolation(t, NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, time.Time{}), "BR-AC-11")
+}
