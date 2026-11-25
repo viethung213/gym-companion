@@ -417,9 +417,10 @@ func TestPlanValidator_InjuryRPECap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("validate returned error: %v", err)
 	}
-	if len(got.Issues) != 1 || !strings.Contains(got.Issues[0].Reason, "injury cap") {
-		t.Fatalf("got issues %v, want one RPE cap issue", got.Issues)
+	if len(got.Issues) != 0 || len(got.Fitted) != 1 || !strings.Contains(got.Fitted[0].Reason, "injury cap") {
+		t.Fatalf("got issues %v fitted %v, want the RPE cap fitted", got.Issues, got.Fitted)
 	}
+	sp.Prescription.MainExercises[0].TargetRPE = 7.5 // strict mode fitted the plan itself
 	if !strings.Contains(got.Cautions["squat"], "max RPE 6") {
 		t.Errorf("got caution %q, want the RPE 6 limit", got.Cautions["squat"])
 	}

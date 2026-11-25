@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 // recordingAttempt wraps a sequence of canned responses and records what
@@ -253,5 +256,34 @@ func TestFormatIssues_CapsFeedbackLength(t *testing.T) {
 	}
 	if !strings.Contains(got[len(got)-1], "further issues") {
 		t.Errorf("got last line %q, want a truncation summary", got[len(got)-1])
+	}
+}
+
+// Seen live: a rewrite after an injury was rejected for limited exercises at
+// the phase RPE. The validator knows the cap, so it fits the line, lowers the
+// load with it and ships without paying for a second generation.
+func TestRunWithRetries_RPEOnlyDefectShipsFitted(t *testing.T) {
+	v := newPlanValidator(injuryCatalog()).withAthlete(&service.Athlete{
+		Equipment: service.DefaultGymEquipment(),
+		Injuries:  []service.Injury{{Region: taxonomy.JointRegionLowerBack, Severity: taxonomy.InjurySeverityModerate}},
+	})
+	sp := sessionOf("2026-08-03", "squat")
+	sp.Prescription.MainExercises[0].TargetRPE = 7.5 // cap is 6
+	sp.Prescription.MainExercises[0].TargetWeightKg = 100
+	att := alwaysReturns(planOf(sp))
+
+	got, err := runWithRetries(context.Background(), v, att.fn, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if att.calls != 1 {
+		t.Errorf("got %d attempts, want 1", att.calls)
+	}
+	line := got.Plan.Weeks[0].Sessions[0].Prescription.MainExercises[0]
+	if line.TargetRPE != 6 || line.TargetWeightKg != 94 {
+		t.Errorf("shipped RPE %v at %v kg, want 6 at 94 (1.5 points x 4%% lighter)", line.TargetRPE, line.TargetWeightKg)
+	}
+	if got.Degraded {
+		t.Error("a fitted plan is not degraded")
 	}
 }

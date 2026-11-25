@@ -108,6 +108,15 @@ func runWithRetries(
 			return nil, fmt.Errorf("validate exercises: %w", err) // infrastructure, not plan defect
 		}
 
+		if len(outcome.Fitted) > 0 {
+			// The validator's own fixes: a rising count means the prompt or
+			// the model is slipping, before it ever costs a retry.
+			slog.InfoContext(ctx, "Coaching plan RPE fitted by validation",
+				slog.Int("attempt", n),
+				slog.Int("fitted_count", len(outcome.Fitted)),
+				slog.Any("fitted", formatIssues(outcome.Fitted)))
+		}
+
 		report := ValidationReport{
 			Passed:   len(outcome.Issues) == 0,
 			Degraded: outcome.Degraded,

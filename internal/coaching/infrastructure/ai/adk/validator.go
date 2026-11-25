@@ -28,6 +28,9 @@ type planIssue struct {
 	Slot       string // "warm_ups" | "main_exercises" | "cool_downs"; empty for session/week issues
 	ExerciseID string
 	Reason     string
+	// Fitted marks a defect the validator already fixed on the plan (fitRPE):
+	// it is logged, and costs a retry only when too many lines needed it.
+	Fitted bool
 }
 
 // String renders the issue as feedback for the model.
@@ -53,7 +56,8 @@ type validationOutcome struct {
 	// Primaries maps exercise_id -> primary MuscleGroup code for every resolved exercise.
 	Primaries map[string]string
 	Issues    []planIssue
-	Degraded  bool // salvage mode removed something
+	Fitted    []planIssue // fixed on the plan by the validator, see splitFitted
+	Degraded  bool        // salvage mode removed something
 }
 
 // planValidator checks exercise IDs against the catalog and plan shape against the domain.
@@ -296,8 +300,12 @@ func (v *planValidator) validate(
 	// BR-AC-11 (DELOAD volume) is not checked here: the domain cuts the DELOAD
 	// sets to fit before the guardrail, so a heavy DELOAD week never costs a
 	// retry (roadmap.FitDeloadVolume).
+	issues, fitted := splitFitted(plan, issues, dropInvalid)
 	if !dropInvalid {
-		return validationOutcome{Plan: plan, Names: names, Cautions: cautions, Primaries: primaries, Issues: issues}, nil
+		return validationOutcome{
+			Plan: plan, Names: names, Cautions: cautions, Primaries: primaries,
+			Issues: issues, Fitted: fitted,
+		}, nil
 	}
 
 	if len(out.Weeks) != len(plan.Weeks) {
@@ -310,6 +318,7 @@ func (v *planValidator) validate(
 		Cautions:  cautions,
 		Primaries: primaries,
 		Issues:    issues,
+		Fitted:    fitted,
 		Degraded:  degraded,
 	}, nil
 }
@@ -536,12 +545,20 @@ func (v *planValidator) validateSession(
 				if verdict.MaxRPE > 0 {
 					injuryCap = verdict.MaxRPE
 					cautions[ex.ExerciseID] = injuryLimitText(&verdict)
-					if ex.TargetRPE > verdict.MaxRPE {
-						loc.Reason = fmt.Sprintf("target_rpe %.1f exceeds the injury cap: %s", ex.TargetRPE, injuryLimitText(&verdict))
-						issues = append(issues, loc)
-						ex.TargetRPE = verdict.MaxRPE // salvage keeps the exercise at its cap
-					}
 				}
+			}
+
+			// Strict mode fits the plan itself, like the measure fields, so a
+			// plan whose only defect is RPE ships as fitted; salvage fits its copy.
+			target := &ex
+			if !dropInvalid {
+				target = &slot.exs[j]
+			}
+			if fix := fitRPE(target, slot.name == "main_exercises", sp, injuryCap); fix != "" {
+				fittedLoc := loc
+				fittedLoc.Reason, fittedLoc.Fitted = fix, true
+				issues = append(issues, fittedLoc)
+				ex = *target
 			}
 
 			// Numbers last: salvage keeps the line, clamped to every limit.

@@ -69,9 +69,9 @@ type CoachInput struct {
 	RecentSessions []string            `json:"recent_sessions"`
 	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
 	CurrentRoadmap *RoadmapSnapshot    `json:"current_roadmap,omitempty"`
-	// AvailableExercises groups compact 6-element main exercise tuples by
-	// primary MuscleGroup code:
-	// [exercise_id, name, equipment, level, movement_type, measurement_type].
+	// AvailableExercises groups compact main exercise tuples by primary
+	// MuscleGroup code: [exercise_id, name, equipment, level, movement_type,
+	// measurement_type], plus "max RPE n" for an exercise kept despite an injury.
 	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
 	// RecoveryExercises groups STRETCHING exercises, used for both warm-ups and
 	// cool-downs, by primary MuscleGroup code (+ "General").

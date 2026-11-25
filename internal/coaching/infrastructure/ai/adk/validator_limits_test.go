@@ -2,6 +2,7 @@ package adk
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,9 +136,16 @@ func TestPlanValidator_PhaseRPEWindow(t *testing.T) {
 	plan := planOf(fullWeekOne()...)
 	plan.Weeks[0].Sessions[0].Prescription.MainExercises[0].TargetRPE = 9 // ACCUMULATION is 6-7
 
+	// Strict mode fits the plan itself instead of asking for a retry.
 	strict, _ := scheduledValidator().validate(context.Background(), plan, false)
-	if n := issuesContaining(strict.Issues, "ACCUMULATION window"); n != 1 {
-		t.Fatalf("issues %v, want one window issue", strict.Issues)
+	if n := issuesContaining(strict.Issues, "window"); n != 0 {
+		t.Errorf("issues %v, want the window fitted, not reported", strict.Issues)
+	}
+	if len(strict.Fitted) != 1 || !strings.Contains(strict.Fitted[0].Reason, "ACCUMULATION window") {
+		t.Errorf("fitted %v, want one ACCUMULATION window fit", strict.Fitted)
+	}
+	if got := mainOf(plan).TargetRPE; got != 7 {
+		t.Errorf("strict RPE = %v, want 7 fitted on the plan", got)
 	}
 
 	plan = planOf(fullWeekOne()...)
@@ -168,9 +176,13 @@ func TestPlanValidator_RewriteUsesEachSessionsPhase(t *testing.T) {
 		t.Errorf("PEAK 8.5 then DELOAD 5.5: issues %v, want none", ok.Issues)
 	}
 
-	bad, _ := v.validate(context.Background(), build(8.5, 8.5), false)
-	if n := issuesContaining(bad.Issues, "DELOAD window"); n != 1 {
-		t.Errorf("DELOAD session at 8.5: issues %v, want the DELOAD window issue", bad.Issues)
+	plan := build(8.5, 8.5)
+	bad, _ := v.validate(context.Background(), plan, false)
+	if n := issuesContaining(bad.Fitted, "DELOAD window"); n != 1 {
+		t.Errorf("DELOAD session at 8.5: fitted %v, want the DELOAD window fit", bad.Fitted)
+	}
+	if got := plan.Weeks[0].Sessions[1].Prescription.MainExercises[0].TargetRPE; got != 6 {
+		t.Errorf("DELOAD RPE = %v, want 6 (top of DELOAD)", got)
 	}
 }
 
@@ -277,5 +289,57 @@ func TestPlanValidator_LightLoadAgainstARecordPasses(t *testing.T) {
 	got, _ := v.validate(context.Background(), p, false)
 	if len(got.Issues) != 0 {
 		t.Errorf("issues %v, want none for a lighter load", got.Issues)
+	}
+}
+
+// Lowering the RPE lowers the load with it, 4% per point; raising it into the
+// window keeps the load. An injury cap binds in every phase.
+func TestFitRPE(t *testing.T) {
+	peak := &SessionPlan{SessionKind: kindTraining, phase: roadmap.PhasePeak}
+	tests := []struct {
+		name             string
+		rpe, weight, cap float64
+		main             bool
+		wantRPE, wantKg  float64
+		wantReason       string
+	}{
+		{"inside the window", 8.5, 100, 0, true, 8.5, 100, ""},
+		{"above the window lowers the load", 9.5, 100, 0, true, 9, 98, "PEAK window"},
+		{"below the window keeps the load", 7, 100, 0, true, 8, 100, "PEAK window"},
+		{"injury cap under the window", 8.5, 100, 7, true, 7, 94, "injury cap max RPE 7"},
+		{"injury cap on a warm-up", 8, 0, 6, false, 6, 0, "injury cap"},
+		{"no RPE is clampRPE's", 0, 100, 0, true, 0, 100, ""},
+	}
+	for _, tt := range tests {
+		ex := PrescribedExercise{TargetRPE: tt.rpe, TargetWeightKg: tt.weight}
+		reason := fitRPE(&ex, tt.main, peak, tt.cap)
+		if ex.TargetRPE != tt.wantRPE || ex.TargetWeightKg != tt.wantKg {
+			t.Errorf("%s: RPE %v load %v, want %v and %v", tt.name, ex.TargetRPE, ex.TargetWeightKg, tt.wantRPE, tt.wantKg)
+		}
+		if (tt.wantReason == "") != (reason == "") || !strings.Contains(reason, tt.wantReason) {
+			t.Errorf("%s: reason %q, want one containing %q", tt.name, reason, tt.wantReason)
+		}
+	}
+}
+
+// A few fitted lines ship; a plan where most lines needed fitting goes back.
+func TestSplitFitted(t *testing.T) {
+	plan := planOf(sessionOf("2026-08-03", "a", "b", "c", "d"), sessionOf("2026-08-05", "e", "f", "g", "h"))
+	fit := func(n int) []planIssue {
+		out := []planIssue{{Reason: "is not in the exercise catalog"}}
+		for range n {
+			out = append(out, planIssue{Reason: "target_rpe fitted", Fitted: true})
+		}
+		return out
+	}
+
+	if open, fitted := splitFitted(plan, fit(2), false); len(open) != 1 || len(fitted) != 2 {
+		t.Errorf("2 of 8 lines: open %d fitted %d, want 1 and 2", len(open), len(fitted))
+	}
+	if open, fitted := splitFitted(plan, fit(3), false); len(open) != 4 || fitted != nil {
+		t.Errorf("3 of 8 lines: open %d fitted %d, want all 4 back to the model", len(open), len(fitted))
+	}
+	if open, fitted := splitFitted(plan, fit(3), true); len(open) != 1 || len(fitted) != 3 {
+		t.Errorf("final round: open %d fitted %d, want the fits kept", len(open), len(fitted))
 	}
 }
