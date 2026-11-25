@@ -54,7 +54,8 @@ type SessionPlan struct {
 	info SessionPlanInfo
 }
 
-// NewSessionPlan constructs a SessionPlan in PENDING status.
+// NewSessionPlan constructs a SessionPlan in PENDING status. A session built
+// without a length (an ad-hoc pick) takes the one its prescription needs.
 func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) {
 	if info == nil {
 		return nil, fmt.Errorf("%w: nil SessionPlanInfo", ErrInvalidRoadmap)
@@ -63,6 +64,10 @@ func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) 
 	normInfo := normalizeSessionInfo(info)
 
 	normInfo.Status = SessionPlanStatusPending
+
+	if normInfo.EstimatedDurationMinutes <= 0 {
+		normInfo.EstimatedDurationMinutes = normInfo.Prescription.EstimatedMinutes()
+	}
 
 	if normInfo.Source == "" {
 		normInfo.Source = SessionPlanSourceScheduled

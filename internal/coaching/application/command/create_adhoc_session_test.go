@@ -135,6 +135,10 @@ func TestCreateAdhocSessionHandler_Success(t *testing.T) {
 	if spInfo.Status != roadmap.SessionPlanStatusPending {
 		t.Errorf("expected status PENDING, got %s", spInfo.Status)
 	}
+
+	if want := spInfo.Prescription.EstimatedMinutes(); spInfo.EstimatedDurationMinutes != want {
+		t.Errorf("length %d min, want %d from the prescription", spInfo.EstimatedDurationMinutes, want)
+	}
 }
 
 func TestCreateAdhocSessionHandler_NoActiveRoadmap(t *testing.T) {

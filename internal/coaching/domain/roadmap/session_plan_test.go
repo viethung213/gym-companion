@@ -42,6 +42,34 @@ func TestNewSessionPlan_DefaultsToPending(t *testing.T) {
 	}
 }
 
+// Seen live: an ad-hoc session was saved as 0 minutes because nothing gave it
+// a length. A session without one takes its prescription's.
+func TestNewSessionPlan_LengthFollowsThePrescription(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	info := newTestSessionInfo()
+	info.Prescription = WorkoutPrescription{MainExercises: []PrescribedExercise{
+		{TargetSets: 3, TargetReps: 10, RestSetSec: 90, RestExerciseSec: 120},
+		{TargetSets: 3, TargetReps: 10, RestSetSec: 90, RestExerciseSec: 120},
+	}}
+
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sp.Info().EstimatedDurationMinutes, info.Prescription.EstimatedMinutes(); got != want || got <= 0 {
+		t.Errorf("length %d, want %d from the prescription", got, want)
+	}
+
+	info.EstimatedDurationMinutes = 45
+	sp, err = NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Info().EstimatedDurationMinutes; got != 45 {
+		t.Errorf("length %d, want the given 45 kept", got)
+	}
+}
+
 func TestNewSessionPlan_NilChecks(t *testing.T) {
 	if _, err := NewSessionPlan(nil, time.Now()); err == nil {
 		t.Errorf("expected error for nil SessionPlanInfo")
