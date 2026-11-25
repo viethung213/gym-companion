@@ -80,7 +80,8 @@ func (h *Handlers) ListRoadmaps(ctx context.Context, q ListRoadmapsQuery) ([]*ro
 }
 
 // listedStatuses is what a roadmap list shows: the requested status, or by
-// default the athlete's history (ACTIVE and COMPLETED).
+// default the athlete's history (ACTIVE and COMPLETED). The next block
+// planned ahead is not history; it is listed only when asked for by status.
 func listedStatuses(s roadmap.Status) []roadmap.Status {
 	if s != "" {
 		return []roadmap.Status{s}

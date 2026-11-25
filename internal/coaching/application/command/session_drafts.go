@@ -74,8 +74,8 @@ func rewriteInPlace(pending []*roadmap.SessionPlan, aligned []*roadmap.SessionPl
 
 // reloadForRewrite reads the roadmap again once the model has answered, so the
 // drafts land on what is stored now rather than on the copy read before the
-// generation: workouts completed or weeks reviewed in the meantime are kept. A
-// roadmap no longer ACTIVE is not rewritten.
+// generation: workouts completed, weeks reviewed or a roll-over saved in the
+// meantime are kept. A roadmap no longer ACTIVE is not rewritten.
 func reloadForRewrite(ctx context.Context, repo port.RoadmapRepository, rm *roadmap.Roadmap, zone string) (*roadmap.Roadmap, error) {
 	fresh, err := repo.FindByID(ctx, rm.ID())
 	if err != nil {

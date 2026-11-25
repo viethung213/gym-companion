@@ -39,10 +39,24 @@ type CreateAdhocSessionHandler struct {
 	profiles  port.UserProfileReader
 	idgen     port.IDGenerator
 	clock     port.Clock
+	// rollover, when set, moves the athlete to their next block when the
+	// active roadmap has ended, so the session lands in the right one.
+	rollover roadmapRollover
+}
+
+// roadmapRollover is the RollOverHandler contract.
+type roadmapRollover interface {
+	Handle(ctx context.Context, userID string) (*RollOverResult, error)
 }
 
 // errRoadmapEnded marks a session asked for after the active roadmap ended.
 var errRoadmapEnded = fmt.Errorf("active roadmap has ended: %w", roadmap.ErrDateOutsideRoadmap)
+
+// WithRollover enables moving to the next block when the active one ended.
+func (h *CreateAdhocSessionHandler) WithRollover(r roadmapRollover) *CreateAdhocSessionHandler {
+	h.rollover = r
+	return h
+}
 
 // NewCreateAdhocSessionHandler wires the handler.
 func NewCreateAdhocSessionHandler(
@@ -97,7 +111,17 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 	now := h.clock.Now()
 	today := roadmap.CalendarDate(now, profile.Zone())
 
-	return h.place(ctx, cmd.UserID, today, now, mains, exercises)
+	out, err := h.place(ctx, cmd.UserID, today, now, mains, exercises)
+	if errors.Is(err, errRoadmapEnded) && h.rollover != nil {
+		if _, rollErr := h.rollover.Handle(ctx, cmd.UserID); rollErr != nil {
+			return nil, rollErr
+		}
+		out, err = h.place(ctx, cmd.UserID, today, now, mains, exercises)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // place adds the session to today's DayPlan of the user's active roadmap.

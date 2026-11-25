@@ -47,8 +47,19 @@ CREATE TABLE IF NOT EXISTS coaching.roadmaps (
     end_date    DATE         NOT NULL,
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_roadmap_status CHECK (status IN ('ACTIVE', 'COMPLETED'))
+    CONSTRAINT chk_roadmap_status CHECK (status IN ('PLANNED', 'ACTIVE', 'COMPLETED'))
 );
+
+-- PLANNED is the next block, drafted during the last week of the active one.
+-- Databases created before it existed get the wider constraint too.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_roadmap_status'
+               AND conrelid = 'coaching.roadmaps'::regclass
+               AND pg_get_constraintdef(oid) NOT LIKE '%PLANNED%') THEN
+        ALTER TABLE coaching.roadmaps DROP CONSTRAINT chk_roadmap_status;
+        ALTER TABLE coaching.roadmaps ADD CONSTRAINT chk_roadmap_status CHECK (status IN ('PLANNED', 'ACTIVE', 'COMPLETED'));
+    END IF;
+END $$;
 
 -- IANA zone the schedule's scheduled_date / slot_time wall clock is in.
 ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
@@ -56,6 +67,7 @@ ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT 
 ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON coaching.roadmaps(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_planned ON coaching.roadmaps(user_id) WHERE status = 'PLANNED';
 
 -- 3. WEEK PLANS (4 per roadmap, one per phase)
 CREATE TABLE IF NOT EXISTS coaching.week_plans (

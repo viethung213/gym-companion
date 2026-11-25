@@ -37,6 +37,15 @@ type RegenerateScheduleHandler struct {
 	outbox   port.OutboxWriter
 	clock    port.Clock
 	ids      port.IDGenerator
+	// rotation, when set, discards the next block planned from a profile that
+	// has since changed, so it is planned again from the current one.
+	rotation port.RoadmapRotation
+}
+
+// WithPlannedBlocks enables discarding a stale planned block on profile changes.
+func (h *RegenerateScheduleHandler) WithPlannedBlocks(rotation port.RoadmapRotation) *RegenerateScheduleHandler {
+	h.rotation = rotation
+	return h
 }
 
 // NewRegenerateScheduleHandler wires the handler.
@@ -76,6 +85,10 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	rm, err := h.repo.FindActiveByUser(ctx, cmd.UserID)
 	if err != nil {
 		return nil, err
+	}
+
+	if discardErr := h.discardStalePlan(ctx, cmd); discardErr != nil {
+		return nil, discardErr
 	}
 
 	// Onboarding emits the injuries with ProfileCompleted: the roadmap planned
@@ -156,4 +169,26 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	}
 
 	return &RegenerateScheduleResult{Roadmap: rm}, nil
+}
+
+// discardStalePlan deletes the user's planned next block when it was drafted
+// before the profile change: it may hold an exercise a new injury rules out or
+// sit on slots the athlete gave up. The next block is then planned again.
+func (h *RegenerateScheduleHandler) discardStalePlan(ctx context.Context, cmd RegenerateScheduleCommand) error {
+	if h.rotation == nil || cmd.ChangedAt.IsZero() {
+		return nil
+	}
+	planned, err := h.rotation.FindPlannedByUser(ctx, cmd.UserID)
+	if errors.Is(err, roadmap.ErrRoadmapNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find planned roadmap: %w", err)
+	}
+	if !planned.Info().CreatedAt.Before(cmd.ChangedAt) {
+		return nil
+	}
+	slog.InfoContext(ctx, "Profile changed after the next block was planned; discarding it to plan again",
+		slog.String("user_id", cmd.UserID), slog.String("planned_roadmap_id", planned.ID()), slog.String("reason", cmd.Reason))
+	return h.rotation.DeletePlannedRoadmap(ctx, planned.ID())
 }

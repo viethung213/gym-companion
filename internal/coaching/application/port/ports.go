@@ -101,3 +101,30 @@ type WeekReviewQueue interface {
 	// Callers decide the exact cut-off in each roadmap's zone.
 	RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, date time.Time) ([]string, error)
 }
+
+// RoadmapRotation drafts each user's next 4-week block ahead of time and
+// swaps it in when the active one ends.
+type RoadmapRotation interface {
+	// FindPlannedByUser returns the user's PLANNED roadmap, or
+	// roadmap.ErrRoadmapNotFound.
+	FindPlannedByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error)
+	// DeletePlannedRoadmap removes a PLANNED roadmap and everything under it.
+	// A roadmap that was activated meanwhile is left untouched.
+	DeletePlannedRoadmap(ctx context.Context, roadmapID string) error
+	// ActiveRoadmapsEndingBy returns the ACTIVE roadmaps whose end_date is on
+	// or before date. Callers decide which of them need work.
+	ActiveRoadmapsEndingBy(ctx context.Context, date time.Time) ([]RoadmapRef, error)
+}
+
+// RoadmapLifecycleStore is the persistence the roadmap lifecycle needs: the
+// work that is due, and rotating one block into the next.
+type RoadmapLifecycleStore interface {
+	WeekReviewQueue
+	RoadmapRotation
+}
+
+// RoadmapRef identifies a roadmap and the athlete it belongs to.
+type RoadmapRef struct {
+	RoadmapID string
+	UserID    string
+}

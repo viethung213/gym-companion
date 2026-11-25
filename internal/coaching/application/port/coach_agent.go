@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
@@ -62,4 +63,11 @@ type CoachAgent interface {
 	Adapt(ctx context.Context, userID string, decision *service.AdaptationDecision) ([]*roadmap.SessionPlanInfo, error)
 	// SuggestAdHocSession returns a single-session suggestion.
 	SuggestAdHocSession(ctx context.Context, userID string, hint *AdHocHint) (SuggestedSession, error)
+}
+
+// NextBlockPlanner drafts a user's next 4-week block ahead of time.
+type NextBlockPlanner interface {
+	// PlanRoadmapFrom synthesizes a full 4-week draft whose first week starts
+	// on startDate, a calendar date in the athlete's zone.
+	PlanRoadmapFrom(ctx context.Context, userID string, startDate time.Time) (*roadmap.Roadmap, error)
 }

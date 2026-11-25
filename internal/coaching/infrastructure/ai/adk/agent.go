@@ -122,6 +122,12 @@ func (c *CoachingContextAgent) GenerateRoadmap(ctx context.Context, userID strin
 	return c.generateRoadmap(ctx, userID, time.Time{})
 }
 
+// PlanRoadmapFrom satisfies port.NextBlockPlanner: a 4-week draft whose first
+// week starts on startDate (a calendar date), in the athlete's zone.
+func (c *CoachingContextAgent) PlanRoadmapFrom(ctx context.Context, userID string, startDate time.Time) (*roadmap.Roadmap, error) {
+	return c.generateRoadmap(ctx, userID, startDate)
+}
+
 // generateRoadmap drafts a roadmap starting now, or on startDate when set.
 func (c *CoachingContextAgent) generateRoadmap(ctx context.Context, userID string, startDate time.Time) (*roadmap.Roadmap, error) {
 	// Provisional dating; the application stamps the authoritative planning

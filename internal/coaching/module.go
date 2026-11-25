@@ -28,6 +28,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// lifecycleInterval is how often roadmaps are checked for ended blocks,
+// finished weeks and blocks to plan ahead.
+const lifecycleInterval = 30 * time.Minute
+
 // realClock returns time.Now().UTC() for production use.
 type realClock struct{}
 
@@ -44,8 +48,12 @@ type ModuleDeps struct {
 	SessionReader  port.WorkoutSessionReader
 	CatalogReader  port.ExerciseCatalogReader
 	RoadmapRepo    port.RoadmapRepository
-	OutboxWriter   port.OutboxWriter
-	IDGenerator    port.IDGenerator
+	// Lifecycle stores the roadmap lifecycle (week reviews, block rotation).
+	// It defaults to the roadmap repository built from the database; without
+	// it the lifecycle worker does not run.
+	Lifecycle    port.RoadmapLifecycleStore
+	OutboxWriter port.OutboxWriter
+	IDGenerator  port.IDGenerator
 }
 
 // Initialize sets up the coaching module (coaching context agent, gRPC services, etc).
@@ -80,7 +88,11 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	if deps.RoadmapRepo == nil && gormDB != nil {
-		deps.RoadmapRepo = persistence.NewRoadmapRepository(gormDB)
+		repo := persistence.NewRoadmapRepository(gormDB)
+		deps.RoadmapRepo = repo
+		if deps.Lifecycle == nil {
+			deps.Lifecycle = repo
+		}
 	}
 
 	var outboxRepo port.OutboxRepository
@@ -156,6 +168,21 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 
 	// Wiring rule: a handler's required collaborators are constructor
 	// parameters; an optional one that switches a behaviour on is a WithX setter.
+	//
+	// Roadmap rotation (command/plan_next_block.go, command/roll_over.go): the
+	// next 4-week block is planned during the final week and swapped in when
+	// the active one ends.
+	lifecycle := deps.Lifecycle
+	var rollOverHandler *command.RollOverHandler
+	if lifecycle != nil && deps.OutboxWriter != nil && txMgr != nil {
+		rollOverHandler = command.NewRollOverHandler(txMgr, deps.RoadmapRepo, lifecycle, deps.OutboxWriter, clock)
+		if regenerateHandler != nil {
+			regenerateHandler.WithPlannedBlocks(lifecycle)
+		}
+		if createAdhocHandler != nil {
+			createAdhocHandler.WithRollover(rollOverHandler)
+		}
+	}
 
 	var queriesHandler *query.Handlers
 	if deps.RoadmapRepo != nil {
@@ -201,6 +228,27 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		slog.Info("Coaching UpcomingWorkoutReminderWorker started")
 	} else {
 		slog.Warn("Coaching UpcomingWorkoutReminderWorker not started (missing RoadmapRepo or OutboxWriter)")
+	}
+
+	// Keep roadmaps moving: roll over ended blocks, review finished weeks and
+	// adapt to them (BR-AC-04), plan the next block during the final week.
+	var lifecycleWorker *worker.RoadmapLifecycleWorker
+	if rollOverHandler != nil {
+		adaptHandler := command.NewApplyAdaptiveCycleHandler(
+			txMgr, deps.RoadmapRepo, coachAgent, guard, deps.ProfileReader, deps.OutboxWriter, clock,
+			nil, // engine: the default AdaptiveCoachEngine
+		)
+		reviewHandler := command.NewReviewWeeksHandler(txMgr, deps.RoadmapRepo, adaptHandler, clock)
+		planHandler := command.NewPlanNextBlockHandler(
+			txMgr, deps.RoadmapRepo, lifecycle, coachAgent, guard, deps.ProfileReader, clock,
+		)
+		lifecycleWorker = worker.NewRoadmapLifecycleWorker(lifecycle, rollOverHandler, reviewHandler, planHandler, lifecycleInterval)
+		if initiateHandler != nil {
+			lifecycleWorker.WithInitiator(initiateHandler)
+		}
+		lifecycleWorker.Start(ctx)
+	} else {
+		slog.Warn("Coaching RoadmapLifecycleWorker not started (no Lifecycle store, OutboxWriter or database)")
 	}
 
 	var outboxWorker *worker.OutboxWorker
@@ -274,6 +322,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		}
 		if reminderWorker != nil {
 			reminderWorker.Stop()
+		}
+		if lifecycleWorker != nil {
+			lifecycleWorker.Stop()
 		}
 	}
 

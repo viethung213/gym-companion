@@ -6,6 +6,9 @@ package roadmap
 type Status string
 
 const (
+	// StatusPlanned is the next 4-week block, drafted ahead and waiting for the
+	// current roadmap to end.
+	StatusPlanned   Status = "PLANNED"
 	StatusActive    Status = "ACTIVE"
 	StatusCompleted Status = "COMPLETED"
 )
@@ -13,7 +16,7 @@ const (
 // Valid reports whether s is a known Status.
 func (s Status) Valid() bool {
 	switch s {
-	case StatusActive, StatusCompleted:
+	case StatusPlanned, StatusActive, StatusCompleted:
 		return true
 	default:
 		return false

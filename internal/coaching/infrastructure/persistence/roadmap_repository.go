@@ -39,6 +39,9 @@ func (r *RoadmapRepository) getDB(ctx context.Context) *gorm.DB {
 // activeRoadmapConstraint is the unique index allowing one ACTIVE roadmap per user.
 const activeRoadmapConstraint = "ux_roadmaps_user_active"
 
+// plannedRoadmapConstraint is the unique index allowing one PLANNED roadmap per user.
+const plannedRoadmapConstraint = "ux_roadmaps_user_planned"
+
 func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error {
 	if rm == nil {
 		return errors.New("nil roadmap")
@@ -63,6 +66,9 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 		if errors.As(err, &pqErr) && pqErr.Constraint == activeRoadmapConstraint {
 			// Another node initiated this user's roadmap first.
 			return fmt.Errorf("%w: %s", roadmap.ErrActiveRoadmapExists, rm.UserID())
+		}
+		if errors.As(err, &pqErr) && pqErr.Constraint == plannedRoadmapConstraint {
+			return fmt.Errorf("%w: %s", roadmap.ErrPlannedRoadmapExists, rm.UserID())
 		}
 		return fmt.Errorf("upsert roadmap: %w", err)
 	}
@@ -396,4 +402,44 @@ func (r *RoadmapRepository) RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, 
 		return nil, fmt.Errorf("find roadmaps with an open week ending by %s: %w", date.Format(time.DateOnly), err)
 	}
 	return ids, nil
+}
+
+var _ port.RoadmapRotation = (*RoadmapRepository)(nil)
+
+// FindPlannedByUser returns the user's PLANNED roadmap.
+func (r *RoadmapRepository) FindPlannedByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error) {
+	var rec roadmapRecord
+	err := r.getDB(ctx).Where("user_id = ? AND status = ?", userID, string(roadmap.StatusPlanned)).First(&rec).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, roadmap.ErrRoadmapNotFound
+		}
+		return nil, fmt.Errorf("find planned roadmap: %w", err)
+	}
+	return r.loadTree(ctx, &rec)
+}
+
+// DeletePlannedRoadmap removes a PLANNED roadmap; weeks, days and sessions go
+// with it (ON DELETE CASCADE). The status condition makes it a no-op on a
+// roadmap a roll-over activated in between, so a live plan is never lost.
+func (r *RoadmapRepository) DeletePlannedRoadmap(ctx context.Context, roadmapID string) error {
+	err := r.getDB(ctx).Where("roadmap_id = ? AND status = ?", roadmapID, string(roadmap.StatusPlanned)).
+		Delete(&roadmapRecord{}).Error
+	if err != nil {
+		return fmt.Errorf("delete planned roadmap %s: %w", roadmapID, err)
+	}
+	return nil
+}
+
+// ActiveRoadmapsEndingBy lists ACTIVE roadmaps whose end_date is on or before
+// date.
+func (r *RoadmapRepository) ActiveRoadmapsEndingBy(ctx context.Context, date time.Time) ([]port.RoadmapRef, error) {
+	var refs []port.RoadmapRef
+	err := r.getDB(ctx).Table("coaching.roadmaps").Select("roadmap_id, user_id").
+		Where("status = ? AND end_date <= ?", string(roadmap.StatusActive), roadmap.CalendarDate(date, time.UTC)).
+		Scan(&refs).Error
+	if err != nil {
+		return nil, fmt.Errorf("find active roadmaps ending by %s: %w", date.Format(time.DateOnly), err)
+	}
+	return refs, nil
 }
