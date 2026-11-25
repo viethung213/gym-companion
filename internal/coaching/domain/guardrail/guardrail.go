@@ -57,7 +57,7 @@ type ReviewResult struct {
 }
 
 // PRLookup returns a user's personal-record baseline weight per exercise id
-// (port.WeightBaselines over the workout history). An exercise without history
+// (athlete.WeightBaselines over the workout history). An exercise without history
 // is absent; a nil map means none is known.
 type PRLookup func(ctx context.Context, userID string) map[string]float64
 

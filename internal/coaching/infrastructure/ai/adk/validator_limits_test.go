@@ -343,3 +343,55 @@ func TestSplitFitted(t *testing.T) {
 		t.Errorf("final round: open %d fitted %d, want the fits kept", len(open), len(fitted))
 	}
 }
+
+// The 300 kg ceiling holds above every other cap: a 260 kg record allows
+// 338 kg by the +30% band, and a 210 kg athlete 315 kg by bodyweight, but the
+// guardrail rejects anything over 300, so the validator must clamp there too.
+func TestPlanValidator_LoadNeverAboveTheAbsoluteCeiling(t *testing.T) {
+	tests := []struct {
+		name  string
+		loads *loadLimits
+	}{
+		{"strong record", &loadLimits{baselines: map[string]float64{"squat": 260}, bodyWeightKg: 90}},
+		{"heavy athlete without a record", &loadLimits{bodyWeightKg: 210}},
+	}
+	// A modest record still caps below the ceiling: 100 kg allows 130, not 300.
+	modest := newPlanValidator(newFakeCatalog("squat")).withLoads(&loadLimits{baselines: map[string]float64{"squat": 100}})
+	heavy := planOf(sessionOf("2026-08-03", "squat"))
+	heavy.Weeks[0].Sessions[0].Prescription.MainExercises[0].TargetWeightKg = 330
+	if got, _ := modest.validate(context.Background(), heavy, true); mainOf(got.Plan).TargetWeightKg != 130 {
+		t.Errorf("100 kg record: salvaged load = %v, want 130", mainOf(got.Plan).TargetWeightKg)
+	}
+	for _, tt := range tests {
+		v := newPlanValidator(newFakeCatalog("squat")).withLoads(tt.loads)
+		plan := planOf(sessionOf("2026-08-03", "squat"))
+		plan.Weeks[0].Sessions[0].Prescription.MainExercises[0].TargetWeightKg = 330
+
+		strict, _ := v.validate(context.Background(), plan, false)
+		if n := issuesContaining(strict.Issues, "300 kg ceiling"); n != 1 {
+			t.Errorf("%s: issues %v, want the ceiling issue", tt.name, strict.Issues)
+		}
+		salvaged, _ := v.validate(context.Background(), plan, true)
+		if got := mainOf(salvaged.Plan).TargetWeightKg; got != roadmap.MaxTargetWeightKg {
+			t.Errorf("%s: salvaged load = %v, want %d", tt.name, got, roadmap.MaxTargetWeightKg)
+		}
+	}
+}
+
+// Reps the model gave a timed exercise are converted to a hold (3 s a rep,
+// 30-60 s), not thrown away before the conversion can read them.
+func TestPlanValidator_RepsOnATimedExerciseBecomeAHold(t *testing.T) {
+	catalog := newFakeCatalog("plank")
+	plank := catalog.byID["plank"]
+	plank.MeasurementType = measurementDuration
+	catalog.byID["plank"] = plank
+	plan := planOf(sessionOf("2026-08-03", "plank"))
+	line := &plan.Weeks[0].Sessions[0].Prescription.MainExercises[0]
+	line.TargetReps, line.DurationSeconds = 20, 0
+
+	salvaged, _ := newPlanValidator(catalog).validate(context.Background(), plan, true)
+	got := mainOf(salvaged.Plan)
+	if got.DurationSeconds != 60 || got.TargetReps != 0 {
+		t.Errorf("salvaged plank = %d s, %d reps; want 60 s (20 reps x 3 s) and no reps", got.DurationSeconds, got.TargetReps)
+	}
+}

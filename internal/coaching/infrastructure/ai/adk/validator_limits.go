@@ -97,27 +97,27 @@ func (v *planValidator) clampLoad(ex *PrescribedExercise) string {
 		return ""
 	}
 
+	// Every cap applies and the lowest wins: the athlete's record or
+	// bodyweight, and above both the absolute ceiling the guardrail enforces.
+	var reason string
 	if v.loads != nil {
 		if baseline := v.loads.baselines[ex.ExerciseID]; baseline > 0 {
 			if ceiling := service.NewOverloadValidator().Ceiling(baseline); w > ceiling {
 				ex.TargetWeightKg = ceiling
-				return fmt.Sprintf("target_weight_kg %.1f is more than 30%% above the athlete's record %.1f kg (at most %.1f)",
+				reason = fmt.Sprintf("target_weight_kg %.1f is more than 30%% above the athlete's record %.1f kg (at most %.1f)",
 					w, baseline, ceiling)
 			}
-			return ""
-		}
-		if bw := v.loads.bodyWeightKg; bw > 0 && w > bw*roadmap.UnrecordedLoadFactor {
+		} else if bw := v.loads.bodyWeightKg; bw > 0 && w > bw*roadmap.UnrecordedLoadFactor {
 			ex.TargetWeightKg = bw * roadmap.UnrecordedLoadFactor
-			return fmt.Sprintf("target_weight_kg %.1f exceeds %.1f kg (%.1f× bodyweight) for an exercise the athlete has no record of",
+			reason = fmt.Sprintf("target_weight_kg %.1f exceeds %.1f kg (%.1f× bodyweight) for an exercise the athlete has no record of",
 				w, ex.TargetWeightKg, roadmap.UnrecordedLoadFactor)
 		}
 	}
-
-	if w > roadmap.MaxTargetWeightKg {
+	if ex.TargetWeightKg > roadmap.MaxTargetWeightKg {
 		ex.TargetWeightKg = roadmap.MaxTargetWeightKg
-		return fmt.Sprintf("target_weight_kg %.1f exceeds the %d kg ceiling", w, roadmap.MaxTargetWeightKg)
+		reason = fmt.Sprintf("target_weight_kg %.1f exceeds the %d kg ceiling", w, roadmap.MaxTargetWeightKg)
 	}
-	return ""
+	return reason
 }
 
 const (
@@ -167,9 +167,14 @@ func clampMeasure(ex *PrescribedExercise, main bool, measure string) []string {
 
 // dropStrayMeasureFields clears what does not apply to the exercise's
 // measurement type: reps and load on a timed exercise, a duration on a
-// repetition one. Nothing is lost, so the model is not asked to fix it.
+// repetition one. Nothing is lost, so the model is not asked to fix it. Reps
+// on a timed line still missing its duration are kept for clampMeasure to
+// convert into a hold.
 func dropStrayMeasureFields(ex *PrescribedExercise, measure string) {
 	if measure == measurementDuration {
+		if ex.DurationSeconds <= 0 {
+			return
+		}
 		ex.TargetReps = 0
 		ex.TargetWeightKg = 0
 		return
