@@ -45,7 +45,7 @@ func (m *mockKeyRepository) UpdateStatus(ctx context.Context, id string, status 
 	return nil
 }
 
-func (m *mockKeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
+func (m *mockKeyRepository) DeactivateAllActiveKeys(ctx context.Context, graceExpiresAt time.Time) error {
 	return nil
 }
 

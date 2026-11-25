@@ -45,8 +45,16 @@ func TestE2E_JWKS_And_KeyRotation(t *testing.T) {
 
 	initialKid := initialJWKS.Keys[0].Kid
 
-	// 2. Trigger Manual Key Rotation
-	respRotate, err := http.Post(baseURL+authServicePrefix+"RotateKeys", "application/json", bytes.NewBuffer([]byte("{}")))
+	// 2. Trigger Manual Key Rotation (as Admin)
+	rotateReq, err := http.NewRequest(http.MethodPost, baseURL+authServicePrefix+"RotateKeys", bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		t.Fatalf("Failed to create key rotation request: %v", err)
+	}
+	rotateReq.Header.Set("Content-Type", "application/json")
+	rotateReq.Header.Set("X-User-Id", "admin-user-id")
+	rotateReq.Header.Set("X-User-Role", "Admin")
+
+	respRotate, err := http.DefaultClient.Do(rotateReq)
 	if err != nil {
 		t.Fatalf("Failed to execute key rotation request: %v", err)
 	}

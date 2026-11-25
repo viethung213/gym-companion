@@ -166,12 +166,17 @@ func (h *GRPCHandler) GetOAuthLoginURL(
 	}, nil
 }
 
-// RotateKeys generates a new active JWK pair and archives old ones.
+// RotateKeys generates a new active JWK pair and archives old ones (Admin only).
 func (h *GRPCHandler) RotateKeys(
 	ctx context.Context,
 	_ *authv1message.RotateKeysRequest,
 ) (*authv1message.RotateKeysResponse, error) {
-	newKeyID, err := h.rotateKeysHandler.Handle(ctx, command.RotateKeysCommand{})
+	actor, err := extractActor(ctx)
+	if err != nil || !actor.IsAdmin() {
+		return nil, status.Errorf(codes.PermissionDenied, "chỉ Quản trị viên (Admin) mới có quyền xoay khóa ký")
+	}
+
+	newKeyID, err := h.rotateKeysHandler.Handle(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to rotate keys: %v", err)
 	}

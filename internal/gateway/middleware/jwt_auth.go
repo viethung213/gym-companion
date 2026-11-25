@@ -3,8 +3,6 @@ package middleware
 import (
 	"context"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"strings"
@@ -86,44 +84,16 @@ func (v *JWTValidator) getPublicKey(ctx context.Context, kid string) (*rsa.Publi
 		return pubKey, nil
 	}
 
-	// If keyProvider is RemoteJWKSKeyProvider, directly query it
-	if rk, isRemote := v.keyProvider.(*RemoteJWKSKeyProvider); isRemote {
-		key, err := rk.GetPublicKey(ctx, kid)
-		if err != nil {
-			return nil, err
-		}
-		v.mu.Lock()
-		v.keyCache[kid] = key
-		v.mu.Unlock()
-		return key, nil
-	}
-
-	// Fallback to PEM parser
-	pemStr, err := v.keyProvider.GetPublicKeyPEM(ctx, kid)
+	key, err := v.keyProvider.GetPublicKey(ctx, kid)
 	if err != nil {
-		return nil, fmt.Errorf("fetch public key pem: %w", err)
-	}
-
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		return nil, errors.New("failed to parse PEM block containing the public key")
-	}
-
-	parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse rsa public key: %w", err)
-	}
-
-	rsaPub, ok := parsedKey.(*rsa.PublicKey)
-	if !ok {
-		return nil, errors.New("not an RSA public key")
+		return nil, fmt.Errorf("fetch public key: %w", err)
 	}
 
 	v.mu.Lock()
-	v.keyCache[kid] = rsaPub
+	v.keyCache[kid] = key
 	v.mu.Unlock()
 
-	return rsaPub, nil
+	return key, nil
 }
 
 // IsAuthRequired checks the compiled protobuf annotations to see if the method requires BearerAuth.
