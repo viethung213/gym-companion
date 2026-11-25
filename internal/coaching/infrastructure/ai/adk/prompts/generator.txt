@@ -5,6 +5,7 @@ Your task is to generate or adapt a workout plan based on the input flow.
 ## Mandatory Business Rules
 
 ### Phase Sequence and RPE Targets (CRITICAL GUARDRAIL - VIOLATIONS ARE BLOCKED)
+**Injury limits come first.** An exercise listed in `injury_limits` never goes above its "max RPE", whatever the phase window below says: in a PEAK week (8.0-9.0) an exercise limited to "max RPE 7" gets 7, not 8. Every other main exercise follows the window.
 - **Week 1: ACCUMULATION** (phase="ACCUMULATION", Target RPE for all main exercises MUST be between 6.0 and 7.0, Sets: 3 per exercise)
 - **Week 2: OVERLOAD** (phase="OVERLOAD", Target RPE for all main exercises MUST be between 7.0 and 8.0, Sets: 3 per exercise)
 - **Week 3: PEAK** (phase="PEAK", Target RPE for all main exercises MUST be between 8.0 and 9.0, Sets: 3 per exercise)
@@ -58,7 +59,8 @@ user already has, not planning fresh ones.
 - Each entry carries its own `phase` (the roadmap week it falls in) and, when it
   is TRAINING, that phase's window as `target_rpe_min` and `target_rpe_max`.
   Every main exercise of that entry MUST keep `target_rpe` between the entry's own
-  `target_rpe_min` and `target_rpe_max` (an injury limit may lower it further).
+  `target_rpe_min` and `target_rpe_max` (an exercise in `injury_limits` stays at or below its
+  max even when that is under the window: max RPE 7 in a PEAK entry means 7).
   The entries often span several phases: take the window from each entry, never
   from the first entry, `current_roadmap.phase` or the week you emit them under.
   Example: an OVERLOAD entry (7.0-8.0) after ACCUMULATION ones (6.0-7.0) gets
@@ -134,7 +136,7 @@ Each exercise object must contain: exercise_id, target_sets, target_rpe, rest_se
    - Your input contains three pre-filtered maps tailored to the athlete's equipment, experience level, goal, preferred muscles, and injury status:
      * `available_exercises`: Main exercises grouped by primary muscle group code (`"CHEST"`, `"LATS"`, `"QUADRICEPS"`, `"ABDOMINALS"`, ...).
      * `recovery_exercises`: Stretching movements for both warm-ups and cool-downs, grouped by primary muscle group code (+ `"General"`).
-     * `injury_limits`: `exercise_id` -> limit for exercises kept despite an injury (e.g. `"max RPE 6 (...)"`). Every prescription of such an exercise MUST keep `target_rpe` at or below that max, and the session `reasoning` must mention the caution.
+     * `injury_limits`: `exercise_id` -> limit for exercises kept despite an injury (e.g. `"max RPE 6 (...)"`). Every prescription of such an exercise MUST keep `target_rpe` at or below that max in every phase, even when the max is below the phase's RPE window (the injury wins), and the session `reasoning` must mention the caution.
    - Each entry under a key is a compact 6-element tuple: `[0] exercise_id (UUID), [1] name, [2] equipment code, [3] level code, [4] movement_type` (`"Compound"`, `"Accessory"`, `"Cardio"`, or `"Stretch"`), `[5] measurement_type` (`"REPS"` or `"DURATION"`).
    - Select all `exercise_id` values EXCLUSIVELY from index `[0]` of the tuples in `available_exercises` or `recovery_exercises`.
    - CRITICAL: Index `[0]` is the ONLY valid exercise_id. NEVER use index `[1]` (name) or index `[2]` (equipment code) or any user ID as an `exercise_id`.
