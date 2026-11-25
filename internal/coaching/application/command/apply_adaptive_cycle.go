@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
@@ -16,12 +17,18 @@ import (
 type ApplyAdaptiveCycleCommand struct {
 	UserID  string
 	Metrics []service.WeeklyMetrics
+	// ReviewedWeekIDs are the weeks this adaptation answers. They are stamped
+	// reviewed in the same save as the rewrite, and if one already is (another
+	// run adapted to it), nothing is applied again.
+	ReviewedWeekIDs []string
 }
 
 // ApplyAdaptiveCycleResult echoes the decision applied.
 type ApplyAdaptiveCycleResult struct {
 	Decision service.AdaptationDecision
 	Roadmap  *roadmap.Roadmap
+	// AlreadyApplied is set when the weeks were reviewed by another run.
+	AlreadyApplied bool
 }
 
 // ApplyAdaptiveCycleHandler orchestrates BR-AC-04 Trigger A.
@@ -87,6 +94,11 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	}
 	rm.SetTimezone(profile.Zone().String())
 
+	// Checked before the model is paid for, and again after it answers.
+	if anyReviewed(rm, cmd.ReviewedWeekIDs) {
+		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm, AlreadyApplied: true}, nil
+	}
+
 	// Same set the agent revises (adk pendingNode): PENDING sessions not yet started.
 	if len(rm.UpcomingPendingSessions(h.clock.Now())) == 0 {
 		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
@@ -100,6 +112,10 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	if rm, err = reloadForRewrite(ctx, h.repo, rm, profile.Zone().String()); err != nil {
 		return nil, err
 	}
+	if anyReviewed(rm, cmd.ReviewedWeekIDs) {
+		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm, AlreadyApplied: true}, nil
+	}
+
 	// Generation takes a while; sessions that started meanwhile are left alone.
 	now := h.clock.Now()
 	pending := rm.UpcomingPendingSessions(now)
@@ -127,6 +143,11 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		rm.Touch(now)
+		for _, id := range cmd.ReviewedWeekIDs {
+			if markErr := rm.MarkReviewed(id, now); markErr != nil {
+				return markErr
+			}
+		}
 
 		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
 			return saveErr
@@ -150,4 +171,14 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	}
 
 	return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
+}
+
+// anyReviewed reports whether one of the weeks is already stamped reviewed.
+func anyReviewed(rm *roadmap.Roadmap, weekIDs []string) bool {
+	for _, w := range rm.Weeks() {
+		if w.Reviewed() && slices.Contains(weekIDs, w.ID()) {
+			return true
+		}
+	}
+	return false
 }

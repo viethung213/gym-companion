@@ -82,7 +82,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 		if err := db.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "week_plan_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"phase", "target_rpe", "start_date", "end_date", "muscle_split_type",
+				"phase", "target_rpe", "start_date", "end_date", "muscle_split_type", "reviewed_at",
 			}),
 		}).Create(&wr).Error; err != nil {
 			return fmt.Errorf("upsert week plan %s: %w", wr.WeekPlanID, err)
@@ -378,4 +378,22 @@ func (r *RoadmapRepository) FindPendingSessionsStarting(ctx context.Context, fro
 		out = append(out, port.ScheduledSession{Info: sp.Info(), StartsAt: at, Location: loc})
 	}
 	return out, nil
+}
+
+var _ port.WeekReviewQueue = (*RoadmapRepository)(nil)
+
+// RoadmapIDsWithOpenWeekEndingBy lists ACTIVE roadmaps with an unreviewed week
+// whose end_date is on or before date.
+func (r *RoadmapRepository) RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, date time.Time) ([]string, error) {
+	var ids []string
+	err := r.getDB(ctx).Table("coaching.week_plans AS w").
+		Distinct("w.roadmap_id").
+		Joins("JOIN coaching.roadmaps AS r ON r.roadmap_id = w.roadmap_id").
+		Where("r.status = ? AND w.reviewed_at IS NULL AND w.end_date <= ?",
+			string(roadmap.StatusActive), roadmap.CalendarDate(date, time.UTC)).
+		Pluck("w.roadmap_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("find roadmaps with an open week ending by %s: %w", date.Format(time.DateOnly), err)
+	}
+	return ids, nil
 }

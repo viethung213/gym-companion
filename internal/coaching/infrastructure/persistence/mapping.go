@@ -83,6 +83,8 @@ func toWeekPlanRecord(w *roadmap.WeekPlan) weekPlanRecord {
 		EndDate: info.EndDate,
 
 		MuscleSplitType: info.MuscleSplitType,
+
+		ReviewedAt: info.ReviewedAt,
 	}
 }
 
@@ -101,6 +103,7 @@ func fromWeekPlanRecord(rec *weekPlanRecord, days []*roadmap.DayPlan) (*roadmap.
 		StartDate:       rec.StartDate,
 		EndDate:         rec.EndDate,
 		MuscleSplitType: rec.MuscleSplitType,
+		ReviewedAt:      rec.ReviewedAt,
 	}, days)
 }
 

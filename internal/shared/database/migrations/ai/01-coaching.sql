@@ -75,6 +75,9 @@ CREATE TABLE IF NOT EXISTS coaching.week_plans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_week_plans_roadmap_id ON coaching.week_plans(roadmap_id);
+-- When the week was closed for the adaptive cycle (BR-AC-04); NULL while open.
+ALTER TABLE coaching.week_plans ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITH TIME ZONE;
+CREATE INDEX IF NOT EXISTS idx_week_plans_open_end ON coaching.week_plans(end_date) WHERE reviewed_at IS NULL;
 
 -- 4. DAY PLANS (7 per week)
 CREATE TABLE IF NOT EXISTS coaching.day_plans (

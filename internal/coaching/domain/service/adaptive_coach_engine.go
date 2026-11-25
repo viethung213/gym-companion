@@ -51,6 +51,10 @@ type WeeklyMetrics struct {
 	MaxActualRPE    float64 // Highest RPE observed
 	HighRPESessions int     // sessions with RPE ≥ 9.0
 	TotalSessions   int
+	// EffortUnreported is set when no completed session reported an RPE: the
+	// ΔRPE figures are then empty, not "on target", and the rules that read
+	// them stay silent rather than act on a missing signal.
+	EffortUnreported bool
 }
 
 // AdaptiveCoachEngine is a stateless domain service. All inputs are passed
@@ -77,6 +81,11 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 				Params: AdaptationParams{SessionsToDrop: 1},
 			}
 		}
+	}
+	// Cases 1 and 2 read the athlete's reported effort; without it there is
+	// nothing to judge fatigue or progress by, so the plan is held.
+	if last.EffortUnreported {
+		return AdaptationDecision{Kind: AdaptationNoOp, Reason: "no effort (RPE) reported"}
 	}
 	// Case 2: Excessive fatigue → Deload.
 	// Trigger if 3+ sessions with RPE ≥ 9.0 OR avgΔRPE ≥ +2.0.
