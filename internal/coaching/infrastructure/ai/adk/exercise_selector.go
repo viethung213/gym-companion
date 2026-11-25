@@ -187,15 +187,22 @@ func recordLimit(c *candidate, limits map[string]string) {
 
 // injuryLimitText is the limit shown to the generator and kept in reasoning.
 func injuryLimitText(v *service.Verdict) string {
-	return "max RPE " + strconv.FormatFloat(v.MaxRPE, 'f', -1, 64) + " (" + v.Reason() + ")"
+	return maxRPEText(v.MaxRPE) + " (" + v.Reason() + ")"
 }
 
+func maxRPEText(maxRPE float64) string {
+	return "max RPE " + strconv.FormatFloat(maxRPE, 'f', -1, 64)
+}
+
+// buildExerciseTuple is [id, name, equipment, level, movement type,
+// measurement], plus the max RPE of an exercise kept despite an injury, so the
+// cap sits beside the exercise the model picks.
 func buildExerciseTuple(c *candidate, movementType string) []string {
 	measType := c.exercise.MeasurementType
 	if measType == "" {
 		measType = measurementReps
 	}
-	return []string{
+	tuple := []string{
 		c.exercise.ExerciseID,
 		c.exercise.Name,
 		string(c.traits.Equipment),
@@ -203,4 +210,8 @@ func buildExerciseTuple(c *candidate, movementType string) []string {
 		movementType,
 		measType,
 	}
+	if c.verdict.MaxRPE > 0 {
+		tuple = append(tuple, maxRPEText(c.verdict.MaxRPE))
+	}
+	return tuple
 }
