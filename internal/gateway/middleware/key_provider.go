@@ -20,9 +20,9 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// KeyProvider defines the interface to fetch public key PEM for JWT verification.
+// KeyProvider defines the interface to fetch RSA public keys for JWT verification.
 type KeyProvider interface {
-	GetPublicKeyPEM(ctx context.Context, kid string) (string, error)
+	GetPublicKey(ctx context.Context, kid string) (*rsa.PublicKey, error)
 }
 
 // jwksResponse represents standard RFC 7517 JSON Web Key Set structure.
@@ -101,15 +101,6 @@ func (p *RemoteJWKSKeyProvider) GetPublicKey(ctx context.Context, kid string) (*
 	}
 
 	return nil, fmt.Errorf("public key not found for kid: %s", kid)
-}
-
-// GetPublicKeyPEM satisfies the KeyProvider interface.
-func (p *RemoteJWKSKeyProvider) GetPublicKeyPEM(ctx context.Context, kid string) (string, error) {
-	_, err := p.GetPublicKey(ctx, kid)
-	if err != nil {
-		return "", err
-	}
-	return "", nil
 }
 
 func (p *RemoteJWKSKeyProvider) refresh(ctx context.Context) error {

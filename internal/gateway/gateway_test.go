@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,11 +28,14 @@ import (
 )
 
 type mockKeyProvider struct {
-	pemStr string
+	pubKey *rsa.PublicKey
 }
 
-func (m *mockKeyProvider) GetPublicKeyPEM(_ context.Context, _ string) (string, error) {
-	return m.pemStr, nil
+func (m *mockKeyProvider) GetPublicKey(_ context.Context, _ string) (*rsa.PublicKey, error) {
+	if m.pubKey == nil {
+		return nil, errors.New("key not found")
+	}
+	return m.pubKey, nil
 }
 
 func generateRSATestKey(t *testing.T) (*rsa.PrivateKey, string) {
@@ -53,8 +57,8 @@ func generateRSATestKey(t *testing.T) (*rsa.PrivateKey, string) {
 func TestGateway_E2ERoutingAndTokenTranslation(t *testing.T) {
 	t.Parallel()
 
-	privKey, pubPEM := generateRSATestKey(t)
-	kp := &mockKeyProvider{pemStr: pubPEM}
+	privKey, _ := generateRSATestKey(t)
+	kp := &mockKeyProvider{pubKey: &privKey.PublicKey}
 	internalSecret := "unit-test-gateway-secret-key-12345"
 
 	// Mock Backend Server simulating Core & AI service (wrapped with h2c)

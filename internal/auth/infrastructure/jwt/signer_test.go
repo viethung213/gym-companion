@@ -56,7 +56,7 @@ func (m *mockKeyRepository) UpdateStatus(ctx context.Context, id string, status 
 	return apperror.ErrKeyNotFound
 }
 
-func (m *mockKeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
+func (m *mockKeyRepository) DeactivateAllActiveKeys(ctx context.Context, graceExpiresAt time.Time) error {
 	for _, key := range m.keys {
 		if key.Status == port.KeyStatusActive {
 			key.Status = port.KeyStatusInactive

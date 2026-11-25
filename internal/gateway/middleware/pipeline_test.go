@@ -19,8 +19,8 @@ type mockTestKeyProvider struct {
 	pubKey *rsa.PublicKey
 }
 
-func (m *mockTestKeyProvider) GetPublicKeyPEM(_ context.Context, _ string) (string, error) {
-	return "", nil
+func (m *mockTestKeyProvider) GetPublicKey(_ context.Context, _ string) (*rsa.PublicKey, error) {
+	return m.pubKey, nil
 }
 
 func TestPipeline_E2E(t *testing.T) {

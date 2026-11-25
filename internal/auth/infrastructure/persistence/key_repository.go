@@ -51,11 +51,11 @@ func (r *KeyRepository) GetActiveKey(ctx context.Context) (*port.JWKRecord, erro
 	return dbKey.ToRepositoryRecord(), nil
 }
 
-// GetAllActiveAndInactiveKeys returns all keys that can be used for verification (active & inactive).
+// GetAllActiveAndInactiveKeys returns all keys that can be used for verification (active & inactive within grace period).
 func (r *KeyRepository) GetAllActiveAndInactiveKeys(ctx context.Context) ([]*port.JWKRecord, error) {
 	var dbKeys []JSONWebKeyModel
 	err := GetDB(ctx, r.db).
-		Where("status IN ?", []string{port.KeyStatusActive, port.KeyStatusInactive}).
+		Where("status = ? OR (status = ? AND expires_at > ?)", port.KeyStatusActive, port.KeyStatusInactive, time.Now()).
 		Order("created_at DESC").
 		Find(&dbKeys).
 		Error
@@ -87,12 +87,19 @@ func (r *KeyRepository) UpdateStatus(ctx context.Context, id string, status stri
 	return nil
 }
 
-// DeactivateAllActiveKeys updates all active keys to inactive status.
-func (r *KeyRepository) DeactivateAllActiveKeys(ctx context.Context) error {
+// DeactivateAllActiveKeys updates all active keys to inactive status and sets their grace period expiration.
+func (r *KeyRepository) DeactivateAllActiveKeys(ctx context.Context, graceExpiresAt time.Time) error {
+	updates := map[string]any{
+		"status": port.KeyStatusInactive,
+	}
+	if !graceExpiresAt.IsZero() {
+		updates["expires_at"] = graceExpiresAt
+	}
+
 	err := GetDB(ctx, r.db).
 		Model(&JSONWebKeyModel{}).
 		Where("status = ?", port.KeyStatusActive).
-		Update("status", port.KeyStatusInactive).
+		Updates(updates).
 		Error
 
 	if err != nil {

@@ -88,7 +88,13 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 		txManager,
 	)
 	logoutHandler := command.NewLogoutHandler(sessRepo)
-	rotateKeysHandler := command.NewRotateKeysHandler(keyRepo, keyGen, txManager)
+	rotateKeysHandler := command.NewRotateKeysHandler(
+		keyRepo,
+		keyGen,
+		txManager,
+		cfg.KeyRotationTTL,
+		cfg.KeyGracePeriodTTL,
+	)
 	getJWKSHandler := query.NewGetJWKSHandler(keyRepo)
 	getOAuthLoginURLHandler := query.NewGetOAuthLoginURLHandler(oauthServ)
 
@@ -97,9 +103,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 	if err != nil {
 		if errors.Is(err, apperror.ErrKeyNotFound) {
 			slog.Info("No active signing key found, generating initial active key")
-			_, err = rotateKeysHandler.Handle(ctx, command.RotateKeysCommand{
-				KeyTTL: cfg.KeyRotationTTL,
-			})
+			_, err = rotateKeysHandler.Handle(ctx)
 			if err != nil {
 				return nil, nil, fmt.Errorf("generate initial active key: %w", err)
 			}
@@ -133,9 +137,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*authGRPC.GRPCHandler, fu
 				if err == nil {
 					if time.Until(activeKey.ExpiresAt) < 24*time.Hour {
 						slog.Info("Active key near expiration, triggering key rotation")
-						_, err = rotateKeysHandler.Handle(wCtx, command.RotateKeysCommand{
-							KeyTTL: cfg.KeyRotationTTL,
-						})
+						_, err = rotateKeysHandler.Handle(wCtx)
 						if err != nil {
 							slog.Error("Background automated key rotation failed", slog.String("error", err.Error()))
 						}
