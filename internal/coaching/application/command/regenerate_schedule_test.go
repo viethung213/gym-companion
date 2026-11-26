@@ -274,4 +274,18 @@ func TestRegenerateSchedule_SkipsChangesTheRoadmapAlreadyReflects(t *testing.T) 
 	if len(outbox.events) == 0 {
 		t.Fatal("a change made after the roadmap was planned must regenerate it")
 	}
+
+	// Stamped just before planning began, the change may not have been
+	// committed when the profile was read: it regenerates.
+	rm = regenFixture(t)
+	h, _, outbox = newRegenHandler(t, rm, drafts, time.UTC)
+	_, err = h.Handle(context.Background(), RegenerateScheduleCommand{
+		UserID: "u-1", Reason: "injury_reported", ChangedAt: plannedAt.Add(-100 * time.Millisecond),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(outbox.events) == 0 {
+		t.Fatal("a change stamped 100 ms before planning may be missing from it and must regenerate")
+	}
 }

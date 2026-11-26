@@ -13,6 +13,20 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
+// profileCommitSlack covers the gap between a profile change's timestamp and
+// its commit: the event is stamped inside the profile transaction, so a plan
+// started just after the stamp may still have read the profile before the
+// commit. It stays below the outbox-and-Kafka hop that separates onboarding
+// from the roadmap it plans, so that roadmap still counts as reflecting it.
+const profileCommitSlack = 500 * time.Millisecond
+
+// plannedAfter reports whether a roadmap planned at plannedAt already read a
+// profile changed at changedAt. A doubt regenerates: one more generation is
+// cheaper than an injury left out of the plan.
+func plannedAfter(plannedAt, changedAt time.Time) bool {
+	return !plannedAt.Before(changedAt.Add(profileCommitSlack))
+}
+
 // RegenerateScheduleCommand is the input to UC-02.3.
 type RegenerateScheduleCommand struct {
 	UserID string
@@ -95,7 +109,7 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	// Onboarding emits the injuries with ProfileCompleted: the roadmap planned
 	// from that profile already holds them, and rewriting it would cost a
 	// second generation for nothing.
-	if !cmd.ChangedAt.IsZero() && !rm.Info().CreatedAt.Before(cmd.ChangedAt) {
+	if !cmd.ChangedAt.IsZero() && plannedAfter(rm.Info().CreatedAt, cmd.ChangedAt) {
 		slog.InfoContext(ctx, "Profile change predates the active roadmap; already reflected, not regenerating",
 			slog.String("user_id", cmd.UserID), slog.String("reason", cmd.Reason))
 		return &RegenerateScheduleResult{Roadmap: rm}, nil
@@ -192,7 +206,7 @@ func (h *RegenerateScheduleHandler) discardStalePlan(ctx context.Context, cmd Re
 	if err != nil {
 		return fmt.Errorf("find planned roadmap: %w", err)
 	}
-	if !planned.Info().CreatedAt.Before(changedAt) {
+	if plannedAfter(planned.Info().CreatedAt, changedAt) {
 		return nil
 	}
 	slog.InfoContext(ctx, "Profile changed after the next block was planned; discarding it to plan again",
