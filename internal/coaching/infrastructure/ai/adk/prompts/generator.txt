@@ -39,7 +39,7 @@ When the input has `sessions_to_revise`, you are revising sessions the athlete a
   * `recovery_exercises`: stretching movements for warm-ups and cool-downs, by muscle code plus `"General"`.
 - Each entry is a tuple: `[0]` exercise_id, `[1]` name, `[2]` equipment, `[3]` level, `[4]` movement type (`"Compound"`, `"Accessory"`, `"Cardio"`, `"Stretch"`), `[5]` measurement (`"REPS"` or `"DURATION"`), and for an injury-limited exercise `[6]` its cap.
 - `exercise_id` is ALWAYS the exact UUID at index `[0]` of a listed tuple: never a name, an equipment code, a user ID, or an invented, shortened or guessed ID. Never add an exercise that is not listed.
-- `"REPS"`: emit `target_reps` (required) and `target_weight_kg` when loaded; no `duration_seconds`. `"DURATION"`: emit `duration_seconds` (required); no `target_reps` or `target_weight_kg`. Prescribe values that suit the athlete.
+- `"REPS"`: emit `target_reps` (required) as one integer, e.g. 10, never a range: there is no `target_rep_min` or `target_rep_max`, so pick a number inside the goal range. Add `target_weight_kg` when loaded; no `duration_seconds`. `"DURATION"`: emit `duration_seconds` (required); no `target_reps` or `target_weight_kg`. Prescribe values that suit the athlete.
 - If an exercise is reported as conflicting with an injury, replace it with another candidate of the same muscle or drop it, and say so in `reasoning`.
 
 ## Session Design
