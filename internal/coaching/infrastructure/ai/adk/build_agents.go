@@ -89,6 +89,10 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		Tools:       nil,
 		Toolsets:    nil,
 		OutputKey:   "generated_plan_text",
+		// Structured output: the plan is always well-formed JSON with only the
+		// fields the backend reads. The ad-hoc agent below keeps free text:
+		// ADK does not combine an output schema with its search tool.
+		OutputSchema: buildGeneratedPlanSchema(),
 		GenerateContentConfig: &genai.GenerateContentConfig{
 			MaxOutputTokens: maxGeneratorTokens,
 		},
