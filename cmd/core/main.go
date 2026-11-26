@@ -122,6 +122,13 @@ func run() error {
 		return errors.New("hardcoded default INTERNAL_SECRET is forbidden in production")
 	}
 
+	gatewayURL := os.Getenv("GATEWAY_URL")
+	if gatewayURL == "" {
+		slog.Error("GATEWAY_URL environment variable is required but not set")
+		return errors.New("GATEWAY_URL environment variable is required")
+	}
+	slog.Info("Internal Gateway upstream configured for Core RPC", "gateway_url", gatewayURL)
+
 	// Initialize Auth Module
 	authGRPCHandler, shutdownAuth, err := auth.Initialize(ctx, auth.ModuleDeps{
 		DB:            db,
