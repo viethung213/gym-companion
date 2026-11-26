@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	domainevent "github.com/viethung213/gym-companion/internal/coaching/domain/event"
@@ -100,8 +102,14 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	}
 
 	// Same set the agent revises (adk pendingNode): PENDING sessions not yet started.
-	if len(rm.UpcomingPendingSessions(h.clock.Now())) == 0 {
+	upcoming := rm.UpcomingPendingSessions(h.clock.Now())
+	if len(upcoming) == 0 {
 		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
+	}
+	// The volume a deload cuts from, read before the model rewrites it.
+	setsBefore := make(map[string]int, len(upcoming))
+	for _, s := range upcoming {
+		setsBefore[s.ID()] = s.MainSets()
 	}
 
 	drafts, err := h.agent.Adapt(ctx, cmd.UserID, &decision)
@@ -133,6 +141,11 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 		return nil, fmt.Errorf("no session was adapted out of %d pending", len(pending))
 	}
 
+	if decision.Kind == service.AdaptationTriggerDeload {
+		if unloadErr := unloadVolume(ctx, rm, setsBefore, decision.Params.VolumePctChange, now); unloadErr != nil {
+			return nil, unloadErr
+		}
+	}
 	if fitErr := fitDeloadVolume(ctx, rm, now); fitErr != nil {
 		return nil, fitErr
 	}
@@ -181,4 +194,21 @@ func anyReviewed(rm *roadmap.Roadmap, weekIDs []string) bool {
 		}
 	}
 	return false
+}
+
+// unloadVolume enforces the deload's volume cut instead of trusting the model
+// to: the prompt asks for it, but the model kept 2 sets per line live.
+func unloadVolume(ctx context.Context, rm *roadmap.Roadmap, before map[string]int, pctChange float64, now time.Time) error {
+	if pctChange >= 0 {
+		return nil
+	}
+	cut, err := rm.UnloadUpcoming(before, 1+pctChange, now)
+	if err != nil {
+		return err
+	}
+	if len(cut) > 0 {
+		slog.InfoContext(ctx, "Deload volume cut enforced (BR-AC-04)",
+			slog.String("roadmap_id", rm.ID()), slog.Int("sessions", len(cut)))
+	}
+	return nil
 }

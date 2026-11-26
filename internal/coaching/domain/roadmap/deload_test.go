@@ -123,3 +123,43 @@ func TestFitDeloadVolume_NoCutWithinTheAllowance(t *testing.T) {
 		t.Errorf("changed %v err %v, want nothing", changed, err)
 	}
 }
+
+// A fatigue deload keeps 70% of each session's sets: 10 becomes 7, cut from
+// the largest lines. The DELOAD week is already unloaded and stays as it is.
+func TestUnloadUpcoming_CutsNonDeloadWeeksOnly(t *testing.T) {
+	rm := deloadFixture(t, 0, [][]int32{{2, 2}}, []SessionPlanStatus{SessionPlanStatusPending})
+	s, _ := rm.FindSession("peak")
+	s.info.Prescription.MainExercises = []PrescribedExercise{
+		{ExerciseID: "a", TargetSets: 4, TargetReps: 8, TargetRPE: 8},
+		{ExerciseID: "b", TargetSets: 3, TargetReps: 8, TargetRPE: 8},
+		{ExerciseID: "c", TargetSets: 3, TargetReps: 8, TargetRPE: 8},
+	}
+
+	cut, err := rm.UnloadUpcoming(map[string]int{"peak": 10, "dl1": 4}, 0.7, beforeTheBlock())
+	if err != nil {
+		t.Fatalf("UnloadUpcoming: %v", err)
+	}
+	if len(cut) != 1 || cut[0] != "peak" {
+		t.Errorf("cut %v, want only the PEAK session", cut)
+	}
+	if got := setsOf(t, rm, "peak"); !equalSets(got, []int32{2, 2, 3}) {
+		t.Errorf("PEAK sets = %v, want [2 2 3]", got)
+	}
+	if got := setsOf(t, rm, "dl1"); !equalSets(got, []int32{2, 2}) {
+		t.Errorf("DELOAD sets = %v, want them untouched", got)
+	}
+}
+
+// A model that already cut deeper than asked, and a session the deload did
+// not see before, are left as they are.
+func TestUnloadUpcoming_LeavesDeepEnoughAndUnknownSessions(t *testing.T) {
+	rm := deloadFixture(t, 3, nil, nil)
+
+	cut, err := rm.UnloadUpcoming(map[string]int{"peak": 6}, 0.7, beforeTheBlock())
+	if err != nil || len(cut) != 0 {
+		t.Fatalf("cut %v err %v, want nothing (3 <= 4)", cut, err)
+	}
+	if cut, _ = rm.UnloadUpcoming(map[string]int{}, 0.7, beforeTheBlock()); len(cut) != 0 {
+		t.Errorf("cut %v, want nothing for an unknown session", cut)
+	}
+}

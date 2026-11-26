@@ -261,6 +261,19 @@ func sessionTargetRPE(rm *roadmap.Roadmap, session *roadmap.SessionPlan) float32
 	return 0
 }
 
+// sessionMaxTargetRPE is the highest target RPE of the session's main
+// exercises, or its mean target RPE when none carries one.
+func sessionMaxTargetRPE(rm *roadmap.Roadmap, session *roadmap.SessionPlan) float32 {
+	var top float32
+	for _, ex := range session.Info().Prescription.MainExercises {
+		top = max(top, ex.TargetRPE)
+	}
+	if top > 0 {
+		return top
+	}
+	return sessionTargetRPE(rm, session)
+}
+
 // countTargetSets sums target sets from all exercises in the session prescription.
 func countTargetSets(session *roadmap.SessionPlan) int {
 	info := session.Info()

@@ -196,6 +196,12 @@ func TestReviewWeeks_ExhaustingWeekUnloads(t *testing.T) {
 	if res.Adaptation == nil || res.Adaptation.Decision.Kind != service.AdaptationTriggerDeload {
 		t.Fatalf("adaptation = %+v, want TriggerDeload", res.Adaptation)
 	}
+	// The agent kept 3 sets; the handler enforces the 30% cut: 3 -> 2.
+	for _, id := range []string{"w2-s0", "w2-s1", "w2-s2"} {
+		if s, _ := rm.FindSession(id); s.MainSets() != 2 {
+			t.Errorf("%s main sets = %d, want 2 after the deload cut", id, s.MainSets())
+		}
+	}
 	if agent.decision == nil || agent.decision.Kind != service.AdaptationTriggerDeload {
 		t.Errorf("decision %+v, want the deload passed to the agent", agent.decision)
 	}
@@ -326,5 +332,26 @@ func TestReviewWeeks_NoAdaptationWithoutMetricsForTheNewestWeek(t *testing.T) {
 	err := h.runAdaptation(context.Background(), rm, []*roadmap.WeekPlan{rm.Weeks()[1]}, res, weekOneEnd())
 	if err != nil || res.Adaptation != nil || agent.decision != nil {
 		t.Errorf("err %v adaptation %+v agent got %+v; want nothing applied", err, res.Adaptation, agent.decision)
+	}
+}
+
+// RPE is relative to the plan: sessions felt just under one RPE above their
+// target are hard but on plan, one RPE above is a fatigue signal.
+func TestReviewWeeks_HighRPEIsRelativeToThePlan(t *testing.T) {
+	for _, tc := range []struct {
+		delta float32
+		high  int
+	}{{0.9, 0}, {1.0, 3}} {
+		rm := reviewFixture(t)
+		complete(t, rm, 100, tc.delta, "w1-s0", "w1-s1", "w1-s2")
+		h, _, _ := newReviewHandler(rm, weekOneEnd().Add(8*time.Hour))
+
+		res, err := h.Handle(context.Background(), "rm-r")
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if got := res.Metrics[0].HighRPESessions; got != tc.high {
+			t.Errorf("ΔRPE %+.1f over target 6.5: high-RPE sessions = %d, want %d", tc.delta, got, tc.high)
+		}
 	}
 }

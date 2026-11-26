@@ -51,7 +51,7 @@ func TestEvaluateTriggerA_DeloadOnHighRPESessions(t *testing.T) {
 	d := e.EvaluateTriggerA(weeks)
 
 	if d.Kind != AdaptationTriggerDeload {
-		t.Fatalf("kind=%v, want TriggerDeload (3+ RPE≥9)", d.Kind)
+		t.Fatalf("kind=%v, want TriggerDeload (3 sessions above plan)", d.Kind)
 	}
 }
 

@@ -22,9 +22,14 @@ const (
 	// stamped reviewed anyway: the next week is well under way by then.
 	adaptRetryWindow = 12 * time.Hour
 
-	// highActualRPE is the effort from which a session counts as very hard
-	// (BR-AC-04: three such sessions in a week trigger a deload).
-	highActualRPE = 9.0
+	// overTargetRPE is how far above its highest prescribed RPE a session
+	// must be felt to count as very hard (BR-AC-04: three such sessions in a
+	// week trigger a deload). RPE is relative to the plan (Helms 2016): a PEAK
+	// session felt at its prescribed 9 is on plan, not a fatigue signal.
+	overTargetRPE = 1.0
+	// maxRPE is the top of the RPE scale (failure); a session felt there is
+	// always very hard.
+	maxRPE = 10.0
 )
 
 // ReviewWeeksResult reports what a review found and decided.
@@ -228,7 +233,7 @@ func weekMetrics(rm *roadmap.Roadmap, w *roadmap.WeekPlan) (service.WeeklyMetric
 
 			actual := float64(sessionTargetRPE(rm, s)) + delta
 			m.MaxActualRPE = max(m.MaxActualRPE, actual)
-			if actual >= highActualRPE {
+			if actual >= min(float64(sessionMaxTargetRPE(rm, s))+overTargetRPE, maxRPE) {
 				m.HighRPESessions++
 			}
 		}

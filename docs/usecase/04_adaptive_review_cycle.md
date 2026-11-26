@@ -18,7 +18,7 @@
 1. System tính Tỷ lệ hoàn thành Set ($SCR = \frac{\text{Số Set thực tế}}{\text{Số Set giao}} \times 100\%$) và Độ lệch mệt mỏi ($\Delta RPE = RPE_{\text{Thực tế}} - RPE_{\text{Target}}$).
 2. System áp dụng quy tắc thích ứng định kỳ [BR-AC-04](../NGHIEP_VU_COT_LOI_BABOK.md#L135):
    - **Tăng tải lũy tiến** ($SCR \ge 80\%$ và $-1 \le \Delta RPE \le +1$): Tự động tăng mức tạ gợi ý $+2.5\% \rightarrow +5\%$ cho tuần kế tiếp.
-   - **Quản lý mệt mỏi & Deload** ($RPE_{\text{Thực tế}} \ge 9.0$ liên tục 3 buổi hoặc $\Delta RPE \ge +2.0$): Tự động kích hoạt tuần Deload (giảm 30% volume & 10% tạ).
+   - **Quản lý mệt mỏi & Deload** (3 buổi có $RPE_{\text{Thực tế}} \ge \min(RPE_{\text{Target cao nhất của buổi}} + 1,\ 10)$ hoặc $\Delta RPE \ge +2.0$): Tự động kích hoạt Deload (hệ thống tự cắt 30% số set chính, tối thiểu 1 set/bài, và AI giảm 10% tạ). Buổi thuộc tuần DELOAD chỉ giảm tạ, không cắt thêm set.
    - **Thích ứng linh hoạt** ($50\% \le SCR < 80\%$): Giữ nguyên mức tạ, điều chỉnh rep/set nếu cần, gợi ý tăng buổi tập/tuần nếu user đồng ý.
 3. System cập nhật `prescription` bài tập của các `SessionPlan` tuần kế tiếp, phát `RoadmapAdjusted`.
 

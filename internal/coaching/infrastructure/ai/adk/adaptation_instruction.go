@@ -20,6 +20,7 @@ func adaptationInstruction(d *service.AdaptationDecision) string {
 			"keep sets, reps and each session's phase RPE window.", d.Reason, p.WeightPctChange*100)
 	case service.AdaptationTriggerDeload:
 		return fmt.Sprintf("%s. Unload: cut working sets by about %.0f%% and target_weight_kg by about %.0f%%; "+
+			"in DELOAD-week sessions keep the sets (already unloaded) and only lower the weight; "+
 			"keep target_rpe at the bottom of each session's phase window.",
 			d.Reason, math.Abs(p.VolumePctChange)*100, math.Abs(p.WeightPctChange)*100)
 	case service.AdaptationProposeExpressFormat:

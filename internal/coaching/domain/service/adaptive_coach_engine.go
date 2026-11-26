@@ -49,7 +49,7 @@ type WeeklyMetrics struct {
 	SCR             float64 // Session Completion Rate (0..100)
 	AvgDeltaRPE     float64 // ΔRPE averaged across sessions
 	MaxActualRPE    float64 // Highest RPE observed
-	HighRPESessions int     // sessions with RPE ≥ 9.0
+	HighRPESessions int     // sessions felt ≥ 1 RPE above their highest target (or at 10)
 	TotalSessions   int
 	// EffortUnreported is set when no completed session reported an RPE: the
 	// ΔRPE figures are then empty, not "on target", and the rules that read
@@ -88,11 +88,11 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 		return AdaptationDecision{Kind: AdaptationNoOp, Reason: "no effort (RPE) reported"}
 	}
 	// Case 2: Excessive fatigue → Deload.
-	// Trigger if 3+ sessions with RPE ≥ 9.0 OR avgΔRPE ≥ +2.0.
+	// Trigger if 3+ sessions felt ≥ 1 RPE above plan OR avgΔRPE ≥ +2.0.
 	if last.HighRPESessions >= 3 || last.AvgDeltaRPE >= 2.0 {
 		return AdaptationDecision{
 			Kind:   AdaptationTriggerDeload,
-			Reason: "excessive fatigue (RPE≥9 x3 or ΔRPE≥+2)",
+			Reason: "excessive fatigue (3 sessions ≥1 RPE above plan or ΔRPE≥+2)",
 			Params: AdaptationParams{
 				VolumePctChange: -0.30,
 				WeightPctChange: -0.10,
