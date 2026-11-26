@@ -105,6 +105,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"   # Public API endpoint
       - "127.0.0.1:8001:8001"   # Admin / Control Plane
+      - "127.0.0.1:8002:8002"   # Internal Service-to-Service Ingress
     networks:
       - fitai-network
     healthcheck:

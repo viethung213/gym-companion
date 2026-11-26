@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/gateway/gwerror"
-	"github.com/viethung213/gym-companion/internal/shared/internaltoken"
 )
 
 // PipelineOptions configures the security pipeline for Gateway.
@@ -49,6 +48,13 @@ func NewPipeline(opts PipelineOptions) *Pipeline {
 func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 	// Base handler with JWT auth & Token translation
 	authAndTranslate := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Perimeter check (defense-in-depth): external clients must never supply X-Internal-Token
+		if r.Header.Get(HeaderInternalToken) != "" {
+			r.Header.Del(HeaderInternalToken)
+			gwerror.Forbidden(w, r, "external X-Internal-Token is forbidden")
+			return
+		}
+
 		procedure := r.URL.Path
 		if procedure == "/health" {
 			next.ServeHTTP(w, r)
@@ -57,23 +63,10 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 
 		requiresAuth := IsAuthRequired(procedure)
 
-		var (
-			userID, role   string
-			incomingClaims *internaltoken.InternalClaims
-		)
-		incomingInternalToken := r.Header.Get(HeaderInternalToken)
+		var userID, role string
 		authHeader := r.Header.Get("Authorization")
 
 		switch {
-		case incomingInternalToken != "":
-			claims, err := p.translator.Validate(incomingInternalToken)
-			if err != nil {
-				gwerror.Unauthenticated(w, r, fmt.Sprintf("invalid or expired internal token: %v", err))
-				return
-			}
-			userID = claims.UserID
-			role = claims.Role
-			incomingClaims = claims
 		case requiresAuth:
 			var err error
 			userID, role, err = p.jwtVal.Verify(r.Context(), authHeader)
@@ -96,9 +89,6 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 		}
 
 		reqID := r.Header.Get(HeaderRequestID)
-		if reqID == "" && incomingClaims != nil && incomingClaims.RequestID != "" {
-			reqID = incomingClaims.RequestID
-		}
 		internalToken, err := p.translator.Generate(userID, role, reqID)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "Gateway token generation failed", "error", err)
@@ -127,8 +117,15 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 	// Wrap with Host/Authority Whitelist
 	hostChecked := p.hostFilter.Wrap(recovered)
 
-	// Outer-most: TLS Enforcement (if enabled)
+	// Outer-most: Perimeter Sanitization & TLS Enforcement (if enabled)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Perimeter Security: Gateway at the edge must reject and strip any incoming X-Internal-Token from external callers
+		if r.Header.Get(HeaderInternalToken) != "" {
+			r.Header.Del(HeaderInternalToken)
+			gwerror.Forbidden(w, r, "external X-Internal-Token is forbidden at perimeter")
+			return
+		}
+
 		if p.enforceTLS {
 			isTLS := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 			if !isTLS {
@@ -144,4 +141,53 @@ func (p *Pipeline) Wrap(next http.Handler) http.Handler {
 
 		hostChecked.ServeHTTP(w, r)
 	})
+}
+
+// WrapInternal chains security and verification checks for internal service-to-service ingress (Approach 2).
+// It strictly validates X-Internal-Token and blocks unauthorized callers, while applying rate limiting,
+// distributed tracing, and recovery to prevent runaway module spam loops.
+func (p *Pipeline) WrapInternal(next http.Handler) http.Handler {
+	internalAuth := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		procedure := r.URL.Path
+		if procedure == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		tokenStr := r.Header.Get(HeaderInternalToken)
+		if tokenStr == "" {
+			gwerror.Unauthenticated(w, r, "missing X-Internal-Token for internal gateway call")
+			return
+		}
+
+		claims, err := p.translator.Validate(tokenStr)
+		if err != nil {
+			gwerror.Unauthenticated(w, r, fmt.Sprintf("invalid internal token: %v", err))
+			return
+		}
+
+		// Inject verified user and role headers into the request for downstream routing
+		if claims.UserID != "" {
+			r.Header.Set("X-User-Id", claims.UserID)
+		}
+		if claims.Role != "" {
+			r.Header.Set("X-User-Role", claims.Role)
+		}
+
+		// Preserve or propagate request tracing ID from claims
+		if claims.RequestID != "" {
+			r.Header.Set(HeaderRequestID, claims.RequestID)
+		}
+
+		next.ServeHTTP(w, r)
+	})
+
+	// Wrap with Rate Limiter (protects against internal module spamming/looping)
+	rateLimited := p.rateLimiter.Wrap(internalAuth)
+
+	// Wrap with Tracing (maintains distributed trace ID)
+	traced := Tracing(rateLimited)
+
+	// Wrap with Recovery
+	return Recovery(traced)
 }

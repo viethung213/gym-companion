@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,6 +16,7 @@ import (
 type StartupConfig struct {
 	AppEnv          string
 	Port            string
+	InternalPort    string
 	ConfigPath      string
 	InternalSecret  string
 	TokenTTL        time.Duration
@@ -39,8 +41,19 @@ type Config struct {
 	Services     []ServiceConfig `json:"services"`
 }
 
-// LoadStartupConfig loads environment variables from .env.gateway or .env, applies defaults, and returns StartupConfig.
-func LoadStartupConfig() *StartupConfig {
+// Validate verifies that required startup configuration values are set and safe.
+func (c *StartupConfig) Validate() error {
+	if c.InternalSecret == "" {
+		return errors.New("INTERNAL_SECRET environment variable is required")
+	}
+	if strings.EqualFold(c.AppEnv, "production") && c.InternalSecret == "gym-companion-internal-secret-2026-key" {
+		return errors.New("hardcoded default INTERNAL_SECRET is forbidden in production")
+	}
+	return nil
+}
+
+// LoadStartupConfig loads environment variables from .env.gateway or .env, applies defaults, validates requirements, and returns StartupConfig.
+func LoadStartupConfig() (*StartupConfig, error) {
 	loadEnvFiles()
 
 	appEnv := os.Getenv("APP_ENV")
@@ -53,15 +66,17 @@ func LoadStartupConfig() *StartupConfig {
 		port = "8000"
 	}
 
+	internalPort := os.Getenv("GATEWAY_INTERNAL_PORT")
+	if internalPort == "" {
+		internalPort = "8002"
+	}
+
 	configPath := os.Getenv("GATEWAY_CONFIG_PATH")
 	if configPath == "" {
 		configPath = filepath.Join("configs", "gateway_routes.json")
 	}
 
 	internalSecret := os.Getenv("INTERNAL_SECRET")
-	if internalSecret == "" {
-		internalSecret = "gym-companion-internal-secret-2026-key"
-	}
 
 	tokenTTL := time.Minute
 	if ttlStr := os.Getenv("TOKEN_TTL"); ttlStr != "" {
@@ -102,9 +117,10 @@ func LoadStartupConfig() *StartupConfig {
 		}
 	}
 
-	return &StartupConfig{
+	cfg := &StartupConfig{
 		AppEnv:          appEnv,
 		Port:            port,
+		InternalPort:    internalPort,
 		ConfigPath:      configPath,
 		InternalSecret:  internalSecret,
 		TokenTTL:        tokenTTL,
@@ -115,6 +131,12 @@ func LoadStartupConfig() *StartupConfig {
 		AdminEnabled:    adminEnabled,
 		TraceBufferSize: traceBufferSize,
 	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validate startup config: %w", err)
+	}
+
+	return cfg, nil
 }
 
 func loadEnvFiles() {

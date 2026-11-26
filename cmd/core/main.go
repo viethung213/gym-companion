@@ -113,10 +113,21 @@ func run() error {
 		slog.Info("Initialized isolated Workout Execution Database Pool successfully")
 	}
 
+	appEnv := os.Getenv("APP_ENV")
 	internalSecret := os.Getenv("INTERNAL_SECRET")
 	if internalSecret == "" {
-		internalSecret = "gym-companion-internal-secret-2026-key"
+		return errors.New("INTERNAL_SECRET environment variable is required")
 	}
+	if strings.EqualFold(appEnv, "production") && internalSecret == "gym-companion-internal-secret-2026-key" {
+		return errors.New("hardcoded default INTERNAL_SECRET is forbidden in production")
+	}
+
+	gatewayURL := os.Getenv("GATEWAY_URL")
+	if gatewayURL == "" {
+		slog.Error("GATEWAY_URL environment variable is required but not set")
+		return errors.New("GATEWAY_URL environment variable is required")
+	}
+	slog.Info("Internal Gateway upstream configured for Core RPC", "gateway_url", gatewayURL)
 
 	// Initialize Auth Module
 	authGRPCHandler, shutdownAuth, err := auth.Initialize(ctx, auth.ModuleDeps{

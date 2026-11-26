@@ -59,6 +59,9 @@ type Options struct {
 //
 //nolint:gocritic // opts is startup configuration struct passed by value
 func NewGateway(opts Options) (*Gateway, error) {
+	if opts.InternalSecret == "" {
+		return nil, errors.New("gateway: InternalSecret is required")
+	}
 	if opts.TokenTTL <= 0 {
 		opts.TokenTTL = time.Minute
 	}
@@ -379,8 +382,7 @@ func (r *statusRecorder) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }
 
-// Handler returns the full http.Handler with CORS, Pipeline, Routing, and Telemetry.
-func (gw *Gateway) Handler() http.Handler {
+func (gw *Gateway) buildDispatcherMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -467,29 +469,10 @@ func (gw *Gateway) Handler() http.Handler {
 		}
 	})
 
-	// Wrap in Security & Translation Pipeline
-	wrappedPipeline := gw.pipeline.Wrap(mux)
+	return mux
+}
 
-	// Wrap in CORS
-	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{
-			"Accept", "Content-Type", "Content-Length", "Accept-Encoding",
-			"Authorization", "Connect-Protocol-Version", "Connect-Timeout-Ms",
-			"Connect-Accept-Encoding", "Connect-Content-Encoding", "X-User-Id", "X-GRPC-Web",
-			middleware.HeaderRequestID,
-		},
-		ExposedHeaders: []string{
-			"Content-Type", "Content-Length", "Connect-Content-Encoding",
-			"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin",
-			middleware.HeaderRequestID,
-		},
-		AllowCredentials: true,
-		MaxAge:           7200,
-	}).Handler(wrappedPipeline)
-
-	// Outer Telemetry wrapper
+func (gw *Gateway) wrapTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{
@@ -533,6 +516,44 @@ func (gw *Gateway) Handler() http.Handler {
 			})
 		}()
 
-		corsHandler.ServeHTTP(rec, r)
+		next.ServeHTTP(rec, r)
 	})
+}
+
+// Handler returns the full http.Handler with CORS, Pipeline, Routing, and Telemetry.
+func (gw *Gateway) Handler() http.Handler {
+	mux := gw.buildDispatcherMux()
+
+	// Wrap in Security & Translation Pipeline
+	wrappedPipeline := gw.pipeline.Wrap(mux)
+
+	// Wrap in CORS
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{
+			"Accept", "Content-Type", "Content-Length", "Accept-Encoding",
+			"Authorization", "Connect-Protocol-Version", "Connect-Timeout-Ms",
+			"Connect-Accept-Encoding", "Connect-Content-Encoding", "X-User-Id", "X-GRPC-Web",
+			middleware.HeaderRequestID,
+		},
+		ExposedHeaders: []string{
+			"Content-Type", "Content-Length", "Connect-Content-Encoding",
+			"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin",
+			middleware.HeaderRequestID,
+		},
+		AllowCredentials: true,
+		MaxAge:           7200,
+	}).Handler(wrappedPipeline)
+
+	return gw.wrapTelemetry(corsHandler)
+}
+
+// InternalHandler returns the internal service-to-service http.Handler (Approach 2).
+// It verifies authentic X-Internal-Token, handles dynamic routing and load balancing,
+// applies circuit breaking and telemetry without perimeter constraints.
+func (gw *Gateway) InternalHandler() http.Handler {
+	mux := gw.buildDispatcherMux()
+	wrappedInternal := gw.pipeline.WrapInternal(mux)
+	return gw.wrapTelemetry(wrappedInternal)
 }
