@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // PrescribedExercise is a single exercise line item within a WorkoutPrescription.
@@ -235,10 +236,7 @@ func (s *SessionPlan) MarkAborted(reason string) error {
 	}
 
 	s.info.Status = SessionPlanStatusAborted
-	if len(reason) > maxAbortReasonLen {
-		reason = reason[:maxAbortReasonLen]
-	}
-	s.info.AbortReason = reason
+	s.info.AbortReason = truncateRunes(reason, maxAbortReasonLen)
 
 	return nil
 }
@@ -372,4 +370,18 @@ func copyStringSlice(in []string) []string {
 	copy(out, in)
 
 	return out
+}
+
+// truncateRunes shortens s to at most maxBytes bytes without splitting a
+// character: the reason carries the athlete's note, often Vietnamese, and a
+// cut mid-character is invalid UTF-8 the database refuses.
+func truncateRunes(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	end := maxBytes
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end]
 }

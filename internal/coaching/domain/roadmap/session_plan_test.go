@@ -2,8 +2,10 @@ package roadmap
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func newTestSessionInfo() SessionPlanInfo {
@@ -433,5 +435,25 @@ func TestSessionPlan_StoppedForPain(t *testing.T) {
 	}
 	if newPendingSession(t).StoppedForPain() {
 		t.Error("a pending session reported a pain stop")
+	}
+}
+
+// A long Vietnamese note is cut on a character boundary: a byte cut inside a
+// character is invalid UTF-8 and the abort could not be saved.
+func TestSessionPlan_AbortReasonKeepsValidUTF8(t *testing.T) {
+	sp := newPendingSession(t)
+	note := "pain: " + strings.Repeat("đau lưng dưới ", 60)
+	if err := sp.MarkAborted(note); err != nil {
+		t.Fatal(err)
+	}
+	got := sp.Info().AbortReason
+	if len(got) > maxAbortReasonLen || !utf8.ValidString(got) || !strings.HasPrefix(note, got) {
+		t.Errorf("reason len %d valid %v, want a valid prefix of at most %d bytes", len(got), utf8.ValidString(got), maxAbortReasonLen)
+	}
+	if !sp.StoppedForPain() {
+		t.Error("truncated pain reason no longer reads as a pain stop")
+	}
+	if truncateRunes("abc", 10) != "abc" || truncateRunes("abcdef", 3) != "abc" {
+		t.Error("ASCII truncation changed")
 	}
 }
