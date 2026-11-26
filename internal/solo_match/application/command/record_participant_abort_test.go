@@ -25,6 +25,10 @@ func (m *abortMatchRepoMock) FindByID(ctx context.Context, id string) (*aggregat
 	return m.matches[id], nil
 }
 
+func (m *abortMatchRepoMock) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	return m.matches[id], nil
+}
+
 func (m *abortMatchRepoMock) FindActiveByUserID(ctx context.Context, userID string) (*aggregate.SoloMatch, error) {
 	return nil, nil
 }

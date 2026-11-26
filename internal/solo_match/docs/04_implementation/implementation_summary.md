@@ -28,7 +28,7 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
 - [x] **Domain Services & Unit Tests**:
   - `service/match_resolver.go` & `service/match_resolver_test.go`: Thuật toán so khớp điểm số, phân định thắng thua hòa theo thể thức REPS / DURATION.
 - [x] **Repository Interfaces (Outbound Ports)**:
-  - `repository/solo_match_repository.go`
+  - `repository/solo_match_repository.go` (Bao gồm `Save`, `FindByID`, `FindByIDForUpdate` với row-level lock)
   - `repository/user_snapshot_repository.go`
   - `repository/bot_repository.go`
   - `repository/outbox_repository.go`
@@ -40,7 +40,7 @@ Tài liệu này tổng kết toàn bộ hiện trạng triển khai thực tế
 - [x] **Command Handlers & Unit Tests**:
   - `command/join_matchmaking_queue.go` & `test`: Tiếp nhận yêu cầu tìm trận, kiểm tra Active Match Guard, ghi vé vào Redis ZSet.
   - `command/cancel_matchmaking.go` & `test`: Hủy vé tìm trận, rút khỏi hàng đợi Redis.
-  - `command/record_participant_result.go` & `test`: Ghi nhận điểm số từ buổi tập, kích hoạt phân định thắng/thua khi đủ 2 bên.
+  - `command/record_participant_result.go` & `test`: Ghi nhận điểm số từ buổi tập, bảo vệ bằng Pessimistic Row Lock (`FindByIDForUpdate`), chống race condition và kích hoạt phân định thắng/thua khi đủ 2 bên (kèm concurrency integration test).
   - `command/record_participant_abort.go` & `test`: Xử lý thua tức thì cho người bỏ cuộc và trao giải cho đối thủ.
   - `command/handle_match_timeout.go` & `test`: Quét và hủy các trận `PENDING_READY` quá 60s không vào phòng và xử lý các trận `IN_PROGRESS` treo quá 35 phút.
   - `command/sync_user_snapshot.go` & `test`: Cập nhật snapshot người dùng từ Auth/Profile event.

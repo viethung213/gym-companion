@@ -152,28 +152,57 @@ sequenceDiagram
 
 ---
 
-### 3.4. Luồng Phân Định Thắng Thua Khi Cả Hai Cùng Hoàn Thành
+### 3.4. Luồng Phân Định Thắng Thua Khi Cả Hai Cùng Hoàn Thành (Pessimistic Locking Chống Concurrency)
+
+Khi cả hai đấu thủ nộp kết quả gần như đồng thời (hoặc cùng lúc nhận được 2 sự kiện từ Kafka), hệ thống áp dụng cơ chế **Pessimistic Row-level Locking (`SELECT ... FOR UPDATE`)** trên Aggregate Root `solo_matches` bên trong Database Transaction để tuần tự hóa việc xử lý, triệt tiêu hoàn toàn Race Condition và Lost Update:
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Kafka as Kafka Event Bus
-    participant Consumer as WorkoutCompletedConsumer
-    participant DB as PostgreSQL (solo_match)
+    participant C1 as Consumer Worker 1 (P1)
+    participant C2 as Consumer Worker 2 (P2)
+    participant DB as PostgreSQL (solo_matches)
     participant Resolver as MatchResolver
+    participant Outbox as outbox_events
 
-    Kafka->>Consumer: Nhận SoloTrackingCompleted (P1, score=25)
-    Consumer->>DB: Kiểm tra Idempotency qua outbox_logs
-    Consumer->>DB: RecordParticipantResult(P1) -> P1 completed
-    Note over Consumer: P2 chưa hoàn thành -> Chờ tiếp
+    par Hai sự kiện đến đồng thời từ Kafka
+        Kafka->>C1: SoloTrackingCompleted (P1, score=25)
+    and
+        Kafka->>C2: SoloTrackingCompleted (P2, score=20)
+    end
 
-    Kafka->>Consumer: Nhận SoloTrackingCompleted (P2, score=20)
-    Consumer->>DB: RecordParticipantResult(P2) -> Cả P1 và P2 đã xong!
+    Note over C1,DB: C1 khởi tạo Transaction trước (TX1)
+    C1->>DB: BEGIN TRANSACTION (TX1)
+    C1->>DB: SELECT * FROM solo_matches WHERE id='M' FOR UPDATE
+    Note over DB: TX1 chiếm giữ Row Lock trên Match M!
 
-    Consumer->>Resolver: ResolveOutcome(REPS, P1, P2)
-    Note over Resolver: So sánh 25 > 20 -> Winner: P1 (WIN), P2 (LOSE)
-    Consumer->>DB: Cập nhật SoloMatch (status=COMPLETED, winner_id=P1)
-    Consumer->>DB: Ghi Outbox event SoloMatchCompleted
+    Note over C2,DB: C2 khởi tạo Transaction ngay sau đó (TX2)
+    C2->>DB: BEGIN TRANSACTION (TX2)
+    C2->>DB: SELECT * FROM solo_matches WHERE id='M' FOR UPDATE
+    Note over C2,DB: ⏳ TX2 BỊ CHẶN (Chờ TX1 giải phóng khóa)
+
+    Note over C1: C1 tải dữ liệu: P1=chưa xong, P2=chưa xong
+    C1->>C1: match.RecordParticipantResult(P1, 25)
+    Note over C1: P1 đã xong, nhưng P2 chưa xong -> status giữ nguyên IN_PROGRESS
+    C1->>DB: Save(match): Ghi nhận P1 completed=true, score=25
+    C1->>DB: COMMIT TRANSACTION (TX1)
+    Note over DB: TX1 hoàn tất. Khóa trên Match M được giải phóng!
+
+    Note over C2,DB: 🟢 TX2 unblock và đọc phiên bản đã commit bởi TX1
+    Note over C2: C2 tải dữ liệu: P1=ĐÃ XONG (25 reps), P2=chưa xong
+    C2->>C2: match.RecordParticipantResult(P2, 20)
+    Note over C2: Cả P1 và P2 đều đã hoàn thành!
+
+    C2->>Resolver: ResolveOutcome(REPS, P1: 25, P2: 20)
+    Resolver-->>C2: Winner: P1 (WIN), P2 (LOSE), isDraw: false
+    Note over C2: Match chuyển sang COMPLETED, winner_id = P1
+
+    C2->>DB: Save(match): Cập nhật status=COMPLETED, winner_id=P1, P2=LOSE
+    C2->>Outbox: RecordEvents(SoloMatchCompleted{Winner: P1, P1Score: 25, P2Score: 20})
+    C2->>DB: COMMIT TRANSACTION (TX2)
+
+    Note over DB,Outbox: Trận đấu kết thúc hoàn tất. Outbox Publisher đẩy event SoloMatchCompleted sang Kafka!
 ```
 
 ---

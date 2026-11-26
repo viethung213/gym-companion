@@ -34,6 +34,10 @@ func (m *mockMatchRepo) FindByID(ctx context.Context, id string) (*aggregate.Sol
 	return m.matches[id], nil
 }
 
+func (m *mockMatchRepo) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	return m.matches[id], nil
+}
+
 func (m *mockMatchRepo) FindActiveByUserID(ctx context.Context, userID string) (*aggregate.SoloMatch, error) {
 	if m.activeMatch != nil {
 		return m.activeMatch, nil
