@@ -262,7 +262,7 @@ func (h *CreateAdhocSessionHandler) builtPrescription(
 			if issue := line.LimitIssue(); issue != "" {
 				return nil, fmt.Errorf("%w: %s: %s", ErrInvalidAdhocPrescription, ex.Name, issue)
 			}
-			fillAdHocDefaults(&line, main)
+			fillAdHocDefaults(&line, main, ex.IsTimed())
 			if len(injuries) > 0 {
 				traits := ex.Traits()
 				verdict := service.EvaluateInjuries(&traits, injuries)
@@ -296,9 +296,17 @@ func (h *CreateAdhocSessionHandler) builtPrescription(
 	return out, mainExercises, nil
 }
 
-// fillAdHocDefaults gives a built line the numbers it left out: 3 sets of 8
-// for main work (1 set for a warm-up or cool-down) at the user-built RPE.
-func fillAdHocDefaults(line *roadmap.PrescribedExercise, main bool) {
+// Defaults for a built ad-hoc line that left its measure out.
+const (
+	adHocDefaultReps        = 8
+	adHocDefaultHoldSeconds = 30 // a warm-up or cool-down hold
+	adHocDefaultWorkSeconds = 45 // a timed main-work interval
+)
+
+// fillAdHocDefaults gives a built line the numbers it left out: 3 sets (1 for
+// a warm-up or cool-down) of 8 reps, or of a hold for a timed exercise, at the
+// user-built RPE.
+func fillAdHocDefaults(line *roadmap.PrescribedExercise, main, timed bool) {
 	if line.TargetSets == 0 {
 		line.TargetSets = 1
 		if main {
@@ -306,7 +314,14 @@ func fillAdHocDefaults(line *roadmap.PrescribedExercise, main bool) {
 		}
 	}
 	if line.TargetReps == 0 && line.DurationSeconds == 0 {
-		line.TargetReps = 8
+		switch {
+		case !timed:
+			line.TargetReps = adHocDefaultReps
+		case main:
+			line.DurationSeconds = adHocDefaultWorkSeconds
+		default:
+			line.DurationSeconds = adHocDefaultHoldSeconds
+		}
 	}
 	if main && line.TargetRPE == 0 {
 		line.TargetRPE = adHocTargetRPE

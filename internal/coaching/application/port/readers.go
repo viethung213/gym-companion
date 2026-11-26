@@ -141,6 +141,9 @@ type Exercise struct {
 }
 
 // Traits returns the eligibility view of the exercise.
+// IsTimed reports whether the exercise is held or timed rather than counted.
+func (e *Exercise) IsTimed() bool { return e.MeasurementType == "DURATION" }
+
 func (e *Exercise) Traits() service.ExerciseTraits {
 	return service.ExerciseTraits{
 		PrimaryMuscle:    e.PrimaryMuscle,

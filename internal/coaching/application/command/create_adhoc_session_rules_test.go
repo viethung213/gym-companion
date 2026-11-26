@@ -191,3 +191,46 @@ func TestCreateAdhoc_BuiltPrescriptionIsChecked(t *testing.T) {
 		t.Errorf("30 sets: err = %v, want ErrInvalidAdhocPrescription", err)
 	}
 }
+
+// A timed exercise left without numbers gets a hold, not 8 reps: 30 s as a
+// warm-up or cool-down, 45 s as main work. A counted one gets 8 reps.
+func TestCreateAdhoc_BuiltLineDefaultsFollowTheMeasure(t *testing.T) {
+	start := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	catalog := &exerciseCatalogMock{fn: func(_ context.Context, id string) (port.Exercise, error) {
+		ex := port.Exercise{ExerciseID: id, Name: id, PrimaryMuscle: taxonomy.MuscleGroupAbdominals,
+			Equipment: taxonomy.EquipmentBodyOnly, Level: taxonomy.LevelBeginner, MeasurementType: "REPS"}
+		if id == "plank" {
+			ex.MeasurementType = "DURATION"
+		}
+		return ex, nil
+	}}
+	n := 0
+	h := NewCreateAdhocSessionHandler(
+		&transactionManagerMock{fn: func(ctx context.Context, f func(context.Context) error) error { return f(ctx) }},
+		&roadmapRepositoryMock{
+			findActiveByUserFn: func(context.Context, string) (*roadmap.Roadmap, error) { return oneWeekRoadmap(t, start), nil },
+			saveFn:             func(context.Context, *roadmap.Roadmap) error { return nil },
+		},
+		catalog, injuredProfiles{},
+		&idGeneratorMock{fn: func() string { n++; return "id-" + string(rune('a'+n)) }},
+		&clockMock{now: start.Add(10 * time.Hour)},
+	)
+
+	res, err := h.Handle(context.Background(), CreateAdhocSessionCommand{UserID: "user-1", Prescription: &roadmap.WorkoutPrescription{
+		MainExercises: []roadmap.PrescribedExercise{{ExerciseID: "plank"}, {ExerciseID: "crunch"}},
+		CoolDowns:     []roadmap.PrescribedExercise{{ExerciseID: "plank"}},
+	}})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	p := res.SessionPlan.Info().Prescription
+	if m := p.MainExercises[0]; m.DurationSeconds != 45 || m.TargetReps != 0 {
+		t.Errorf("timed main line %+v, want a 45 s hold", m)
+	}
+	if m := p.MainExercises[1]; m.TargetReps != 8 || m.DurationSeconds != 0 {
+		t.Errorf("counted main line %+v, want 8 reps", m)
+	}
+	if c := p.CoolDowns[0]; c.DurationSeconds != 30 || c.TargetReps != 0 || c.TargetSets != 1 {
+		t.Errorf("timed cool-down %+v, want one 30 s hold", c)
+	}
+}
