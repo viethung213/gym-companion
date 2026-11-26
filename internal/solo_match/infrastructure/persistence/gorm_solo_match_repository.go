@@ -69,6 +69,25 @@ func (r *GORMSoloMatchRepository) FindByID(ctx context.Context, id string) (*agg
 	return model.ToDomain()
 }
 
+func (r *GORMSoloMatchRepository) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	db := GetDB(ctx, r.db)
+	var model SoloMatchModel
+
+	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("Participants", func(pDb *gorm.DB) *gorm.DB {
+			return pDb.Order("solo_match.match_participants.id ASC")
+		}).
+		First(&model, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find solo match by id for update %s: %w", id, err)
+	}
+
+	return model.ToDomain()
+}
+
 func (r *GORMSoloMatchRepository) FindActiveByUserID(ctx context.Context, userID string) (*aggregate.SoloMatch, error) {
 	db := GetDB(ctx, r.db)
 	var model SoloMatchModel

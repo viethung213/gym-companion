@@ -27,6 +27,10 @@ func (m *timeoutMatchRepoMock) FindByID(ctx context.Context, id string) (*aggreg
 	return m.matches[id], nil
 }
 
+func (m *timeoutMatchRepoMock) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	return m.matches[id], nil
+}
+
 func (m *timeoutMatchRepoMock) FindActiveByUserID(ctx context.Context, userID string) (*aggregate.SoloMatch, error) {
 	return nil, nil
 }

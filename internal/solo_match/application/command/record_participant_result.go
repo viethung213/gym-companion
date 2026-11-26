@@ -47,24 +47,24 @@ func NewRecordParticipantResultHandler(
 }
 
 func (h *RecordParticipantResultHandler) Handle(ctx context.Context, cmd RecordParticipantResultCommand) error {
-	match, err := h.matchRepo.FindByID(ctx, cmd.MatchID)
-	if err != nil {
-		return fmt.Errorf("find match %s: %w", cmd.MatchID, err)
-	}
-	if match == nil {
-		return fmt.Errorf("match %s not found", cmd.MatchID)
-	}
-
 	completedAt := cmd.CompletedAt
 	if completedAt.IsZero() {
 		completedAt = time.Now().UTC()
 	}
 
-	if err := match.RecordParticipantResult(cmd.UserID, cmd.ScoreValue, completedAt, h.resolver); err != nil {
-		return fmt.Errorf("record participant result: %w", err)
-	}
-
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		match, err := h.matchRepo.FindByIDForUpdate(txCtx, cmd.MatchID)
+		if err != nil {
+			return fmt.Errorf("find match %s: %w", cmd.MatchID, err)
+		}
+		if match == nil {
+			return fmt.Errorf("match %s not found", cmd.MatchID)
+		}
+
+		if err := match.RecordParticipantResult(cmd.UserID, cmd.ScoreValue, completedAt, h.resolver); err != nil {
+			return fmt.Errorf("record participant result: %w", err)
+		}
+
 		if err := h.matchRepo.Save(txCtx, match); err != nil {
 			return fmt.Errorf("save match: %w", err)
 		}
