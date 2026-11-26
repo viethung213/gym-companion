@@ -648,3 +648,36 @@ func TestWorkoutSession_Share(t *testing.T) {
 		}
 	})
 }
+
+// Seen live: 9 main sets at RPE 8 plus 4 unrated warm-up and cool-down sets
+// averaged to about 5.5, so coaching read a session trained exactly as
+// prescribed as far too easy. The average covers rated sets only, and is 0
+// (unrated) when no set carries an RPE.
+func TestWorkoutSession_AverageRPECountsRatedSetsOnly(t *testing.T) {
+	session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
+	logSet := func(n int, rpe float32) {
+		if err := session.LogSet(aggregate.WorkoutSetLog{
+			SetNumber: n, ExerciseID: "ex-1", TargetReps: 10, ActualReps: 10, Weight: 50, RPE: rpe,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logSet(1, 0) // warm-up, unrated
+	logSet(2, 8)
+	logSet(3, 9)
+	logSet(4, 0) // cool-down, unrated
+
+	summary := session.CalculateSummary()
+	if summary.AverageRPE != 8.5 {
+		t.Errorf("AverageRPE = %v, want 8.5 over the 2 rated sets", summary.AverageRPE)
+	}
+	if summary.TotalSets != 4 {
+		t.Errorf("TotalSets = %d, want every logged set (4)", summary.TotalSets)
+	}
+
+	unrated, _ := aggregate.NewWorkoutSession("sess-2", "user-1", "plan-1")
+	_ = unrated.LogSet(aggregate.WorkoutSetLog{SetNumber: 1, ExerciseID: "ex-1", TargetReps: 10, ActualReps: 10})
+	if got := unrated.CalculateSummary().AverageRPE; got != 0 {
+		t.Errorf("unrated session AverageRPE = %v, want 0", got)
+	}
+}

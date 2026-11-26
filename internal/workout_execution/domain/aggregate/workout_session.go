@@ -415,20 +415,30 @@ func (s *WorkoutSession) CalculateSummary() vo.SessionSummary {
 
 	var totalVolume float32
 	var totalRPE float32
+	var ratedSets int
 	var totalFormScore float32
 	var aiSetCount int
 
 	for i := range s.sets {
 		set := &s.sets[i]
 		totalVolume += set.Weight * float32(set.ActualReps)
-		totalRPE += set.RPE
+		// An unrated set (a warm-up, or one the athlete did not score) says
+		// nothing about effort: counting it as RPE 0 reads a session trained
+		// as prescribed as far too easy.
+		if set.RPE > 0 {
+			totalRPE += set.RPE
+			ratedSets++
+		}
 		if set.FormScore != nil {
 			totalFormScore += *set.FormScore
 			aiSetCount++
 		}
 	}
 
-	avgRPE := totalRPE / float32(totalSets)
+	var avgRPE float32 // 0 = no set was rated
+	if ratedSets > 0 {
+		avgRPE = totalRPE / float32(ratedSets)
+	}
 	var avgFormScore *float32
 	if aiSetCount > 0 {
 		score := totalFormScore / float32(aiSetCount)
