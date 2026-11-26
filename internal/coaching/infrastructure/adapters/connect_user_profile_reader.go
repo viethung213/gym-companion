@@ -263,14 +263,21 @@ func parseWorkoutTime(item string) []port.Slot {
 	return nil
 }
 
-// validSlot reports whether a slot names a weekday and two HH:MM clock times.
+// validSlot reports whether a slot names a weekday and an HH:MM start. The
+// end is optional ("tue:18:00"): planning schedules by the start, and a
+// dropped slot would put the athlete on default days they never chose.
 func validSlot(s port.Slot) bool {
 	if s.DayOfWeek < time.Sunday || s.DayOfWeek > time.Saturday {
 		return false
 	}
-	_, errStart := time.Parse("15:04", s.StartTime)
-	_, errEnd := time.Parse("15:04", s.EndTime)
-	return errStart == nil && errEnd == nil
+	if _, err := time.Parse("15:04", s.StartTime); err != nil {
+		return false
+	}
+	if s.EndTime == "" {
+		return true
+	}
+	_, err := time.Parse("15:04", s.EndTime)
+	return err == nil
 }
 
 func dayCodeToWeekday(code string) (time.Weekday, bool) {

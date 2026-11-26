@@ -1,34 +1,18 @@
 package adapters
 
 import (
-	"slices"
 	"testing"
-	"time"
 
-	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestParseWorkoutTimesList(t *testing.T) {
-	slots, unreadable := parseWorkoutTimesList([]string{
-		"mon:17:30-19:00",          // what the app sends
-		"WED 06:00-07:30",          // also accepted by the profile service
-		`{"fri": ["18:00-19:00"]}`, // JSON map
-		`[{"day_of_week":6,"start_time":"08:00","end_time":"09:30"}]`, // JSON list
-		"someday:18:00-19:00", // unknown day
-		"tue:soon",            // not a clock range
-		"",                    // ignored, not reported
-	})
-
-	want := []port.Slot{
-		{DayOfWeek: time.Monday, StartTime: "17:30", EndTime: "19:00"},
-		{DayOfWeek: time.Wednesday, StartTime: "06:00", EndTime: "07:30"},
-		{DayOfWeek: time.Friday, StartTime: "18:00", EndTime: "19:00"},
-		{DayOfWeek: time.Saturday, StartTime: "08:00", EndTime: "09:30"},
-	}
-	if !slices.Equal(slots, want) {
-		t.Errorf("slots = %+v\nwant %+v", slots, want)
-	}
-	if wantBad := []string{"someday:18:00-19:00", "tue:soon"}; !slices.Equal(unreadable, wantBad) {
-		t.Errorf("unreadable = %q, want %q", unreadable, wantBad)
-	}
+// A slot given by its start only ("tue:18:00") is kept: planning schedules by
+// the start, and dropping it put the athlete on default days. A broken start
+// or end is still unreadable.
+func TestParseWorkoutTimesList_StartOnlySlot(t *testing.T) {
+	slots, unreadable := parseWorkoutTimesList([]string{"tue:18:00", "thu:18:00-19:30", "fri:25:00", "sat:18:00-nope"})
+	assert.Len(t, slots, 2)
+	assert.Equal(t, "18:00", slots[0].StartTime)
+	assert.Empty(t, slots[0].EndTime)
+	assert.Equal(t, []string{"fri:25:00", "sat:18:00-nope"}, unreadable)
 }
