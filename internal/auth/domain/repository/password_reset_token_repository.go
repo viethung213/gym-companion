@@ -10,5 +10,6 @@ import (
 type PasswordResetTokenRepository interface {
 	Save(ctx context.Context, token *entity.PasswordResetToken) error
 	FindByToken(ctx context.Context, token string) (*entity.PasswordResetToken, error)
+	FindByTokenForUpdate(ctx context.Context, token string) (*entity.PasswordResetToken, error)
 	Update(ctx context.Context, token *entity.PasswordResetToken) error
 }

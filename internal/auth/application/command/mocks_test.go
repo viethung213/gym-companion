@@ -25,6 +25,7 @@ type mockUserRepo struct {
 	users             map[string]*aggregate.User
 	findByEmailErr    error
 	findByGoogleIDErr error
+	updateErr         error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, u *aggregate.User) error {
@@ -33,6 +34,9 @@ func (m *mockUserRepo) Create(ctx context.Context, u *aggregate.User) error {
 }
 
 func (m *mockUserRepo) Update(ctx context.Context, u *aggregate.User) error {
+	if m.updateErr != nil {
+		return m.updateErr
+	}
 	if _, ok := m.users[u.ID()]; !ok {
 		return derror.ErrUserNotFound
 	}
@@ -359,6 +363,10 @@ func (m *mockPasswordResetTokenRepo) FindByToken(ctx context.Context, token stri
 		return nil, derror.ErrNotFound
 	}
 	return t, nil
+}
+
+func (m *mockPasswordResetTokenRepo) FindByTokenForUpdate(ctx context.Context, token string) (*entity.PasswordResetToken, error) {
+	return m.FindByToken(ctx, token)
 }
 
 func (m *mockPasswordResetTokenRepo) Update(ctx context.Context, token *entity.PasswordResetToken) error {
