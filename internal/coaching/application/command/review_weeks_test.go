@@ -355,3 +355,28 @@ func TestReviewWeeks_HighRPEIsRelativeToThePlan(t *testing.T) {
 		}
 	}
 }
+
+// A session stopped for pain is left out of the week: the app promises it
+// does not count against the athlete. Stopped for lack of time, it counts.
+func TestReviewWeeks_PainStopIsLeftOut(t *testing.T) {
+	for _, tc := range []struct {
+		reason string
+		scr    float64
+	}{{"pain: lower back", 100}, {"out-of-time", 200.0 / 3}} {
+		rm := reviewFixture(t)
+		complete(t, rm, 100, 0, "w1-s0", "w1-s1")
+		s, _ := rm.FindSession("w1-s2")
+		if err := s.MarkAborted(tc.reason); err != nil {
+			t.Fatal(err)
+		}
+		h, _, _ := newReviewHandler(rm, weekOneEnd().Add(8*time.Hour))
+
+		res, err := h.Handle(context.Background(), "rm-r")
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if got := res.Metrics[0].SCR; math.Abs(got-tc.scr) > 0.01 {
+			t.Errorf("%q: SCR = %v, want %v", tc.reason, got, tc.scr)
+		}
+	}
+}

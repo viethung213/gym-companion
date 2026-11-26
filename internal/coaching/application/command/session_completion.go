@@ -207,7 +207,7 @@ func (h *AbortSessionHandler) Handle(ctx context.Context, cmd AbortSessionComman
 			return roadmap.ErrSessionNotFound
 		}
 
-		if err := session.MarkAborted(); err != nil {
+		if err := session.MarkAborted(cmd.Reason); err != nil {
 			return err
 		}
 

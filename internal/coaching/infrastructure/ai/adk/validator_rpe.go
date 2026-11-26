@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 )
 
 const (
@@ -63,6 +64,28 @@ func fitRPE(ex *PrescribedExercise, main bool, sp *SessionPlan, injuryCap float6
 		reason += fmt.Sprintf(", target_weight_kg %.1f to %.1f", w, ex.TargetWeightKg)
 	}
 	return reason
+}
+
+// fitRecordLoad lowers a load above BR-AC-02's ceiling (30% over the
+// athlete's record for the exercise) to that ceiling, like fitRPE: the record
+// is the backend's to know, and a retry to move 20 kg to 19.5 kg costs a model
+// call. Loads without a record, and the absolute ceiling, stay clampLoad's.
+func (v *planValidator) fitRecordLoad(ex *PrescribedExercise) string {
+	if v.loads == nil || ex.TargetWeightKg <= 0 {
+		return ""
+	}
+	baseline := v.loads.baselines[ex.ExerciseID]
+	if baseline <= 0 {
+		return ""
+	}
+	ceiling := service.NewOverloadValidator().Ceiling(baseline)
+	if ex.TargetWeightKg <= ceiling {
+		return ""
+	}
+	w := ex.TargetWeightKg
+	ex.TargetWeightKg = math.Floor(ceiling*2) / 2
+	return fmt.Sprintf("target_weight_kg %.1f is more than 30%% above the athlete's record %.1f kg; set to %.1f",
+		w, baseline, ex.TargetWeightKg)
 }
 
 // splitFitted separates what the validator fixed itself from what the model

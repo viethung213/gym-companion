@@ -11,6 +11,10 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 )
 
+// ErrInvalidAdhocPrescription is returned for a built session line that
+// breaks a hard limit (BR-AC-13).
+var ErrInvalidAdhocPrescription = errors.New("invalid ad-hoc prescription")
+
 // ErrExerciseExcludedByInjury is returned when the athlete picks an exercise
 // an active injury rules out (BR-AC-09 applies to ad-hoc sessions too).
 var ErrExerciseExcludedByInjury = errors.New("exercise is excluded by an active injury")
@@ -23,6 +27,9 @@ const adHocTargetRPE = 7.0
 type CreateAdhocSessionCommand struct {
 	UserID      string
 	ExerciseIDs []string
+	// Prescription, when it has main work, is the session as the athlete
+	// built it and takes the place of ExerciseIDs.
+	Prescription *roadmap.WorkoutPrescription
 }
 
 // CreateAdhocSessionResult wraps the created session plan.
@@ -84,7 +91,8 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 		return nil, errors.New("user_id is required")
 	}
 
-	if len(cmd.ExerciseIDs) == 0 {
+	built := cmd.Prescription != nil && len(cmd.Prescription.MainExercises) > 0
+	if !built && len(cmd.ExerciseIDs) == 0 {
 		return nil, errors.New("at least one exercise_id is required")
 	}
 
@@ -93,28 +101,26 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 	if err != nil {
 		return nil, fmt.Errorf("load profile for ad-hoc session: %w", err)
 	}
-	exercises := make([]port.Exercise, 0, len(cmd.ExerciseIDs))
-	for _, exID := range cmd.ExerciseIDs {
-		ex, getErr := h.exercises.GetByID(ctx, exID)
-		if getErr != nil {
-			return nil, fmt.Errorf("get exercise %s: %w", exID, getErr)
-		}
-		exercises = append(exercises, ex)
-	}
+	injuries := profile.Athlete().Injuries
 
-	athlete := profile.Athlete()
-	mains, err := adHocLines(exercises, athlete.Injuries)
+	var prescription roadmap.WorkoutPrescription
+	var mainExercises []port.Exercise
+	if built {
+		prescription, mainExercises, err = h.builtPrescription(ctx, cmd.Prescription, injuries)
+	} else {
+		prescription, mainExercises, err = h.defaultPrescription(ctx, cmd.ExerciseIDs, injuries)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	now := h.clock.Now()
-	out, err := h.place(ctx, cmd.UserID, now, mains, exercises)
+	out, err := h.place(ctx, cmd.UserID, now, prescription, mainExercises)
 	if errors.Is(err, errRoadmapEnded) && h.rollover != nil {
 		if _, rollErr := h.rollover.Handle(ctx, cmd.UserID); rollErr != nil {
 			return nil, rollErr
 		}
-		out, err = h.place(ctx, cmd.UserID, now, mains, exercises)
+		out, err = h.place(ctx, cmd.UserID, now, prescription, mainExercises)
 	}
 	if err != nil {
 		return nil, err
@@ -128,7 +134,7 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 // session refused as "after the end" is always one the roll-over moves on.
 func (h *CreateAdhocSessionHandler) place(
 	ctx context.Context, userID string, now time.Time,
-	mains []roadmap.PrescribedExercise, exercises []port.Exercise,
+	prescription roadmap.WorkoutPrescription, mainExercises []port.Exercise,
 ) (*CreateAdhocSessionResult, error) {
 	var out *CreateAdhocSessionResult
 	err := h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -160,8 +166,8 @@ func (h *CreateAdhocSessionHandler) place(
 			ScheduledDate:      today,
 			SlotTime:           "",
 			Source:             roadmap.SessionPlanSourceAdHoc,
-			TargetMuscleGroups: uniqueMuscleGroups(exercises),
-			Prescription:       roadmap.WorkoutPrescription{MainExercises: mains},
+			TargetMuscleGroups: uniqueMuscleGroups(mainExercises),
+			Prescription:       prescription,
 			Reasoning:          "ad-hoc session created by user",
 		}, now)
 		if newErr != nil {
@@ -183,6 +189,108 @@ func (h *CreateAdhocSessionHandler) place(
 		return nil, err
 	}
 
+	return out, nil
+}
+
+// defaultPrescription is the legacy ad-hoc session: each exercise a default
+// main line.
+func (h *CreateAdhocSessionHandler) defaultPrescription(
+	ctx context.Context, ids []string, injuries []service.Injury,
+) (roadmap.WorkoutPrescription, []port.Exercise, error) {
+	exercises, err := h.lookUp(ctx, ids)
+	if err != nil {
+		return roadmap.WorkoutPrescription{}, nil, err
+	}
+	mains, err := adHocLines(exercises, injuries)
+	if err != nil {
+		return roadmap.WorkoutPrescription{}, nil, err
+	}
+	return roadmap.WorkoutPrescription{MainExercises: mains}, exercises, nil
+}
+
+// builtPrescription keeps the session as the athlete built it, warm-ups and
+// cool-downs included, and holds every line to the catalog, the athlete's
+// injuries and the hard limits: an excluded exercise or a line past a limit
+// fails the request, and a limited one is capped at its injury RPE. Missing
+// numbers get the defaults of a user-built line.
+func (h *CreateAdhocSessionHandler) builtPrescription(
+	ctx context.Context, in *roadmap.WorkoutPrescription, injuries []service.Injury,
+) (roadmap.WorkoutPrescription, []port.Exercise, error) {
+	var mainExercises []port.Exercise
+	fit := func(lines []roadmap.PrescribedExercise, main bool) ([]roadmap.PrescribedExercise, error) {
+		out := make([]roadmap.PrescribedExercise, 0, len(lines))
+		for i := range lines {
+			line := lines[i]
+			found, err := h.lookUp(ctx, []string{line.ExerciseID})
+			if err != nil {
+				return nil, err
+			}
+			ex := &found[0]
+			line.ExerciseName = ex.Name
+			if issue := line.LimitIssue(); issue != "" {
+				return nil, fmt.Errorf("%w: %s: %s", ErrInvalidAdhocPrescription, ex.Name, issue)
+			}
+			fillAdHocDefaults(&line, main)
+			if len(injuries) > 0 {
+				traits := ex.Traits()
+				verdict := service.EvaluateInjuries(&traits, injuries)
+				if verdict.Excluded {
+					return nil, fmt.Errorf("%w: %s (%s)", ErrExerciseExcludedByInjury, ex.Name, verdict.Reason())
+				}
+				if verdict.MaxRPE > 0 && float64(line.TargetRPE) > verdict.MaxRPE {
+					line.TargetRPE = float32(verdict.MaxRPE)
+					line.Notes = "Injury caution: " + verdict.Reason()
+				}
+			}
+			if main {
+				mainExercises = append(mainExercises, *ex)
+			}
+			out = append(out, line)
+		}
+		return out, nil
+	}
+
+	var out roadmap.WorkoutPrescription
+	var err error
+	if out.WarmUps, err = fit(in.WarmUps, false); err != nil {
+		return out, nil, err
+	}
+	if out.MainExercises, err = fit(in.MainExercises, true); err != nil {
+		return out, nil, err
+	}
+	if out.CoolDowns, err = fit(in.CoolDowns, false); err != nil {
+		return out, nil, err
+	}
+	return out, mainExercises, nil
+}
+
+// fillAdHocDefaults gives a built line the numbers it left out: 3 sets of 8
+// for main work (1 set for a warm-up or cool-down) at the user-built RPE.
+func fillAdHocDefaults(line *roadmap.PrescribedExercise, main bool) {
+	if line.TargetSets == 0 {
+		line.TargetSets = 1
+		if main {
+			line.TargetSets = 3
+		}
+	}
+	if line.TargetReps == 0 && line.DurationSeconds == 0 {
+		line.TargetReps = 8
+	}
+	if main && line.TargetRPE == 0 {
+		line.TargetRPE = adHocTargetRPE
+	}
+}
+
+// lookUp reads the exercises from the catalog, in order.
+func (h *CreateAdhocSessionHandler) lookUp(ctx context.Context, ids []string) ([]port.Exercise, error) {
+	out := make([]port.Exercise, 0, len(ids))
+	for _, id := range ids {
+		ex, err := h.exercises.GetByID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("get exercise %s: %w", id, err)
+		}
+		out = append(out, ex)
+	}
 	return out, nil
 }
 

@@ -204,7 +204,8 @@ func endedWeekMetrics(rm *roadmap.Roadmap, due []*roadmap.WeekPlan) []service.We
 
 // weekMetrics measures a week's scheduled TRAINING sessions. Recovery and
 // user-built sessions are not the program and are left out. A session not
-// completed (skipped, aborted) counts as 0% done; ΔRPE and effort come from
+// completed (skipped, aborted) counts as 0% done, except one stopped for pain,
+// which is left out; ΔRPE and effort come from
 // the completed ones that reported an RPE, effort being the session's target
 // RPE plus its ΔRPE.
 func weekMetrics(rm *roadmap.Roadmap, w *roadmap.WeekPlan) (service.WeeklyMetrics, error) {
@@ -217,6 +218,9 @@ func weekMetrics(rm *roadmap.Roadmap, w *roadmap.WeekPlan) (service.WeeklyMetric
 			info := s.Info()
 			if info.Source != roadmap.SessionPlanSourceScheduled || s.Kind() != roadmap.SessionKindTraining {
 				continue
+			}
+			if s.StoppedForPain() {
+				continue // the app promises a pain stop does not count against the athlete
 			}
 			m.TotalSessions++
 			if info.Status != roadmap.SessionPlanStatusCompleted || info.SessionSCR == nil {

@@ -204,7 +204,7 @@ func TestSessionPlan_MarkAborted_Idempotent(t *testing.T) {
 
 	sp, _ := NewSessionPlan(&info, now)
 
-	if err := sp.MarkAborted(); err != nil {
+	if err := sp.MarkAborted(""); err != nil {
 		t.Fatalf("MarkAborted: %v", err)
 	}
 
@@ -213,7 +213,7 @@ func TestSessionPlan_MarkAborted_Idempotent(t *testing.T) {
 	}
 
 	// Idempotent
-	if err := sp.MarkAborted(); err != nil {
+	if err := sp.MarkAborted(""); err != nil {
 		t.Errorf("expected no-op on second MarkAborted, got %v", err)
 	}
 
@@ -400,13 +400,38 @@ func TestSessionPlan_MarkAborted_AfterSkip(t *testing.T) {
 	if err := sp.MarkSkipped(); err != nil {
 		t.Fatal(err)
 	}
-	if err := sp.MarkAborted(); err != nil || sp.Status() != SessionPlanStatusAborted {
+	if err := sp.MarkAborted(""); err != nil || sp.Status() != SessionPlanStatusAborted {
 		t.Fatalf("abort after skip: err %v, status %s", err, sp.Status())
 	}
 
 	done, _ := NewSessionPlan(&info, now)
 	_ = done.MarkCompleted(100, 0, now)
-	if err := done.MarkAborted(); !errors.Is(err, ErrInvalidTransition) {
+	if err := done.MarkAborted(""); !errors.Is(err, ErrInvalidTransition) {
 		t.Errorf("abort after completion: err %v, want ErrInvalidTransition", err)
+	}
+}
+
+func newPendingSession(t *testing.T) *SessionPlan {
+	t.Helper()
+	info := newTestSessionInfo()
+	sp, err := NewSessionPlan(&info, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sp
+}
+
+func TestSessionPlan_StoppedForPain(t *testing.T) {
+	for reason, want := range map[string]bool{"pain": true, "Pain: knee": true, "painful-music": false, "out-of-time": false, "": false} {
+		sp := newPendingSession(t)
+		if err := sp.MarkAborted(reason); err != nil {
+			t.Fatal(err)
+		}
+		if got := sp.StoppedForPain(); got != want {
+			t.Errorf("%q: StoppedForPain = %v, want %v", reason, got, want)
+		}
+	}
+	if newPendingSession(t).StoppedForPain() {
+		t.Error("a pending session reported a pain stop")
 	}
 }

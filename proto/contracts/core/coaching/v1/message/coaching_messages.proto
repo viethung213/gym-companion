@@ -163,7 +163,13 @@ message PrescribedExercise {
 }
 
 message CreateAdhocSessionPlanRequest {
+  // Legacy: exercises prescribed as default 3 x 8 main lines. Ignored when
+  // prescription carries main work.
   repeated string exercise_ids = 1;
+  // The session as built (e.g. an AI suggestion the athlete edited): warm-ups,
+  // main work and cool-downs with their numbers. Injuries and the hard limits
+  // still apply.
+  WorkoutPrescription prescription = 2;
 }
 
 message CreateAdhocSessionPlanResponse {

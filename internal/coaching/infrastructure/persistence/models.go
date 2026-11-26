@@ -70,6 +70,7 @@ type sessionPlanRecord struct {
 	CompletedAt              sql.NullTime    `gorm:"column:completed_at"`
 	SessionSCR               sql.NullFloat64 `gorm:"column:session_scr"`
 	SessionDeltaRPE          sql.NullFloat64 `gorm:"column:session_delta_rpe"`
+	AbortReason              string          `gorm:"column:abort_reason"`
 }
 
 func (sessionPlanRecord) TableName() string { return "coaching.session_plans" }

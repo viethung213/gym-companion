@@ -47,7 +47,13 @@ type SessionPlanInfo struct {
 	CompletedAt              *time.Time
 	SessionSCR               *float32
 	SessionDeltaRPE          *float32
+	// AbortReason is why an ABORTED session was stopped, as the workout
+	// service reported it ("pain: ...", "out-of-time", "timeout").
+	AbortReason string
 }
+
+// maxAbortReasonLen bounds the stored reason; it carries the athlete's note.
+const maxAbortReasonLen = 500
 
 // SessionPlan is an entity nested under DayPlan.
 type SessionPlan struct {
@@ -80,6 +86,8 @@ func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) 
 	normInfo.SessionSCR = nil
 
 	normInfo.SessionDeltaRPE = nil
+
+	normInfo.AbortReason = ""
 
 	sp := &SessionPlan{info: *normInfo}
 
@@ -217,7 +225,7 @@ func (s *SessionPlan) MarkSkipped() error {
 // or 4-hour inactivity timeouts (WorkoutSessionAborted event). A SKIPPED
 // session may be aborted too: the week was closed before the late event came.
 // Idempotent: calling on an already-ABORTED session is a no-op.
-func (s *SessionPlan) MarkAborted() error {
+func (s *SessionPlan) MarkAborted(reason string) error {
 	if s.info.Status == SessionPlanStatusAborted {
 		return nil
 	}
@@ -227,8 +235,23 @@ func (s *SessionPlan) MarkAborted() error {
 	}
 
 	s.info.Status = SessionPlanStatusAborted
+	if len(reason) > maxAbortReasonLen {
+		reason = reason[:maxAbortReasonLen]
+	}
+	s.info.AbortReason = reason
 
 	return nil
+}
+
+// StoppedForPain reports whether the athlete stopped this session because
+// something hurt. The app promises such a stop does not count against the
+// athlete's load, so the weekly review leaves it out (BR-AC-04).
+func (s *SessionPlan) StoppedForPain() bool {
+	if s.info.Status != SessionPlanStatusAborted {
+		return false
+	}
+	r := strings.ToLower(strings.TrimSpace(s.info.AbortReason))
+	return r == "pain" || strings.HasPrefix(r, "pain:")
 }
 
 // RewritePrescription replaces the prescription content in-place while the

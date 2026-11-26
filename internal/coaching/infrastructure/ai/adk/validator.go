@@ -560,6 +560,12 @@ func (v *planValidator) validateSession(
 				issues = append(issues, fittedLoc)
 				ex = *target
 			}
+			if fix := v.fitRecordLoad(target); fix != "" {
+				fittedLoc := loc
+				fittedLoc.Reason, fittedLoc.Fitted = fix, true
+				issues = append(issues, fittedLoc)
+				ex = *target
+			}
 
 			// Numbers last: salvage keeps the line, clamped to every limit.
 			for _, reason := range v.clampLine(&ex, slot.name == "main_exercises", catalogEx.MeasurementType, sp, injuryCap) {

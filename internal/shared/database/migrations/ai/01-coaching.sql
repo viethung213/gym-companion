@@ -132,6 +132,9 @@ CREATE INDEX IF NOT EXISTS idx_session_plans_day_plan_id  ON coaching.session_pl
 CREATE INDEX IF NOT EXISTS idx_session_plans_user_date    ON coaching.session_plans(user_id, scheduled_date);
 CREATE INDEX IF NOT EXISTS ix_session_plans_pending       ON coaching.session_plans(user_id, scheduled_date) WHERE status = 'PENDING';
 
+-- Why an ABORTED session was stopped; a stop for pain is left out of the weekly review.
+ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS abort_reason VARCHAR(500) NOT NULL DEFAULT '';
+
 -- TRAINING sessions count toward the weekly cap (BR-AC-01); RECOVERY ones are active recovery.
 ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS session_kind VARCHAR(20) NOT NULL DEFAULT 'TRAINING';
 DO $$ BEGIN

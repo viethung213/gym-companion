@@ -115,7 +115,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 					Columns: []clause.Column{{Name: "session_plan_id"}},
 					DoUpdates: clause.AssignmentColumns([]string{
 						"slot_time", "estimated_duration_minutes", "status", "session_kind", "target_muscle_groups", "prescription",
-						"reasoning", "generated_at", "completed_at", "session_scr", "session_delta_rpe",
+						"reasoning", "generated_at", "completed_at", "session_scr", "session_delta_rpe", "abort_reason",
 					}),
 				}).Create(&sr).Error; err != nil {
 					return fmt.Errorf("upsert session plan %s: %w", sr.SessionPlanID, err)

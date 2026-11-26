@@ -67,8 +67,9 @@ func TestPlanValidator_NumericLimits(t *testing.T) {
 	}
 }
 
-// A weight outside ±30% of the athlete's record is sent back, and salvage
-// clamps it to the band edge (BR-AC-02 before the guardrail).
+// A weight more than 30% above the athlete's record is lowered to the
+// ceiling by the validator itself (BR-AC-02 before the guardrail): the plan
+// ships with the fix logged, and costs no model retry.
 func TestPlanValidator_LoadAgainstRecord(t *testing.T) {
 	v := newPlanValidator(newFakeCatalog("bench-press")).
 		withLoads(&loadLimits{baselines: map[string]float64{"bench-press": 60}, bodyWeightKg: 70})
@@ -85,8 +86,11 @@ func TestPlanValidator_LoadAgainstRecord(t *testing.T) {
 	}
 
 	strict, _ := v.validate(context.Background(), build(100), false)
-	if n := issuesContaining(strict.Issues, "30% above"); n != 1 {
-		t.Errorf("100 kg against a 60 kg record: issues %v, want the band issue", strict.Issues)
+	if len(strict.Issues) != 0 || issuesContaining(strict.Fitted, "30% above") != 1 {
+		t.Errorf("100 kg against a 60 kg record: issues %v fitted %v, want it fitted", strict.Issues, strict.Fitted)
+	}
+	if got := mainOf(strict.Plan).TargetWeightKg; got != 78 {
+		t.Errorf("fitted load = %v, want 78 (60 + 30%%)", got)
 	}
 	salvaged, _ := v.validate(context.Background(), build(100), true)
 	if got := mainOf(salvaged.Plan).TargetWeightKg; got != 78 {

@@ -206,6 +206,8 @@ func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
 		rec.SessionDeltaRPE = sql.NullFloat64{Float64: float64(*info.SessionDeltaRPE), Valid: true}
 	}
 
+	rec.AbortReason = info.AbortReason
+
 	return rec, nil
 }
 
@@ -278,6 +280,8 @@ func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error)
 
 		info.SessionDeltaRPE = &v
 	}
+
+	info.AbortReason = rec.AbortReason
 
 	return roadmap.RehydrateSessionPlan(&info)
 }

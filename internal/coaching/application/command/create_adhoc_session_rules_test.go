@@ -137,3 +137,57 @@ func findDay(rm *roadmap.Roadmap, id string) (*roadmap.DayPlan, bool) {
 	}
 	return nil, false
 }
+
+// A session built from a suggestion keeps its warm-up, its numbers and its
+// cool-down, instead of becoming default 3 x 8 main lines.
+func TestCreateAdhoc_KeepsTheBuiltPrescription(t *testing.T) {
+	start := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	built := &roadmap.WorkoutPrescription{
+		WarmUps:       []roadmap.PrescribedExercise{{ExerciseID: "warm", TargetSets: 1, DurationSeconds: 60}},
+		MainExercises: []roadmap.PrescribedExercise{{ExerciseID: "bench", TargetSets: 4, TargetReps: 10, TargetWeight: 12.5, TargetRPE: 6.5, RestSetSec: 90}},
+		CoolDowns:     []roadmap.PrescribedExercise{{ExerciseID: "cool", DurationSeconds: 60}},
+	}
+	res, err := adHocHandler(oneWeekRoadmap(t, start), injuredProfiles{}, start.Add(10*time.Hour)).
+		Handle(context.Background(), CreateAdhocSessionCommand{UserID: "user-1", Prescription: built})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	p := res.SessionPlan.Info().Prescription
+	if len(p.WarmUps) != 1 || len(p.MainExercises) != 1 || len(p.CoolDowns) != 1 {
+		t.Fatalf("prescription %+v, want the three parts kept", p)
+	}
+	if m := p.MainExercises[0]; m.TargetSets != 4 || m.TargetReps != 10 || m.TargetWeight != 12.5 || m.TargetRPE != 6.5 {
+		t.Errorf("main line %+v, want 4 x 10 at 12.5 kg RPE 6.5", m)
+	}
+	if c := p.CoolDowns[0]; c.TargetSets != 1 || c.DurationSeconds != 60 || c.TargetReps != 0 {
+		t.Errorf("cool-down %+v, want one 60 s hold", c)
+	}
+	if p.MainExercises[0].ExerciseName == "" {
+		t.Error("exercise name not filled from the catalog")
+	}
+}
+
+// The built session is still held to the athlete: an injury caps a line's
+// RPE, and a line past a hard limit is refused.
+func TestCreateAdhoc_BuiltPrescriptionIsChecked(t *testing.T) {
+	start := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	now := start.Add(10 * time.Hour)
+	mild := injuredProfiles{injuries: []port.InjuryStatus{{Region: taxonomy.JointRegionChest, Severity: taxonomy.InjurySeverityMild}}}
+	cmd := func(sets int32, rpe float32) CreateAdhocSessionCommand {
+		return CreateAdhocSessionCommand{UserID: "user-1", Prescription: &roadmap.WorkoutPrescription{
+			MainExercises: []roadmap.PrescribedExercise{{ExerciseID: "bench", TargetSets: sets, TargetReps: 8, TargetRPE: rpe}},
+		}}
+	}
+
+	res, err := adHocHandler(oneWeekRoadmap(t, start), mild, now).Handle(context.Background(), cmd(3, 9))
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if line := res.SessionPlan.Info().Prescription.MainExercises[0]; line.TargetRPE > 7 || line.Notes == "" {
+		t.Errorf("line RPE %v notes %q, want the mild-injury cap 7 and a caution", line.TargetRPE, line.Notes)
+	}
+
+	if _, err := adHocHandler(oneWeekRoadmap(t, start), injuredProfiles{}, now).Handle(context.Background(), cmd(30, 7)); !errors.Is(err, ErrInvalidAdhocPrescription) {
+		t.Errorf("30 sets: err = %v, want ErrInvalidAdhocPrescription", err)
+	}
+}
