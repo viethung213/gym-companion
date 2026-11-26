@@ -98,6 +98,13 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 			return roadmap.ErrSessionNotFound
 		}
 
+		// A redelivered event finds the session already done: nothing is saved
+		// or announced again, so a workout is never counted twice.
+		if session.Status() == roadmap.SessionPlanStatusCompleted {
+			out = completedResult(rm, session)
+			return nil
+		}
+
 		// Auto-count prescribed sets if not provided.
 		totalPrescribedSets := cmd.TotalPrescribedSets
 		if totalPrescribedSets <= 0 {
@@ -157,6 +164,19 @@ func (h *CompleteSessionHandler) Handle(ctx context.Context, cmd CompleteSession
 	return out, err
 }
 
+// completedResult reports a session completed earlier, from what it stored.
+func completedResult(rm *roadmap.Roadmap, session *roadmap.SessionPlan) *CompleteSessionResult {
+	info := session.Info()
+	res := &CompleteSessionResult{RoadmapID: rm.ID(), SessionPlanID: session.ID()}
+	if info.SessionSCR != nil {
+		res.SCR = *info.SessionSCR
+	}
+	if info.SessionDeltaRPE != nil {
+		res.DeltaRPE = *info.SessionDeltaRPE
+	}
+	return res
+}
+
 // AbortSessionCommand corresponds to WorkoutSessionAborted event.
 type AbortSessionCommand struct {
 	SessionPlanID string
@@ -207,6 +227,9 @@ func (h *AbortSessionHandler) Handle(ctx context.Context, cmd AbortSessionComman
 			return roadmap.ErrSessionNotFound
 		}
 
+		if session.Status() == roadmap.SessionPlanStatusAborted {
+			return nil // redelivered: already applied and announced
+		}
 		if err := session.MarkAborted(cmd.Reason); err != nil {
 			return err
 		}

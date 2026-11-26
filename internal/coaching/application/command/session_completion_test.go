@@ -265,3 +265,47 @@ func mustSession(t *testing.T, repo *memRepo, id string) *roadmap.SessionPlan {
 	}
 	return s
 }
+
+// A redelivered completion or abort finds the session already final: it is
+// not saved or announced again, so downstream never counts a workout twice.
+func TestSessionEvents_RedeliveryAnnouncesOnce(t *testing.T) {
+	t.Run("completion", func(t *testing.T) {
+		repo := newMemRepo()
+		seedRoadmap(t, repo)
+		outbox := &captureOutbox{}
+		h := NewCompleteSessionHandler(fakeTx{}, repo, service.NewSCRCalculator(), outbox,
+			&fakeClock{t: time.Date(2026, 8, 3, 8, 0, 0, 0, time.UTC)})
+		cmd := CompleteSessionCommand{SessionPlanID: "sp-1", TotalActualSets: 12, TotalPrescribedSets: 15, AverageActualRPE: 7.5}
+
+		first, err := h.Handle(context.Background(), cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		again, err := h.Handle(context.Background(), cmd)
+		if err != nil {
+			t.Fatalf("redelivery: %v", err)
+		}
+		if len(outbox.events) != 1 {
+			t.Errorf("events = %d, want 1", len(outbox.events))
+		}
+		if again.SCR != first.SCR || again.DeltaRPE != first.DeltaRPE {
+			t.Errorf("redelivery result %+v, want the stored %+v", again, first)
+		}
+	})
+
+	t.Run("abort", func(t *testing.T) {
+		repo := newMemRepo()
+		seedRoadmap(t, repo)
+		outbox := &captureOutbox{}
+		h := NewAbortSessionHandler(fakeTx{}, repo, outbox, &fakeClock{t: time.Now()})
+		cmd := AbortSessionCommand{SessionPlanID: "sp-1", Reason: "pain"}
+		for range 2 {
+			if err := h.Handle(context.Background(), cmd); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(outbox.events) != 1 {
+			t.Errorf("events = %d, want 1", len(outbox.events))
+		}
+	})
+}
