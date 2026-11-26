@@ -70,6 +70,9 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 	if n := len(coachInput.SessionsToRevise); n > 0 {
 		v = v.expecting(n).withRevise(coachInput.SessionsToRevise)
 	}
+	if coachInput.Flow == FlowInitiate4Week {
+		v = v.planningRoadmap()
+	}
 	// Slot coverage is an initial-roadmap rule; rewrites get no schedule.
 	schedule, err := initSlotSchedule(coachInput)
 	if err != nil {

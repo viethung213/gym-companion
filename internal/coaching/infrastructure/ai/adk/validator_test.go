@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
@@ -462,5 +463,28 @@ func TestPlanValidator_EquipmentNotOwnedIsRetryable(t *testing.T) {
 	}
 	if len(got.Issues) != 1 || !strings.Contains(got.Issues[0].Reason, "BARBELL") {
 		t.Errorf("got issues %v, want one missing-equipment issue", got.Issues)
+	}
+}
+
+// An initial roadmap pins its weeks' phases even without a slot schedule (an
+// athlete with no slot): the schema no longer lets the model send them, and an
+// empty phase failed the whole roadmap.
+func TestPlanValidator_InitialRoadmapPinsPhasesWithoutSchedule(t *testing.T) {
+	v := newPlanValidator(newFakeCatalog("bench-press")).planningRoadmap()
+	plan := planOf(sessionOf("2026-08-03", "bench-press"))
+	plan.Weeks[0].Phase = "" // the model no longer sends it
+	v.pinKinds(plan)
+	if got := plan.Weeks[0].Phase; got != string(roadmap.PhaseAccumulation) {
+		t.Errorf("week 1 phase %q, want %s", got, roadmap.PhaseAccumulation)
+	}
+	if got := plan.Weeks[0].Sessions[0].phase; got != roadmap.PhaseAccumulation {
+		t.Errorf("session phase %q, want %s", got, roadmap.PhaseAccumulation)
+	}
+
+	adhoc := planOf(sessionOf("2026-08-03", "bench-press"))
+	adhoc.Weeks[0].Phase = ""
+	newPlanValidator(newFakeCatalog("bench-press")).pinKinds(adhoc)
+	if got := adhoc.Weeks[0].Phase; got != "" {
+		t.Errorf("a non-roadmap plan got phase %q, want none", got)
 	}
 }

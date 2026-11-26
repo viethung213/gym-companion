@@ -83,6 +83,10 @@ type planValidator struct {
 
 	// loads, when set, bounds every prescribed weight to the athlete.
 	loads *loadLimits
+
+	// initial marks a 4-week roadmap being planned: its weeks take their
+	// phase and RPE window from their number, schedule or not.
+	initial bool
 }
 
 // loadLimits are the athlete-specific bounds on a prescribed weight.
@@ -104,6 +108,12 @@ func (v *planValidator) expecting(sessions int) *planValidator {
 	return &cp
 }
 
+func (v *planValidator) planningRoadmap() *planValidator {
+	cp := *v
+	cp.initial = true
+	return &cp
+}
+
 func (v *planValidator) withAthlete(athlete *service.Athlete) *planValidator {
 	cp := *v
 	cp.athlete = athlete
@@ -113,6 +123,7 @@ func (v *planValidator) withAthlete(athlete *service.Athlete) *planValidator {
 func (v *planValidator) withSchedule(schedule *slotSchedule) *planValidator {
 	cp := *v
 	cp.schedule = schedule
+	cp.initial = true // only an initial roadmap has a slot schedule
 	return &cp
 }
 
@@ -138,7 +149,7 @@ func (v *planValidator) pinKinds(plan *GeneratedPlan) {
 	} else {
 		for w := range plan.Weeks {
 			wp := &plan.Weeks[w]
-			if v.schedule != nil {
+			if v.initial {
 				pinWeekPhase(wp)
 			}
 			for i := range wp.Sessions {
@@ -146,6 +157,8 @@ func (v *planValidator) pinKinds(plan *GeneratedPlan) {
 				sp.SessionKind = kindTraining
 				if v.schedule != nil {
 					sp.SessionKind = v.schedule.kindOf(sp.ScheduledDate, sp.SlotTime)
+				}
+				if v.initial {
 					sp.phase = roadmap.Phase(wp.Phase)
 				}
 			}
