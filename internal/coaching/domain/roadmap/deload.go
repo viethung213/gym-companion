@@ -114,9 +114,10 @@ func (s *SessionPlan) MainSets() int { return s.mainSets() }
 // the upcoming PENDING training sessions: each keeps at most ratio of the
 // main sets it had before the adaptation (before, by session ID), cut from
 // its largest lines, never below one set per line. Sessions of a DELOAD week
-// are skipped: BR-AC-11 already unloads them, and cutting again would leave
-// barely a workout. Sessions missing from before are left alone. It returns
-// the IDs of the sessions it cut.
+// are not cut by the ratio: BR-AC-11 sizes them instead, as at most
+// DeloadVolumeRatio of the PEAK week as it now stands, so a PEAK this cut
+// lowers lowers DELOAD with it (FitDeloadVolume runs after). Sessions missing
+// from before are left alone. It returns the IDs of the sessions it cut.
 func (r *Roadmap) UnloadUpcoming(before map[string]int, ratio float64, now time.Time) ([]string, error) {
 	upcoming := make(map[string]bool)
 	for _, s := range r.UpcomingPendingSessions(now) {
