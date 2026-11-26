@@ -409,6 +409,44 @@ func TestCreateAdhoc_AfterTheBlockEndedLandsInTheNextOne(t *testing.T) {
 	}
 }
 
+// freshStarter stands in for InitiateRoadmapHandler: it activates roadmap rm.
+type freshStarter struct {
+	repo  *rotationRepo
+	rm    *roadmap.Roadmap
+	calls int
+}
+
+func (f *freshStarter) Handle(context.Context, InitiateRoadmapCommand) (*InitiateRoadmapResult, error) {
+	f.calls++
+	f.repo.byID[f.rm.ID()] = f.rm
+	return &InitiateRoadmapResult{Roadmap: f.rm}, nil
+}
+
+// Seen in review: an ad-hoc session asked for after a trained block ended with
+// no successor rolled it over, but the fresh roadmap StartFresh asks for was
+// never started, and the worker no longer saw the block. It is started here.
+func TestCreateAdhoc_AfterTheBlockEndedStartsAFreshRoadmap(t *testing.T) {
+	repo := newRotationRepo(blockA(t))
+	now := time.Date(2026, 11, 30, 0, 10, 0, 0, time.UTC)
+	starter := &freshStarter{repo: repo, rm: blockStarting(t, "c", time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC))}
+	n := 0
+	h := NewCreateAdhocSessionHandler(fakeTx{}, repo, benchOnly(), zoneProfiles{loc: time.UTC},
+		&idGeneratorMock{fn: func() string { n++; return fmt.Sprintf("id-%d", n) }}, &clockMock{now: now}).
+		WithRollover(newRollOver(repo, &captureOutbox{}, now)).
+		WithFreshStart(starter)
+
+	res, err := h.Handle(context.Background(), CreateAdhocSessionCommand{UserID: "u-1", ExerciseIDs: []string{"ex-1"}})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if starter.calls != 1 {
+		t.Errorf("fresh starts = %d, want 1", starter.calls)
+	}
+	if got := res.SessionPlan.Info().RoadmapID; got != "c" {
+		t.Errorf("session placed in roadmap %s, want the fresh roadmap c", got)
+	}
+}
+
 // Seen in review: "today" came from the profile's zone while the roll-over
 // decides by the roadmap's. With the profile 7h ahead of a roadmap stored in
 // UTC, 21:00 UTC the day before the end was "after the end" for the session

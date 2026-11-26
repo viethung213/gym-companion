@@ -181,6 +181,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		}
 		if createAdhocHandler != nil {
 			createAdhocHandler.WithRollover(rollOverHandler)
+			if initiateHandler != nil {
+				createAdhocHandler.WithFreshStart(initiateHandler)
+			}
 		}
 	}
 

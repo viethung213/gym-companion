@@ -49,11 +49,19 @@ type CreateAdhocSessionHandler struct {
 	// rollover, when set, moves the athlete to their next block when the
 	// active roadmap has ended, so the session lands in the right one.
 	rollover roadmapRollover
+	// starter, when set, starts a fresh roadmap when the roll-over leaves
+	// the athlete without one and asks for it (RollOverResult.StartFresh).
+	starter roadmapStarter
 }
 
 // roadmapRollover is the RollOverHandler contract.
 type roadmapRollover interface {
 	Handle(ctx context.Context, userID string) (*RollOverResult, error)
+}
+
+// roadmapStarter is the InitiateRoadmapHandler contract.
+type roadmapStarter interface {
+	Handle(ctx context.Context, cmd InitiateRoadmapCommand) (*InitiateRoadmapResult, error)
 }
 
 // errRoadmapEnded marks a session asked for after the active roadmap ended.
@@ -62,6 +70,13 @@ var errRoadmapEnded = fmt.Errorf("active roadmap has ended: %w", roadmap.ErrDate
 // WithRollover enables moving to the next block when the active one ended.
 func (h *CreateAdhocSessionHandler) WithRollover(r roadmapRollover) *CreateAdhocSessionHandler {
 	h.rollover = r
+	return h
+}
+
+// WithFreshStart starts a new roadmap when the roll-over asks for one, as the
+// lifecycle worker would: the worker no longer sees a roadmap rolled over here.
+func (h *CreateAdhocSessionHandler) WithFreshStart(s roadmapStarter) *CreateAdhocSessionHandler {
+	h.starter = s
 	return h
 }
 
@@ -117,7 +132,7 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 	now := h.clock.Now()
 	out, err := h.place(ctx, cmd.UserID, now, prescription, mainExercises)
 	if errors.Is(err, errRoadmapEnded) && h.rollover != nil {
-		if _, rollErr := h.rollover.Handle(ctx, cmd.UserID); rollErr != nil {
+		if rollErr := h.rollOver(ctx, cmd.UserID); rollErr != nil {
 			return nil, rollErr
 		}
 		out, err = h.place(ctx, cmd.UserID, now, prescription, mainExercises)
@@ -126,6 +141,23 @@ func (h *CreateAdhocSessionHandler) Handle(ctx context.Context, cmd CreateAdhocS
 		return nil, err
 	}
 	return out, nil
+}
+
+// rollOver completes the ended roadmap and, when that leaves the athlete
+// without one and a fresh one is due, starts it.
+func (h *CreateAdhocSessionHandler) rollOver(ctx context.Context, userID string) error {
+	res, err := h.rollover.Handle(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !res.StartFresh || h.starter == nil {
+		return nil
+	}
+	if _, err := h.starter.Handle(ctx, InitiateRoadmapCommand{UserID: userID}); err != nil &&
+		!errors.Is(err, roadmap.ErrActiveRoadmapExists) {
+		return fmt.Errorf("start a fresh roadmap: %w", err)
+	}
+	return nil
 }
 
 // place adds the session to today's DayPlan of the user's active roadmap.
