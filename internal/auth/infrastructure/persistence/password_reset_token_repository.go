@@ -9,6 +9,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/domain/entity"
 	domainRepo "github.com/viethung213/gym-companion/internal/auth/domain/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // PasswordResetTokenRepository implements domainRepo.PasswordResetTokenRepository using PostgreSQL and GORM.
@@ -46,7 +47,7 @@ func (m *PasswordResetTokenModel) ToDomain() *entity.PasswordResetToken {
 // Save inserts a new password reset token.
 func (r *PasswordResetTokenRepository) Save(ctx context.Context, token *entity.PasswordResetToken) error {
 	m := toPasswordResetTokenModel(token)
-	if err := r.db.WithContext(ctx).Create(m).Error; err != nil {
+	if err := GetDB(ctx, r.db).Create(m).Error; err != nil {
 		return fmt.Errorf("failed to save password reset token: %w", err)
 	}
 	return nil
@@ -55,7 +56,7 @@ func (r *PasswordResetTokenRepository) Save(ctx context.Context, token *entity.P
 // FindByToken retrieves a reset token record by its token string.
 func (r *PasswordResetTokenRepository) FindByToken(ctx context.Context, token string) (*entity.PasswordResetToken, error) {
 	var m PasswordResetTokenModel
-	err := r.db.WithContext(ctx).Where("token = ?", token).First(&m).Error
+	err := GetDB(ctx, r.db).Where("token = ?", token).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, derror.ErrNotFound
@@ -65,10 +66,23 @@ func (r *PasswordResetTokenRepository) FindByToken(ctx context.Context, token st
 	return m.ToDomain(), nil
 }
 
+// FindByTokenForUpdate retrieves a reset token record with row-level lock (SELECT FOR UPDATE).
+func (r *PasswordResetTokenRepository) FindByTokenForUpdate(ctx context.Context, token string) (*entity.PasswordResetToken, error) {
+	var m PasswordResetTokenModel
+	err := GetDB(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE"}).Where("token = ?", token).First(&m).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, derror.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to find password reset token for update: %w", err)
+	}
+	return m.ToDomain(), nil
+}
+
 // Update updates an existing reset token (marking it as used).
 func (r *PasswordResetTokenRepository) Update(ctx context.Context, token *entity.PasswordResetToken) error {
 	m := toPasswordResetTokenModel(token)
-	err := r.db.WithContext(ctx).
+	err := GetDB(ctx, r.db).
 		Model(&PasswordResetTokenModel{}).
 		Where("token = ?", m.Token).
 		Update("is_used", m.IsUsed).Error

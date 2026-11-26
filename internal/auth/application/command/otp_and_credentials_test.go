@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -417,5 +418,19 @@ func TestResetPasswordHandler(t *testing.T) {
 	})
 	if err != derror.ErrResetTokenAlreadyUsed {
 		t.Fatalf("expected ErrResetTokenAlreadyUsed, got %v", err)
+	}
+
+	// Test 3: Transaction failure when user update fails
+	failToken := entity.NewPasswordResetToken("fail-tx-token", "user-rp", 15*time.Minute)
+	_ = resetTokenRepo.Save(ctx, failToken)
+	userRepo.updateErr = errors.New("db write failure")
+
+	_, err = handler.Handle(ctx, ResetPasswordCommand{
+		ResetToken:      "fail-tx-token",
+		NewPassword:     "brandnewpass123",
+		ConfirmPassword: "brandnewpass123",
+	})
+	if err == nil {
+		t.Fatalf("expected error when transaction fails, got nil")
 	}
 }
