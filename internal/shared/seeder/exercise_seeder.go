@@ -70,6 +70,10 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 	if err != nil {
 		return err
 	}
+	stabilizers, err := loadStabilizers()
+	if err != nil {
+		return err
+	}
 	existing, err := existingExerciseSlugs(ctx, db)
 	if err != nil {
 		return err
@@ -95,6 +99,7 @@ func SeedExercises(ctx context.Context, db *sql.DB, exerciseService ExerciseRegi
 			continue
 		}
 
+		withStabilizers(record, stabilizers)
 		req, err := newCreateExerciseRequest(record, motionSlugs[record.ID])
 		if err != nil {
 			return err
