@@ -33,9 +33,11 @@ func rescheduleTargets(rm *roadmap.Roadmap, slots []WorkoutSlot, now time.Time) 
 		taken := make(map[string]bool) // slots a kept session already holds
 		for _, d := range w.Days() {
 			for _, s := range d.Sessions() {
-				if _, ok := moving[s.ID()]; !ok {
+				// The athlete's own ad-hoc or solo workouts are not the plan:
+				// they take no slot and no training session from it.
+				if _, ok := moving[s.ID()]; !ok && s.Info().Source == roadmap.SessionPlanSourceScheduled {
 					kept++
-					if s.Kind() == roadmap.SessionKindTraining {
+					if s.IsTrainingVolume() {
 						keptTraining++
 					}
 					info := s.Info()
