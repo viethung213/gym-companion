@@ -191,3 +191,27 @@ func TestRoadmapRepository_RegenerationDue_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, users, userID)
 }
+
+// Reproduces the review finding: a copy read before its roadmap was deleted
+// (a stale PLANNED block discarded after an injury) was written back by the
+// upsert, bringing the deleted roadmap and its sessions back. A save from a
+// read copy must find the row it read.
+func TestRoadmapRepository_SaveDoesNotResurrectADeletedRoadmap_Integration(t *testing.T) {
+	db := getCoachingTestDB(t)
+	repo := persistence.NewRoadmapRepository(db)
+	ctx := context.Background()
+
+	rm := newPersistedRoadmap(t, uuid.NewString())
+	require.NoError(t, repo.Save(ctx, rm))
+	t.Cleanup(func() { db.Exec("DELETE FROM coaching.roadmaps WHERE roadmap_id = ?", rm.ID()) })
+
+	stale, err := repo.FindByID(ctx, rm.ID())
+	require.NoError(t, err)
+	require.NoError(t, db.Exec("DELETE FROM coaching.roadmaps WHERE roadmap_id = ?", rm.ID()).Error)
+
+	stale.Touch(time.Now())
+	err = repo.Save(ctx, stale)
+	assert.ErrorIs(t, err, roadmap.ErrRoadmapChanged)
+	_, err = repo.FindByID(ctx, rm.ID())
+	assert.ErrorIs(t, err, roadmap.ErrRoadmapNotFound, "the deleted roadmap came back")
+}

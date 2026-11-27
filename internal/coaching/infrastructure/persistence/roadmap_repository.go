@@ -42,6 +42,9 @@ const activeRoadmapConstraint = "ux_roadmaps_user_active"
 // plannedRoadmapConstraint is the unique index allowing one PLANNED roadmap per user.
 const plannedRoadmapConstraint = "ux_roadmaps_user_planned"
 
+// uniqueViolation is the Postgres SQLSTATE for a duplicate key.
+const uniqueViolation = "23505"
+
 func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error {
 	if rm == nil {
 		return errors.New("nil roadmap")
@@ -49,21 +52,23 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 
 	db := r.getDB(ctx)
 
-	// Optimistic lock: the row is written only if it still holds the version
-	// this copy was read at, so a writer working from a stale copy (one that
-	// waited on the model, say) cannot erase what others saved meanwhile.
+	// Optimistic lock: a roadmap never saved is inserted; a copy read from the
+	// store is written only over the row it read, at the version it read. A
+	// writer working from a stale copy (one that waited on the model, say)
+	// cannot erase what others saved meanwhile, nor bring back a roadmap that
+	// was deleted since (a discarded PLANNED block).
 	rec := toRoadmapRecordPtr(rm)
 	rec.Version = rm.Version() + 1
-	res := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "roadmap_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"status", "start_date", "end_date", "updated_at", "timezone", "version",
-			"regenerate_due_since", "regenerate_reason",
-		}),
-		Where: clause.Where{Exprs: []clause.Expression{
-			clause.Expr{SQL: "coaching.roadmaps.version = ?", Vars: []any{rm.Version()}},
-		}},
-	}).Create(rec)
+	var res *gorm.DB
+	if rm.Version() == 0 {
+		res = db.Create(rec)
+	} else {
+		res = db.Model(&roadmapRecord{}).
+			Where("roadmap_id = ? AND version = ?", rm.ID(), rm.Version()).
+			Select("status", "start_date", "end_date", "updated_at", "timezone", "version",
+				"regenerate_due_since", "regenerate_reason").
+			Updates(rec)
+	}
 	if err := res.Error; err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Constraint == activeRoadmapConstraint {
@@ -73,7 +78,11 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 		if errors.As(err, &pqErr) && pqErr.Constraint == plannedRoadmapConstraint {
 			return fmt.Errorf("%w: %s", roadmap.ErrPlannedRoadmapExists, rm.UserID())
 		}
-		return fmt.Errorf("upsert roadmap: %w", err)
+		if errors.As(err, &pqErr) && pqErr.Code == uniqueViolation {
+			// The roadmap was created by another writer from a copy never saved.
+			return fmt.Errorf("%w: %s already exists", roadmap.ErrRoadmapChanged, rm.ID())
+		}
+		return fmt.Errorf("save roadmap: %w", err)
 	}
 	if res.RowsAffected == 0 {
 		return fmt.Errorf("%w: %s at version %d", roadmap.ErrRoadmapChanged, rm.ID(), rm.Version())
