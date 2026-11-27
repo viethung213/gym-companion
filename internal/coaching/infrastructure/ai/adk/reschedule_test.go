@@ -172,3 +172,16 @@ func TestPinRewriteSlots(t *testing.T) {
 		t.Errorf("session 1 should be pinned but keep its own duration: %+v", s[1])
 	}
 }
+
+// Reproduces what the UI test saw: Monday's 17:30 session was trained early,
+// at 10:00 the same day, and the slots did not change. Its slot is still ahead
+// at 10:00, so it counted as open, the open slots no longer matched the
+// pending sessions, and a regenerate rescheduled every upcoming session under
+// new IDs instead of rewriting them in place.
+func TestRescheduleTargets_NilAfterASessionTrainedBeforeItsSlot(t *testing.T) {
+	rm := rescheduleRoadmap(t, remainingMonThu()...)              // Mon 23rd 17:30 is COMPLETED
+	trainedEarly := time.Date(2026, 11, 23, 3, 0, 0, 0, time.UTC) // Mon 10:00 ICT
+	if got := rescheduleTargets(rm, mondayThursday(), trainedEarly); got != nil {
+		t.Fatalf("got %d targets, want nil: the slots did not change", len(got))
+	}
+}
