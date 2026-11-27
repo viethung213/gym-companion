@@ -20,8 +20,9 @@ import (
 //   - a claim left by a process that died mid-handling is taken over by the
 //     redelivery (the consumer commits offsets only after handling).
 //
-// Once the consumer has exhausted its retries it commits the offset and logs
-// the event as failed: there is no dead-letter queue yet.
+// Once the consumer loop (sharedKafka.RunConsumerLoop) has exhausted its
+// retries it publishes the event to the dead-letter topic and commits the
+// offset; the released claim lets a replay from that topic run it again.
 func handleOnce(
 	ctx context.Context,
 	outbox port.OutboxRepository,
