@@ -114,17 +114,17 @@ func (h *PlanNextBlockHandler) Handle(ctx context.Context, roadmapID string) (*r
 // changed during the generation; the next run plans it again.
 var errProfileChangedWhilePlanning = errors.New("profile changed while the next block was planned; planning again next run")
 
-// profileUnchangedSince refuses a draft when the athlete edited their profile
-// after planning started. The profile-change event cannot catch it: when it
-// was handled there was no planned block yet to discard. The profile RPC
-// reports updated_at in whole seconds (RFC 3339), so the comparison does too: a
-// same-second edit re-plans.
+// profileUnchangedSince refuses a draft when the athlete's profile may have
+// changed after the planner read it. The profile-change event cannot catch it:
+// when it was handled there was no planned block yet to discard. The profile
+// RPC rounds updated_at down to the second, so the edit may be up to a second
+// later than reported; plannedAfter adds the commit slack on top.
 func (h *PlanNextBlockHandler) profileUnchangedSince(ctx context.Context, userID string, plannedAt time.Time) error {
 	profile, err := h.profiles.GetProfile(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("re-read profile after planning: %w", err)
 	}
-	if !profile.UpdatedAt.Before(plannedAt.Truncate(time.Second)) {
+	if !plannedAfter(plannedAt, profile.UpdatedAt.Add(time.Second)) {
 		return errProfileChangedWhilePlanning
 	}
 	return nil

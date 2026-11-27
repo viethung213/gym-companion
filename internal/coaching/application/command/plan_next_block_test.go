@@ -543,3 +543,29 @@ func TestPlanNextBlock_DropsADraftFromAProfileEditedMeanwhile(t *testing.T) {
 		t.Errorf("a draft from the stale profile was stored: %v", err)
 	}
 }
+
+// Reproduces the review finding: an injury stamped 100 ms before planning
+// started (10:00:00.900) commits after the planner read the profile. The RPC
+// rounds updated_at down to 10:00:00, the old check saw "before 10:00:01" and
+// kept a block planned without the injury, and the profile event found no
+// planned block to discard. A change that may have missed the read re-plans.
+func TestPlanNextBlock_DropsADraftWhenTheEditMayHaveMissedTheRead(t *testing.T) {
+	plannedAt := time.Date(2026, 11, 24, 10, 0, 1, 0, time.UTC)
+	repo := newRotationRepo(blockA(t))
+	h := NewPlanNextBlockHandler(fakeTx{}, repo, repo, &stubPlanner{t: t},
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil),
+		editedProfiles{updatedAt: time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)}, &fakeClock{t: plannedAt})
+
+	if _, err := h.Handle(context.Background(), "a"); !errors.Is(err, errProfileChangedWhilePlanning) {
+		t.Fatalf("err = %v, want errProfileChangedWhilePlanning", err)
+	}
+
+	// An edit well before planning keeps the draft.
+	repo = newRotationRepo(blockA(t))
+	h = NewPlanNextBlockHandler(fakeTx{}, repo, repo, &stubPlanner{t: t},
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil),
+		editedProfiles{updatedAt: plannedAt.Add(-time.Hour)}, &fakeClock{t: plannedAt})
+	if _, err := h.Handle(context.Background(), "a"); err != nil {
+		t.Fatalf("an old edit dropped the draft: %v", err)
+	}
+}
