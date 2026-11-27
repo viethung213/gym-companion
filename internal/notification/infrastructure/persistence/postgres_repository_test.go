@@ -470,6 +470,90 @@ func TestPostgresOutboxLog_ConcurrentZombieReclaim_MutualExclusion(t *testing.T)
 	}
 }
 
+func TestPostgresOutboxLog_FetchFailedLogs_IncludesZombieProcessing(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+
+	// 1. FAILED log ready for retry
+	failedEventID := "550e8400-e29b-41d4-a716-446655440051"
+	err := db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-failed-1", failedEventID, "TestEvent", "{}", "usr-1", now.Add(-2*time.Minute), "FAILED", 0, now.Add(-1*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert failed log error: %v", err)
+	}
+
+	// 2. Zombie PROCESSING log (stuck 10 minutes ago, server crashed without redelivery)
+	zombieEventID := "550e8400-e29b-41d4-a716-446655440052"
+	err = db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-zombie-fetch-1", zombieEventID, "TestEvent", "{}", "usr-2", now.Add(-10*time.Minute), "PROCESSING", 0, now.Add(-10*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert zombie processing log error: %v", err)
+	}
+
+	// 3. Active PROCESSING log (only 1 minute ago, currently being handled by another worker)
+	activeEventID := "550e8400-e29b-41d4-a716-446655440053"
+	err = db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-active-proc-1", activeEventID, "TestEvent", "{}", "usr-3", now.Add(-1*time.Minute), "PROCESSING", 0, now.Add(-1*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert active processing log error: %v", err)
+	}
+
+	// 4. SUCCESS log (must never be fetched)
+	successEventID := "550e8400-e29b-41d4-a716-446655440054"
+	err = db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-success-1", successEventID, "TestEvent", "{}", "usr-4", now.Add(-2*time.Minute), "SUCCESS", 0, now.Add(-2*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert success log error: %v", err)
+	}
+
+	// Fetch logs for retry
+	fetched, err := outboxLogRepo.FetchFailedLogs(ctx, 10)
+	if err != nil {
+		t.Fatalf("FetchFailedLogs error: %v", err)
+	}
+
+	if got, want := len(fetched), 2; got != want {
+		t.Fatalf("got %d fetched logs, want %d", got, want)
+	}
+
+	foundFailed := false
+	foundZombie := false
+	for _, rec := range fetched {
+		if rec.EventID == failedEventID {
+			foundFailed = true
+		}
+		if rec.EventID == zombieEventID {
+			foundZombie = true
+		}
+		if rec.EventID == activeEventID {
+			t.Errorf("active PROCESSING event %s should not have been fetched", activeEventID)
+		}
+		if rec.EventID == successEventID {
+			t.Errorf("SUCCESS event %s should not have been fetched", successEventID)
+		}
+	}
+
+	if !foundFailed {
+		t.Errorf("expected to find FAILED event %s in fetched logs", failedEventID)
+	}
+	if !foundZombie {
+		t.Errorf("expected to find zombie PROCESSING event %s in fetched logs", zombieEventID)
+	}
+}
+
 func TestTxManager(t *testing.T) {
 	sqlDB, db := setupTestDB(t)
 	defer sqlDB.Close()

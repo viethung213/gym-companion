@@ -168,13 +168,18 @@ func (r *OutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([
 
 	var models []OutboxLogModel
 	now := time.Now().UTC()
+	zombieThreshold := now.Add(-defaultProcessingTimeout)
+
 	err := GetDB(ctx, r.db).
-		Where("status = ? AND retry_count < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", "FAILED", 3, now).
+		Where(
+			"(status = ? AND retry_count < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)) OR (status = ? AND retry_count < ? AND processed_at < ?)",
+			"FAILED", 3, now, "PROCESSING", 3, zombieThreshold,
+		).
 		Order("processed_at ASC").
 		Limit(limit).
 		Find(&models).Error
 	if err != nil {
-		return nil, fmt.Errorf("query failed notification outbox logs: %w", err)
+		return nil, fmt.Errorf("query failed or zombie notification outbox logs: %w", err)
 	}
 
 	records := make([]*port.OutboxLogRecord, 0, len(models))
