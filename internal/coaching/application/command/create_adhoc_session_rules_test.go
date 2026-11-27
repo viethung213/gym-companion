@@ -234,3 +234,31 @@ func TestCreateAdhoc_BuiltLineDefaultsFollowTheMeasure(t *testing.T) {
 		t.Errorf("timed cool-down %+v, want one 30 s hold", c)
 	}
 }
+
+// Reproduces the review finding: an ad-hoc session requested by exercise ids
+// (the solo-match path) still prescribed a timed exercise as 3 x 8 reps.
+func TestCreateAdhoc_ByIDsTimedExerciseGetsAHold(t *testing.T) {
+	start := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	catalog := &exerciseCatalogMock{fn: func(_ context.Context, id string) (port.Exercise, error) {
+		return port.Exercise{ExerciseID: id, Name: id, PrimaryMuscle: taxonomy.MuscleGroupAbdominals,
+			Equipment: taxonomy.EquipmentBodyOnly, Level: taxonomy.LevelBeginner, MeasurementType: "DURATION"}, nil
+	}}
+	n := 0
+	h := NewCreateAdhocSessionHandler(
+		&transactionManagerMock{fn: func(ctx context.Context, f func(context.Context) error) error { return f(ctx) }},
+		&roadmapRepositoryMock{
+			findActiveByUserFn: func(context.Context, string) (*roadmap.Roadmap, error) { return oneWeekRoadmap(t, start), nil },
+			saveFn:             func(context.Context, *roadmap.Roadmap) error { return nil },
+		},
+		catalog, injuredProfiles{},
+		&idGeneratorMock{fn: func() string { n++; return "id-" + string(rune('a'+n)) }},
+		&clockMock{now: start.Add(10 * time.Hour)},
+	)
+	res, err := h.Handle(context.Background(), CreateAdhocSessionCommand{UserID: "user-1", ExerciseIDs: []string{"plank"}})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if m := res.SessionPlan.Info().Prescription.MainExercises[0]; m.DurationSeconds != 45 || m.TargetReps != 0 {
+		t.Errorf("timed line %+v, want a 45 s hold", m)
+	}
+}

@@ -351,12 +351,11 @@ func adHocLines(exercises []port.Exercise, injuries []service.Injury) ([]roadmap
 		line := roadmap.PrescribedExercise{
 			ExerciseID:      ex.ExerciseID,
 			ExerciseName:    ex.Name,
-			TargetSets:      3,
-			TargetReps:      8,
 			RestSetSec:      90,
 			RestExerciseSec: 120,
 			TargetRPE:       adHocTargetRPE,
 		}
+		fillAdHocDefaults(&line, true, ex.IsTimed())
 		if len(injuries) > 0 {
 			traits := ex.Traits()
 			verdict := service.EvaluateInjuries(&traits, injuries)
