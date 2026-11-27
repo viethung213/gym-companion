@@ -99,7 +99,8 @@ func ToSettingModel(s *aggregate.Setting) *SettingModel {
 
 type InAppNotificationModel struct {
 	ID        string    `gorm:"primaryKey;column:id"`
-	UserID    string    `gorm:"column:user_id;index:idx_notification_in_app_notifications_user_id"`
+	EventID   *string   `gorm:"column:event_id;index:idx_notification_in_app_user_event,unique"`
+	UserID    string    `gorm:"column:user_id;index:idx_notification_in_app_notifications_user_id;index:idx_notification_in_app_user_event,unique"`
 	Title     string    `gorm:"column:title"`
 	Body      string    `gorm:"column:body"`
 	Data      []byte    `gorm:"column:data;type:jsonb"`
@@ -125,8 +126,13 @@ func (m *InAppNotificationModel) ToDomain() (*aggregate.InAppNotification, error
 			}
 		}
 	}
+	eventID := ""
+	if m.EventID != nil {
+		eventID = *m.EventID
+	}
 	return aggregate.ReconstituteInAppNotification(
 		m.ID,
+		eventID,
 		m.UserID,
 		m.Title,
 		m.Body,
@@ -141,8 +147,14 @@ func ToInAppNotificationModel(n *aggregate.InAppNotification) (*InAppNotificatio
 	if err != nil {
 		return nil, fmt.Errorf("marshal notification data JSON: %w", err)
 	}
+	var eventIDPtr *string
+	if n.EventID() != "" {
+		eid := n.EventID()
+		eventIDPtr = &eid
+	}
 	return &InAppNotificationModel{
 		ID:        n.ID(),
+		EventID:   eventIDPtr,
 		UserID:    n.UserID(),
 		Title:     n.Title(),
 		Body:      n.Body(),
@@ -188,13 +200,15 @@ func (m *OutboxModel) ToDomain() *port.OutboxRecord {
 
 type OutboxLogModel struct {
 	ID           string    `gorm:"primaryKey;column:id"`
-	EventID      string    `gorm:"column:event_id"`
+	EventID      string    `gorm:"column:event_id;uniqueIndex"`
 	EventType    string    `gorm:"column:event_type"`
 	Payload      []byte    `gorm:"column:payload;type:jsonb"`
 	PartitionKey string    `gorm:"column:partition_key"`
 	ProcessedAt  time.Time `gorm:"column:processed_at"`
 	Status       string    `gorm:"column:status"`
 	ErrorMessage string    `gorm:"column:error_message"`
+	RetryCount   int       `gorm:"column:retry_count;default:0"`
+	NextRetryAt  time.Time `gorm:"column:next_retry_at"`
 }
 
 func (OutboxLogModel) TableName() string {

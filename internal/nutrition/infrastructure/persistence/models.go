@@ -108,7 +108,7 @@ func (g *GormOutbox) TableName() string {
 
 type GormOutboxLog struct {
 	ID           string    `gorm:"column:id;primaryKey"`
-	EventID      string    `gorm:"column:event_id;index"`
+	EventID      string    `gorm:"column:event_id;uniqueIndex;not null"`
 	EventType    string    `gorm:"column:event_type"`
 	Payload      []byte    `gorm:"column:payload;type:jsonb"`
 	PartitionKey string    `gorm:"column:partition_key"`

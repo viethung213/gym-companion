@@ -10,34 +10,40 @@ import (
 	"github.com/viethung213/gym-companion/internal/auth/application/port"
 )
 
-// RotateKeysCommand represents the command to rotate JWT signing keys.
-type RotateKeysCommand struct {
-	KeyTTL         time.Duration
-	GracePeriodTTL time.Duration
-}
-
 // RotateKeysHandler generates a new key pair, sets it active, and deactivates old active ones.
 type RotateKeysHandler struct {
-	keyRepo   port.KeyRepository
-	keyGen    port.KeyGenerator
-	txManager port.TransactionManager
+	keyRepo        port.KeyRepository
+	keyGen         port.KeyGenerator
+	txManager      port.TransactionManager
+	keyTTL         time.Duration
+	gracePeriodTTL time.Duration
 }
 
-// NewRotateKeysHandler constructs a RotateKeysHandler instance.
+// NewRotateKeysHandler constructs a RotateKeysHandler instance with durations loaded from environment.
 func NewRotateKeysHandler(
 	keyRepo port.KeyRepository,
 	keyGen port.KeyGenerator,
 	txManager port.TransactionManager,
+	keyTTL time.Duration,
+	gracePeriodTTL time.Duration,
 ) *RotateKeysHandler {
+	if keyTTL <= 0 {
+		keyTTL = 7 * 24 * time.Hour
+	}
+	if gracePeriodTTL <= 0 {
+		gracePeriodTTL = 24 * time.Hour
+	}
 	return &RotateKeysHandler{
-		keyRepo:   keyRepo,
-		keyGen:    keyGen,
-		txManager: txManager,
+		keyRepo:        keyRepo,
+		keyGen:         keyGen,
+		txManager:      txManager,
+		keyTTL:         keyTTL,
+		gracePeriodTTL: gracePeriodTTL,
 	}
 }
 
-// Handle executes the key rotation logic.
-func (h *RotateKeysHandler) Handle(ctx context.Context, cmd RotateKeysCommand) (string, error) {
+// Handle executes the key rotation logic using configured key and grace period TTLs.
+func (h *RotateKeysHandler) Handle(ctx context.Context) (string, error) {
 	// 1. Generate new active key in memory
 	privPEM, pubPEM, err := h.keyGen.Generate(ctx)
 	if err != nil {
@@ -52,12 +58,13 @@ func (h *RotateKeysHandler) Handle(ctx context.Context, cmd RotateKeysCommand) (
 		Algorithm:     "RS256",
 		Status:        port.KeyStatusActive,
 		CreatedAt:     now,
-		ExpiresAt:     now.Add(cmd.KeyTTL),
+		ExpiresAt:     now.Add(h.keyTTL),
 	}
 
 	executeRotation := func(txCtx context.Context) error {
-		// 2. Deactivate all previous active keys
-		if err := h.keyRepo.DeactivateAllActiveKeys(txCtx); err != nil {
+		// 2. Deactivate all previous active keys and set their expiration to grace period
+		graceExpiresAt := now.Add(h.gracePeriodTTL)
+		if err := h.keyRepo.DeactivateAllActiveKeys(txCtx, graceExpiresAt); err != nil {
 			return fmt.Errorf("deactivate active keys: %w", err)
 		}
 

@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
+	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 )
+
+const defaultDispatchTimeout = 5 * time.Second
 
 type genericNotificationPayload struct {
 	Target *struct {
@@ -38,8 +42,14 @@ type SelfEventHandler struct {
 	sendPushHandler  *command.SendPushNotificationHandler
 	sendEmailHandler *command.SendEmailNotificationHandler
 	sendSMSHandler   *command.SendSMSNotificationHandler
+	deviceRepo       repository.DeviceRepository
 	outboxLogRepo    port.OutboxLogRepository
 	rules            map[string]selfEventRule
+}
+
+func (h *SelfEventHandler) WithDeviceRepo(repo repository.DeviceRepository) *SelfEventHandler {
+	h.deviceRepo = repo
+	return h
 }
 
 func NewSelfEventHandler(
@@ -104,10 +114,18 @@ func (h *SelfEventHandler) Handle(
 
 	var userIDs []string
 	if payload.Target != nil {
-		if payload.Target.UserID != "" {
+		switch {
+		case payload.Target.UserID != "":
 			userIDs = append(userIDs, payload.Target.UserID)
-		} else if payload.Target.UserList != nil {
+		case payload.Target.UserList != nil:
 			userIDs = append(userIDs, payload.Target.UserList.UserIDs...)
+		case payload.Target.AllUsers && h.deviceRepo != nil:
+			allUIDs, err := h.deviceRepo.GetAllActiveUserIDs(ctx)
+			if err != nil {
+				slog.ErrorContext(ctx, "Fetch all active users for broadcast failed", slog.Any("error", err))
+			} else {
+				userIDs = append(userIDs, allUIDs...)
+			}
 		}
 	}
 	if len(userIDs) == 0 && payload.UserID != "" {
@@ -157,13 +175,16 @@ func (h *SelfEventHandler) Handle(
 		case "PUSH":
 			if h.sendPushHandler != nil {
 				for _, uid := range userIDs {
-					_, err := h.sendPushHandler.Handle(ctx, command.SendPushNotificationCommand{
+					dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
+					_, err := h.sendPushHandler.Handle(dispatchCtx, command.SendPushNotificationCommand{
+						EventID:        env.ID,
 						UserID:         uid,
 						Title:          title,
 						Body:           body,
 						Data:           payload.Data,
 						IsHighPriority: isHighPriority,
 					})
+					cancel()
 					if err != nil {
 						lastErr = err
 						slog.ErrorContext(ctx, "Push dispatch error", slog.String("user_id", uid), slog.Any("error", err))
@@ -187,26 +208,30 @@ func (h *SelfEventHandler) Handle(
 				if emailAddr != "" {
 					if len(userIDs) > 0 {
 						for _, uid := range userIDs {
-							_, err := h.sendEmailHandler.Handle(ctx, command.SendEmailNotificationCommand{
+							dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
+							_, err := h.sendEmailHandler.Handle(dispatchCtx, command.SendEmailNotificationCommand{
 								UserID:         uid,
 								To:             emailAddr,
 								Subject:        title,
 								Body:           body,
 								IsHighPriority: isHighPriority,
 							})
+							cancel()
 							if err != nil {
 								lastErr = err
 								slog.ErrorContext(ctx, "Email dispatch error", slog.String("to", emailAddr), slog.Any("error", err))
 							}
 						}
 					} else {
-						_, err := h.sendEmailHandler.Handle(ctx, command.SendEmailNotificationCommand{
+						dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
+						_, err := h.sendEmailHandler.Handle(dispatchCtx, command.SendEmailNotificationCommand{
 							UserID:         "",
 							To:             emailAddr,
 							Subject:        title,
 							Body:           body,
 							IsHighPriority: isHighPriority,
 						})
+						cancel()
 						if err != nil {
 							lastErr = err
 							slog.ErrorContext(ctx, "Email dispatch error", slog.String("to", emailAddr), slog.Any("error", err))
@@ -236,24 +261,28 @@ func (h *SelfEventHandler) Handle(
 				if phoneNum != "" {
 					if len(userIDs) > 0 {
 						for _, uid := range userIDs {
-							_, err := h.sendSMSHandler.Handle(ctx, command.SendSMSNotificationCommand{
+							dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
+							_, err := h.sendSMSHandler.Handle(dispatchCtx, command.SendSMSNotificationCommand{
 								UserID:         uid,
 								PhoneNumber:    phoneNum,
 								Message:        body,
 								IsHighPriority: isHighPriority,
 							})
+							cancel()
 							if err != nil {
 								lastErr = err
 								slog.ErrorContext(ctx, "SMS dispatch error", slog.String("to", phoneNum), slog.Any("error", err))
 							}
 						}
 					} else {
-						_, err := h.sendSMSHandler.Handle(ctx, command.SendSMSNotificationCommand{
+						dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
+						_, err := h.sendSMSHandler.Handle(dispatchCtx, command.SendSMSNotificationCommand{
 							UserID:         "",
 							PhoneNumber:    phoneNum,
 							Message:        body,
 							IsHighPriority: isHighPriority,
 						})
+						cancel()
 						if err != nil {
 							lastErr = err
 							slog.ErrorContext(ctx, "SMS dispatch error", slog.String("to", phoneNum), slog.Any("error", err))

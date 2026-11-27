@@ -176,6 +176,13 @@ Hệ thống tận dụng RAM của Redis để phục vụ hàng đợi tìm tr
     - Nếu `Score2 > Score1` $\rightarrow$ P2 thắng (`WIN`), P1 thua (`LOSE`).
     - Nếu `Score1 == Score2` $\rightarrow$ Kết quả hòa (`DRAW`), cả 2 nhận `DRAW`.
 
+### 4.4. `RecordParticipantResultHandler` & Kiểm Soát Tương Tranh (Concurrency Control)
+- Quản lý quá trình nộp kết quả thi đấu từ hai phía:
+  - Toàn bộ chu trình đọc, biến đổi aggregate, lưu DB và ghi Outbox được đóng gói trong một **Database Transaction duy nhất**.
+  - Sử dụng phương thức `FindByIDForUpdate` (`SELECT ... FOR UPDATE`) khóa độc quyền dòng Aggregate Root `solo_matches`.
+  - Tuần tự hóa tuyệt đối việc hoàn thành trận đấu: Tiến trình thứ nhất nộp bài lưu điểm nhưng giữ trận ở `IN_PROGRESS`; Tiến trình thứ hai unblock sẽ thấy đối phương đã xong, kích hoạt `MatchResolver`, chuyển trạng thái `COMPLETED` và phát sự kiện `SoloMatchCompleted` vào Outbox.
+  - Ngăn ngừa 100% tình trạng **Lost Update**, **Memory Desync** và **Kẹt trận vĩnh viễn** khi cả hai bên nộp bài đồng thời.
+
 ---
 
 ## 5. Chuẩn Hóa API Protobuf & ConnectRPC

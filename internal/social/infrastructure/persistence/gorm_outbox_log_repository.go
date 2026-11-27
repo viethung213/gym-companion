@@ -43,8 +43,11 @@ func (r *GormOutboxLogRepository) Save(
 		ErrorMessage: errMsg,
 	}
 
-	// Idempotent: bỏ qua nếu đã log event_id này với status trùng khớp
-	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(m).Error
+	// Idempotent: cập nhật status, error_message và processed_at khi conflict event_id (hỗ trợ retry)
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "event_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"status", "error_message", "processed_at"}),
+	}).Create(m).Error
 	if err != nil {
 		return fmt.Errorf("create outbox log: %w", err)
 	}

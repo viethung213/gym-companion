@@ -38,19 +38,19 @@ func NewRecordParticipantAbortHandler(
 }
 
 func (h *RecordParticipantAbortHandler) Handle(ctx context.Context, cmd RecordParticipantAbortCommand) error {
-	match, err := h.matchRepo.FindByID(ctx, cmd.MatchID)
-	if err != nil {
-		return fmt.Errorf("find match %s: %w", cmd.MatchID, err)
-	}
-	if match == nil {
-		return fmt.Errorf("match %s not found", cmd.MatchID)
-	}
-
-	if err := match.ForfeitParticipant(cmd.UserID, cmd.Reason); err != nil {
-		return fmt.Errorf("forfeit participant: %w", err)
-	}
-
 	return h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		match, err := h.matchRepo.FindByIDForUpdate(txCtx, cmd.MatchID)
+		if err != nil {
+			return fmt.Errorf("find match %s: %w", cmd.MatchID, err)
+		}
+		if match == nil {
+			return fmt.Errorf("match %s not found", cmd.MatchID)
+		}
+
+		if err := match.ForfeitParticipant(cmd.UserID, cmd.Reason); err != nil {
+			return fmt.Errorf("forfeit participant: %w", err)
+		}
+
 		if err := h.matchRepo.Save(txCtx, match); err != nil {
 			return fmt.Errorf("save match: %w", err)
 		}

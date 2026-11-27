@@ -194,7 +194,7 @@ func (OutboxModel) TableName() string {
 // OutboxLogModel ánh xạ bảng solo_match.outbox_log (Idempotency Pattern cho Incoming Consumer Events)
 type OutboxLogModel struct {
 	ID           string    `gorm:"primaryKey;column:id"`
-	EventID      string    `gorm:"column:event_id;not null"`
+	EventID      string    `gorm:"column:event_id;uniqueIndex;not null"`
 	EventType    string    `gorm:"column:event_type;not null"`
 	Payload      []byte    `gorm:"column:payload;type:jsonb;not null"`
 	PartitionKey string    `gorm:"column:partition_key;not null"`

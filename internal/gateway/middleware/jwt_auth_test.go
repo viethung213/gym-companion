@@ -4,8 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,11 +14,14 @@ import (
 )
 
 type staticKeyProvider struct {
-	pemStr string
+	pubKey *rsa.PublicKey
 }
 
-func (s *staticKeyProvider) GetPublicKeyPEM(_ context.Context, _ string) (string, error) {
-	return s.pemStr, nil
+func (s *staticKeyProvider) GetPublicKey(_ context.Context, _ string) (*rsa.PublicKey, error) {
+	if s.pubKey == nil {
+		return nil, errors.New("key not found")
+	}
+	return s.pubKey, nil
 }
 
 func TestJWTValidator(t *testing.T) {
@@ -28,14 +30,7 @@ func TestJWTValidator(t *testing.T) {
 	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	pubDER, err := x509.MarshalPKIXPublicKey(&privKey.PublicKey)
-	require.NoError(t, err)
-	pubPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: pubDER,
-	})
-
-	kp := &staticKeyProvider{pemStr: string(pubPEM)}
+	kp := &staticKeyProvider{pubKey: &privKey.PublicKey}
 	val := NewJWTValidator(kp)
 
 	ctx := context.Background()

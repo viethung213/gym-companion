@@ -41,7 +41,10 @@ func run() error {
 		}()
 	}
 
-	cfg := config.LoadStartupConfig()
+	cfg, err := config.LoadStartupConfig()
+	if err != nil {
+		return fmt.Errorf("load gateway config: %w", err)
+	}
 
 	slog.Info("Initializing API Gateway",
 		"port", cfg.Port,
@@ -66,12 +69,20 @@ func run() error {
 	}
 	defer gw.Close()
 
-	// Wrap with h2c for HTTP/2 cleartext streaming & gRPC support
-	h2cHandler := h2c.NewHandler(gw.Handler(), &http2.Server{})
-
+	// 1. Public Gateway Server (Perimeter Ingress) - HTTP/2 h2c
+	h2cPublicHandler := h2c.NewHandler(gw.Handler(), &http2.Server{})
 	gatewayServer := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           h2cHandler,
+		Handler:           h2cPublicHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	// 2. Internal Gateway Server (Service-to-Service Ingress) - HTTP/2 h2c
+	h2cInternalHandler := h2c.NewHandler(gw.InternalHandler(), &http2.Server{})
+	internalServer := &http.Server{
+		Addr:              ":" + cfg.InternalPort,
+		Handler:           h2cInternalHandler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -83,15 +94,25 @@ func run() error {
 		adminServer = admin.NewServer(cfg.AdminPort, cfg.AdminKey, adminInspector)
 	}
 
-	errChan := make(chan error, 2)
+	errChan := make(chan error, 3)
 
 	go func() {
-		slog.Info("API Gateway listening and serving",
+		slog.Info("API Gateway Public Ingress listening",
 			"addr", "http://localhost:"+cfg.Port,
-			"mode", "Stateless, Zero-DB, Auto-Auth Discovery",
+			"mode", "Public Perimeter (Bearer JWT Only, Rejects X-Internal-Token)",
 		)
 		if err := gatewayServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errChan <- fmt.Errorf("gateway server: %w", err)
+			errChan <- fmt.Errorf("public gateway server: %w", err)
+		}
+	}()
+
+	go func() {
+		slog.Info("API Gateway Internal Ingress listening",
+			"addr", "http://localhost:"+cfg.InternalPort,
+			"mode", "Private Mesh Ingress (X-Internal-Token Required)",
+		)
+		if err := internalServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errChan <- fmt.Errorf("internal gateway server: %w", err)
 		}
 	}()
 
@@ -118,6 +139,9 @@ func run() error {
 
 	if adminServer != nil {
 		_ = adminServer.Shutdown(ctx)
+	}
+	if err := internalServer.Shutdown(ctx); err != nil {
+		slog.Error("Internal gateway server shutdown error", "error", err)
 	}
 	if err := gatewayServer.Shutdown(ctx); err != nil {
 		return fmt.Errorf("gateway server shutdown: %w", err)

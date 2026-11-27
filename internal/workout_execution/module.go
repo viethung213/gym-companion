@@ -185,151 +185,25 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*workoutGRPC.GRPCHandler,
 		criticalWorker.Start(workerCtx)
 	}()
 
-	// Start ExerciseCreated event consumer worker (listening to topic 'exercise.events')
-	if deps.KafkaRegistry != nil {
-		exerciseReader, err := deps.KafkaRegistry.GetReader("workout_execution_exercise_consumer", "exercise.events")
-		if err == nil && exerciseReader != nil {
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("PANIC RECOVERED in WorkoutExecution ExerciseCreated consumer worker", slog.Any("panic", r))
-					}
-					_ = exerciseReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := exerciseReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							slog.Error("WorkoutExecution exercise reader error", slog.String("error", err.Error()))
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									slog.Error("PANIC RECOVERED in ExerciseCreated event handling", slog.Any("panic", r))
-								}
-							}()
-							if err := exerciseCreatedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								slog.Error("WorkoutExecution failed to process ExerciseCreated event", slog.String("error", err.Error()))
-							}
-						}()
-					}
-				}
-			}()
-		} else if err != nil {
-			slog.Warn("Failed to obtain exercise events reader", slog.String("error", err.Error()))
-		}
-
-		// Start WorkoutSessionCompleted event consumer worker (listening to topic 'workout_execution.events')
-		sessionCompletedReader, err := deps.KafkaRegistry.GetReader("workout_execution_pr_consumer", "workout_execution.events")
-		if err == nil && sessionCompletedReader != nil {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("PANIC RECOVERED in WorkoutExecution PREventConsumer worker", slog.Any("panic", r))
-					}
-					_ = sessionCompletedReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := sessionCompletedReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							slog.Error("WorkoutExecution PR consumer reader error", slog.String("error", err.Error()))
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									slog.Error("PANIC RECOVERED in PREventConsumer event handling", slog.Any("panic", r))
-								}
-							}()
-							if err := prConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								slog.Error("WorkoutExecution failed to process WorkoutSessionCompleted event for PR", slog.String("error", err.Error()))
-							}
-						}()
-					}
-				}
-			}()
-		} else if err != nil {
-			slog.Warn("Failed to obtain PR consumer reader", slog.String("error", err.Error()))
-		}
-
-		// Start SoloMatchStarted event consumer worker (listening to topic 'solo_match.events')
-		soloMatchReader, err := deps.KafkaRegistry.GetReader("workout_execution_solo_match_consumer", "solo_match.events")
-		if err == nil && soloMatchReader != nil {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("PANIC RECOVERED in WorkoutExecution SoloMatchStarted consumer worker", slog.Any("panic", r))
-					}
-					_ = soloMatchReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := soloMatchReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							slog.Error("WorkoutExecution solo match reader error", slog.String("error", err.Error()))
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									slog.Error("PANIC RECOVERED in SoloMatch event handling", slog.Any("panic", r))
-								}
-							}()
-							if err := soloMatchStartedConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								slog.Error("WorkoutExecution failed to process SoloMatchStarted event", slog.String("error", err.Error()))
-							}
-							if err := soloMatchCancelledConsumer.HandleMessage(workerCtx, msg.Value); err != nil {
-								slog.Error("WorkoutExecution failed to process SoloMatchCancelled event", slog.String("error", err.Error()))
-							}
-						}()
-					}
-				}
-			}()
-		} else if err != nil {
-			slog.Warn("Failed to obtain solo match reader", slog.String("error", err.Error()))
-		}
+	// Start Kafka Consumers via ConsumerManager
+	consumerMgr := workoutConsumer.NewConsumerManager(
+		deps.KafkaRegistry,
+		exerciseCreatedConsumer,
+		prConsumer,
+		soloMatchStartedConsumer,
+		soloMatchCancelledConsumer,
+	)
+	if consumerMgr != nil {
+		consumerMgr.Start(workerCtx)
 	}
 
 	shutdown := func() {
 		slog.Info("Shutting down Workout Execution Bounded Context background workers")
 		cancelWorkers()
 		soloBotManager.StopAll()
+		if consumerMgr != nil {
+			consumerMgr.Wait()
+		}
 		wg.Wait()
 		slog.Info("Workout Execution Bounded Context background workers stopped successfully")
 	}

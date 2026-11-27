@@ -11,13 +11,20 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
 	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type WorkoutEventConsumer struct {
 	reader        *kafka.Reader
+	dlqWriter     sharedKafka.MessageWriter
 	coordinator   *appService.ActivityIngestionCoordinator
 	outboxLogRepo port.OutboxLogRepository
+}
+
+func (c *WorkoutEventConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *WorkoutEventConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 func NewWorkoutEventConsumer(
@@ -33,7 +40,7 @@ func NewWorkoutEventConsumer(
 }
 
 func (c *WorkoutEventConsumer) Start(ctx context.Context) {
-	runConsumerLoop(ctx, "WorkoutEvent", c.reader, c.ProcessMessage)
+	runConsumerLoop(ctx, "WorkoutEvent", c.reader, c.dlqWriter, c.ProcessMessage)
 }
 
 func (c *WorkoutEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {

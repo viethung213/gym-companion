@@ -16,6 +16,9 @@ func (m *mockTimeoutRepo) Save(_ context.Context, _ *aggregate.SoloMatch) error 
 func (m *mockTimeoutRepo) FindByID(_ context.Context, _ string) (*aggregate.SoloMatch, error) {
 	return nil, nil
 }
+func (m *mockTimeoutRepo) FindByIDForUpdate(_ context.Context, _ string) (*aggregate.SoloMatch, error) {
+	return nil, nil
+}
 func (m *mockTimeoutRepo) FindActiveByUserID(_ context.Context, _ string) (*aggregate.SoloMatch, error) {
 	return nil, nil
 }

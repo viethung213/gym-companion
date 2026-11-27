@@ -188,6 +188,31 @@ func TestKeyRepository_Integration(t *testing.T) {
 	if all[0].Status != port.KeyStatusInactive {
 		t.Errorf("Expected status to be inactive, got %s", all[0].Status)
 	}
+
+	// 5. Verify expired inactive keys are omitted from GetAllActiveAndInactiveKeys
+	expiredKey := &port.JWKRecord{
+		ID:            "key-expired",
+		PrivateKeyPEM: "mock-priv-key-pem-2",
+		PublicKeyPEM:  "mock-pub-key-pem-2",
+		Algorithm:     "RS256",
+		Status:        port.KeyStatusInactive,
+		CreatedAt:     time.Now().Add(-48 * time.Hour),
+		ExpiresAt:     time.Now().Add(-24 * time.Hour),
+	}
+	err = repo.Save(ctx, expiredKey)
+	if err != nil {
+		t.Fatalf("Failed to save expired inactive key: %v", err)
+	}
+
+	allAfterExpiry, err := repo.GetAllActiveAndInactiveKeys(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get keys: %v", err)
+	}
+	for _, k := range allAfterExpiry {
+		if k.ID == "key-expired" {
+			t.Errorf("Expired inactive key %s should not be returned by GetAllActiveAndInactiveKeys", k.ID)
+		}
+	}
 }
 
 func TestSessionRepository_Integration(t *testing.T) {

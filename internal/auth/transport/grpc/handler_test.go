@@ -3,9 +3,13 @@
 package grpc
 
 import (
+	"context"
 	"testing"
 
 	authv1message "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/message"
+	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestNewGRPCHandler(t *testing.T) {
@@ -68,4 +72,23 @@ func TestGRPCHandler_Register_GenderValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGRPCHandler_RotateKeys_AdminAuthorization(t *testing.T) {
+	h := &GRPCHandler{}
+
+	t.Run("unauthenticated request returns PermissionDenied", func(t *testing.T) {
+		_, err := h.RotateKeys(context.Background(), &authv1message.RotateKeysRequest{})
+		if status.Code(err) != codes.PermissionDenied {
+			t.Fatalf("expected PermissionDenied, got %v", err)
+		}
+	})
+
+	t.Run("non-admin request returns PermissionDenied", func(t *testing.T) {
+		ctx := middleware.WithActor(context.Background(), "user-1", "Member")
+		_, err := h.RotateKeys(ctx, &authv1message.RotateKeysRequest{})
+		if status.Code(err) != codes.PermissionDenied {
+			t.Fatalf("expected PermissionDenied, got %v", err)
+		}
+	})
 }

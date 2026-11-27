@@ -121,14 +121,28 @@ func (r *Registry) GetWriter(module string, brokers ...[]string) (*kafka.Writer,
 	return w, nil
 }
 
+// GetDLQWriter returns a kafka.Writer pointed to the system-wide Dead Letter Queue topic (SystemDLQTopic).
+func (r *Registry) GetDLQWriter(brokers ...[]string) (*kafka.Writer, error) {
+	return r.GetWriter(SystemDLQTopic, brokers...)
+}
+
 // GetReader retrieves or instantiates a kafka.Reader dedicated to a consumer group and topic.
 func (r *Registry) GetReader(consumerGroup, topic string, brokers ...[]string) (*kafka.Reader, error) {
+	return r.GetReaderInstance(consumerGroup, topic, "", brokers...)
+}
+
+// GetReaderInstance retrieves or instantiates an independent kafka.Reader for a consumer group, topic, and instance identifier.
+// Different instanceIDs yield separate kafka.Reader instances within the same consumer group, enabling multi-partition consumption.
+func (r *Registry) GetReaderInstance(consumerGroup, topic, instanceID string, brokers ...[]string) (*kafka.Reader, error) {
 	targetBrokers, err := r.resolveBrokers(brokers...)
 	if err != nil {
 		return nil, fmt.Errorf("resolve brokers for topic %s: %w", topic, err)
 	}
 
 	key := fmt.Sprintf("%s:%s", consumerGroup, topic)
+	if instanceID != "" {
+		key = fmt.Sprintf("%s:%s:%s", consumerGroup, topic, instanceID)
+	}
 	r.mu.RLock()
 	reader, exists := r.readers[key]
 	r.mu.RUnlock()
@@ -145,7 +159,11 @@ func (r *Registry) GetReader(consumerGroup, topic string, brokers ...[]string) (
 		return reader, nil
 	}
 
-	ensureTopicExists(targetBrokers, topic)
+	numPartitions := 1
+	if topic == "notification.events.high-priority" {
+		numPartitions = 3
+	}
+	ensureTopicExistsWithPartitions(targetBrokers, topic, numPartitions)
 
 	dialer, _, err := buildSecurityConfig()
 	if err != nil {
@@ -281,8 +299,15 @@ func getFirstEnv(keys ...string) string {
 }
 
 func ensureTopicExists(brokers []string, topic string) {
+	ensureTopicExistsWithPartitions(brokers, topic, 1)
+}
+
+func ensureTopicExistsWithPartitions(brokers []string, topic string, numPartitions int) {
 	if len(brokers) == 0 || topic == "" {
 		return
+	}
+	if numPartitions <= 0 {
+		numPartitions = 1
 	}
 	conn, err := kafka.Dial("tcp", brokers[0])
 	if err != nil {
@@ -292,7 +317,7 @@ func ensureTopicExists(brokers []string, topic string) {
 
 	_ = conn.CreateTopics(kafka.TopicConfig{
 		Topic:             topic,
-		NumPartitions:     1,
+		NumPartitions:     numPartitions,
 		ReplicationFactor: 1,
 	})
 }

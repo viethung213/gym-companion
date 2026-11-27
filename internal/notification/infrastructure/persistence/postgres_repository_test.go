@@ -28,6 +28,7 @@ func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("failed to get sql.DB: %v", err)
 	}
+	sqlDB.SetMaxOpenConns(1)
 
 	queries := []string{
 		`ATTACH DATABASE ':memory:' AS notification`,
@@ -46,7 +47,8 @@ func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 		`CREATE TABLE IF NOT EXISTS notification.in_app_notifications (
 			id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL,
 			body TEXT NOT NULL, data TEXT DEFAULT '{}', is_read INTEGER DEFAULT 0,
-			created_at TIMESTAMP
+			created_at TIMESTAMP, event_id TEXT,
+			CONSTRAINT uq_notification_in_app_user_event UNIQUE (user_id, event_id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.outbox (
 			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, aggregate_type TEXT, aggregate_id TEXT, event_type TEXT,
@@ -55,9 +57,9 @@ func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 			locked_until TIMESTAMP, status TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.outbox_log (
-			id TEXT PRIMARY KEY, event_id TEXT, event_type TEXT,
+			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, event_type TEXT,
 			payload TEXT, partition_key TEXT, processed_at TIMESTAMP,
-			status TEXT, error_message TEXT
+			status TEXT, error_message TEXT, retry_count INTEGER DEFAULT 0, next_retry_at TIMESTAMP
 		)`,
 	}
 
@@ -87,7 +89,7 @@ func TestPostgresDeviceRepository(t *testing.T) {
 		t.Fatalf("Save device error: %v", err)
 	}
 
-	// 2. Test GetActiveDevicesByUserID
+	// 2. Test GetActiveDevicesByUserID & GetAllActiveUserIDs
 	activeDevices, err := repo.GetActiveDevicesByUserID(ctx, "usr-1")
 	if err != nil {
 		t.Fatalf("GetActiveDevicesByUserID error: %v", err)
@@ -97,6 +99,17 @@ func TestPostgresDeviceRepository(t *testing.T) {
 	}
 	if got, want := activeDevices[0].DeviceToken(), "fcm-token-1"; got != want {
 		t.Errorf("got token %s, want %s", got, want)
+	}
+
+	userIDs, err := repo.GetAllActiveUserIDs(ctx)
+	if err != nil {
+		t.Fatalf("GetAllActiveUserIDs error: %v", err)
+	}
+	if got, want := len(userIDs), 1; got != want {
+		t.Fatalf("got %d active users, want %d", got, want)
+	}
+	if userIDs[0] != "usr-1" {
+		t.Errorf("got user_id %s, want usr-1", userIDs[0])
 	}
 
 	// 3. Test DeactivateTokens
@@ -160,10 +173,23 @@ func TestPostgresNotificationRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new in-app notification error: %v", err)
 	}
+	item.WithEventID("event-test-123")
 
 	// 1. Save
 	if err := repo.Save(ctx, item); err != nil {
 		t.Fatalf("Save in-app notification error: %v", err)
+	}
+
+	// 1b. Test FindByUserAndEventID
+	found, err := repo.FindByUserAndEventID(ctx, "usr-notif-1", "event-test-123")
+	if err != nil {
+		t.Fatalf("FindByUserAndEventID error: %v", err)
+	}
+	if found == nil || found.ID() != item.ID() {
+		t.Fatalf("expected found notification %s, got %v", item.ID(), found)
+	}
+	if found.EventID() != "event-test-123" {
+		t.Errorf("expected EventID event-test-123, got %s", found.EventID())
 	}
 
 	// 2. ListByUserID
@@ -226,7 +252,7 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 	}
 
 	// 2. Test OutboxLog LogProcessed (Idempotency)
-	fresh1, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "SUCCESS", "")
+	fresh1, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "PROCESSING", "")
 	if err != nil {
 		t.Fatalf("LogProcessed first call error: %v", err)
 	}
@@ -234,12 +260,297 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 		t.Errorf("got fresh1 = false, want true for new event")
 	}
 
-	fresh2, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "SUCCESS", "")
+	fresh2, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "PROCESSING", "")
 	if err != nil {
 		t.Fatalf("LogProcessed second call error: %v", err)
 	}
-	if !fresh2 {
-		t.Errorf("got fresh2 = false, want true when non-conflicting log is inserted")
+	if fresh2 {
+		t.Errorf("got fresh2 = true, want false for duplicate event_id")
+	}
+
+	// 2.1 Test OutboxLog LogProcessed allows retry when previous attempt was FAILED
+	failErr := outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      "550e8400-e29b-41d4-a716-446655440001",
+		EventType:    "EventType",
+		Payload:      []byte(`{}`),
+		PartitionKey: "usr-1",
+		Status:       "FAILED",
+		ErrorMessage: "network timeout",
+	})
+	if failErr != nil {
+		t.Fatalf("SaveLog FAILED error: %v", failErr)
+	}
+
+	freshRetry, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "PROCESSING", "")
+	if err != nil {
+		t.Fatalf("LogProcessed retry call error: %v", err)
+	}
+	if !freshRetry {
+		t.Errorf("got freshRetry = false, want true when previous attempt was FAILED")
+	}
+
+	// 3. Test OutboxLog SaveLog updates existing record to SUCCESS
+	err = outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      "550e8400-e29b-41d4-a716-446655440001",
+		EventType:    "EventType",
+		Payload:      []byte(`{}`),
+		PartitionKey: "usr-1",
+		Status:       "SUCCESS",
+		ErrorMessage: "",
+	})
+	if err != nil {
+		t.Fatalf("SaveLog error: %v", err)
+	}
+
+	var logs []persistence.OutboxLogModel
+	if err := db.Where("event_id = ?", "550e8400-e29b-41d4-a716-446655440001").Find(&logs).Error; err != nil {
+		t.Fatalf("query outbox_log error: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Errorf("got %d logs, want 1", len(logs))
+	} else if logs[0].Status != "SUCCESS" {
+		t.Errorf("got status %s, want SUCCESS", logs[0].Status)
+	}
+}
+
+func TestPostgresOutboxLog_ConcurrentRetryRace_MutualExclusion(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	eventID := "550e8400-e29b-41d4-a716-446655440099"
+
+	// Initial failed state
+	err := outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      eventID,
+		EventType:    "TestEvent",
+		Payload:      []byte(`{}`),
+		PartitionKey: "usr-race",
+		Status:       "FAILED",
+		ErrorMessage: "push failed",
+	})
+	if err != nil {
+		t.Fatalf("SaveLog initial FAILED error: %v", err)
+	}
+
+	// Simulate concurrent race: 5 workers (e.g. Kafka Consumer + InboundEventRetryWorker nodes)
+	// simultaneously trying to process the failed event via LogProcessed
+	const workers = 5
+	results := make(chan bool, workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			fresh, pErr := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-race", []byte(`{}`), "PROCESSING", "")
+			if pErr != nil {
+				results <- false
+				return
+			}
+			results <- fresh
+		}()
+	}
+
+	trueCount := 0
+	falseCount := 0
+	for i := 0; i < workers; i++ {
+		if <-results {
+			trueCount++
+		} else {
+			falseCount++
+		}
+	}
+
+	// Exactly ONE worker must win the race and transition FAILED -> PROCESSING
+	if trueCount != 1 {
+		t.Errorf("got %d workers with fresh=true, want exactly 1 (race condition!)", trueCount)
+	}
+	if falseCount != workers-1 {
+		t.Errorf("got %d workers with fresh=false, want %d", falseCount, workers-1)
+	}
+}
+
+func TestPostgresOutboxLog_ZombieProcessingTimeout(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	eventID := "550e8400-e29b-41d4-a716-446655440088"
+
+	// 1. Simulate server crash: Record stuck in PROCESSING with processed_at = 10 minutes ago
+	staleProcessedAt := time.Now().UTC().Add(-10 * time.Minute)
+	err := db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "log-zombie-1", eventID, "TestEvent", "{}", "usr-zombie", staleProcessedAt, "PROCESSING").Error
+	if err != nil {
+		t.Fatalf("insert stale PROCESSING record error: %v", err)
+	}
+
+	// 2. Worker restarts or Kafka redelivers message: LogProcessed should reclaim zombie lock (fresh = true)
+	fresh, err := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-zombie", []byte(`{}`), "PROCESSING", "")
+	if err != nil {
+		t.Fatalf("LogProcessed zombie recovery error: %v", err)
+	}
+	if !fresh {
+		t.Errorf("got fresh = false, want true when reclaiming stale PROCESSING lock (> 5m)")
+	}
+
+	// Verify that processed_at has been renewed to recent time
+	var updated persistence.OutboxLogModel
+	if err := db.Where("event_id = ?", eventID).First(&updated).Error; err != nil {
+		t.Fatalf("query updated outbox_log error: %v", err)
+	}
+	if updated.ProcessedAt.Before(time.Now().UTC().Add(-1 * time.Minute)) {
+		t.Errorf("expected renewed processed_at, got %v", updated.ProcessedAt)
+	}
+
+	// 3. Immediate subsequent call within 5m must NOT be reclaimed (must be treated as duplicate / in-progress)
+	freshDup, err := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-zombie", []byte(`{}`), "PROCESSING", "")
+	if err != nil {
+		t.Fatalf("LogProcessed duplicate error: %v", err)
+	}
+	if freshDup {
+		t.Errorf("got freshDup = true, want false when PROCESSING is still active (< 5m)")
+	}
+}
+
+func TestPostgresOutboxLog_ConcurrentZombieReclaim_MutualExclusion(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	eventID := "550e8400-e29b-41d4-a716-446655440077"
+
+	// Initial zombie state: PROCESSING 15 minutes ago
+	staleTime := time.Now().UTC().Add(-15 * time.Minute)
+	err := db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "log-zombie-race-1", eventID, "TestEvent", "{}", "usr-race", staleTime, "PROCESSING").Error
+	if err != nil {
+		t.Fatalf("insert stale PROCESSING record error: %v", err)
+	}
+
+	// Simulate 5 concurrent workers trying to reclaim the same zombie lock
+	const workers = 5
+	results := make(chan bool, workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			fresh, pErr := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-race", []byte(`{}`), "PROCESSING", "")
+			if pErr != nil {
+				results <- false
+				return
+			}
+			results <- fresh
+		}()
+	}
+
+	trueCount := 0
+	falseCount := 0
+	for i := 0; i < workers; i++ {
+		if <-results {
+			trueCount++
+		} else {
+			falseCount++
+		}
+	}
+
+	// Exactly ONE worker must succeed in claiming the zombie lock
+	if trueCount != 1 {
+		t.Errorf("got %d workers with fresh=true, want exactly 1 for zombie reclaim race", trueCount)
+	}
+	if falseCount != workers-1 {
+		t.Errorf("got %d workers with fresh=false, want %d", falseCount, workers-1)
+	}
+}
+
+func TestPostgresOutboxLog_FetchFailedLogs_IncludesZombieProcessing(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+
+	// 1. FAILED log ready for retry
+	failedEventID := "550e8400-e29b-41d4-a716-446655440051"
+	err := db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-failed-1", failedEventID, "TestEvent", "{}", "usr-1", now.Add(-2*time.Minute), "FAILED", 0, now.Add(-1*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert failed log error: %v", err)
+	}
+
+	// 2. Zombie PROCESSING log (stuck 10 minutes ago, server crashed without redelivery)
+	zombieEventID := "550e8400-e29b-41d4-a716-446655440052"
+	err = db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-zombie-fetch-1", zombieEventID, "TestEvent", "{}", "usr-2", now.Add(-10*time.Minute), "PROCESSING", 0, now.Add(-10*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert zombie processing log error: %v", err)
+	}
+
+	// 3. Active PROCESSING log (only 1 minute ago, currently being handled by another worker)
+	activeEventID := "550e8400-e29b-41d4-a716-446655440053"
+	err = db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-active-proc-1", activeEventID, "TestEvent", "{}", "usr-3", now.Add(-1*time.Minute), "PROCESSING", 0, now.Add(-1*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert active processing log error: %v", err)
+	}
+
+	// 4. SUCCESS log (must never be fetched)
+	successEventID := "550e8400-e29b-41d4-a716-446655440054"
+	err = db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status, retry_count, next_retry_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "log-success-1", successEventID, "TestEvent", "{}", "usr-4", now.Add(-2*time.Minute), "SUCCESS", 0, now.Add(-2*time.Minute)).Error
+	if err != nil {
+		t.Fatalf("insert success log error: %v", err)
+	}
+
+	// Fetch logs for retry
+	fetched, err := outboxLogRepo.FetchFailedLogs(ctx, 10)
+	if err != nil {
+		t.Fatalf("FetchFailedLogs error: %v", err)
+	}
+
+	if got, want := len(fetched), 2; got != want {
+		t.Fatalf("got %d fetched logs, want %d", got, want)
+	}
+
+	foundFailed := false
+	foundZombie := false
+	for _, rec := range fetched {
+		if rec.EventID == failedEventID {
+			foundFailed = true
+		}
+		if rec.EventID == zombieEventID {
+			foundZombie = true
+		}
+		if rec.EventID == activeEventID {
+			t.Errorf("active PROCESSING event %s should not have been fetched", activeEventID)
+		}
+		if rec.EventID == successEventID {
+			t.Errorf("SUCCESS event %s should not have been fetched", successEventID)
+		}
+	}
+
+	if !foundFailed {
+		t.Errorf("expected to find FAILED event %s in fetched logs", failedEventID)
+	}
+	if !foundZombie {
+		t.Errorf("expected to find zombie PROCESSING event %s in fetched logs", zombieEventID)
 	}
 }
 

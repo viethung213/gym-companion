@@ -13,6 +13,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 // CloudEvent types emitted by the Profile module.
@@ -60,9 +61,16 @@ func (p *ProfileEventPayload) UnmarshalJSON(data []byte) error {
 // Idempotency is enforced through coaching.outbox_log (D9 pattern).
 type ProfileCompletedConsumer struct {
 	reader     *segmentio.Reader
+	dlqWriter  sharedKafka.MessageWriter
 	initiate   *command.InitiateRoadmapHandler
 	regenerate *command.RegenerateScheduleHandler
 	outbox     port.OutboxRepository
+}
+
+// WithDLQWriter attaches an optional dead letter queue writer.
+func (c *ProfileCompletedConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *ProfileCompletedConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 // NewProfileCompletedConsumer wires the consumer.
@@ -84,54 +92,19 @@ func NewProfileCompletedConsumer(
 func (c *ProfileCompletedConsumer) Start(ctx context.Context) {
 	slog.InfoContext(ctx, "Starting ProfileCompletedConsumer on topic profile.events")
 
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Stopping ProfileCompletedConsumer due to context cancellation")
-			return
-		default:
-			// Fetch, not Read: the offset is committed only once the message is
-			// handled, so a crash mid-handling redelivers it after restart.
-			msg, err := c.reader.FetchMessage(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-
-				slog.ErrorContext(ctx, "Error reading profile.events", slog.String("error", err.Error()))
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			if processErr := c.processWithRetry(ctx, &msg); processErr != nil {
-				slog.ErrorContext(ctx, "Exhausted retries processing profile event", slog.String("error", processErr.Error()))
-			}
-			if commitErr := c.reader.CommitMessages(ctx, msg); commitErr != nil {
-				slog.ErrorContext(ctx, "Commit offset failed; the message will be delivered again",
-					slog.Int64("offset", msg.Offset), slog.Any("error", commitErr))
-			}
-		}
-	}
-}
-
-// processWithRetry attempts to handle the message up to maxRetries times with
-// incremental backoff (100ms per attempt number).
-func (c *ProfileCompletedConsumer) processWithRetry(ctx context.Context, msg *segmentio.Message) error {
-	const maxRetries = 3
-
-	var lastErr error
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		lastErr = c.HandleMessage(ctx, msg.Value)
-		if lastErr == nil {
-			return nil
-		}
-
-		slog.WarnContext(ctx, "Profile event attempt failed",
-			slog.Int("attempt", attempt), slog.Int("max_retries", maxRetries), slog.String("error", lastErr.Error()))
-		time.Sleep(time.Duration(attempt*100) * time.Millisecond)
-	}
-
-	return fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		c.reader,
+		sharedKafka.ConsumerConfig{
+			Name:        "ProfileCompletedConsumer",
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   c.dlqWriter,
+		},
+		func(ctx context.Context, msg *segmentio.Message) error {
+			return c.HandleMessage(ctx, msg.Value)
+		},
+	)
 }
 
 // HandleMessage decodes and dispatches one Kafka message. Exported so that

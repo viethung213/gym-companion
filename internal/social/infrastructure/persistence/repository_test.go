@@ -245,6 +245,23 @@ func TestRepositories_OutboxAndTxManager(t *testing.T) {
 		t.Fatalf("expected isProcessed true")
 	}
 
+	// 2.1 Outbox Log Retry Update
+	if err := repos.OutboxLogRepo.Save(ctx, "evt-retry", "test.event", []byte(`{}`), "key", "FAILED", "error 1"); err != nil {
+		t.Fatalf("OutboxLog Save failed: %v", err)
+	}
+	if err := repos.OutboxLogRepo.Save(ctx, "evt-retry", "test.event", []byte(`{}`), "key", "FAILED", "error 2"); err != nil {
+		t.Fatalf("OutboxLog retry Save failed: %v", err)
+	}
+	if isProc, _ := repos.OutboxLogRepo.IsProcessed(ctx, "evt-retry"); isProc {
+		t.Fatalf("expected evt-retry to not be processed")
+	}
+	if err := repos.OutboxLogRepo.Save(ctx, "evt-retry", "test.event", []byte(`{}`), "key", "PROCESSED", ""); err != nil {
+		t.Fatalf("OutboxLog retry success Save failed: %v", err)
+	}
+	if isProc, _ := repos.OutboxLogRepo.IsProcessed(ctx, "evt-retry"); !isProc {
+		t.Fatalf("expected evt-retry to be processed after successful retry")
+	}
+
 	// 3. TxManager rollback
 	err = repos.TxManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		return errors.New("simulated rollback")

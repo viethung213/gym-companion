@@ -57,20 +57,6 @@ func (h *ResetPasswordHandler) Handle(ctx context.Context, cmd ResetPasswordComm
 		return nil, err
 	}
 
-	tokenEntity, err := h.resetTokenRepo.FindByToken(ctx, cmd.ResetToken)
-	if err != nil {
-		return nil, fmt.Errorf("invalid or expired reset token: %w", err)
-	}
-
-	if err := tokenEntity.Use(time.Now()); err != nil {
-		return nil, err
-	}
-
-	user, err := h.userRepo.FindByID(ctx, tokenEntity.UserID())
-	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
-	}
-
 	hashedStr, err := h.hasher.Hash(newPasswordVO.Value())
 	if err != nil {
 		return nil, fmt.Errorf("hash new password: %w", err)
@@ -80,9 +66,23 @@ func (h *ResetPasswordHandler) Handle(ctx context.Context, cmd ResetPasswordComm
 		return nil, fmt.Errorf("invalid hashed password: %w", err)
 	}
 
-	user.UpdatePassword(hashedVO.Value())
-
 	err = h.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		tokenEntity, err := h.resetTokenRepo.FindByTokenForUpdate(txCtx, cmd.ResetToken)
+		if err != nil {
+			return fmt.Errorf("invalid or expired reset token: %w", err)
+		}
+
+		if err := tokenEntity.Use(time.Now()); err != nil {
+			return err
+		}
+
+		user, err := h.userRepo.FindByID(txCtx, tokenEntity.UserID())
+		if err != nil {
+			return fmt.Errorf("user not found: %w", err)
+		}
+
+		user.UpdatePassword(hashedVO.Value())
+
 		if err := h.resetTokenRepo.Update(txCtx, tokenEntity); err != nil {
 			return fmt.Errorf("mark token used: %w", err)
 		}
@@ -93,7 +93,7 @@ func (h *ResetPasswordHandler) Handle(ctx context.Context, cmd ResetPasswordComm
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("transaction failed: %w", err)
+		return nil, err
 	}
 
 	return &ResetPasswordResult{

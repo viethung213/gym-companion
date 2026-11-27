@@ -32,6 +32,13 @@ func (m *roomReadyMockMatchRepo) FindByID(_ context.Context, id string) (*aggreg
 	return m.matches[id], nil
 }
 
+func (m *roomReadyMockMatchRepo) FindByIDForUpdate(_ context.Context, id string) (*aggregate.SoloMatch, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.matches[id], nil
+}
+
 func (m *roomReadyMockMatchRepo) FindActiveByUserID(_ context.Context, _ string) (*aggregate.SoloMatch, error) {
 	return nil, nil
 }

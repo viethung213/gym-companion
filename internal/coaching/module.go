@@ -259,10 +259,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	var outboxWorker *worker.OutboxWorker
-	var profileConsumer *consumer.ProfileCompletedConsumer
-	var profileConsumerCancel context.CancelFunc
-	var workoutConsumer *consumer.WorkoutExecutionConsumer
-	var workoutConsumerCancel context.CancelFunc
+	var consumerMgr *consumer.ConsumerManager
 
 	if deps.KafkaRegistry != nil {
 		if outboxRepo != nil {
@@ -275,45 +272,16 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 			}
 		}
 
-		// Subscribe to profile.events for auto-initiation / regeneration of roadmaps.
-		if initiateHandler != nil && outboxRepo != nil {
-			reader, rErr := deps.KafkaRegistry.GetReader(
-				"coaching-profile-completed-group", "profile.events",
-			)
-			if rErr == nil && reader != nil {
-				profileConsumer = consumer.NewProfileCompletedConsumer(reader, initiateHandler, regenerateHandler, outboxRepo)
-				var consumerCtx context.Context
-				consumerCtx, profileConsumerCancel = context.WithCancel(ctx)
-				go profileConsumer.Start(consumerCtx)
-				slog.Info("Coaching ProfileCompletedConsumer started (profile.events)")
-			} else {
-				slog.Warn("Coaching ProfileCompletedConsumer not started", slog.Any("reader_error", rErr))
-			}
-		} else {
-			slog.Warn("Coaching ProfileCompletedConsumer not started (missing InitiateRoadmapHandler or OutboxRepo)")
-		}
-
-		// Subscribe to workout_execution.events for session completion / abortion.
-		if completeSessionHandler != nil && abortSessionHandler != nil && outboxRepo != nil {
-			weReader, weErr := deps.KafkaRegistry.GetReader(
-				"coaching-workout-execution-group", "workout_execution.events",
-			)
-			if weErr == nil && weReader != nil {
-				workoutConsumer = consumer.NewWorkoutExecutionConsumer(
-					weReader,
-					completeSessionHandler,
-					abortSessionHandler,
-					outboxRepo,
-				)
-				var weCtx context.Context
-				weCtx, workoutConsumerCancel = context.WithCancel(ctx)
-				go workoutConsumer.Start(weCtx)
-				slog.Info("Coaching WorkoutExecutionConsumer started (workout_execution.events)")
-			} else {
-				slog.Warn("Coaching WorkoutExecutionConsumer not started", slog.Any("reader_error", weErr))
-			}
-		} else {
-			slog.Warn("Coaching WorkoutExecutionConsumer not started (missing CompleteSessionHandler, AbortSessionHandler or OutboxRepo)")
+		consumerMgr = consumer.NewConsumerManager(
+			deps.KafkaRegistry,
+			initiateHandler,
+			regenerateHandler,
+			completeSessionHandler,
+			abortSessionHandler,
+			outboxRepo,
+		)
+		if consumerMgr != nil {
+			consumerMgr.Start(ctx)
 		}
 	}
 
@@ -321,11 +289,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 
 	shutdown := func() {
 		slog.Info("Shutting down Coaching Module...")
-		if profileConsumerCancel != nil {
-			profileConsumerCancel()
-		}
-		if workoutConsumerCancel != nil {
-			workoutConsumerCancel()
+		if consumerMgr != nil {
+			consumerMgr.Wait()
 		}
 		if reminderWorker != nil {
 			reminderWorker.Stop()

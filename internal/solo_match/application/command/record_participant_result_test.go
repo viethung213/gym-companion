@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,10 @@ func (m *resultMatchRepoMock) Save(ctx context.Context, match *aggregate.SoloMat
 }
 
 func (m *resultMatchRepoMock) FindByID(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	return m.matches[id], nil
+}
+
+func (m *resultMatchRepoMock) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
 	return m.matches[id], nil
 }
 
@@ -67,6 +72,66 @@ func (m *resultBotRepoMock) IsBot(ctx context.Context, userID string) (bool, err
 
 func (m *resultBotRepoMock) GetRandomBotUserID(ctx context.Context) (string, error) {
 	return "", nil
+}
+
+type concurrentMatchRepoMock struct {
+	mu      sync.Mutex
+	matches map[string]*aggregate.SoloMatch
+}
+
+func (m *concurrentMatchRepoMock) Save(ctx context.Context, match *aggregate.SoloMatch) error {
+	m.matches[match.ID()] = match
+	return nil
+}
+
+func (m *concurrentMatchRepoMock) FindByID(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	return m.matches[id], nil
+}
+
+func (m *concurrentMatchRepoMock) FindByIDForUpdate(ctx context.Context, id string) (*aggregate.SoloMatch, error) {
+	return m.matches[id], nil
+}
+
+func (m *concurrentMatchRepoMock) FindActiveByUserID(ctx context.Context, userID string) (*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *concurrentMatchRepoMock) FindUnreadyExpiredMatches(ctx context.Context, now time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *concurrentMatchRepoMock) FindExpiredInProgressMatches(ctx context.Context, startedBefore time.Time, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+func (m *concurrentMatchRepoMock) ListByUserID(ctx context.Context, userID string, offset, limit int) ([]*aggregate.SoloMatch, error) {
+	return nil, nil
+}
+
+type concurrentEventPubMock struct {
+	mu     sync.Mutex
+	events []any
+}
+
+func (m *concurrentEventPubMock) RecordEvents(ctx context.Context, events []any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, events...)
+	return nil
+}
+
+func (m *concurrentEventPubMock) PublishEvents(ctx context.Context, events []any) error {
+	return m.RecordEvents(ctx, events)
+}
+
+type concurrentTxManagerMock struct {
+	mu *sync.Mutex
+}
+
+func (t *concurrentTxManagerMock) WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return fn(ctx)
 }
 
 func TestRecordParticipantResultHandler(t *testing.T) {
@@ -171,6 +236,74 @@ func TestRecordParticipantResultHandler(t *testing.T) {
 		})
 		if err == nil {
 			t.Errorf("expected error for non-participant user, got nil")
+		}
+	})
+
+	t.Run("concurrent completion of both participants completes match and publishes event", func(t *testing.T) {
+		repo := &concurrentMatchRepoMock{
+			matches: make(map[string]*aggregate.SoloMatch),
+		}
+		eventPub := &concurrentEventPubMock{}
+		txManager := &concurrentTxManagerMock{mu: &repo.mu}
+		botRepo := &resultBotRepoMock{}
+
+		p1, _ := entity.NewMatchParticipant("p_1", "m_concurrent", "user_1")
+		p2, _ := entity.NewMatchParticipant("p_2", "m_concurrent", "user_2")
+		match, _ := aggregate.NewSoloMatch(
+			"m_concurrent",
+			"ex_pushup",
+			"Push-Up",
+			valueobject.ChallengeTypeReps,
+			[]*entity.MatchParticipant{p1, p2},
+			now,
+		)
+		_ = match.ActivateRoom(now)
+		repo.matches["m_concurrent"] = match
+
+		handler := command.NewRecordParticipantResultHandler(repo, eventPub, txManager, nil, botRepo)
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		var err1, err2 error
+		go func() {
+			defer wg.Done()
+			err1 = handler.Handle(ctx, command.RecordParticipantResultCommand{
+				MatchID:     "m_concurrent",
+				UserID:      "user_1",
+				ScoreValue:  25,
+				CompletedAt: now,
+			})
+		}()
+
+		go func() {
+			defer wg.Done()
+			err2 = handler.Handle(ctx, command.RecordParticipantResultCommand{
+				MatchID:     "m_concurrent",
+				UserID:      "user_2",
+				ScoreValue:  20,
+				CompletedAt: now,
+			})
+		}()
+
+		wg.Wait()
+
+		if err1 != nil {
+			t.Fatalf("unexpected error for user_1: %v", err1)
+		}
+		if err2 != nil {
+			t.Fatalf("unexpected error for user_2: %v", err2)
+		}
+
+		finalMatch := repo.matches["m_concurrent"]
+		if finalMatch.Status() != valueobject.MatchStatusCompleted {
+			t.Fatalf("expected status COMPLETED, got %s", finalMatch.Status())
+		}
+		if finalMatch.WinnerID() == nil || *finalMatch.WinnerID() != "user_1" {
+			t.Fatalf("expected user_1 to be winner, got %v", finalMatch.WinnerID())
+		}
+		if len(eventPub.events) != 1 {
+			t.Fatalf("expected exactly 1 completion event, got %d", len(eventPub.events))
 		}
 	})
 }

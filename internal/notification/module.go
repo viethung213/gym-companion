@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -84,66 +85,49 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	// 5. Setup Outbox Worker, Inbound Retry Worker & Consumer in background if KafkaRegistry is provided
 	var cancelWorkers context.CancelFunc
 	ctxWorkers, cancelWorkers := context.WithCancel(ctx)
+	var wg sync.WaitGroup
 
-	var kafkaPub *notificationKafka.Publisher
+	var (
+		kafkaPub    *notificationKafka.Publisher
+		consumerMgr *notificationConsumer.ConsumerManager
+	)
 	if deps.KafkaRegistry != nil {
 		// Outbound Outbox Worker Publisher
 		writer, wErr := deps.KafkaRegistry.GetWriter("notification.events")
 		if wErr == nil && writer != nil {
 			kafkaPub = notificationKafka.NewPublisher(writer)
 			outboxWorker := notificationWorker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				_ = outboxWorker.Start(ctxWorkers)
 			}()
 		} else {
 			slog.Warn("Failed to get kafka writer for notification outbox", slog.Any("error", wErr))
 		}
 
-		// 1. HIGH-PRIORITY Notification Consumer: Dedicated group & Multi-worker pool for instant dispatch
-		highTopic := "notification.events.high-priority"
-		highReader, highErr := deps.KafkaRegistry.GetReader("notification-group-high", highTopic)
-		if highErr == nil && highReader != nil {
-			highConsumer := notificationConsumer.NewNotificationEventConsumer(highReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
-			const highWorkers = 3
-			for i := 0; i < highWorkers; i++ {
-				go highConsumer.Start(ctxWorkers)
-			}
-			slog.Info("Notification HIGH-PRIORITY consumer started", slog.Int("workers", highWorkers), slog.String("topic", highTopic))
-		} else {
-			slog.Warn("Failed to get kafka reader for high-priority topic", slog.String("topic", highTopic), slog.Any("error", highErr))
+		// Inbound Event Consumers managed by ConsumerManager
+		consumerMgr = notificationConsumer.NewConsumerManager(
+			deps.KafkaRegistry,
+			sendPushHandler,
+			sendEmailHandler,
+			sendSMSHandler,
+			outboxLogRepo,
+			deviceRepo,
+		)
+		if consumerMgr != nil {
+			consumerMgr.Start(ctxWorkers)
 		}
 
-		// 2. NORMAL-PRIORITY Notification Consumer: Dedicated group for background/standard dispatch
-		normalTopic := "notification.events.normal-priority"
-		normalReader, normalErr := deps.KafkaRegistry.GetReader("notification-group-normal", normalTopic)
-		if normalErr == nil && normalReader != nil {
-			normalConsumer := notificationConsumer.NewNotificationEventConsumer(normalReader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
-			go normalConsumer.Start(ctxWorkers)
-			slog.Info("Notification NORMAL-PRIORITY consumer started", slog.String("topic", normalTopic))
-		} else {
-			slog.Warn("Failed to get kafka reader for normal-priority topic", slog.String("topic", normalTopic), slog.Any("error", normalErr))
+		// Inbound Event Failure Retry Worker: Dispatches through full multi-channel ProcessMessage
+		var primaryConsumer *notificationConsumer.NotificationEventConsumer
+		if consumerMgr != nil {
+			primaryConsumer = consumerMgr.PrimaryConsumer()
 		}
-
-		// 3. CORE DOMAIN Inbound Event Consumers (Coaching, Nutrition, Workout Execution)
-		coreTopics := []string{
-			"coaching.events",
-			"nutrition.events",
-			"workout_execution.events",
-		}
-		for _, topic := range coreTopics {
-			reader, rErr := deps.KafkaRegistry.GetReader("notification-group-core", topic)
-			if rErr == nil && reader != nil {
-				consumer := notificationConsumer.NewNotificationEventConsumer(reader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
-				go consumer.Start(ctxWorkers)
-				slog.Info("Notification Core consumer started", slog.String("topic", topic))
-			} else {
-				slog.Warn("Failed to get kafka reader for core topic", slog.String("topic", topic), slog.Any("error", rErr))
-			}
-		}
-
-		// Inbound Event Failure Retry Worker
-		inboundRetryWorker := notificationWorker.NewInboundEventRetryWorker(outboxLogRepo, sendPushHandler, 10*time.Second)
+		inboundRetryWorker := notificationWorker.NewInboundEventRetryWorker(outboxLogRepo, primaryConsumer, 10*time.Second)
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			_ = inboundRetryWorker.Start(ctxWorkers)
 		}()
 	}
@@ -152,6 +136,21 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		if cancelWorkers != nil {
 			cancelWorkers()
 		}
+		done := make(chan struct{})
+		go func() {
+			if consumerMgr != nil {
+				consumerMgr.Wait()
+			}
+			wg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+			slog.Info("All notification background workers stopped gracefully")
+		case <-time.After(10 * time.Second):
+			slog.Warn("Notification background workers shutdown timed out after 10s")
+		}
+
 		if kafkaPub != nil {
 			_ = kafkaPub.Close()
 		}

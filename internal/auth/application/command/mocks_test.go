@@ -25,6 +25,7 @@ type mockUserRepo struct {
 	users             map[string]*aggregate.User
 	findByEmailErr    error
 	findByGoogleIDErr error
+	updateErr         error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, u *aggregate.User) error {
@@ -33,6 +34,9 @@ func (m *mockUserRepo) Create(ctx context.Context, u *aggregate.User) error {
 }
 
 func (m *mockUserRepo) Update(ctx context.Context, u *aggregate.User) error {
+	if m.updateErr != nil {
+		return m.updateErr
+	}
 	if _, ok := m.users[u.ID()]; !ok {
 		return derror.ErrUserNotFound
 	}
@@ -130,10 +134,13 @@ func (m *mockKeyRepo) UpdateStatus(ctx context.Context, id string, status string
 	return apperror.ErrKeyNotFound
 }
 
-func (m *mockKeyRepo) DeactivateAllActiveKeys(ctx context.Context) error {
+func (m *mockKeyRepo) DeactivateAllActiveKeys(ctx context.Context, graceExpiresAt time.Time) error {
 	for _, k := range m.keys {
 		if k.Status == port.KeyStatusActive {
 			k.Status = port.KeyStatusInactive
+			if !graceExpiresAt.IsZero() {
+				k.ExpiresAt = graceExpiresAt
+			}
 		}
 	}
 	return nil
@@ -356,6 +363,10 @@ func (m *mockPasswordResetTokenRepo) FindByToken(ctx context.Context, token stri
 		return nil, derror.ErrNotFound
 	}
 	return t, nil
+}
+
+func (m *mockPasswordResetTokenRepo) FindByTokenForUpdate(ctx context.Context, token string) (*entity.PasswordResetToken, error) {
+	return m.FindByToken(ctx, token)
 }
 
 func (m *mockPasswordResetTokenRepo) Update(ctx context.Context, token *entity.PasswordResetToken) error {

@@ -29,6 +29,10 @@ func (m *mockDeviceRepo) GetActiveDevicesByUserID(ctx context.Context, userID st
 	return nil, nil
 }
 
+func (m *mockDeviceRepo) GetAllActiveUserIDs(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockDeviceRepo) DeactivateTokens(ctx context.Context, tokens []string) error {
 	return nil
 }
@@ -52,6 +56,15 @@ func (m *mockNotificationRepo) MarkAsRead(ctx context.Context, userID, notificat
 
 func (m *mockNotificationRepo) MarkAllAsRead(ctx context.Context, userID string) error {
 	return nil
+}
+
+func (m *mockNotificationRepo) FindByUserAndEventID(ctx context.Context, userID, eventID string) (*aggregate.InAppNotification, error) {
+	for _, it := range m.items {
+		if it.UserID() == userID && it.EventID() == eventID {
+			return it, nil
+		}
+	}
+	return nil, nil
 }
 
 type mockSettingRepo struct {

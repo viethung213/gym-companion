@@ -26,7 +26,7 @@ ALTER TABLE solo_match.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255)
 
 CREATE TABLE IF NOT EXISTS solo_match.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS solo_match.outbox_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_solo_match_outbox_log_event_status ON solo_match.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_solo_match_outbox_log_event_id ON solo_match.outbox_log (event_id);
 
 -- 2. USER SNAPSHOTS (Local snapshot for fast matchmaking & schema isolation)
 CREATE TABLE IF NOT EXISTS solo_match.user_snapshots (

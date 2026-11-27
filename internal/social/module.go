@@ -146,10 +146,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 
 	// Background workers (Kafka publisher & consumers)
 	var kafkaPub *socialKafka.Publisher
-	var workoutSharedConsumer *socialConsumer.WorkoutSharedConsumer
-	var userRegisteredConsumer *socialConsumer.UserRegisteredConsumer
-	var userIdentityUpdatedConsumer *socialConsumer.UserIdentityUpdatedConsumer
-	var userRoleUpdatedConsumer *socialConsumer.UserRoleUpdatedConsumer
+	var consumerMgr *socialConsumer.ConsumerManager
 
 	if deps.KafkaRegistry != nil {
 		notifWriter, nErr := deps.KafkaRegistry.GetWriter("notification.events.normal-priority")
@@ -159,25 +156,14 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 			kafkaPub = socialKafka.NewPublisher(notifWriter)
 		}
 
-		workoutReader, rErr := deps.KafkaRegistry.GetReader("social-workout-shared-group", "workout_execution.events")
-		if rErr == nil && workoutReader != nil {
-			workoutSharedConsumer = socialConsumer.NewWorkoutSharedConsumer(workoutReader, ingestWorkoutActivityHandler, outboxLogRepo, txManager)
-		}
-
-		authReader, aErr := deps.KafkaRegistry.GetReader("social-user-registered-group", "auth.events")
-		if aErr == nil && authReader != nil {
-			userRegisteredConsumer = socialConsumer.NewUserRegisteredConsumer(authReader, syncUserSnapshotHandler, outboxLogRepo)
-		}
-
-		authRoleReader, arErr := deps.KafkaRegistry.GetReader("social-user-role-updated-group", "auth.events")
-		if arErr == nil && authRoleReader != nil {
-			userRoleUpdatedConsumer = socialConsumer.NewUserRoleUpdatedConsumer(authRoleReader, updateUserRoleHandler, outboxLogRepo)
-		}
-
-		profileReader, pErr := deps.KafkaRegistry.GetReader("social-user-identity-updated-group", "profile.events")
-		if pErr == nil && profileReader != nil {
-			userIdentityUpdatedConsumer = socialConsumer.NewUserIdentityUpdatedConsumer(profileReader, syncUserSnapshotHandler, outboxLogRepo)
-		}
+		consumerMgr = socialConsumer.NewConsumerManager(
+			deps.KafkaRegistry,
+			outboxLogRepo,
+			txManager,
+			ingestWorkoutActivityHandler,
+			syncUserSnapshotHandler,
+			updateUserRoleHandler,
+		)
 	}
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
@@ -223,41 +209,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*socialGRPC.GRPCHandler, 
 		}()
 	}
 
-	if workoutSharedConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			workoutSharedConsumer.Start(workerCtx)
-		}()
-	}
-
-	if userRegisteredConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			userRegisteredConsumer.Start(workerCtx)
-		}()
-	}
-
-	if userRoleUpdatedConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			userRoleUpdatedConsumer.Start(workerCtx)
-		}()
-	}
-
-	if userIdentityUpdatedConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			userIdentityUpdatedConsumer.Start(workerCtx)
-		}()
+	if consumerMgr != nil {
+		consumerMgr.Start(workerCtx)
 	}
 
 	shutdown := func() {
 		log.Println("Shutting down Social Bounded Context background workers...")
 		cancelWorkers()
+		if consumerMgr != nil {
+			consumerMgr.Wait()
+		}
 		wg.Wait()
 		log.Println("Social Bounded Context successfully shutdown.")
 	}

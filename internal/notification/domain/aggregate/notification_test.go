@@ -66,6 +66,7 @@ func TestInAppNotificationAggregate(t *testing.T) {
 		now := time.Now().UTC()
 		notif := aggregate.ReconstituteInAppNotification(
 			"notif-999",
+			"event-999",
 			"user-888",
 			"Title 999",
 			"Body 999",
@@ -76,6 +77,9 @@ func TestInAppNotificationAggregate(t *testing.T) {
 
 		if got, want := notif.ID(), "notif-999"; got != want {
 			t.Errorf("got ID %s, want %s", got, want)
+		}
+		if got, want := notif.EventID(), "event-999"; got != want {
+			t.Errorf("got EventID %s, want %s", got, want)
 		}
 		if got, want := notif.IsRead(), true; got != want {
 			t.Errorf("got IsRead %v, want %v", got, want)

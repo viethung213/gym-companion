@@ -19,6 +19,7 @@ type Config struct {
 	AccessTokenTTL       time.Duration
 	RefreshTokenTTL      time.Duration
 	KeyRotationTTL       time.Duration
+	KeyGracePeriodTTL    time.Duration
 	StateSecret          string
 }
 
@@ -45,6 +46,7 @@ func Load() (*Config, error) {
 		AccessTokenTTL:       getEnvDuration("JWT_ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL:      getEnvDuration("JWT_REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		KeyRotationTTL:       getEnvDuration("JWT_KEY_ROTATION_TTL", 7*24*time.Hour),
+		KeyGracePeriodTTL:    getEnvDuration("JWT_KEY_GRACE_PERIOD_TTL", 24*time.Hour),
 		StateSecret:          stateSecret,
 	}, nil
 }

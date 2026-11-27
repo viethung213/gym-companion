@@ -12,6 +12,7 @@ Tài liệu này đặc tả chi tiết 7 giải pháp kỹ thuật chuyên sâu
 5. [Kỹ Thuật 5: Check-in No-Show 60 Giây (`ready_deadline`) & Cancellation](#5-kỹ-thuật-5-check-in-no-show-60-giây-ready_deadline--cancellation)
 6. [Kỹ Thuật 6: Kiến Trúc Xử Thua 2 Tầng (Fast Forfeit via Event + 35m Safety Net)](#6-kỹ-thuật-6-kiến-trúc-xử-thua-2-tầng-fast-forfeit-via-event--35m-safety-net)
 7. [Kỹ Thuật 7: Transactional Outbox (SKIP LOCKED) & Idempotent Consumer Logging](#7-kỹ-thuật-7-transactional-outbox-skip-locked--idempotent-consumer-logging)
+8. [Kỹ Thuật 8: Pessimistic Row Locking (`FOR UPDATE`) Trên Aggregate Root & Tuần Tự Hóa Hoàn Thành Trận Đấu](#8-kỹ-thuật-8-pessimistic-row-locking-for-update-trên-aggregate-root--tuần-tự-hóa-hoàn-thành-trận-đấu)
 
 ---
 
@@ -140,3 +141,33 @@ Nếu Client liên tục gửi request HTTP Polling mỗi 1 giây để hỏi "�
   }
   ```
 - Đảm bảo 1 sự kiện dù bị mạng phân tán gửi lại bao nhiêu lần cũng chỉ được thực thi đúng 1 lần duy nhất.
+
+---
+
+## 8. Kỹ Thuật 8: Pessimistic Row Locking (`FOR UPDATE`) Trên Aggregate Root & Tuần Tự Hóa Hoàn Thành Trận Đấu
+
+### 8.1. Bối cảnh & Vấn đề Race Condition khi hoàn thành đồng thời
+Trong trận đấu 1v1, khi cả hai đấu thủ hoàn thành bài tập camera AI gần như cùng một thời điểm, hai sự kiện `SoloTrackingCompleted` được phát ra từ module `workout_execution` và được tiêu thụ song song trên 2 worker goroutines của `solo_match`.
+- **Rủi ro nghiêm trọng**: Nếu đọc dữ liệu ngoài transaction bằng `FindByID` thông thường, cả 2 tiến trình đều thấy đối phương "chưa hoàn thành" $\rightarrow$ Cả 2 cùng chỉ ghi nhận điểm của mình mà không bên nào chuyển trạng thái trận sang `COMPLETED`, không bắn event `SoloMatchCompleted`. Trận đấu bị treo vĩnh viễn ở `IN_PROGRESS` (Lỗi **[CRIT-SOLO-01]**). Đồng thời, các thao tác batch update trên `match_participants` có nguy cơ ghi đè dữ liệu của nhau (Lost Update) hoặc gây deadlock trên database.
+
+### 8.2. Giải pháp Pessimistic Row Locking trên Aggregate Root
+Áp dụng nguyên lý ranh giới nhất quán của Aggregate Root trong Domain-Driven Design:
+1. **Khóa độc quyền ở cấp Aggregate Root**:
+   Trong câu lệnh `FindByIDForUpdate`:
+   ```go
+   db.Clauses(clause.Locking{Strength: "UPDATE"}).
+       Preload("Participants", func(pDb *gorm.DB) *gorm.DB {
+           return pDb.Order("solo_match.match_participants.id ASC")
+       }).
+       First(&model, "id = ?", id)
+   ```
+   PostgreSQL phát lệnh `SELECT * FROM solo_match.solo_matches WHERE id = ? FOR UPDATE`, chiếm giữ khóa độc quyền đúng **1 dòng đại diện cho trận đấu**.
+2. **Tuần tự hóa thực thi nguyên tử (Serialized Execution)**:
+   - Toàn bộ chu trình: `FindByIDForUpdate` $\rightarrow$ `match.RecordParticipantResult` $\rightarrow$ `Save` $\rightarrow$ `RecordEvents` được bọc trọn vẹn trong một database transaction `txManager.WithTransaction`.
+   - Tiến trình 1 vào trước khóa dòng `solo_matches`, ghi nhận điểm số của P1. Trận đấu vẫn `IN_PROGRESS`. Commit transaction và nhả khóa.
+   - Tiến trình 2 bị chặn ở tầng DB cho đến khi Tiến trình 1 commit. Khi unblock, Tiến trình 2 đọc phiên bản mới nhất đã commit (chế độ Read Committed), thấy P1 đã xong $\rightarrow$ Kích hoạt `MatchResolver.ResolveOutcome`, chuyển `COMPLETED`, xác định người chiến thắng và ghi sự kiện `SoloMatchCompleted` vào Outbox trong cùng transaction.
+3. **Triệt tiêu nguy cơ Deadlock**:
+   - Khóa dòng Aggregate Root được chiếm giữ trước tiên, đóng vai trò là "chìa khóa phòng" (Mutex).
+   - Danh sách `Participants` luôn được nạp theo thứ tự xác định `id ASC`, loại trừ hoàn toàn khả năng tranh chấp khóa chéo giữa các dòng con.
+4. **Hiệu năng**:
+   - Thời gian giữ khóa diễn ra trong RAM của PostgreSQL buffer pool chỉ kéo dài **~1-3ms**, hoàn toàn không tạo bottleneck và không cần hạ tầng khóa phân tán Redis phức tạp.

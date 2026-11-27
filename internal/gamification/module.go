@@ -108,12 +108,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 
 	// 6. Kafka & Workers Setup
 	var (
-		kafkaPub                    *infraKafka.Publisher
-		userRegisteredConsumer      *consumer.UserRegisteredConsumer
-		workoutEventConsumer        *consumer.WorkoutEventConsumer
-		personalRecordConsumer      *consumer.PersonalRecordConsumer
-		nutritionEventConsumer      *consumer.NutritionEventConsumer
-		userIdentityUpdatedConsumer *consumer.UserIdentityUpdatedConsumer
+		kafkaPub    *infraKafka.Publisher
+		consumerMgr *consumer.ConsumerManager
 	)
 
 	if deps.KafkaRegistry != nil {
@@ -123,25 +119,15 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 			slog.Warn("Failed to create Kafka writer", slog.String("module", "gamification"), slog.Any("error", wErr))
 		}
 
-		if authReader, aErr := deps.KafkaRegistry.GetReader("gamification-user-registered-group", "auth.events"); aErr == nil {
-			userRegisteredConsumer = consumer.NewUserRegisteredConsumer(authReader, initUserGamificationHandler, outboxLogRepo)
-		}
-
-		if workoutReader, woErr := deps.KafkaRegistry.GetReader("gamification-workout-group", "workout_execution.events"); woErr == nil {
-			workoutEventConsumer = consumer.NewWorkoutEventConsumer(workoutReader, coordinator, outboxLogRepo)
-		}
-
-		if prReader, prErr := deps.KafkaRegistry.GetReader("gamification-pr-group", "workout_execution.events"); prErr == nil {
-			personalRecordConsumer = consumer.NewPersonalRecordConsumer(prReader, prCoordinatorAdapter{coordinator: coordinator}, outboxLogRepo)
-		}
-
-		if nutritionReader, nErr := deps.KafkaRegistry.GetReader("gamification-nutrition-group", "nutrition.events"); nErr == nil {
-			nutritionEventConsumer = consumer.NewNutritionEventConsumer(nutritionReader, nutritionCoordinatorAdapter{coordinator: coordinator}, outboxLogRepo)
-		}
-
-		if profileReader, pErr := deps.KafkaRegistry.GetReader("gamification-profile-group", "profile.events"); pErr == nil {
-			userIdentityUpdatedConsumer = consumer.NewUserIdentityUpdatedConsumer(profileReader, syncUserSnapshotHandler, outboxLogRepo)
-		}
+		consumerMgr = consumer.NewConsumerManager(
+			deps.KafkaRegistry,
+			outboxLogRepo,
+			initUserGamificationHandler,
+			coordinator,
+			prCoordinatorAdapter{coordinator: coordinator},
+			nutritionCoordinatorAdapter{coordinator: coordinator},
+			syncUserSnapshotHandler,
+		)
 	}
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
@@ -156,49 +142,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		}()
 	}
 
-	if userRegisteredConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			userRegisteredConsumer.Start(workerCtx)
-		}()
-	}
-
-	if workoutEventConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			workoutEventConsumer.Start(workerCtx)
-		}()
-	}
-
-	if personalRecordConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			personalRecordConsumer.Start(workerCtx)
-		}()
-	}
-
-	if nutritionEventConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			nutritionEventConsumer.Start(workerCtx)
-		}()
-	}
-
-	if userIdentityUpdatedConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			userIdentityUpdatedConsumer.Start(workerCtx)
-		}()
+	if consumerMgr != nil {
+		consumerMgr.Start(workerCtx)
 	}
 
 	shutdown = func() {
 		slog.Info("Shutting down background workers...", slog.String("module", "gamification"))
 		cancelWorkers()
+		if consumerMgr != nil {
+			consumerMgr.Wait()
+		}
 		wg.Wait()
 		slog.Info("Background workers shutdown complete.", slog.String("module", "gamification"))
 	}

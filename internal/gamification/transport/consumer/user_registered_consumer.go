@@ -8,13 +8,20 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	authv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/auth/v1/event"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type UserRegisteredConsumer struct {
 	reader        *kafka.Reader
+	dlqWriter     sharedKafka.MessageWriter
 	initHandler   *command.InitUserGamificationHandler
 	outboxLogRepo port.OutboxLogRepository
+}
+
+func (c *UserRegisteredConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *UserRegisteredConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 func NewUserRegisteredConsumer(
@@ -30,7 +37,7 @@ func NewUserRegisteredConsumer(
 }
 
 func (c *UserRegisteredConsumer) Start(ctx context.Context) {
-	runConsumerLoop(ctx, "UserRegistered", c.reader, c.ProcessMessage)
+	runConsumerLoop(ctx, "UserRegistered", c.reader, c.dlqWriter, c.ProcessMessage)
 }
 
 func (c *UserRegisteredConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {

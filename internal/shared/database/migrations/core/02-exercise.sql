@@ -36,7 +36,7 @@ ALTER TABLE exercise.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);
 
 CREATE TABLE IF NOT EXISTS exercise.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS exercise.outbox_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_exercise_outbox_log_event_status ON exercise.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_exercise_outbox_log_event_id ON exercise.outbox_log (event_id);
 
 -- 2. EXERCISES (catalog = free-exercise-db, docs/05 §5.1)
 -- Taxonomy columns hold the short codes of the proto enums in

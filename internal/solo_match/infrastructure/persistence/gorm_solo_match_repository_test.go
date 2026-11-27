@@ -124,7 +124,16 @@ func TestGORMSoloMatchRepository_SaveAndFindByID(t *testing.T) {
 		t.Fatalf("got %d participants, want 2", len(found.Participants()))
 	}
 
-	// 3. FindByID non-existent match
+	// 3. FindByIDForUpdate existing match
+	foundForUpdate, err := repo.FindByIDForUpdate(ctx, "m_1")
+	if err != nil {
+		t.Fatalf("repo.FindByIDForUpdate failed: %v", err)
+	}
+	if foundForUpdate == nil || foundForUpdate.ID() != "m_1" {
+		t.Fatalf("expected match m_1 to be found via FindByIDForUpdate")
+	}
+
+	// 4. FindByID non-existent match
 	notFound, err := repo.FindByID(ctx, "m_nonexistent")
 	if err != nil {
 		t.Fatalf("unexpected err for non-existent match: %v", err)

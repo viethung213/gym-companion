@@ -17,6 +17,7 @@ import (
 )
 
 type SendPushNotificationCommand struct {
+	EventID        string
 	UserID         string
 	Title          string
 	Body           string
@@ -57,12 +58,21 @@ func NewSendPushNotificationHandler(
 	}
 }
 
+//nolint:gocritic // hugeParam: command struct is an immutable value object
 func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNotificationCommand) (*SendPushNotificationResponse, error) {
 	// 1. Create In-App Notification record (or prepare for POST_REACTION rollup)
 	notifData := make(map[string]string, len(cmd.Data)+1)
 	for k, v := range cmd.Data {
 		notifData[k] = v
 	}
+	eventID := cmd.EventID
+	if eventID == "" {
+		eventID = notifData["eventId"]
+	}
+	if eventID != "" && notifData["eventId"] == "" {
+		notifData["eventId"] = eventID
+	}
+
 	isPostReaction := notifData["type"] == "POST_REACTION" && notifData["feedItemId"] != ""
 	if isPostReaction && notifData["rollupCount"] == "" {
 		notifData["rollupCount"] = "1"
@@ -73,12 +83,34 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 	if err != nil {
 		return nil, fmt.Errorf("create in-app notification: %w", err)
 	}
+	if eventID != "" {
+		inAppNotif.WithEventID(eventID)
+	}
 
 	effectiveBody := cmd.Body
 	effectiveData := notifData
 
 	// 2. Save (or Rollup) In-App Notification & Outbox CloudEvent 1.0 atomically inside a single DB Transaction
 	saveTxFn := func(txCtx context.Context) error {
+		// Idempotency check: if notification with same (user_id, event_id) already exists (e.g. from previous failed push attempt),
+		// reuse the existing notification and skip inserting duplicate in-app record or outbox event!
+		if eventID != "" {
+			existing, findErr := h.notificationRepo.FindByUserAndEventID(txCtx, cmd.UserID, eventID)
+			if findErr != nil {
+				slog.WarnContext(txCtx, "FindByUserAndEventID error during idempotency check", slog.Any("error", findErr))
+			} else if existing != nil {
+				inAppNotif = existing
+				effectiveBody = existing.Body()
+				effectiveData = existing.Data()
+				slog.InfoContext(txCtx, "Idempotent push notification retry detected, reusing existing in-app record",
+					slog.String("notification_id", existing.ID()),
+					slog.String("event_id", eventID),
+					slog.String("user_id", cmd.UserID),
+				)
+				return nil
+			}
+		}
+
 		rolledUp := false
 		if isPostReaction {
 			if rollupRepo, ok := h.notificationRepo.(repository.ReactionRollupRepository); ok {
@@ -106,6 +138,7 @@ func (h *SendPushNotificationHandler) Handle(ctx context.Context, cmd SendPushNo
 					rolledBody := fmt.Sprintf("%s và %d người khác đã bày tỏ cảm xúc về bài viết của bạn", actorName, newCount-1)
 					updated := aggregate.ReconstituteInAppNotification(
 						existing.ID(),
+						existing.EventID(),
 						cmd.UserID,
 						cmd.Title,
 						rolledBody,
