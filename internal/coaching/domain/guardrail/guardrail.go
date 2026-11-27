@@ -445,9 +445,10 @@ func ftoa(f float64) string {
 // Dropping RPE while keeping volume intact passes BR-AC-10 and still leaves
 // the athlete without a recovery week, which is what this rule catches.
 //
-// Only a breach a rewrite can still fix blocks: if the DELOAD week stays over
-// with every rewritable line at one set (its finished sessions alone exceed
-// the allowance), rejecting would lock every later rewrite of the roadmap.
+// Only a breach a rewrite can still fix blocks: if the finished and started
+// DELOAD sessions alone exceed the allowance, rejecting would lock every later
+// rewrite of the roadmap. A rewritable session counts as nothing, since a
+// rewrite may cut or drop its lines.
 func (e *Engine) checkDeloadVolume(r *roadmap.Roadmap, inScope func(*roadmap.SessionPlan) bool) []Violation {
 	// No PEAK week means no baseline to unload from; ValidateFullStructure
 	// owns the "is this roadmap shaped correctly" question.
@@ -461,27 +462,23 @@ func (e *Engine) checkDeloadVolume(r *roadmap.Roadmap, inScope func(*roadmap.Ses
 		return nil
 	}
 
-	least := 0 // DELOAD sets with every rewritable line cut to one set
+	fixed := 0 // DELOAD sets no rewrite can change
 	for _, w := range r.Weeks() {
 		if w.Phase() != roadmap.PhaseDeload {
 			continue
 		}
 		for _, d := range w.Days() {
 			for _, s := range d.Sessions() {
-				if !s.IsTrainingVolume() {
+				if !s.IsTrainingVolume() || inScope(s) {
 					continue
 				}
 				for _, ex := range s.Info().Prescription.MainExercises {
-					if inScope(s) {
-						least++
-					} else {
-						least += int(ex.TargetSets)
-					}
+					fixed += int(ex.TargetSets)
 				}
 			}
 		}
 	}
-	if least > allowed {
+	if fixed > allowed {
 		return nil
 	}
 

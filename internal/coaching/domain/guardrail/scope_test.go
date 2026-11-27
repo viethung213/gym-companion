@@ -93,3 +93,13 @@ func TestGuardrail_DeloadVolumeOnlyBlocksWhatCanChange(t *testing.T) {
 	}
 	assertViolation(t, NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, time.Time{}), "BR-AC-11")
 }
+
+// Reproduces the review finding: the exemption meant for a DELOAD week that
+// finished sessions alone push over its allowance also let a fresh draft
+// through when it had more DELOAD lines than allowed sets, though every line
+// is still in scope and a rewrite can drop it. PEAK 3 sets allows 2; DELOAD
+// holds 3 rewritable lines of 4 sets.
+func TestGuardrail_DeloadVolumeBlocksAnOverweightDraft(t *testing.T) {
+	r := buildRoadmap(t, validRPE(), [4]int32{3, 3, 1, 4})
+	assertViolation(t, NewEngine(nil, benchCatalog(), benchWeight).Check(context.Background(), r, nil, time.Time{}), "BR-AC-11")
+}
