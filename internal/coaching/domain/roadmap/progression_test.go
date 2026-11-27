@@ -10,6 +10,11 @@ func TestRepRangeForGoal(t *testing.T) {
 	for goal, want := range map[string]RepRange{
 		"BUILD_MUSCLE": {8, 12}, "hypertrophy": {8, 12}, "STRENGTH": {4, 6},
 		"ENDURANCE": {12, 15}, "LOSE_FAT": {10, 15}, "": {8, 12}, "unknown": {8, 12},
+		// Reproduces the review finding: the goals stored by the app are
+		// FAT_LOSS and PRIMARY_GOAL_*, which matched nothing and fell back to
+		// hypertrophy.
+		"FAT_LOSS": {10, 15}, "weight_loss": {10, 15}, "PRIMARY_GOAL_STRENGTH": {4, 6},
+		"PRIMARY_GOAL_MUSCLE_GAIN": {8, 12}, "endurance": {12, 15},
 	} {
 		if got := RepRangeForGoal(goal); got != want {
 			t.Errorf("%q: %v, want %v", goal, got, want)
@@ -57,6 +62,13 @@ func TestProgressLine(t *testing.T) {
 		// Reproduces the review finding: the 300 kg hard limit (BR-AC-13) was
 		// not checked, so the guardrail refused the whole adaptation.
 		{"never past the 300 kg limit", line(3, 12, 299, 0), 2.5, hypertrophy, 0, line(3, 12, 299, 0)},
+		// Reproduces the review finding: a line prescribed outside the goal's
+		// range was pulled into it, so a heavy 5-rep line climbed to 12 reps
+		// at the same load, and a 15-rep line dropped to 8. It keeps the reps
+		// it was prescribed and takes the load step.
+		{"heavy line below the range keeps its reps", line(5, 5, 100, 0), 2.5, hypertrophy, 0, line(5, 5, 102.5, 0)},
+		{"light line above the range keeps its reps", line(3, 15, 20, 0), 2, hypertrophy, 0, line(3, 15, 22, 0)},
+		{"below the range, no load step: held", line(3, 5, 5, 0), 0, hypertrophy, 0, line(3, 5, 5, 0)},
 	}
 	for _, tt := range tests {
 		if got := ProgressLine(&tt.in, tt.step, tt.rng, tt.ceil); got != tt.want {

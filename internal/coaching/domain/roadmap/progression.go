@@ -10,10 +10,12 @@ import (
 
 // Progressive overload (BR-AC-04 case 1) is applied by these rules, not left
 // to the model, which answered "+2.5%" with anything from +0% to +33%. A
-// loaded line uses double progression: it gains reps inside the goal's range,
+// loaded line in the goal's rep range uses double progression: it gains reps,
 // and at the top of the range it takes one real load step (a dumbbell or a
-// plate pair) and drops back to the bottom of the range. Bodyweight work gains
-// reps, holds gain seconds, each up to a ceiling.
+// plate pair) and drops back to the bottom of the range. A loaded line the
+// coach prescribed outside that range (heavy 5s in a muscle block) keeps its
+// reps and takes the load step. Bodyweight work gains reps, holds gain
+// seconds, each up to a ceiling.
 const (
 	maxProgressedReps    = 20 // bodyweight reps past this are endurance work
 	maxProgressedHoldSec = 90
@@ -24,16 +26,19 @@ const (
 type RepRange struct{ Min, Max int32 }
 
 // RepRangeForGoal is the rep range of the athlete's primary goal; an unknown
-// goal trains for hypertrophy, the default goal.
+// goal trains for hypertrophy, the default goal. Goals arrive in several
+// spellings (STRENGTH, PRIMARY_GOAL_STRENGTH, FAT_LOSS, LOSE_FAT, weight_loss),
+// so the goal's keyword decides.
 func RepRangeForGoal(goal string) RepRange {
-	switch strings.ToUpper(strings.TrimSpace(goal)) {
-	case "STRENGTH":
+	g := strings.ToUpper(goal)
+	switch {
+	case strings.Contains(g, "STRENGTH"):
 		return RepRange{4, 6}
-	case "ENDURANCE":
+	case strings.Contains(g, "ENDURANCE"):
 		return RepRange{12, 15}
-	case "LOSE_FAT":
+	case strings.Contains(g, "FAT"), strings.Contains(g, "WEIGHT_LOSS"), strings.Contains(g, "LOSE"):
 		return RepRange{10, 15}
-	default: // BUILD_MUSCLE, hypertrophy
+	default: // BUILD_MUSCLE, MUSCLE_GAIN, hypertrophy
 		return RepRange{8, 12}
 	}
 }
@@ -63,16 +68,29 @@ func ProgressLine(from *PrescribedExercise, loadStep float32, rng RepRange, ceil
 		line.DurationSeconds = min(line.DurationSeconds+holdStepSec, max(line.DurationSeconds, maxProgressedHoldSec))
 	case line.TargetWeight <= 0:
 		line.TargetReps = min(line.TargetReps+2, max(line.TargetReps, maxProgressedReps))
+	case line.TargetReps < rng.Min || line.TargetReps > rng.Max:
+		// Prescribed outside the goal's range on purpose: the reps stay.
+		if next, ok := stepLoad(line.TargetWeight, loadStep, ceilingKg); ok {
+			line.TargetWeight = next
+		}
 	case line.TargetReps < rng.Max:
 		line.TargetReps = min(line.TargetReps+repStep(rng), rng.Max)
-	case loadStep > 0:
-		next := line.TargetWeight + loadStep
-		if next > MaxTargetWeightKg || (ceilingKg > 0 && next > ceilingKg) {
-			return line
+	default: // top of the range
+		if next, ok := stepLoad(line.TargetWeight, loadStep, ceilingKg); ok {
+			line.TargetWeight, line.TargetReps = next, rng.Min
 		}
-		line.TargetWeight, line.TargetReps = next, rng.Min
 	}
 	return line
+}
+
+// stepLoad is the load one step up, or false when the load cannot be stepped
+// or the step passes the ceiling or the MaxTargetWeightKg hard limit.
+func stepLoad(kg, loadStep, ceilingKg float32) (float32, bool) {
+	next := kg + loadStep
+	if loadStep <= 0 || next > MaxTargetWeightKg || (ceilingKg > 0 && next > ceilingKg) {
+		return kg, false
+	}
+	return next, true
 }
 
 // repStep is how many reps a loaded line gains a week: 2, or 1 in a narrow
