@@ -159,6 +159,9 @@ func (h *RegenerateScheduleHandler) regenerate(ctx context.Context, cmd Regenera
 	if !cmd.ChangedAt.IsZero() && plannedAfter(rm.Info().CreatedAt, cmd.ChangedAt) {
 		slog.InfoContext(ctx, "Profile change predates the active roadmap; already reflected, not regenerating",
 			slog.String("user_id", cmd.UserID), slog.String("reason", cmd.Reason))
+		if !dueReflectedBy(rm, rm.Info().CreatedAt) {
+			return &RegenerateScheduleResult{Roadmap: rm}, nil // a newer change still waits
+		}
 		return &RegenerateScheduleResult{Roadmap: rm}, h.clearRegenerationDue(ctx, rm)
 	}
 
@@ -180,6 +183,7 @@ func (h *RegenerateScheduleHandler) regenerate(ctx context.Context, cmd Regenera
 		ids = append(ids, s.ID())
 	}
 
+	generatedFrom := h.clock.Now() // before the agent reads the profile
 	drafts, err := h.agent.RegeneratePending(ctx, cmd.UserID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("%w: agent regenerate: %w", errRegenerationFailed, err)
@@ -216,7 +220,11 @@ func (h *RegenerateScheduleHandler) regenerate(ctx context.Context, cmd Regenera
 	}
 
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		rm.ClearRegenerationDue()
+		// A change recorded while the model generated (the roadmap was read
+		// again since) was not in the profile it planned from: it stays.
+		if dueReflectedBy(rm, generatedFrom) {
+			rm.ClearRegenerationDue()
+		}
 		rm.Touch(now)
 		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
 			return saveErr
@@ -253,6 +261,13 @@ func (h *RegenerateScheduleHandler) deferRegeneration(ctx context.Context, cmd R
 		rm.Touch(h.clock.Now())
 		return h.repo.Save(txCtx, rm)
 	})
+}
+
+// dueReflectedBy reports whether a schedule planned at plannedAt already
+// reflects the change waiting on the roadmap (true when none waits).
+func dueReflectedBy(rm *roadmap.Roadmap, plannedAt time.Time) bool {
+	due, err := rm.PendingRegeneration()
+	return errors.Is(err, roadmap.ErrNoRegenerationDue) || plannedAfter(plannedAt, due.ChangedAt)
 }
 
 // clearRegenerationDue drops a waiting change the roadmap no longer needs (it

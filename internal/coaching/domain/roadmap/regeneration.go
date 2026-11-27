@@ -15,18 +15,19 @@ var ErrNoRegenerationDue = errors.New("no regeneration is due")
 
 // RegenerationDue is a profile change the schedule still has to absorb.
 type RegenerationDue struct {
-	// ChangedAt is when the profile changed; a retry plans from it, so a roadmap
-	// planned after it still counts as reflecting it.
+	// ChangedAt is when the latest waiting change happened: a schedule
+	// generated after it reflects every change waiting before it too.
 	ChangedAt time.Time
 	// Reason is the change ("injury_reported", "profile_updated", ...).
 	Reason string
 }
 
 // MarkRegenerationDue records a profile change the schedule could not absorb
-// now, so it is retried later instead of lost. A change already waiting keeps
-// the earliest time: one regeneration covers every change since.
+// now, so it is retried later instead of lost. The latest waiting change is
+// kept: a regeneration that started after it covers the earlier ones, and one
+// that started before it must not clear it.
 func (r *Roadmap) MarkRegenerationDue(changedAt time.Time, reason string) {
-	if r.info.RegenerationDue != nil && !changedAt.Before(r.info.RegenerationDue.ChangedAt) {
+	if r.info.RegenerationDue != nil && !changedAt.After(r.info.RegenerationDue.ChangedAt) {
 		return
 	}
 	r.info.RegenerationDue = &RegenerationDue{ChangedAt: changedAt, Reason: reason}
