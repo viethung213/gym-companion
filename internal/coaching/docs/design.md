@@ -67,7 +67,7 @@ flowchart LR
 | B2 — Schedule mismatch | `Coaching Context` | [BR-AC-06](../../../docs/NGHIEP_VU_COT_LOI_BABOK.md#L137) | Dời slot sang ngày rảnh khác |
 | B3 — Tập ngoài lịch (Unscheduled Workout) | `Workout Execution` | [BR-AC-07](../../../docs/NGHIEP_VU_COT_LOI_BABOK.md#L138) | Check-in phân loại 3 nguyên nhân (quá nhẹ, thừa thời gian, quá sức/nguy hiểm) |
 | B4 — Chai lỳ cơ (Plateau) | `Workout Execution` | [BR-AC-08](../../../docs/NGHIEP_VU_COT_LOI_BABOK.md#L139) | Đổi biến thể bài tập tương đương, điều chỉnh rep/set, hoặc đổi thứ tự bài |
-| Trigger A — Đánh giá định kỳ | `Coaching Context` | [BR-AC-04](../../../docs/NGHIEP_VU_COT_LOI_BABOK.md#L135) | Tính $SCR$ và $\Delta RPE$, tự động điều chỉnh tạ ($+2.5\% \to +5\%$), Deload khi 3 buổi vượt RPE kê cao nhất ≥ 1 hoặc ΔRPE ≥ +2 (code tự cắt 30% set chính trừ tuần DELOAD, 10% tạ), hoặc giảm 1 buổi/tuần ($SCR < 50\%$) |
+| Trigger A — Đánh giá định kỳ | `Coaching Context` | [BR-AC-04](../../../docs/NGHIEP_VU_COT_LOI_BABOK.md#L135) | Tính $SCR$ và $\Delta RPE$, tăng tải theo double progression do code tính (tăng rep trong khoảng của mục tiêu, chạm đỉnh thì lên 1 nấc tạ), Deload khi 3 buổi vượt RPE kê cao nhất ≥ 1 hoặc ΔRPE ≥ +2 (code tự cắt 30% set chính trừ tuần DELOAD, 10% tạ), hoặc giảm 1 buổi/tuần ($SCR < 50\%$) |
 
 ---
 

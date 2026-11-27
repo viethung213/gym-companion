@@ -240,6 +240,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		adaptHandler := command.NewApplyAdaptiveCycleHandler(
 			txMgr, deps.RoadmapRepo, coachAgent, guard, deps.ProfileReader, deps.OutboxWriter, clock,
 			nil, // engine: the default AdaptiveCoachEngine
+			deps.CatalogReader, athlete.PRBaselines(deps.SessionReader),
 		)
 		reviewHandler := command.NewReviewWeeksHandler(txMgr, deps.RoadmapRepo, adaptHandler, clock)
 		planHandler := command.NewPlanNextBlockHandler(

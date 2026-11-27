@@ -43,6 +43,11 @@ type ApplyAdaptiveCycleHandler struct {
 	outbox   port.OutboxWriter
 	clock    port.Clock
 	engine   *service.AdaptiveCoachEngine
+	// catalog gives each exercise's equipment (its load step); records bound
+	// a progressed load to 30% above the athlete's record (BR-AC-02). A nil
+	// records lookup progresses without that bound; the guardrail still holds.
+	catalog port.ExerciseCatalogReader
+	records guardrail.PRLookup
 }
 
 // NewApplyAdaptiveCycleHandler wires the handler.
@@ -55,6 +60,8 @@ func NewApplyAdaptiveCycleHandler(
 	outbox port.OutboxWriter,
 	clock port.Clock,
 	engine *service.AdaptiveCoachEngine,
+	catalog port.ExerciseCatalogReader,
+	records guardrail.PRLookup,
 ) *ApplyAdaptiveCycleHandler {
 	if engine == nil {
 		engine = service.NewAdaptiveCoachEngine()
@@ -69,6 +76,8 @@ func NewApplyAdaptiveCycleHandler(
 		outbox:   outbox,
 		clock:    clock,
 		engine:   engine,
+		catalog:  catalog,
+		records:  records,
 	}
 }
 
@@ -106,10 +115,13 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	if len(upcoming) == 0 {
 		return &ApplyAdaptiveCycleResult{Decision: decision, Roadmap: rm}, nil
 	}
-	// The volume a deload cuts from, read before the model rewrites it.
+	// What a deload cuts from and a progression builds on, read before the
+	// model rewrites it.
 	setsBefore := make(map[string]int, len(upcoming))
+	linesBefore := make(map[string][]roadmap.PrescribedExercise, len(upcoming))
 	for _, s := range upcoming {
 		setsBefore[s.ID()] = s.MainSets()
+		linesBefore[s.ID()] = append([]roadmap.PrescribedExercise(nil), s.Info().Prescription.MainExercises...)
 	}
 
 	drafts, err := h.agent.Adapt(ctx, cmd.UserID, &decision)
@@ -144,6 +156,11 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	if decision.Kind == service.AdaptationTriggerDeload {
 		if unloadErr := unloadVolume(ctx, rm, setsBefore, decision.Params.VolumePctChange, now); unloadErr != nil {
 			return nil, unloadErr
+		}
+	}
+	if decision.Kind == service.AdaptationIncreaseLoad {
+		if progressErr := h.progress(ctx, rm, &profile, linesBefore, now); progressErr != nil {
+			return nil, progressErr
 		}
 	}
 	if fitErr := fitDeloadVolume(ctx, rm, now); fitErr != nil {
@@ -210,5 +227,54 @@ func unloadVolume(ctx context.Context, rm *roadmap.Roadmap, before map[string]in
 		slog.InfoContext(ctx, "Deload volume cut enforced (BR-AC-04)",
 			slog.String("roadmap_id", rm.ID()), slog.Int("sessions", len(cut)))
 	}
+	return nil
+}
+
+// progress applies progressive overload (BR-AC-04 case 1) to the rewritten
+// sessions: double progression in the goal's rep range, one real load step at
+// the top of it, never past 30% above the athlete's record. An exercise the
+// catalog cannot describe, or that an injury limits, keeps its numbers.
+func (h *ApplyAdaptiveCycleHandler) progress(
+	ctx context.Context, rm *roadmap.Roadmap, profile *port.Profile,
+	linesBefore map[string][]roadmap.PrescribedExercise, now time.Time,
+) error {
+	var records map[string]float64
+	if h.records != nil {
+		records = h.records(ctx, rm.UserID())
+	}
+	injuries := profile.Athlete().Injuries
+	ceiling := service.NewOverloadValidator()
+
+	rules := make(map[string]roadmap.LineProgression)
+	for _, lines := range linesBefore {
+		for i := range lines {
+			id := lines[i].ExerciseID
+			if _, seen := rules[id]; seen {
+				continue
+			}
+			ex, err := h.catalog.GetByID(ctx, id)
+			if err != nil {
+				slog.WarnContext(ctx, "Exercise not progressed: catalog lookup failed",
+					slog.String("exercise_id", id), slog.Any("error", err))
+				continue
+			}
+			traits := ex.Traits()
+			if v := service.EvaluateInjuries(&traits, injuries); v.Excluded || v.MaxRPE > 0 {
+				continue // an injury limits it: hold the load
+			}
+			rule := roadmap.LineProgression{LoadStep: roadmap.LoadStep(ex.Equipment)}
+			if record := records[id]; record > 0 {
+				rule.CeilingKg = float32(ceiling.Ceiling(record))
+			}
+			rules[id] = rule
+		}
+	}
+
+	changed, err := rm.ProgressUpcoming(linesBefore, roadmap.RepRangeForGoal(profile.PrimaryGoal), rules, now)
+	if err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "Progressive overload applied (BR-AC-04)",
+		slog.String("roadmap_id", rm.ID()), slog.Int("sessions", len(changed)))
 	return nil
 }

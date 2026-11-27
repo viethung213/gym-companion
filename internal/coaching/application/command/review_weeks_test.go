@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/guardrail"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
+	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
 // weekOneEnd is when week 1 of reviewFixture is over (UTC roadmap).
@@ -123,8 +125,17 @@ func newReviewHandler(rm *roadmap.Roadmap, now time.Time) (*ReviewWeeksHandler, 
 	clock := &fakeClock{t: now}
 	agent := &adaptingAgent{rm: rm}
 	adapt := NewApplyAdaptiveCycleHandler(fakeTx{}, repo, agent,
-		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), zoneProfiles{loc: time.UTC}, &captureOutbox{}, clock, nil)
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), zoneProfiles{loc: time.UTC}, &captureOutbox{}, clock, nil,
+		barbellCatalog(), nil)
 	return NewReviewWeeksHandler(fakeTx{}, repo, adapt, clock), agent, repo
+}
+
+// barbellCatalog resolves every exercise to a barbell lift.
+func barbellCatalog() *exerciseCatalogMock {
+	return &exerciseCatalogMock{fn: func(_ context.Context, id string) (port.Exercise, error) {
+		return port.Exercise{ExerciseID: id, Name: id, PrimaryMuscle: taxonomy.MuscleGroupQuadriceps,
+			Equipment: taxonomy.EquipmentBarbell, Level: taxonomy.LevelIntermediate, MeasurementType: "REPS"}, nil
+	}}
 }
 
 // A fully trained week at the planned effort progresses the load, and the
@@ -378,5 +389,53 @@ func TestReviewWeeks_PainStopIsLeftOut(t *testing.T) {
 		if got := res.Metrics[0].SCR; math.Abs(got-tc.scr) > 0.01 {
 			t.Errorf("%q: SCR = %v, want %v", tc.reason, got, tc.scr)
 		}
+	}
+}
+
+// A week trained as planned progresses the rest of the block by the rules,
+// not by the model: week 2's barbell squat, 3 x 8 at 60 kg, gains reps in the
+// hypertrophy range (8 -> 10) at the same load, whatever the model sent back.
+func TestReviewWeeks_ProgressionFollowsTheRules(t *testing.T) {
+	rm := reviewFixture(t)
+	complete(t, rm, 100, 0, "w1-s0", "w1-s1", "w1-s2")
+	h, _, _ := newReviewHandler(rm, weekOneEnd().Add(8*time.Hour))
+
+	res, err := h.Handle(context.Background(), "rm-r")
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if res.Adaptation == nil || res.Adaptation.Decision.Kind != service.AdaptationIncreaseLoad {
+		t.Fatalf("adaptation = %+v, want IncreaseLoad", res.Adaptation)
+	}
+	for _, id := range []string{"w2-s0", "w2-s1", "w2-s2"} {
+		s, _ := rm.FindSession(id)
+		m := s.Info().Prescription.MainExercises[0]
+		if m.TargetSets != 3 || m.TargetReps != 10 || m.TargetWeight != 60 {
+			t.Errorf("%s: %dx%d at %.1f kg, want 3x10 at 60 kg", id, m.TargetSets, m.TargetReps, m.TargetWeight)
+		}
+	}
+}
+
+// An exercise an injury limits keeps its load: progression never adds work to
+// an injured area (a mild knee injury touches the barbell squat).
+func TestReviewWeeks_ProgressionHoldsAnInjuredExercise(t *testing.T) {
+	rm := reviewFixture(t)
+	complete(t, rm, 100, 0, "w1-s0", "w1-s1", "w1-s2")
+	repo := newMemRepo()
+	_ = repo.Save(context.Background(), rm)
+	clock := &fakeClock{t: weekOneEnd().Add(8 * time.Hour)}
+	knee := injuredProfiles{loc: time.UTC, injuries: []port.InjuryStatus{
+		{Region: taxonomy.JointRegionKnee, Severity: taxonomy.InjurySeverityMild},
+	}}
+	adapt := NewApplyAdaptiveCycleHandler(fakeTx{}, repo, &adaptingAgent{rm: rm},
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), knee, &captureOutbox{}, clock, nil,
+		barbellCatalog(), nil)
+
+	if _, err := NewReviewWeeksHandler(fakeTx{}, repo, adapt, clock).Handle(context.Background(), "rm-r"); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	s, _ := rm.FindSession("w2-s0")
+	if m := s.Info().Prescription.MainExercises[0]; m.TargetReps != 8 || m.TargetWeight != 60 {
+		t.Errorf("injured squat %dx%d at %.1f kg, want held at 3x8 60 kg", m.TargetSets, m.TargetReps, m.TargetWeight)
 	}
 }
