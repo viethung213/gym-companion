@@ -370,6 +370,106 @@ func TestPostgresOutboxLog_ConcurrentRetryRace_MutualExclusion(t *testing.T) {
 	}
 }
 
+func TestPostgresOutboxLog_ZombieProcessingTimeout(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	eventID := "550e8400-e29b-41d4-a716-446655440088"
+
+	// 1. Simulate server crash: Record stuck in PROCESSING with processed_at = 10 minutes ago
+	staleProcessedAt := time.Now().UTC().Add(-10 * time.Minute)
+	err := db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "log-zombie-1", eventID, "TestEvent", "{}", "usr-zombie", staleProcessedAt, "PROCESSING").Error
+	if err != nil {
+		t.Fatalf("insert stale PROCESSING record error: %v", err)
+	}
+
+	// 2. Worker restarts or Kafka redelivers message: LogProcessed should reclaim zombie lock (fresh = true)
+	fresh, err := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-zombie", []byte(`{}`), "PROCESSING", "")
+	if err != nil {
+		t.Fatalf("LogProcessed zombie recovery error: %v", err)
+	}
+	if !fresh {
+		t.Errorf("got fresh = false, want true when reclaiming stale PROCESSING lock (> 5m)")
+	}
+
+	// Verify that processed_at has been renewed to recent time
+	var updated persistence.OutboxLogModel
+	if err := db.Where("event_id = ?", eventID).First(&updated).Error; err != nil {
+		t.Fatalf("query updated outbox_log error: %v", err)
+	}
+	if updated.ProcessedAt.Before(time.Now().UTC().Add(-1 * time.Minute)) {
+		t.Errorf("expected renewed processed_at, got %v", updated.ProcessedAt)
+	}
+
+	// 3. Immediate subsequent call within 5m must NOT be reclaimed (must be treated as duplicate / in-progress)
+	freshDup, err := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-zombie", []byte(`{}`), "PROCESSING", "")
+	if err != nil {
+		t.Fatalf("LogProcessed duplicate error: %v", err)
+	}
+	if freshDup {
+		t.Errorf("got freshDup = true, want false when PROCESSING is still active (< 5m)")
+	}
+}
+
+func TestPostgresOutboxLog_ConcurrentZombieReclaim_MutualExclusion(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	eventID := "550e8400-e29b-41d4-a716-446655440077"
+
+	// Initial zombie state: PROCESSING 15 minutes ago
+	staleTime := time.Now().UTC().Add(-15 * time.Minute)
+	err := db.Exec(`
+		INSERT INTO notification.outbox_log (id, event_id, event_type, payload, partition_key, processed_at, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "log-zombie-race-1", eventID, "TestEvent", "{}", "usr-race", staleTime, "PROCESSING").Error
+	if err != nil {
+		t.Fatalf("insert stale PROCESSING record error: %v", err)
+	}
+
+	// Simulate 5 concurrent workers trying to reclaim the same zombie lock
+	const workers = 5
+	results := make(chan bool, workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			fresh, pErr := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-race", []byte(`{}`), "PROCESSING", "")
+			if pErr != nil {
+				results <- false
+				return
+			}
+			results <- fresh
+		}()
+	}
+
+	trueCount := 0
+	falseCount := 0
+	for i := 0; i < workers; i++ {
+		if <-results {
+			trueCount++
+		} else {
+			falseCount++
+		}
+	}
+
+	// Exactly ONE worker must succeed in claiming the zombie lock
+	if trueCount != 1 {
+		t.Errorf("got %d workers with fresh=true, want exactly 1 for zombie reclaim race", trueCount)
+	}
+	if falseCount != workers-1 {
+		t.Errorf("got %d workers with fresh=false, want %d", falseCount, workers-1)
+	}
+}
+
 func TestTxManager(t *testing.T) {
 	sqlDB, db := setupTestDB(t)
 	defer sqlDB.Close()
