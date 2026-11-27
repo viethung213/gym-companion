@@ -6,18 +6,15 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 )
 
-func TestRepRangeForGoal(t *testing.T) {
-	for goal, want := range map[string]RepRange{
-		"BUILD_MUSCLE": {8, 12}, "hypertrophy": {8, 12}, "STRENGTH": {4, 6},
-		"ENDURANCE": {12, 15}, "LOSE_FAT": {10, 15}, "": {8, 12}, "unknown": {8, 12},
-		// Reproduces the review finding: the goals stored by the app are
-		// FAT_LOSS and PRIMARY_GOAL_*, which matched nothing and fell back to
-		// hypertrophy.
-		"FAT_LOSS": {10, 15}, "weight_loss": {10, 15}, "PRIMARY_GOAL_STRENGTH": {4, 6},
-		"PRIMARY_GOAL_MUSCLE_GAIN": {8, 12}, "endurance": {12, 15},
+// The band follows the reps the coach prescribed; climbing inside it never
+// leaves it, so a heavy line stays heavy and a light one keeps its rep buffer.
+func TestRepRangeFor(t *testing.T) {
+	for reps, want := range map[int32]RepRange{
+		1: {4, 6}, 5: {4, 6}, 6: {4, 6}, 7: {8, 12}, 10: {8, 12}, 12: {8, 12},
+		13: {15, 20}, 15: {15, 20}, 25: {15, 20},
 	} {
-		if got := RepRangeForGoal(goal); got != want {
-			t.Errorf("%q: %v, want %v", goal, got, want)
+		if got := RepRangeFor(reps); got != want {
+			t.Errorf("%d reps: %v, want %v", reps, got, want)
 		}
 	}
 }
@@ -36,7 +33,6 @@ func TestLoadStep(t *testing.T) {
 }
 
 func TestProgressLine(t *testing.T) {
-	hypertrophy := RepRange{8, 12}
 	line := func(sets, reps int32, kg float32, sec int32) PrescribedExercise {
 		return PrescribedExercise{ExerciseID: "ex", TargetSets: sets, TargetReps: reps, TargetWeight: kg, DurationSeconds: sec, TargetRPE: 7}
 	}
@@ -44,34 +40,36 @@ func TestProgressLine(t *testing.T) {
 		name string
 		in   PrescribedExercise
 		step float32
-		rng  RepRange
 		ceil float32
 		want PrescribedExercise
 	}{
-		{"small dumbbell: reps first", line(3, 8, 15, 0), 2, hypertrophy, 0, line(3, 10, 15, 0)},
-		{"top of the range: one step up, reps back to the floor", line(3, 12, 15, 0), 2, hypertrophy, 0, line(3, 8, 17, 0)},
-		{"near the top: reps capped at the top", line(3, 11, 15, 0), 2, hypertrophy, 0, line(3, 12, 15, 0)},
-		{"barbell takes one plate step", line(4, 12, 50, 0), 2.5, hypertrophy, 0, line(4, 8, 52.5, 0)},
-		{"strength range climbs one rep", line(5, 4, 100, 0), 2.5, RepRange{4, 6}, 0, line(5, 5, 100, 0)},
-		{"over the record ceiling: unchanged", line(3, 12, 50, 0), 2.5, hypertrophy, 51, line(3, 12, 50, 0)},
-		{"no load step (bands): reps only, then held", line(3, 12, 5, 0), 0, hypertrophy, 0, line(3, 12, 5, 0)},
-		{"bodyweight: +2 reps", line(3, 10, 0, 0), 0, hypertrophy, 0, line(3, 12, 0, 0)},
-		{"bodyweight capped at 20", line(3, 19, 0, 0), 0, hypertrophy, 0, line(3, 20, 0, 0)},
-		{"hold: +5 s", line(3, 0, 0, 40), 0, hypertrophy, 0, line(3, 0, 0, 45)},
-		{"hold capped at 90 s", line(3, 0, 0, 88), 0, hypertrophy, 0, line(3, 0, 0, 90)},
-		// Reproduces the review finding: the 300 kg hard limit (BR-AC-13) was
-		// not checked, so the guardrail refused the whole adaptation.
-		{"never past the 300 kg limit", line(3, 12, 299, 0), 2.5, hypertrophy, 0, line(3, 12, 299, 0)},
-		// Reproduces the review finding: a line prescribed outside the goal's
-		// range was pulled into it, so a heavy 5-rep line climbed to 12 reps
-		// at the same load, and a 15-rep line dropped to 8. It keeps the reps
-		// it was prescribed and takes the load step.
-		{"heavy line below the range keeps its reps", line(5, 5, 100, 0), 2.5, hypertrophy, 0, line(5, 5, 102.5, 0)},
-		{"light line above the range keeps its reps", line(3, 15, 20, 0), 2, hypertrophy, 0, line(3, 15, 22, 0)},
-		{"below the range, no load step: held", line(3, 5, 5, 0), 0, hypertrophy, 0, line(3, 5, 5, 0)},
+		{"8-12: reps first", line(3, 8, 15, 0), 2, 0, line(3, 10, 15, 0)},
+		{"8-12 top: one step up, reps back to 8", line(3, 12, 15, 0), 2, 0, line(3, 8, 17, 0)},
+		{"near the top: reps capped at the top", line(3, 11, 15, 0), 2, 0, line(3, 12, 15, 0)},
+		{"barbell takes one plate step", line(4, 12, 50, 0), 2.5, 0, line(4, 8, 52.5, 0)},
+		{"7 reps climbs into its 8-12 band", line(3, 7, 30, 0), 2.5, 0, line(3, 9, 30, 0)},
+		// Reproduces the review finding: a heavy 5-rep line climbed toward 12
+		// reps at the same load. It stays in 4-6.
+		{"heavy 5s climb one rep", line(5, 5, 100, 0), 2.5, 0, line(5, 6, 100, 0)},
+		{"heavy 6s: one step up, back to 4", line(5, 6, 100, 0), 2.5, 0, line(5, 4, 102.5, 0)},
+		// A light high-rep line earns its load step at 20 reps instead of
+		// jumping 6 -> 8 kg (+33%) at 15.
+		{"light 15s climb reps", line(3, 15, 6, 0), 2, 0, line(3, 17, 6, 0)},
+		{"light 20s: one step up, back to 15", line(3, 20, 6, 0), 2, 0, line(3, 15, 8, 0)},
+		{"13 reps climbs into 15-20", line(3, 13, 6, 0), 2, 0, line(3, 15, 6, 0)},
+		{"over the record ceiling: unchanged", line(3, 12, 50, 0), 2.5, 51, line(3, 12, 50, 0)},
+		{"no load step (bands): held at the top", line(3, 12, 5, 0), 0, 0, line(3, 12, 5, 0)},
+		{"loaded without reps: unchanged", line(3, 0, 20, 0), 2, 0, line(3, 0, 20, 0)},
+		{"bodyweight: +2 reps", line(3, 10, 0, 0), 0, 0, line(3, 12, 0, 0)},
+		{"bodyweight capped at 20", line(3, 19, 0, 0), 0, 0, line(3, 20, 0, 0)},
+		{"hold: +5 s", line(3, 0, 0, 40), 0, 0, line(3, 0, 0, 45)},
+		{"hold capped at 90 s", line(3, 0, 0, 88), 0, 0, line(3, 0, 0, 90)},
+		// The 300 kg hard limit (BR-AC-13) holds: the guardrail would refuse
+		// the whole adaptation.
+		{"never past the 300 kg limit", line(3, 12, 299, 0), 2.5, 0, line(3, 12, 299, 0)},
 	}
 	for _, tt := range tests {
-		if got := ProgressLine(&tt.in, tt.step, tt.rng, tt.ceil); got != tt.want {
+		if got := ProgressLine(&tt.in, tt.step, tt.ceil); got != tt.want {
 			t.Errorf("%s:\n got %+v\nwant %+v", tt.name, got, tt.want)
 		}
 	}
@@ -97,7 +95,7 @@ func TestRoadmap_ProgressUpcoming(t *testing.T) {
 	}
 	rules := map[string]LineProgression{"db-press": {LoadStep: 2}, "dl1-exa": {LoadStep: 2}, "swapped-in": {LoadStep: 2}}
 
-	changed, err := rm.ProgressUpcoming(before, RepRange{8, 12}, rules, beforeTheBlock())
+	changed, err := rm.ProgressUpcoming(before, rules, beforeTheBlock())
 	if err != nil {
 		t.Fatal(err)
 	}

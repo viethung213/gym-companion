@@ -231,10 +231,11 @@ func unloadVolume(ctx context.Context, rm *roadmap.Roadmap, before map[string]in
 }
 
 // progress applies progressive overload (BR-AC-04 case 1) to the rewritten
-// sessions: double progression in the goal's rep range, one real load step at
-// the top of it, never past 30% above the athlete's record, nor past
-// UnrecordedLoadFactor x bodyweight without a record. An exercise the catalog
-// cannot describe, or that an injury limits, keeps its numbers.
+// sessions: double progression in the rep band of each line's prescribed
+// reps, one real load step at the top of it, never past 30% above the
+// athlete's record, nor past UnrecordedLoadFactor x bodyweight without a
+// record. An exercise the catalog cannot describe, or that an injury limits,
+// keeps its numbers.
 func (h *ApplyAdaptiveCycleHandler) progress(
 	ctx context.Context, rm *roadmap.Roadmap, profile *port.Profile,
 	linesBefore map[string][]roadmap.PrescribedExercise, now time.Time,
@@ -281,7 +282,7 @@ func (h *ApplyAdaptiveCycleHandler) progress(
 		}
 	}
 
-	changed, err := rm.ProgressUpcoming(linesBefore, roadmap.RepRangeForGoal(profile.PrimaryGoal), rules, now)
+	changed, err := rm.ProgressUpcoming(linesBefore, rules, now)
 	if err != nil {
 		return err
 	}
