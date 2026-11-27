@@ -43,11 +43,7 @@ func (c *CoachingContextAgent) generateValidatedPlan(
 		}
 
 		planText, err := retryTransient(nodeCtx, "generator", func() (string, error) {
-			genNode := c.generatorNode
-			if input.Flow == FlowSuggestAdHoc && c.adhocGeneratorNode != nil && (input.AdHocHint == nil || len(input.AdHocHint.MuscleGroups) == 0) {
-				genNode = c.adhocGeneratorNode
-			}
-			return workflow.RunNode[string](nodeCtx, genNode, input)
+			return workflow.RunNode[string](nodeCtx, c.generatorFor(&input), input)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("generator: %w", err)
@@ -357,4 +353,20 @@ func (c *CoachingContextAgent) runAdHocWorkflow(
 		return nil, fmt.Errorf("%w: workflow produced no plan", ErrPlanGenerationFailed)
 	}
 	return res, nil
+}
+
+// generatorFor picks the generator for the flow: a whole roadmap uses the
+// schema that demands weeks 1 to 4; an ad-hoc session without a muscle hint
+// uses the agent that may search the catalog; every rewrite returns only the
+// sessions it changes.
+func (c *CoachingContextAgent) generatorFor(input *CoachInput) *workflow.AgentNode {
+	switch {
+	case input.Flow == FlowInitiate4Week && c.roadmapGeneratorNode != nil:
+		return c.roadmapGeneratorNode
+	case input.Flow == FlowSuggestAdHoc && c.adhocGeneratorNode != nil &&
+		(input.AdHocHint == nil || len(input.AdHocHint.MuscleGroups) == 0):
+		return c.adhocGeneratorNode
+	default:
+		return c.generatorNode
+	}
 }

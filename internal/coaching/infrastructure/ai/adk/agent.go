@@ -35,12 +35,13 @@ const (
 var _ port.CoachAgent = (*CoachingContextAgent)(nil)
 
 type CoachingContextAgent struct {
-	generatorNode      *workflow.AgentNode
-	adhocGeneratorNode *workflow.AgentNode
-	reviewerNode       *workflow.AgentNode
-	fetchNode          workflow.Node
-	pendingNode        workflow.Node
-	parseNode          workflow.Node
+	generatorNode        *workflow.AgentNode // rewrites: returns the sessions it changes
+	roadmapGeneratorNode *workflow.AgentNode // a whole roadmap: exactly 4 weeks
+	adhocGeneratorNode   *workflow.AgentNode
+	reviewerNode         *workflow.AgentNode
+	fetchNode            workflow.Node
+	pendingNode          workflow.Node
+	parseNode            workflow.Node
 
 	initRoadmapWorkflowAgent agent.Agent
 	suggestAdHocAgent        agent.Agent

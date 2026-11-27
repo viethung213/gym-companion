@@ -1,6 +1,9 @@
 package adk
 
-import "google.golang.org/genai"
+import (
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	"google.golang.org/genai"
+)
 
 // buildGeneratedPlanSchema mirrors GeneratedPlan for the generator's
 // structured output. Gemini then always returns well-formed JSON with only
@@ -8,7 +11,12 @@ import "google.golang.org/genai"
 // and once invented target_rep_min/target_rep_max, each costing a retry.
 // A week carries no phase or RPE window: the backend sets them from its
 // number, so the model is not asked for them.
-func buildGeneratedPlanSchema() *genai.Schema {
+//
+// wholeRoadmap demands exactly weeks 1 to 4, each with a session: asked for
+// the 4-week roadmap, the model once stopped after week 2, costing a full
+// regeneration. A rewrite returns only the sessions it changes, so its schema
+// leaves the weeks open.
+func buildGeneratedPlanSchema(wholeRoadmap bool) *genai.Schema {
 	exercise := &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
@@ -55,22 +63,32 @@ func buildGeneratedPlanSchema() *genai.Schema {
 		Required: []string{"scheduled_date", "slot_time", "session_kind", "prescription"},
 	}
 
-	return &genai.Schema{
-		Type: genai.TypeObject,
-		Properties: map[string]*genai.Schema{
-			"weeks": {
-				Type: genai.TypeArray,
-				Items: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"week_number": {Type: genai.TypeInteger},
-						"sessions":    {Type: genai.TypeArray, Items: session},
-					},
-					PropertyOrdering: []string{"week_number", "sessions"},
-					Required:         []string{"week_number", "sessions"},
-				},
+	weekNumber := &genai.Schema{Type: genai.TypeInteger}
+	sessions := &genai.Schema{Type: genai.TypeArray, Items: session}
+	weeks := &genai.Schema{
+		Type: genai.TypeArray,
+		Items: &genai.Schema{
+			Type: genai.TypeObject,
+			Properties: map[string]*genai.Schema{
+				"week_number": weekNumber,
+				"sessions":    sessions,
 			},
+			PropertyOrdering: []string{"week_number", "sessions"},
+			Required:         []string{"week_number", "sessions"},
 		},
-		Required: []string{"weeks"},
+	}
+	if wholeRoadmap {
+		n := int64(roadmap.WeeksPerRoadmap)
+		weeks.MinItems, weeks.MaxItems = &n, &n
+		first, last := 1.0, float64(roadmap.WeeksPerRoadmap)
+		weekNumber.Minimum, weekNumber.Maximum = &first, &last
+		one := int64(1)
+		sessions.MinItems = &one
+	}
+
+	return &genai.Schema{
+		Type:       genai.TypeObject,
+		Properties: map[string]*genai.Schema{"weeks": weeks},
+		Required:   []string{"weeks"},
 	}
 }

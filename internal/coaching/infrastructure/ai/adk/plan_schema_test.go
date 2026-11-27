@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/adk/v2/workflow"
 	"google.golang.org/genai"
 )
 
@@ -39,7 +40,7 @@ func schemaFields(s *genai.Schema) []string {
 // DTOs the backend parses: a field added to one and not the other is either
 // never produced or silently dropped.
 func TestGeneratedPlanSchemaMatchesTheDTOs(t *testing.T) {
-	root := buildGeneratedPlanSchema()
+	root := buildGeneratedPlanSchema(false)
 	week := root.Properties["weeks"].Items
 	session := week.Properties["sessions"].Items
 	prescription := session.Properties["prescription"]
@@ -76,5 +77,46 @@ func TestGeneratedPlanSchemaMatchesTheDTOs(t *testing.T) {
 				t.Errorf("%s requires %q, which is not a property", tc.name, r)
 			}
 		}
+	}
+}
+
+// Reproduces the live finding: asked for the 4-week roadmap, the model once
+// returned weeks 1-2 only, costing a full regeneration. A whole roadmap's
+// schema demands exactly weeks 1 to 4, each with a session; a rewrite's
+// schema, which returns only the sessions it changes, demands none.
+func TestGeneratedPlanSchema_WholeRoadmapHasFourWeeks(t *testing.T) {
+	whole := buildGeneratedPlanSchema(true).Properties["weeks"]
+	if whole.MinItems == nil || *whole.MinItems != 4 || whole.MaxItems == nil || *whole.MaxItems != 4 {
+		t.Errorf("weeks items %v..%v, want exactly 4", whole.MinItems, whole.MaxItems)
+	}
+	week := whole.Items
+	if n := week.Properties["week_number"]; n.Minimum == nil || *n.Minimum != 1 || n.Maximum == nil || *n.Maximum != 4 {
+		t.Errorf("week_number range %v..%v, want 1..4", n.Minimum, n.Maximum)
+	}
+	if s := week.Properties["sessions"]; s.MinItems == nil || *s.MinItems != 1 {
+		t.Errorf("sessions min items %v, want 1", s.MinItems)
+	}
+
+	rewrite := buildGeneratedPlanSchema(false).Properties["weeks"]
+	if rewrite.MinItems != nil || rewrite.MaxItems != nil || rewrite.Items.Properties["week_number"].Maximum != nil {
+		t.Error("a rewrite's schema bounds the weeks; it returns only the sessions it changes")
+	}
+}
+
+// Only a whole roadmap uses the 4-week schema; every rewrite keeps the open one.
+func TestGeneratorFor(t *testing.T) {
+	whole, open, adhoc := &workflow.AgentNode{}, &workflow.AgentNode{}, &workflow.AgentNode{}
+	c := &CoachingContextAgent{roadmapGeneratorNode: whole, generatorNode: open, adhocGeneratorNode: adhoc}
+	for flow, want := range map[string]*workflow.AgentNode{
+		FlowInitiate4Week: whole, FlowRegenerate: open, FlowAdaptiveCycle: open,
+		FlowPostInjury: open, FlowSignalHandler: open, FlowSuggestAdHoc: adhoc,
+	} {
+		if got := c.generatorFor(&CoachInput{Flow: flow}); got != want {
+			t.Errorf("%s: wrong generator", flow)
+		}
+	}
+	hinted := &CoachInput{Flow: FlowSuggestAdHoc, AdHocHint: &AdHocHintInput{MuscleGroups: []string{"CHEST"}}}
+	if c.generatorFor(hinted) != open {
+		t.Error("a hinted ad-hoc session uses the structured generator")
 	}
 }
