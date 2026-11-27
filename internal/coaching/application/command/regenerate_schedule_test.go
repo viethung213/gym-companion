@@ -241,6 +241,45 @@ func TestRegenerateSchedule_SessionStartedDuringGenerationIsKept(t *testing.T) {
 	}
 }
 
+// Reproduces the review finding: with unchanged slots, a session that started
+// while the model generated left its draft matching nothing, so the rewrite
+// fell back to ReschedulePending and gave every upcoming session a new ID the
+// app no longer knew. The started session is left alone and the others keep
+// their IDs, rewritten in place.
+func TestRegenerateSchedule_SessionStartedDuringRewriteKeepsTheOtherIDs(t *testing.T) {
+	rm := regenFixture(t)
+	repo := newMemRepo()
+	if err := repo.Save(context.Background(), rm); err != nil {
+		t.Fatal(err)
+	}
+	clock := &fakeClock{t: time.Date(2026, 11, 26, 17, 29, 0, 0, time.UTC)}
+	agent := &slowAgent{
+		draftAgent: draftAgent{drafts: []*roadmap.SessionPlanInfo{ // same slots: a rewrite
+			{ScheduledDate: date(time.November, 26), SlotTime: "17:30-19:00", Reasoning: "new thu"},
+			{ScheduledDate: date(time.November, 30), SlotTime: "17:30-19:00", Reasoning: "new mon"},
+		}},
+		clock: clock,
+		until: time.Date(2026, 11, 26, 17, 31, 0, 0, time.UTC), // Thursday's session has started
+	}
+	h := NewRegenerateScheduleHandler(fakeTx{}, repo, agent,
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), zoneProfiles{loc: time.UTC}, &captureOutbox{}, clock, &incrIDs{})
+
+	if _, err := h.Handle(context.Background(), RegenerateScheduleCommand{UserID: "u-1", Reason: "injury_reported"}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	saved, _ := repo.FindActiveByUser(context.Background(), "u-1")
+	mon, ok := saved.FindSession("mon")
+	if !ok {
+		t.Fatal("Monday's session lost its ID (rescheduled instead of rewritten)")
+	}
+	if mon.Info().Reasoning != "new mon" {
+		t.Errorf("Monday reasoning %q, want it rewritten in place", mon.Info().Reasoning)
+	}
+	if thu, _ := saved.FindSession("thu"); thu == nil || thu.Info().Reasoning != "old" {
+		t.Error("the session that started during generation must be left as it was")
+	}
+}
+
 // Onboarding with an injury emits InjuryReported next to ProfileCompleted. The
 // roadmap planned from that profile already holds the injury: regenerating it
 // would cost a second generation for nothing. A later change still regenerates.

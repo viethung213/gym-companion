@@ -129,7 +129,7 @@ func (h *ApplyAdaptiveCycleHandler) Handle(ctx context.Context, cmd ApplyAdaptiv
 	pending := rm.UpcomingPendingSessions(now)
 
 	// An adaptation only rewrites prescriptions; it never moves a session.
-	aligned, ok := alignDrafts(pending, drafts)
+	aligned, ok := alignDrafts(pending, dropFinished(upcoming, pending, drafts))
 	if !ok {
 		return nil, fmt.Errorf("agent moved sessions instead of adapting the %d pending ones", len(pending))
 	}

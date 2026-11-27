@@ -123,13 +123,13 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	}
 	rm.SetTimezone(profile.Zone().String())
 
-	pending := rm.UpcomingPendingSessions(h.clock.Now())
-	if len(pending) == 0 {
+	before := rm.UpcomingPendingSessions(h.clock.Now())
+	if len(before) == 0 {
 		return &RegenerateScheduleResult{Roadmap: rm}, nil // nothing left to regenerate
 	}
 
-	ids := make([]string, 0, len(pending))
-	for _, s := range pending {
+	ids := make([]string, 0, len(before))
+	for _, s := range before {
 		ids = append(ids, s.ID())
 	}
 
@@ -145,7 +145,8 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	// Generation takes a while: a session may have started meanwhile, and a
 	// started session is never touched.
 	now := h.clock.Now()
-	pending = rm.UpcomingPendingSessions(now)
+	pending := rm.UpcomingPendingSessions(now)
+	drafts = dropFinished(before, pending, drafts)
 
 	if aligned, ok := alignDrafts(pending, drafts); ok {
 		applied, rwErr := rewriteInPlace(pending, aligned, now)

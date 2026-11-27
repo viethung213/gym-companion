@@ -26,6 +26,38 @@ func draftKey(date time.Time, slotTime string, kind roadmap.SessionKind) string 
 	return date.Format(time.DateOnly) + " " + strings.TrimSpace(start) + " " + string(kind)
 }
 
+// dropFinished removes the drafts of sessions that were pending when the
+// generation started (before) but no longer are (pending): the athlete trained
+// or started them meanwhile, and a finished session is never rewritten. Kept,
+// such a draft matched nothing and failed the whole rewrite.
+func dropFinished(before, pending []*roadmap.SessionPlan, drafts []*roadmap.SessionPlanInfo) []*roadmap.SessionPlanInfo {
+	keyOf := func(s *roadmap.SessionPlan) string {
+		info := s.Info()
+		return draftKey(info.ScheduledDate, info.SlotTime, info.Kind)
+	}
+	still := make(map[string]bool, len(pending))
+	for _, s := range pending {
+		still[keyOf(s)] = true
+	}
+	gone := make(map[string]bool)
+	for _, s := range before {
+		if k := keyOf(s); !still[k] {
+			gone[k] = true
+		}
+	}
+	if len(gone) == 0 {
+		return drafts
+	}
+	out := make([]*roadmap.SessionPlanInfo, 0, len(drafts))
+	for _, d := range drafts {
+		if d != nil && gone[draftKey(d.ScheduledDate, d.SlotTime, d.Kind)] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 // alignDrafts pairs each pending session with the draft that rewrites it:
 // aligned[i] is the draft for pending[i], nil when the agent dropped that
 // session. ok is false when any draft matches no pending session, or two
