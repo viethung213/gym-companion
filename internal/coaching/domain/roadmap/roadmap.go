@@ -21,6 +21,9 @@ type Info struct {
 	// from the stored version is refused (ErrRoadmapChanged): it was built on a
 	// copy that another writer has since changed. 0 for a roadmap never saved.
 	Version int64
+	// RegenerationDue, when set, is a profile change the schedule has yet to
+	// absorb (see MarkRegenerationDue).
+	RegenerationDue *RegenerationDue
 }
 
 // Roadmap is the aggregate root managing a 4-week training program.

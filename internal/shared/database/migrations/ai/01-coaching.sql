@@ -65,6 +65,11 @@ END $$;
 ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
 -- Optimistic lock: a save must start from the stored version (see Roadmap.Version).
 ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+-- A profile change the schedule could not absorb yet (the model unavailable);
+-- the lifecycle worker retries it until RegenerationGiveUpAfter.
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS regenerate_due_since TIMESTAMP WITH TIME ZONE;
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS regenerate_reason VARCHAR(64) NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_roadmaps_regenerate_due ON coaching.roadmaps(regenerate_due_since) WHERE regenerate_due_since IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON coaching.roadmaps(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
 CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_planned ON coaching.roadmaps(user_id) WHERE status = 'PLANNED';

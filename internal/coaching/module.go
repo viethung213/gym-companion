@@ -249,6 +249,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		if initiateHandler != nil {
 			lifecycleWorker.WithInitiator(initiateHandler)
 		}
+		if regenerateHandler != nil {
+			lifecycleWorker.WithRegenerator(regenerateHandler)
+		}
 		lifecycleWorker.Start(ctx)
 	} else {
 		slog.Warn("Coaching RoadmapLifecycleWorker not started (no Lifecycle store, OutboxWriter or database)")

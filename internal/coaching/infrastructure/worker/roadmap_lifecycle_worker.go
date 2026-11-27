@@ -32,6 +32,10 @@ const (
 	// reviewRetryDelay spaces out retries of a failed adaptation, which the
 	// review retries only during its 12h window.
 	reviewRetryDelay = 2 * time.Hour
+
+	// regenerationRetryDelay spaces out retries of a profile change the
+	// schedule could not absorb (roadmap.RegenerationGiveUpAfter bounds them).
+	regenerationRetryDelay = 2 * time.Hour
 )
 
 // The handlers the worker drives, as interfaces so the loop tests without them.
@@ -48,6 +52,9 @@ type (
 	roadmapInitiator interface {
 		Handle(ctx context.Context, cmd command.InitiateRoadmapCommand) (*command.InitiateRoadmapResult, error)
 	}
+	scheduleRegenerator interface {
+		RetryDue(ctx context.Context, userID string) (*command.RegenerateScheduleResult, error)
+	}
 )
 
 // RoadmapLifecycleWorker keeps every athlete's roadmap moving. Each tick, in
@@ -55,12 +62,14 @@ type (
 //
 //  1. roll over: complete the roadmaps that ended and activate their planned
 //     successors (database only, so it runs first and nobody waits on a model);
-//  2. review: close finished weeks and adapt the rest of the block (BR-AC-04);
-//  3. plan: draft the next block of roadmaps in their final week;
-//  4. start fresh: a new roadmap for athletes whose block ended unplanned,
+//  2. regenerate: apply the profile changes a schedule could not absorb when
+//     they happened (the model was unavailable), so an injury is not lost;
+//  3. review: close finished weeks and adapt the rest of the block (BR-AC-04);
+//  4. plan: draft the next block of roadmaps in their final week;
+//  5. start fresh: a new roadmap for athletes whose block ended unplanned,
 //     when the roll-over says so (they trained in it and it just ended).
 //
-// Steps 2 to 4 call the model and run up to maxConcurrentGenerations
+// Steps 2 to 5 call the model and run up to maxConcurrentGenerations
 // roadmaps at once. The steps stay sequential, so a roadmap is never reviewed
 // and planned at the same time.
 type RoadmapLifecycleWorker struct {
@@ -72,8 +81,11 @@ type RoadmapLifecycleWorker struct {
 	// ended with no successor planned (generation kept failing, or the plan was
 	// discarded by a late profile change) and RollOverResult.StartFresh is set.
 	initiator roadmapInitiator
-	interval  time.Duration
-	// reviewGate and planGate space out retries of failed model-backed jobs.
+	// regenerator, when set, retries the profile changes waiting on roadmaps.
+	regenerator scheduleRegenerator
+	interval    time.Duration
+	// The gates space out retries of failed model-backed jobs.
+	regenGate  *retryGate
 	reviewGate *retryGate
 	planGate   *retryGate
 	stopOnce   sync.Once
@@ -94,8 +106,16 @@ func NewRoadmapLifecycleWorker(
 	return &RoadmapLifecycleWorker{
 		queue: queue, rollOver: rollOver, reviewer: reviewer, planner: planner,
 		interval: interval, stop: make(chan struct{}),
+		regenGate:  newRetryGate(regenerationRetryDelay),
 		reviewGate: newRetryGate(reviewRetryDelay), planGate: newRetryGate(planRetryDelay),
 	}
+}
+
+// WithRegenerator enables retrying the profile changes a schedule could not
+// absorb when they happened.
+func (w *RoadmapLifecycleWorker) WithRegenerator(r scheduleRegenerator) *RoadmapLifecycleWorker {
+	w.regenerator = r
+	return w
 }
 
 // WithInitiator enables starting a fresh roadmap after a block ends unplanned.
@@ -140,6 +160,16 @@ func (w *RoadmapLifecycleWorker) RunOnce(ctx context.Context, now time.Time) {
 			if w.rollOverUser(ctx, ref.UserID) {
 				unplanned = append(unplanned, ref.UserID)
 			}
+		}
+	}
+
+	if w.regenerator != nil {
+		if users, err := w.queue.UsersWithRegenerationDue(ctx); err != nil {
+			slog.ErrorContext(ctx, "Roadmap lifecycle: listing regenerations due failed", slog.Any("error", err))
+		} else {
+			forEachBounded(ctx, w.regenGate.due(users, now), func(jobCtx context.Context, userID string) {
+				w.regenGate.record(userID, now, w.regenerate(jobCtx, userID))
+			})
 		}
 	}
 
@@ -206,6 +236,22 @@ func (w *RoadmapLifecycleWorker) startFresh(ctx context.Context, userID string) 
 	}
 	slog.InfoContext(ctx, "Fresh roadmap started after the block ended",
 		slog.String("user_id", userID), slog.String("roadmap_id", res.Roadmap.ID()))
+}
+
+// regenerate retries the profile change waiting on the athlete's roadmap; it
+// reports false when it failed again, so the gate spaces out the next try.
+func (w *RoadmapLifecycleWorker) regenerate(ctx context.Context, userID string) (ok bool) {
+	res, err := w.regenerator.RetryDue(ctx, userID)
+	if err != nil {
+		slog.ErrorContext(ctx, "Retrying a deferred schedule regeneration failed",
+			slog.String("user_id", userID), slog.Any("error", err))
+		return false
+	}
+	if res.Deferred {
+		return false // failed again; still waiting on the roadmap
+	}
+	slog.InfoContext(ctx, "Deferred schedule regeneration applied", slog.String("user_id", userID))
+	return true
 }
 
 // review closes the roadmap's finished weeks; it reports false on a failure.

@@ -102,6 +102,12 @@ type WeekReviewQueue interface {
 	RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, date time.Time) ([]string, error)
 }
 
+// RegenerationQueue finds the athletes whose active schedule still has to
+// absorb a profile change (roadmap.RegenerationDue).
+type RegenerationQueue interface {
+	UsersWithRegenerationDue(ctx context.Context) ([]string, error)
+}
+
 // RoadmapRotation drafts each user's next 4-week block ahead of time and
 // swaps it in when the active one ends.
 type RoadmapRotation interface {
@@ -121,6 +127,7 @@ type RoadmapRotation interface {
 type RoadmapLifecycleStore interface {
 	WeekReviewQueue
 	RoadmapRotation
+	RegenerationQueue
 }
 
 // RoadmapRef identifies a roadmap and the athlete it belongs to.

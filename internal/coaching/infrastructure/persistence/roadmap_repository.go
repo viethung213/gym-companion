@@ -55,8 +55,11 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 	rec := toRoadmapRecordPtr(rm)
 	rec.Version = rm.Version() + 1
 	res := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "roadmap_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"status", "start_date", "end_date", "updated_at", "timezone", "version"}),
+		Columns: []clause.Column{{Name: "roadmap_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"status", "start_date", "end_date", "updated_at", "timezone", "version",
+			"regenerate_due_since", "regenerate_reason",
+		}),
 		Where: clause.Where{Exprs: []clause.Expression{
 			clause.Expr{SQL: "coaching.roadmaps.version = ?", Vars: []any{rm.Version()}},
 		}},
@@ -400,6 +403,21 @@ func (r *RoadmapRepository) RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, 
 		Pluck("w.roadmap_id", &ids).Error
 	if err != nil {
 		return nil, fmt.Errorf("find roadmaps with an open week ending by %s: %w", date.Format(time.DateOnly), err)
+	}
+	return ids, nil
+}
+
+var _ port.RegenerationQueue = (*RoadmapRepository)(nil)
+
+// UsersWithRegenerationDue lists the users whose ACTIVE roadmap holds a
+// profile change still to absorb.
+func (r *RoadmapRepository) UsersWithRegenerationDue(ctx context.Context) ([]string, error) {
+	var ids []string
+	err := r.getDB(ctx).Model(&roadmapRecord{}).
+		Where("status = ? AND regenerate_due_since IS NOT NULL", string(roadmap.StatusActive)).
+		Pluck("user_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("find users with a regeneration due: %w", err)
 	}
 	return ids, nil
 }

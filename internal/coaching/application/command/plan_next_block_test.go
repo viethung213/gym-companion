@@ -96,6 +96,8 @@ func (r *rotationRepo) ActiveRoadmapsEndingBy(context.Context, time.Time) ([]por
 	return nil, nil
 }
 
+func (r *rotationRepo) UsersWithRegenerationDue(context.Context) ([]string, error) { return nil, nil }
+
 // blockStarting is a valid 4-week block (one session a week, Monday 18:00)
 // for user u-1, in UTC.
 func blockStarting(t *testing.T, id string, start time.Time) *roadmap.Roadmap {

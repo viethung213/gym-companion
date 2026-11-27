@@ -159,3 +159,35 @@ func ownSessions(all []port.ScheduledSession, roadmapID string) []port.Scheduled
 	}
 	return out
 }
+
+// A profile change the schedule could not absorb survives save and load, is
+// listed for the lifecycle worker, and is gone once cleared.
+func TestRoadmapRepository_RegenerationDue_Integration(t *testing.T) {
+	db := getCoachingTestDB(t)
+	repo := persistence.NewRoadmapRepository(db)
+	ctx := context.Background()
+	userID := uuid.NewString()
+
+	rm := newPersistedRoadmap(t, userID)
+	changedAt := time.Date(2026, 11, 24, 3, 0, 0, 0, time.UTC)
+	rm.MarkRegenerationDue(changedAt, "injury_reported")
+	require.NoError(t, repo.Save(ctx, rm))
+	t.Cleanup(func() { db.Exec("DELETE FROM coaching.roadmaps WHERE roadmap_id = ?", rm.ID()) })
+
+	loaded, err := repo.FindByID(ctx, rm.ID())
+	require.NoError(t, err)
+	due, err := loaded.PendingRegeneration()
+	require.NoError(t, err)
+	assert.True(t, due.ChangedAt.Equal(changedAt))
+	assert.Equal(t, "injury_reported", due.Reason)
+
+	users, err := repo.UsersWithRegenerationDue(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, users, userID)
+
+	loaded.ClearRegenerationDue()
+	require.NoError(t, repo.Save(ctx, loaded))
+	users, err = repo.UsersWithRegenerationDue(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, users, userID)
+}

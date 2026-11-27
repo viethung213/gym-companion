@@ -14,7 +14,11 @@ import (
 )
 
 type fakeLifecycleQueue struct {
-	ended, toReview, toPlan []string
+	ended, toReview, toPlan, toRegenerate []string
+}
+
+func (q *fakeLifecycleQueue) UsersWithRegenerationDue(context.Context) ([]string, error) {
+	return q.toRegenerate, nil
 }
 
 func (q *fakeLifecycleQueue) RoadmapIDsWithOpenWeekEndingBy(context.Context, time.Time) ([]string, error) {
@@ -206,5 +210,44 @@ func TestRoadmapLifecycleWorker_SpacesOutFailedPlanning(t *testing.T) {
 	w.RunOnce(context.Background(), t0.Add(planRetryDelay+time.Minute))
 	if n := len(w.planGate.next); n != 0 {
 		t.Errorf("retry gate remembers %d roadmaps no longer listed, want 0", n)
+	}
+}
+
+// regenStub fails while down, reporting the change as deferred again.
+type regenStub struct {
+	rec   *recorder
+	down  bool
+	calls atomic.Int32
+}
+
+func (s *regenStub) RetryDue(context.Context, string) (*command.RegenerateScheduleResult, error) {
+	s.calls.Add(1)
+	s.rec.log("regenerate")
+	return &command.RegenerateScheduleResult{Deferred: s.down}, nil
+}
+
+// A profile change the schedule could not absorb is retried before the week
+// reviews (an injury comes first), and a retry that fails again waits for
+// regenerationRetryDelay instead of costing a generation every tick.
+func TestRoadmapLifecycleWorker_RetriesDeferredRegenerations(t *testing.T) {
+	q := &fakeLifecycleQueue{toRegenerate: []string{"u-1"}, toReview: []string{"rm-1"}}
+	rec := newRecorder()
+	regen := &regenStub{rec: rec, down: true}
+	w := NewRoadmapLifecycleWorker(q, recRollOver{rec}, recReviewer{rec}, recPlanner{rec}, time.Hour).
+		WithRegenerator(regen)
+
+	t0 := time.Now()
+	w.RunOnce(context.Background(), t0)
+	if len(rec.steps) < 2 || rec.steps[0] != "regenerate" || rec.steps[1] != "review" {
+		t.Fatalf("steps = %v, want regenerate before review", rec.steps)
+	}
+	w.RunOnce(context.Background(), t0.Add(30*time.Minute))
+	if got := regen.calls.Load(); got != 1 {
+		t.Fatalf("retried %d times within the delay, want 1", got)
+	}
+	regen.down = false
+	w.RunOnce(context.Background(), t0.Add(regenerationRetryDelay))
+	if got := regen.calls.Load(); got != 2 {
+		t.Fatalf("retried %d times after the delay, want 2", got)
 	}
 }

@@ -40,7 +40,15 @@ type RegenerateScheduleCommand struct {
 // RegenerateScheduleResult echoes the updated roadmap.
 type RegenerateScheduleResult struct {
 	Roadmap *roadmap.Roadmap
+	// Deferred is set when the schedule could not be regenerated now (the
+	// model unavailable, a draft the guardrail refused): the change is kept on
+	// the roadmap and the lifecycle worker retries it (RetryDue).
+	Deferred bool
 }
+
+// errRegenerationFailed marks a failure of the generation itself, worth a
+// later retry; a missing roadmap or a storage error is not.
+var errRegenerationFailed = errors.New("regeneration failed")
 
 // RegenerateScheduleHandler orchestrates UC-02.3 (FR-AC-06).
 type RegenerateScheduleHandler struct {
@@ -87,15 +95,54 @@ func NewRegenerateScheduleHandler(
 }
 
 // Handle executes UC-02.3 on the PENDING sessions that have not started (D3).
-//
-// The agent either rewrites those sessions in place or — when the athlete's
-// weekly slots changed — returns sessions on the new slots, which replace
-// them. Drafts that match the pending sessions (day, slot, kind) are rewrites;
-// anything else is a reschedule.
+// A failed generation does not lose the change: it is kept on the roadmap,
+// reported as Deferred, and retried by the lifecycle worker (RetryDue).
 func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateScheduleCommand) (*RegenerateScheduleResult, error) {
 	if cmd.UserID == "" {
 		return nil, errors.New("user_id required")
 	}
+	res, err := h.regenerate(ctx, cmd)
+	if !errors.Is(err, errRegenerationFailed) {
+		return res, err
+	}
+	if deferErr := h.deferRegeneration(ctx, cmd); deferErr != nil {
+		return nil, errors.Join(err, deferErr)
+	}
+	slog.WarnContext(ctx, "Schedule regeneration deferred; the lifecycle worker retries it",
+		slog.String("user_id", cmd.UserID), slog.String("reason", cmd.Reason), slog.Any("error", err))
+	return &RegenerateScheduleResult{Deferred: true}, nil
+}
+
+// RetryDue retries the profile change waiting on the athlete's active
+// roadmap. A change waiting longer than roadmap.RegenerationGiveUpAfter is
+// dropped: the athlete has trained on the old schedule since, and the next
+// profile change or block plans from the current profile anyway.
+func (h *RegenerateScheduleHandler) RetryDue(ctx context.Context, userID string) (*RegenerateScheduleResult, error) {
+	rm, err := h.repo.FindActiveByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	due, err := rm.PendingRegeneration()
+	if errors.Is(err, roadmap.ErrNoRegenerationDue) {
+		return &RegenerateScheduleResult{Roadmap: rm}, nil
+	}
+	if due.RegenerationExpired(h.clock.Now()) {
+		slog.WarnContext(ctx, "Dropping a profile change the schedule could not absorb in time",
+			slog.String("user_id", userID), slog.String("reason", due.Reason), slog.Time("changed_at", due.ChangedAt))
+		if clearErr := h.clearRegenerationDue(ctx, rm); clearErr != nil {
+			return nil, clearErr
+		}
+		return &RegenerateScheduleResult{Roadmap: rm}, nil
+	}
+	return h.Handle(ctx, RegenerateScheduleCommand{UserID: userID, Reason: due.Reason, ChangedAt: due.ChangedAt})
+}
+
+// regenerate rewrites the pending sessions. The agent either rewrites them in
+// place or — when the athlete's weekly slots changed — returns sessions on the
+// new slots, which replace them. Drafts that match the pending sessions (day,
+// slot, kind) are rewrites; anything else is a reschedule. Failures of the
+// generation itself wrap errRegenerationFailed.
+func (h *RegenerateScheduleHandler) regenerate(ctx context.Context, cmd RegenerateScheduleCommand) (*RegenerateScheduleResult, error) {
 
 	rm, err := h.repo.FindActiveByUser(ctx, cmd.UserID)
 	if err != nil {
@@ -112,7 +159,7 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	if !cmd.ChangedAt.IsZero() && plannedAfter(rm.Info().CreatedAt, cmd.ChangedAt) {
 		slog.InfoContext(ctx, "Profile change predates the active roadmap; already reflected, not regenerating",
 			slog.String("user_id", cmd.UserID), slog.String("reason", cmd.Reason))
-		return &RegenerateScheduleResult{Roadmap: rm}, nil
+		return &RegenerateScheduleResult{Roadmap: rm}, h.clearRegenerationDue(ctx, rm)
 	}
 
 	// The schedule is read in the athlete's current zone, the same zone the
@@ -124,8 +171,8 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	rm.SetTimezone(profile.Zone().String())
 
 	before := rm.UpcomingPendingSessions(h.clock.Now())
-	if len(before) == 0 {
-		return &RegenerateScheduleResult{Roadmap: rm}, nil // nothing left to regenerate
+	if len(before) == 0 { // nothing left to regenerate
+		return &RegenerateScheduleResult{Roadmap: rm}, h.clearRegenerationDue(ctx, rm)
 	}
 
 	ids := make([]string, 0, len(before))
@@ -135,7 +182,7 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 
 	drafts, err := h.agent.RegeneratePending(ctx, cmd.UserID, ids)
 	if err != nil {
-		return nil, fmt.Errorf("agent regenerate: %w", err)
+		return nil, fmt.Errorf("%w: agent regenerate: %w", errRegenerationFailed, err)
 	}
 
 	if rm, err = reloadForRewrite(ctx, h.repo, rm, profile.Zone().String()); err != nil {
@@ -154,10 +201,10 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 			return nil, rwErr
 		}
 		if applied == 0 {
-			return nil, fmt.Errorf("no session was rewritten out of %d pending", len(pending))
+			return nil, fmt.Errorf("%w: no session was rewritten out of %d pending", errRegenerationFailed, len(pending))
 		}
 	} else if rsErr := rm.ReschedulePending(now, drafts, h.ids.NewID); rsErr != nil {
-		return nil, fmt.Errorf("reschedule pending sessions: %w", rsErr)
+		return nil, fmt.Errorf("%w: reschedule pending sessions: %w", errRegenerationFailed, rsErr)
 	}
 
 	if fitErr := fitDeloadVolume(ctx, rm, now); fitErr != nil {
@@ -165,10 +212,11 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	}
 	athlete := profile.Athlete()
 	if result := h.guard.Check(ctx, rm, athlete.Injuries, now); result.Status != guardrail.StatusApproved {
-		return nil, fmt.Errorf("guardrail rejected regen: %+v", result.Violations)
+		return nil, fmt.Errorf("%w: guardrail rejected regen: %+v", errRegenerationFailed, result.Violations)
 	}
 
 	err = h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		rm.ClearRegenerationDue()
 		rm.Touch(now)
 		if saveErr := h.repo.Save(txCtx, rm); saveErr != nil {
 			return saveErr
@@ -185,6 +233,40 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	}
 
 	return &RegenerateScheduleResult{Roadmap: rm}, nil
+}
+
+// deferRegeneration keeps the change on the athlete's active roadmap for the
+// lifecycle worker. It reads the roadmap again: the generation that failed may
+// have taken minutes, and the save must start from the stored version. An
+// unknown change time is taken as now, as Handle does.
+func (h *RegenerateScheduleHandler) deferRegeneration(ctx context.Context, cmd RegenerateScheduleCommand) error {
+	changedAt := cmd.ChangedAt
+	if changedAt.IsZero() {
+		changedAt = h.clock.Now()
+	}
+	return h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		rm, err := h.repo.FindActiveByUser(txCtx, cmd.UserID)
+		if err != nil {
+			return fmt.Errorf("load roadmap to defer regeneration: %w", err)
+		}
+		rm.MarkRegenerationDue(changedAt, cmd.Reason)
+		rm.Touch(h.clock.Now())
+		return h.repo.Save(txCtx, rm)
+	})
+}
+
+// clearRegenerationDue drops a waiting change the roadmap no longer needs (it
+// already reflects it, or has nothing left to rewrite). Nothing is saved when
+// no change was waiting.
+func (h *RegenerateScheduleHandler) clearRegenerationDue(ctx context.Context, rm *roadmap.Roadmap) error {
+	if _, err := rm.PendingRegeneration(); errors.Is(err, roadmap.ErrNoRegenerationDue) {
+		return nil
+	}
+	rm.ClearRegenerationDue()
+	rm.Touch(h.clock.Now())
+	return h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		return h.repo.Save(txCtx, rm)
+	})
 }
 
 // discardStalePlan deletes the user's planned next block when it was drafted

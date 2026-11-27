@@ -16,6 +16,10 @@ type roadmapRecord struct {
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 	Timezone  string    `gorm:"column:timezone;not null"`
 	Version   int64     `gorm:"column:version;not null"`
+	// RegenerateDueSince / RegenerateReason hold a profile change the
+	// schedule has yet to absorb (roadmap.RegenerationDue).
+	RegenerateDueSince sql.NullTime `gorm:"column:regenerate_due_since"`
+	RegenerateReason   string       `gorm:"column:regenerate_reason;not null"`
 }
 
 func (roadmapRecord) TableName() string { return "coaching.roadmaps" }

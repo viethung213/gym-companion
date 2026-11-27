@@ -83,6 +83,9 @@
    - Điều chỉnh `MuscleSplit` theo `preferred_muscle_groups` và `primary_goal`.
 4. System lưu thông tin cập nhật vào `Roadmap` và phát event `RoadmapAdjusted`.
 
+**Alternative Flow**
+- A1. Sinh giáo án thất bại (AI quá tải 503/429, hoặc guardrail từ chối bản nháp): System không bỏ thay đổi. Nó lưu thay đổi đang chờ lên `Roadmap` (`regenerate_due_since`, `regenerate_reason`), xác nhận event, và `RoadmapLifecycleWorker` thử lại mỗi ≥ 2 giờ. Quá 24 giờ thì bỏ thay đổi và ghi log WARN; lần thay đổi profile sau hoặc chu kỳ kế tiếp sẽ lập theo profile hiện tại.
+
 **Postcondition**: Toàn bộ giáo án các buổi tập chưa thực thi trong 4 tuần được cập nhật.  
 > *`CoachingService.RegenerateSchedule()` gọi `RoadmapRepository.Save()` và phát `RoadmapAdjusted`.*
 

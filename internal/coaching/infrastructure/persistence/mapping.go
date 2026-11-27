@@ -18,7 +18,17 @@ func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
 
 	info := r.Info()
 
+	var dueSince sql.NullTime
+	var dueReason string
+	if d := info.RegenerationDue; d != nil {
+		dueSince, dueReason = sql.NullTime{Time: d.ChangedAt, Valid: true}, d.Reason
+	}
+
 	return roadmapRecord{
+		RegenerateDueSince: dueSince,
+
+		RegenerateReason: dueReason,
+
 		RoadmapID: info.RoadmapID,
 
 		UserID: info.UserID,
@@ -45,16 +55,25 @@ func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.
 	}
 
 	return roadmap.RehydrateRoadmap(&roadmap.Info{
-		RoadmapID: rec.RoadmapID,
-		UserID:    rec.UserID,
-		Status:    roadmap.Status(rec.Status),
-		StartDate: rec.StartDate,
-		EndDate:   rec.EndDate,
-		CreatedAt: rec.CreatedAt,
-		UpdatedAt: rec.UpdatedAt,
-		Timezone:  rec.Timezone,
-		Version:   rec.Version,
+		RoadmapID:       rec.RoadmapID,
+		UserID:          rec.UserID,
+		Status:          roadmap.Status(rec.Status),
+		StartDate:       rec.StartDate,
+		EndDate:         rec.EndDate,
+		CreatedAt:       rec.CreatedAt,
+		UpdatedAt:       rec.UpdatedAt,
+		Timezone:        rec.Timezone,
+		Version:         rec.Version,
+		RegenerationDue: regenerationDueFrom(rec),
 	}, weeks)
+}
+
+// regenerationDueFrom reads the waiting profile change, nil when none.
+func regenerationDueFrom(rec *roadmapRecord) *roadmap.RegenerationDue {
+	if !rec.RegenerateDueSince.Valid {
+		return nil
+	}
+	return &roadmap.RegenerationDue{ChangedAt: rec.RegenerateDueSince.Time, Reason: rec.RegenerateReason}
 }
 
 // ---------- WeekPlan ----------
