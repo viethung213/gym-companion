@@ -26,7 +26,7 @@ ALTER TABLE nutrition.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);
 
 CREATE TABLE IF NOT EXISTS nutrition.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS nutrition.outbox_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_nutrition_outbox_log_event_status ON nutrition.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_nutrition_outbox_log_event_id ON nutrition.outbox_log (event_id);
 
 -- 2. FOOD ITEMS (Catalog & Partner Products per 100g)
 CREATE TABLE IF NOT EXISTS nutrition.food_items (

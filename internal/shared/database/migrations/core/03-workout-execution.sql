@@ -28,7 +28,7 @@ ALTER TABLE workout_execution.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCH
 
 CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS workout_execution.outbox_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_workout_execution_outbox_log_event_status ON workout_execution.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_workout_execution_outbox_log_event_id ON workout_execution.outbox_log (event_id);
 
 -- 2. WORKOUT SESSIONS
 CREATE TABLE IF NOT EXISTS workout_execution.workout_sessions (

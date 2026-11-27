@@ -26,16 +26,19 @@ ALTER TABLE notification.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(25
 
 CREATE TABLE IF NOT EXISTS notification.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
     processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(50) NOT NULL,
-    error_message TEXT
+    error_message TEXT,
+    retry_count INT DEFAULT 0,
+    next_retry_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_event_status ON notification.outbox_log (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_retry ON notification.outbox_log (status, retry_count, next_retry_at);
 
 -- 2. USER DEVICES (Device Tokens for FCM/APNs)
 CREATE TABLE IF NOT EXISTS notification.user_devices (
@@ -68,14 +71,19 @@ CREATE TABLE IF NOT EXISTS notification.user_settings (
 -- 4. IN-APP NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS notification.in_app_notifications (
     id UUID PRIMARY KEY,
+    event_id VARCHAR(255),
     user_id VARCHAR(255) NOT NULL,
     title VARCHAR(255) NOT NULL,
     body TEXT NOT NULL,
     data JSONB DEFAULT '{}'::jsonb NOT NULL,
     is_read BOOLEAN DEFAULT FALSE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_notification_in_app_user_event UNIQUE (user_id, event_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_notification_in_app_notifications_user_id 
     ON notification.in_app_notifications (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notification_in_app_user_event 
+    ON notification.in_app_notifications (user_id, event_id);
 

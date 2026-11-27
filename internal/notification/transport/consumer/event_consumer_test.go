@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
@@ -15,6 +16,39 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/sms"
 	"github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 )
+
+type mockConsumerReader struct {
+	msg       kafka.Message
+	called    bool
+	committed bool
+	cancel    context.CancelFunc
+}
+
+func (m *mockConsumerReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+	if m.called {
+		if m.cancel != nil {
+			m.cancel()
+		}
+		<-ctx.Done()
+		return kafka.Message{}, ctx.Err()
+	}
+	m.called = true
+	return m.msg, nil
+}
+
+func (m *mockConsumerReader) CommitMessages(ctx context.Context, msgs ...kafka.Message) error {
+	m.committed = true
+	return nil
+}
+
+type mockDLQWriter struct {
+	written []kafka.Message
+}
+
+func (m *mockDLQWriter) WriteMessages(ctx context.Context, msgs ...kafka.Message) error {
+	m.written = append(m.written, msgs...)
+	return nil
+}
 
 type mockDeviceRepo struct {
 	devices []*aggregate.Device
@@ -25,6 +59,9 @@ func (m *mockDeviceRepo) GetActiveDevicesByUserID(ctx context.Context, userID st
 	dt, _ := vo.NewDeviceType("IOS")
 	dev := aggregate.ReconstituteDevice("dev-1", userID, "token-1", dt, true, time.Now(), time.Now(), time.Now())
 	return []*aggregate.Device{dev}, nil
+}
+func (m *mockDeviceRepo) GetAllActiveUserIDs(ctx context.Context) ([]string, error) {
+	return []string{"usr-broadcast-1", "usr-broadcast-2"}, nil
 }
 func (m *mockDeviceRepo) DeactivateTokens(ctx context.Context, tokens []string) error { return nil }
 
@@ -45,10 +82,14 @@ func (m *mockNotificationRepo) MarkAsRead(ctx context.Context, id, userID string
 func (m *mockNotificationRepo) MarkAllAsRead(ctx context.Context, userID string) error {
 	return nil
 }
+func (m *mockNotificationRepo) FindByUserAndEventID(ctx context.Context, userID, eventID string) (*aggregate.InAppNotification, error) {
+	return nil, nil
+}
 
 type mockOutboxLogRepo struct {
 	savedLogs       []*port.OutboxLogRecord
 	processedMap    map[string]bool
+	statusMap       map[string]string
 	logProcessedErr error
 }
 
@@ -72,17 +113,26 @@ func newMockOutboxLogRepo() *mockOutboxLogRepo {
 	return &mockOutboxLogRepo{
 		savedLogs:    make([]*port.OutboxLogRecord, 0),
 		processedMap: make(map[string]bool),
+		statusMap:    make(map[string]string),
 	}
 }
 
 func (m *mockOutboxLogRepo) SaveLog(ctx context.Context, logRec *port.OutboxLogRecord) error {
 	m.savedLogs = append(m.savedLogs, logRec)
+	if m.statusMap == nil {
+		m.statusMap = make(map[string]string)
+	}
+	m.statusMap[logRec.EventID] = logRec.Status
 	return nil
 }
 
 func (m *mockOutboxLogRepo) LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte, status, errorMessage string) (bool, error) {
 	if m.logProcessedErr != nil {
 		return false, m.logProcessedErr
+	}
+	if m.statusMap != nil && m.statusMap[eventID] == "FAILED" {
+		m.statusMap[eventID] = "PROCESSING"
+		return true, nil
 	}
 	if m.processedMap[eventID] {
 		return false, nil
@@ -96,6 +146,10 @@ func (m *mockOutboxLogRepo) FetchFailedLogs(ctx context.Context, limit int) ([]*
 }
 
 func (m *mockOutboxLogRepo) UpdateLogStatus(ctx context.Context, id string, status string, errMsg string) error {
+	return nil
+}
+
+func (m *mockOutboxLogRepo) UpdateRetryLog(ctx context.Context, id string, retryCount int, nextRetryAt time.Time, status, errMsg string) error {
 	return nil
 }
 
@@ -248,6 +302,75 @@ func TestNotificationEventConsumer(t *testing.T) {
 		}
 		if got, want := outboxLogRepo.savedLogs[0].Status, "FAILED"; got != want {
 			t.Errorf("got status %s, want %s", got, want)
+		}
+	})
+
+	t.Run("Retry on Failure is Not Blocked by LogProcessed", func(t *testing.T) {
+		devRepo := &mockDeviceRepo{}
+		notifRepo := &mockNotificationRepo{}
+		provider := &mockPushProvider{shouldFail: true}
+		sendPushH := command.NewSendPushNotificationHandler(devRepo, notifRepo, nil, provider, nil, nil)
+		outboxLogRepo := newMockOutboxLogRepo()
+
+		c := consumer.NewNotificationEventConsumer(nil, sendPushH, nil, nil, outboxLogRepo)
+		evStr := []byte(`{"id":"e-retry","type":"contracts.generic.notification.v1.event.NormalPriorityNotificationRequested","data":{"userId":"usr-1"}}`)
+
+		// Attempt 1: Provider fails, status becomes FAILED
+		err1 := c.ProcessMessage(ctx, evStr)
+		if err1 == nil {
+			t.Fatalf("expected error on attempt 1, got nil")
+		}
+
+		// Attempt 2 (Retry): Provider succeeds, verify it is NOT swallowed by duplicate check
+		provider.shouldFail = false
+		err2 := c.ProcessMessage(ctx, evStr)
+		if err2 != nil {
+			t.Fatalf("expected success on attempt 2 retry, got error: %v", err2)
+		}
+
+		if len(outboxLogRepo.savedLogs) != 2 {
+			t.Fatalf("expected 2 saved logs (FAILED then SUCCESS), got %d", len(outboxLogRepo.savedLogs))
+		}
+		if outboxLogRepo.savedLogs[0].Status != "FAILED" {
+			t.Errorf("expected first log to be FAILED, got %s", outboxLogRepo.savedLogs[0].Status)
+		}
+		if outboxLogRepo.savedLogs[1].Status != "SUCCESS" {
+			t.Errorf("expected second log to be SUCCESS, got %s", outboxLogRepo.savedLogs[1].Status)
+		}
+	})
+
+	t.Run("AllUsers Broadcast Populates Active Users and Dispatches", func(t *testing.T) {
+		devRepo := &mockDeviceRepo{}
+		notifRepo := &mockNotificationRepo{}
+		pushProvider := &mockPushProvider{shouldFail: false}
+		sendPushH := command.NewSendPushNotificationHandler(devRepo, notifRepo, nil, pushProvider, nil, nil)
+		outboxLogRepo := newMockOutboxLogRepo()
+
+		c := consumer.NewNotificationEventConsumer(nil, sendPushH, nil, nil, outboxLogRepo).WithDeviceRepo(devRepo)
+		broadcastJSON := map[string]interface{}{
+			"id":   "evt-broadcast-all",
+			"type": "contracts.generic.notification.v1.event.HighPriorityNotificationRequested",
+			"data": map[string]interface{}{
+				"target": map[string]interface{}{
+					"allUsers": true,
+				},
+				"title":    "System Maintenance",
+				"body":     "System will be updated at midnight",
+				"channels": []string{"PUSH"},
+			},
+		}
+		bBytes, _ := json.Marshal(broadcastJSON)
+
+		err := c.ProcessMessage(ctx, bBytes)
+		if err != nil {
+			t.Fatalf("unexpected error on broadcast dispatch: %v", err)
+		}
+
+		if len(outboxLogRepo.savedLogs) != 1 {
+			t.Fatalf("expected 1 saved log, got %d", len(outboxLogRepo.savedLogs))
+		}
+		if outboxLogRepo.savedLogs[0].Status != "SUCCESS" {
+			t.Errorf("expected status SUCCESS, got %s", outboxLogRepo.savedLogs[0].Status)
 		}
 	})
 
@@ -445,6 +568,50 @@ func TestNotificationEventConsumer(t *testing.T) {
 		}
 		if len(mockSMS.GetSentMessages()) != 1 {
 			t.Errorf("expected 1 SMS sent for high priority bypassing settings, got %d", len(mockSMS.GetSentMessages()))
+		}
+	})
+
+	t.Run("Start With DLQ Writer Routes Failure To DLQ And Commits", func(t *testing.T) {
+		runCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		mockR := &mockConsumerReader{
+			msg: kafka.Message{
+				Topic: "notification.events.high-priority",
+				Value: []byte("invalid-json-payload"),
+			},
+			cancel: cancel,
+		}
+		mockDLQ := &mockDLQWriter{}
+
+		c := consumer.NewNotificationEventConsumer(mockR, nil, nil, nil, nil).WithDLQWriter(mockDLQ)
+		c.Start(runCtx)
+
+		if len(mockDLQ.written) != 1 {
+			t.Errorf("expected 1 message in DLQ, got %d", len(mockDLQ.written))
+		}
+		if !mockR.committed {
+			t.Errorf("expected message to be committed after DLQ routing")
+		}
+	})
+
+	t.Run("Start Without DLQ Aborts Commit On Failure", func(t *testing.T) {
+		runCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		mockR := &mockConsumerReader{
+			msg: kafka.Message{
+				Topic: "notification.events.normal-priority",
+				Value: []byte("invalid-json-payload"),
+			},
+			cancel: cancel,
+		}
+
+		c := consumer.NewNotificationEventConsumer(mockR, nil, nil, nil, nil)
+		c.Start(runCtx)
+
+		if mockR.committed {
+			t.Errorf("expected message NOT to be committed when failure occurs without DLQ")
 		}
 	})
 }

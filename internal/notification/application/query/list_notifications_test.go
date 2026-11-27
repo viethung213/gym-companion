@@ -29,6 +29,15 @@ func (m *mockNotificationRepo) MarkAllAsRead(ctx context.Context, userID string)
 	return nil
 }
 
+func (m *mockNotificationRepo) FindByUserAndEventID(ctx context.Context, userID, eventID string) (*aggregate.InAppNotification, error) {
+	for _, it := range m.items {
+		if it.UserID() == userID && it.EventID() == eventID {
+			return it, nil
+		}
+	}
+	return nil, nil
+}
+
 func TestListNotificationsHandler(t *testing.T) {
 	t.Parallel()
 

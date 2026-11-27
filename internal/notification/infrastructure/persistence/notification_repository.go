@@ -8,6 +8,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -28,10 +29,34 @@ func (r *NotificationRepository) Save(ctx context.Context, item *aggregate.InApp
 	if err != nil {
 		return err
 	}
-	if err := GetDB(ctx, r.db).Create(model).Error; err != nil {
+	query := GetDB(ctx, r.db)
+	if model.EventID != nil && *model.EventID != "" {
+		query = query.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "event_id"}},
+			DoNothing: true,
+		})
+	}
+	if err := query.Create(model).Error; err != nil {
 		return fmt.Errorf("insert in-app notification: %w", err)
 	}
 	return nil
+}
+
+func (r *NotificationRepository) FindByUserAndEventID(ctx context.Context, userID, eventID string) (*aggregate.InAppNotification, error) {
+	if userID == "" || eventID == "" {
+		return nil, nil
+	}
+	var model InAppNotificationModel
+	err := GetDB(ctx, r.db).
+		Where("user_id = ? AND event_id = ?", userID, eventID).
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find in-app notification by user and event ID: %w", err)
+	}
+	return model.ToDomain()
 }
 
 func (r *NotificationRepository) ListByUserID(ctx context.Context, userID string, limit, offset int32) ([]*aggregate.InAppNotification, int32, error) {

@@ -14,6 +14,8 @@ type OutboxLogRecord struct {
 	ProcessedAt  time.Time
 	Status       string
 	ErrorMessage string
+	RetryCount   int
+	NextRetryAt  time.Time
 }
 
 type OutboxLogRepository interface {
@@ -25,4 +27,6 @@ type OutboxLogRepository interface {
 	FetchFailedLogs(ctx context.Context, limit int) ([]*OutboxLogRecord, error)
 	// UpdateLogStatus updates the status and error message of an outbox log record.
 	UpdateLogStatus(ctx context.Context, id string, status string, errMsg string) error
+	// UpdateRetryLog updates retry attempt count, scheduled next retry time, status, and error message.
+	UpdateRetryLog(ctx context.Context, id string, retryCount int, nextRetryAt time.Time, status, errMsg string) error
 }

@@ -1,4 +1,4 @@
-package kafka
+package consumer
 
 import (
 	"context"
@@ -10,15 +10,8 @@ import (
 	segmentio "github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/command"
 	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
-
-type cloudEventEnvelope struct {
-	SpecVersion string          `json:"specversion"`
-	ID          string          `json:"id"`
-	Source      string          `json:"source"`
-	Type        string          `json:"type"`
-	Data        json.RawMessage `json:"data"`
-}
 
 type WorkoutSessionCompletedPayload struct {
 	SessionID           string  `json:"sessionId"`
@@ -28,66 +21,64 @@ type WorkoutSessionCompletedPayload struct {
 	CompletedAt         string  `json:"completedAt"`
 }
 
-type Consumer struct {
+// WorkoutEventConsumer listens to workout execution events and adjusts nutrition plan macros.
+type WorkoutEventConsumer struct {
 	reader                *segmentio.Reader
+	dlqWriter             sharedKafka.MessageWriter
 	workoutSurplusHandler *command.RebalanceWorkoutNutritionHandler
 	outboxLogRepo         port.OutboxLogRepository
 }
 
-func NewConsumer(
+func (c *WorkoutEventConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *WorkoutEventConsumer {
+	c.dlqWriter = writer
+	return c
+}
+
+func NewWorkoutEventConsumer(
 	reader *segmentio.Reader,
 	workoutSurplusHandler *command.RebalanceWorkoutNutritionHandler,
 	outboxLogRepo port.OutboxLogRepository,
-) *Consumer {
-	return &Consumer{
+) *WorkoutEventConsumer {
+	return &WorkoutEventConsumer{
 		reader:                reader,
 		workoutSurplusHandler: workoutSurplusHandler,
 		outboxLogRepo:         outboxLogRepo,
 	}
 }
 
-func (c *Consumer) Start(ctx context.Context) error {
+func (c *WorkoutEventConsumer) Start(ctx context.Context) error {
 	if c.reader == nil {
 		slog.InfoContext(ctx, "Kafka reader is nil, skipping consumer loop")
 		return nil
 	}
 
 	slog.InfoContext(ctx, "Started listening to Kafka topic", slog.String("topic", "workout_execution.events"))
-
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Shutting down Kafka consumer")
-			return nil
-		default:
-			msg, err := c.reader.FetchMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
-				slog.ErrorContext(ctx, "Error fetching message", slog.Any("error", err))
-				continue
-			}
-
-			c.handleMessage(ctx, msg)
-
-			if err := c.reader.CommitMessages(ctx, msg); err != nil {
-				slog.ErrorContext(ctx, "Error committing message", slog.Any("error", err))
-			}
-		}
-	}
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		c.reader,
+		sharedKafka.ConsumerConfig{
+			Name:        "NutritionWorkoutExecutionConsumer",
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   c.dlqWriter,
+		},
+		func(ctx context.Context, msg *segmentio.Message) error {
+			return c.HandleMessage(ctx, *msg)
+		},
+	)
+	return nil
 }
 
 //nolint:gocritic // msg is passed by value per kafka library signature
-func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
-	var env cloudEventEnvelope
+func (c *WorkoutEventConsumer) HandleMessage(ctx context.Context, msg segmentio.Message) error {
+	var env CloudEventEnvelope
 	if err := json.Unmarshal(msg.Value, &env); err != nil {
 		slog.ErrorContext(ctx, "Error unmarshaling CloudEvent envelope", slog.Any("error", err))
-		return
+		return err
 	}
 
 	if !strings.HasSuffix(env.Type, "workoutSessionCompleted") && !strings.HasSuffix(env.Type, "WorkoutSessionCompleted") {
-		return
+		return nil
 	}
 
 	// 1. Check Outbox Log Idempotency: skip if already processed
@@ -97,7 +88,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 			slog.WarnContext(ctx, "Warning checking outbox log idempotency", slog.Any("error", err))
 		} else if processed {
 			slog.DebugContext(ctx, "Event already processed in outbox_log, skipping", slog.String("event_id", env.ID))
-			return
+			return nil
 		}
 	}
 
@@ -106,14 +97,14 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 		if err := json.Unmarshal(env.Data, &payload); err != nil {
 			slog.ErrorContext(ctx, "Error unmarshaling event payload", slog.Any("error", err))
 			c.saveLog(ctx, msg.Value, env, "", err)
-			return
+			return err
 		}
 	} else {
 		// Fallback if payload is not wrapped in data
 		if err := json.Unmarshal(msg.Value, &payload); err != nil {
 			slog.ErrorContext(ctx, "Error unmarshaling raw payload", slog.Any("error", err))
 			c.saveLog(ctx, msg.Value, env, "", err)
-			return
+			return err
 		}
 	}
 
@@ -140,10 +131,11 @@ func (c *Consumer) handleMessage(ctx context.Context, msg segmentio.Message) {
 	}
 
 	c.saveLog(ctx, msg.Value, env, payload.UserID, processErr)
+	return processErr
 }
 
 //nolint:gocritic // env envelope value object is passed by value per helper design
-func (c *Consumer) saveLog(ctx context.Context, rawPayload []byte, env cloudEventEnvelope, userID string, err error) {
+func (c *WorkoutEventConsumer) saveLog(ctx context.Context, rawPayload []byte, env CloudEventEnvelope, userID string, err error) {
 	if c.outboxLogRepo == nil || env.ID == "" {
 		return
 	}

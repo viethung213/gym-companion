@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -33,6 +34,18 @@ func (m *mockDeviceRepo) GetActiveDevicesByUserID(ctx context.Context, userID st
 	return result, nil
 }
 
+func (m *mockDeviceRepo) GetAllActiveUserIDs(ctx context.Context) ([]string, error) {
+	var userIDs []string
+	seen := make(map[string]bool)
+	for _, d := range m.devices {
+		if d.IsActive() && !seen[d.UserID()] {
+			seen[d.UserID()] = true
+			userIDs = append(userIDs, d.UserID())
+		}
+	}
+	return userIDs, nil
+}
+
 func (m *mockDeviceRepo) DeactivateTokens(ctx context.Context, tokens []string) error {
 	m.deactivatedTokens = append(m.deactivatedTokens, tokens...)
 	return nil
@@ -59,6 +72,15 @@ func (m *mockNotificationRepo) MarkAllAsRead(ctx context.Context, userID string)
 	return nil
 }
 
+func (m *mockNotificationRepo) FindByUserAndEventID(ctx context.Context, userID, eventID string) (*aggregate.InAppNotification, error) {
+	for _, it := range m.items {
+		if it.UserID() == userID && it.EventID() == eventID {
+			return it, nil
+		}
+	}
+	return nil, nil
+}
+
 type mockSettingRepoWithMap struct {
 	settings map[string]*aggregate.Setting
 }
@@ -76,9 +98,18 @@ func (m *mockSettingRepoWithMap) Save(ctx context.Context, setting *aggregate.Se
 	return nil
 }
 
-type mockPushProvider struct{}
+type mockPushProvider struct {
+	err  error
+	resp *port.PushResponse
+}
 
 func (m *mockPushProvider) SendPush(ctx context.Context, tokens []string, title, body string, data map[string]string) (*port.PushResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.resp != nil {
+		return m.resp, nil
+	}
 	return &port.PushResponse{
 		SuccessCount: len(tokens),
 		FailureCount: 0,
@@ -230,6 +261,66 @@ func TestSendPushNotificationHandler(t *testing.T) {
 		}
 
 		if got, want := res.Status, "SENT"; got != want {
+			t.Errorf("got status %s, want %s", got, want)
+		}
+	})
+
+	t.Run("retry idempotency prevents duplicate in-app notification for same eventID", func(t *testing.T) {
+		t.Parallel()
+
+		deviceRepo := &mockDeviceRepo{}
+		notifRepo := &mockNotificationRepo{}
+		settingRepo := &mockSettingRepoWithMap{settings: make(map[string]*aggregate.Setting)}
+		rec := &mockEventRecorder{}
+
+		dt, _ := vo.NewDeviceType("WEB")
+		dev, _ := aggregate.NewDevice("dev-idem-1", "usr-retry-1", "token-idem-1", dt)
+		_ = deviceRepo.Save(context.Background(), dev)
+
+		// 1st attempt: push provider fails
+		failingProvider := &mockPushProvider{err: errors.New("fcm network timeout")}
+		handler := command.NewSendPushNotificationHandler(deviceRepo, notifRepo, settingRepo, failingProvider, nil, rec)
+
+		cmd := command.SendPushNotificationCommand{
+			EventID: "event-unique-uuid-12345",
+			UserID:  "usr-retry-1",
+			Title:   "Workout Reminder",
+			Body:    "Time for leg day!",
+		}
+
+		resp1, err1 := handler.Handle(context.Background(), cmd)
+		if err1 == nil {
+			t.Fatal("expected error on 1st attempt due to FCM failure, got nil")
+		}
+		if resp1 != nil {
+			t.Fatalf("expected nil response on error, got %+v", resp1)
+		}
+
+		// Verify 1 in-app record was persisted in DB before FCM call
+		if got, want := len(notifRepo.items), 1; got != want {
+			t.Fatalf("expected 1 in-app notification after 1st attempt, got %d", got)
+		}
+		originalNotifID := notifRepo.items[0].ID()
+
+		// 2nd attempt: Kafka / worker retries the exact same event after 10s, FCM succeeds now
+		successProvider := &mockPushProvider{
+			resp: &port.PushResponse{SuccessCount: 1},
+		}
+		retryHandler := command.NewSendPushNotificationHandler(deviceRepo, notifRepo, settingRepo, successProvider, nil, rec)
+
+		resp2, err2 := retryHandler.Handle(context.Background(), cmd)
+		if err2 != nil {
+			t.Fatalf("expected success on 2nd attempt, got error: %v", err2)
+		}
+
+		// Critical check: no duplicate in-app notification record inserted!
+		if got, want := len(notifRepo.items), 1; got != want {
+			t.Errorf("expected still exactly 1 in-app notification after retry, but got %d (duplicate created!)", got)
+		}
+		if resp2.NotificationID != originalNotifID {
+			t.Errorf("expected retry to reuse original notification ID %s, got %s", originalNotifID, resp2.NotificationID)
+		}
+		if got, want := resp2.Status, "SENT"; got != want {
 			t.Errorf("got status %s, want %s", got, want)
 		}
 	})

@@ -26,7 +26,7 @@ ALTER TABLE auth.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);
 
 CREATE TABLE IF NOT EXISTS auth.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS auth.outbox_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_auth_outbox_log_event_status ON auth.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_auth_outbox_log_event_id ON auth.outbox_log (event_id);
 
 -- 2. ROLES
 CREATE TABLE IF NOT EXISTS auth.roles (

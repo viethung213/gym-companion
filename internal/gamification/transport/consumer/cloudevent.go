@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 type CloudEvent struct {
@@ -26,50 +26,20 @@ func runConsumerLoop(
 	ctx context.Context,
 	name string,
 	reader *kafka.Reader,
+	dlqWriter sharedKafka.MessageWriter,
 	processFn func(ctx context.Context, msg *kafka.Message) error,
 ) {
-	if reader == nil {
-		return
-	}
-	slog.InfoContext(ctx, "Starting Gamification Kafka Consumer", slog.String("consumer", name))
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Stopping Gamification Kafka Consumer due to context cancellation", slog.String("consumer", name))
-			return
-		default:
-			msg, err := reader.FetchMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				slog.ErrorContext(ctx, "Gamification consumer fetch error", slog.String("consumer", name), slog.String("error", err.Error()))
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-
-			var processErr error
-			for attempt := 0; attempt < 3; attempt++ {
-				processErr = processFn(ctx, &msg)
-				if processErr == nil {
-					break
-				}
-				if ctx.Err() != nil {
-					return
-				}
-				time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
-			}
-
-			if processErr != nil {
-				slog.WarnContext(ctx, "Gamification consumer skipping failed message after 3 retries",
-					slog.String("consumer", name), slog.String("error", processErr.Error()))
-			}
-
-			if err := reader.CommitMessages(ctx, msg); err != nil {
-				slog.ErrorContext(ctx, "Gamification consumer commit error", slog.String("consumer", name), slog.String("error", err.Error()))
-			}
-		}
-	}
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		reader,
+		sharedKafka.ConsumerConfig{
+			Name:        name,
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   dlqWriter,
+		},
+		processFn,
+	)
 }
 
 func processIdempotentCloudEvent(

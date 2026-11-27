@@ -10,6 +10,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	workoutexecutionv1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/event"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -19,8 +20,14 @@ type PersonalRecordHandler interface {
 
 type PersonalRecordConsumer struct {
 	reader        *kafka.Reader
+	dlqWriter     sharedKafka.MessageWriter
 	handler       PersonalRecordHandler
 	outboxLogRepo port.OutboxLogRepository
+}
+
+func (c *PersonalRecordConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *PersonalRecordConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 func NewPersonalRecordConsumer(
@@ -36,7 +43,7 @@ func NewPersonalRecordConsumer(
 }
 
 func (c *PersonalRecordConsumer) Start(ctx context.Context) {
-	runConsumerLoop(ctx, "PersonalRecord", c.reader, c.ProcessMessage)
+	runConsumerLoop(ctx, "PersonalRecord", c.reader, c.dlqWriter, c.ProcessMessage)
 }
 
 func (c *PersonalRecordConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {

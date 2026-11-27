@@ -28,6 +28,7 @@ func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("failed to get sql.DB: %v", err)
 	}
+	sqlDB.SetMaxOpenConns(1)
 
 	queries := []string{
 		`ATTACH DATABASE ':memory:' AS notification`,
@@ -46,7 +47,8 @@ func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 		`CREATE TABLE IF NOT EXISTS notification.in_app_notifications (
 			id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL,
 			body TEXT NOT NULL, data TEXT DEFAULT '{}', is_read INTEGER DEFAULT 0,
-			created_at TIMESTAMP
+			created_at TIMESTAMP, event_id TEXT,
+			CONSTRAINT uq_notification_in_app_user_event UNIQUE (user_id, event_id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.outbox (
 			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, aggregate_type TEXT, aggregate_id TEXT, event_type TEXT,
@@ -55,9 +57,9 @@ func setupTestDB(t *testing.T) (*sql.DB, *gorm.DB) {
 			locked_until TIMESTAMP, status TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS notification.outbox_log (
-			id TEXT PRIMARY KEY, event_id TEXT, event_type TEXT,
+			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, event_type TEXT,
 			payload TEXT, partition_key TEXT, processed_at TIMESTAMP,
-			status TEXT, error_message TEXT
+			status TEXT, error_message TEXT, retry_count INTEGER DEFAULT 0, next_retry_at TIMESTAMP
 		)`,
 	}
 
@@ -87,7 +89,7 @@ func TestPostgresDeviceRepository(t *testing.T) {
 		t.Fatalf("Save device error: %v", err)
 	}
 
-	// 2. Test GetActiveDevicesByUserID
+	// 2. Test GetActiveDevicesByUserID & GetAllActiveUserIDs
 	activeDevices, err := repo.GetActiveDevicesByUserID(ctx, "usr-1")
 	if err != nil {
 		t.Fatalf("GetActiveDevicesByUserID error: %v", err)
@@ -97,6 +99,17 @@ func TestPostgresDeviceRepository(t *testing.T) {
 	}
 	if got, want := activeDevices[0].DeviceToken(), "fcm-token-1"; got != want {
 		t.Errorf("got token %s, want %s", got, want)
+	}
+
+	userIDs, err := repo.GetAllActiveUserIDs(ctx)
+	if err != nil {
+		t.Fatalf("GetAllActiveUserIDs error: %v", err)
+	}
+	if got, want := len(userIDs), 1; got != want {
+		t.Fatalf("got %d active users, want %d", got, want)
+	}
+	if userIDs[0] != "usr-1" {
+		t.Errorf("got user_id %s, want usr-1", userIDs[0])
 	}
 
 	// 3. Test DeactivateTokens
@@ -160,10 +173,23 @@ func TestPostgresNotificationRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new in-app notification error: %v", err)
 	}
+	item.WithEventID("event-test-123")
 
 	// 1. Save
 	if err := repo.Save(ctx, item); err != nil {
 		t.Fatalf("Save in-app notification error: %v", err)
+	}
+
+	// 1b. Test FindByUserAndEventID
+	found, err := repo.FindByUserAndEventID(ctx, "usr-notif-1", "event-test-123")
+	if err != nil {
+		t.Fatalf("FindByUserAndEventID error: %v", err)
+	}
+	if found == nil || found.ID() != item.ID() {
+		t.Fatalf("expected found notification %s, got %v", item.ID(), found)
+	}
+	if found.EventID() != "event-test-123" {
+		t.Errorf("expected EventID event-test-123, got %s", found.EventID())
 	}
 
 	// 2. ListByUserID
@@ -226,7 +252,7 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 	}
 
 	// 2. Test OutboxLog LogProcessed (Idempotency)
-	fresh1, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "SUCCESS", "")
+	fresh1, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "PROCESSING", "")
 	if err != nil {
 		t.Fatalf("LogProcessed first call error: %v", err)
 	}
@@ -234,12 +260,113 @@ func TestPostgresOutboxAndLogRepository(t *testing.T) {
 		t.Errorf("got fresh1 = false, want true for new event")
 	}
 
-	fresh2, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "SUCCESS", "")
+	fresh2, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "PROCESSING", "")
 	if err != nil {
 		t.Fatalf("LogProcessed second call error: %v", err)
 	}
-	if !fresh2 {
-		t.Errorf("got fresh2 = false, want true when non-conflicting log is inserted")
+	if fresh2 {
+		t.Errorf("got fresh2 = true, want false for duplicate event_id")
+	}
+
+	// 2.1 Test OutboxLog LogProcessed allows retry when previous attempt was FAILED
+	failErr := outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      "550e8400-e29b-41d4-a716-446655440001",
+		EventType:    "EventType",
+		Payload:      []byte(`{}`),
+		PartitionKey: "usr-1",
+		Status:       "FAILED",
+		ErrorMessage: "network timeout",
+	})
+	if failErr != nil {
+		t.Fatalf("SaveLog FAILED error: %v", failErr)
+	}
+
+	freshRetry, err := outboxLogRepo.LogProcessed(ctx, "550e8400-e29b-41d4-a716-446655440001", "EventType", "usr-1", []byte(`{}`), "PROCESSING", "")
+	if err != nil {
+		t.Fatalf("LogProcessed retry call error: %v", err)
+	}
+	if !freshRetry {
+		t.Errorf("got freshRetry = false, want true when previous attempt was FAILED")
+	}
+
+	// 3. Test OutboxLog SaveLog updates existing record to SUCCESS
+	err = outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      "550e8400-e29b-41d4-a716-446655440001",
+		EventType:    "EventType",
+		Payload:      []byte(`{}`),
+		PartitionKey: "usr-1",
+		Status:       "SUCCESS",
+		ErrorMessage: "",
+	})
+	if err != nil {
+		t.Fatalf("SaveLog error: %v", err)
+	}
+
+	var logs []persistence.OutboxLogModel
+	if err := db.Where("event_id = ?", "550e8400-e29b-41d4-a716-446655440001").Find(&logs).Error; err != nil {
+		t.Fatalf("query outbox_log error: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Errorf("got %d logs, want 1", len(logs))
+	} else if logs[0].Status != "SUCCESS" {
+		t.Errorf("got status %s, want SUCCESS", logs[0].Status)
+	}
+}
+
+func TestPostgresOutboxLog_ConcurrentRetryRace_MutualExclusion(t *testing.T) {
+	sqlDB, db := setupTestDB(t)
+	defer sqlDB.Close()
+
+	outboxLogRepo := persistence.NewOutboxLogRepository(db)
+	ctx := context.Background()
+
+	eventID := "550e8400-e29b-41d4-a716-446655440099"
+
+	// Initial failed state
+	err := outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      eventID,
+		EventType:    "TestEvent",
+		Payload:      []byte(`{}`),
+		PartitionKey: "usr-race",
+		Status:       "FAILED",
+		ErrorMessage: "push failed",
+	})
+	if err != nil {
+		t.Fatalf("SaveLog initial FAILED error: %v", err)
+	}
+
+	// Simulate concurrent race: 5 workers (e.g. Kafka Consumer + InboundEventRetryWorker nodes)
+	// simultaneously trying to process the failed event via LogProcessed
+	const workers = 5
+	results := make(chan bool, workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			fresh, pErr := outboxLogRepo.LogProcessed(ctx, eventID, "TestEvent", "usr-race", []byte(`{}`), "PROCESSING", "")
+			if pErr != nil {
+				results <- false
+				return
+			}
+			results <- fresh
+		}()
+	}
+
+	trueCount := 0
+	falseCount := 0
+	for i := 0; i < workers; i++ {
+		if <-results {
+			trueCount++
+		} else {
+			falseCount++
+		}
+	}
+
+	// Exactly ONE worker must win the race and transition FAILED -> PROCESSING
+	if trueCount != 1 {
+		t.Errorf("got %d workers with fresh=true, want exactly 1 (race condition!)", trueCount)
+	}
+	if falseCount != workers-1 {
+		t.Errorf("got %d workers with fresh=false, want %d", falseCount, workers-1)
 	}
 }
 

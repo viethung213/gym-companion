@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_gamification_outbox_unprocessed
 
 CREATE TABLE IF NOT EXISTS gamification.outbox_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,

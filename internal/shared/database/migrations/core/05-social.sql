@@ -28,7 +28,7 @@ ALTER TABLE social.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);
 
 CREATE TABLE IF NOT EXISTS social.outbox_log (
     id UUID PRIMARY KEY,
-    event_id UUID NOT NULL,
+    event_id UUID NOT NULL UNIQUE,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(255) NOT NULL,
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS social.outbox_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_social_outbox_log_event_status ON social.outbox_log (event_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_social_outbox_log_event_id ON social.outbox_log (event_id);
 
 -- 2. FOLLOWS (Social Graph)
 CREATE TABLE IF NOT EXISTS social.follows (
