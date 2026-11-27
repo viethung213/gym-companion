@@ -54,7 +54,8 @@ func LoadStep(e taxonomy.Equipment) float32 {
 
 // ProgressLine progresses one main-work line. loadStep is LoadStep of the
 // exercise's equipment; ceilingKg (0 = none) is the most the athlete may lift
-// (BR-AC-02): a step past it leaves the line as it was.
+// (BR-AC-02, or a bodyweight bound without a record). A step past it, or past
+// the MaxTargetWeightKg hard limit, leaves the line as it was.
 func ProgressLine(from *PrescribedExercise, loadStep float32, rng RepRange, ceilingKg float32) PrescribedExercise {
 	line := *from
 	switch {
@@ -66,7 +67,7 @@ func ProgressLine(from *PrescribedExercise, loadStep float32, rng RepRange, ceil
 		line.TargetReps = min(line.TargetReps+repStep(rng), rng.Max)
 	case loadStep > 0:
 		next := line.TargetWeight + loadStep
-		if ceilingKg > 0 && next > ceilingKg {
+		if next > MaxTargetWeightKg || (ceilingKg > 0 && next > ceilingKg) {
 			return line
 		}
 		line.TargetWeight, line.TargetReps = next, rng.Min

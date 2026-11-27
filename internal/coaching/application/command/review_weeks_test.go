@@ -439,3 +439,71 @@ func TestReviewWeeks_ProgressionHoldsAnInjuredExercise(t *testing.T) {
 		t.Errorf("injured squat %dx%d at %.1f kg, want held at 3x8 60 kg", m.TargetSets, m.TargetReps, m.TargetWeight)
 	}
 }
+
+// Without a record the progressed load stays within the bound generation
+// uses (UnrecordedLoadFactor x bodyweight): a 70 kg athlete at the top of the
+// rep range on a 105 kg lift does not step past 105 kg.
+func TestReviewWeeks_ProgressionWithoutARecordStaysUnderTheBodyweightBound(t *testing.T) {
+	rm := reviewFixture(t)
+	complete(t, rm, 100, 0, "w1-s0", "w1-s1", "w1-s2")
+	for _, id := range []string{"w2-s0", "w2-s1", "w2-s2"} {
+		s, _ := rm.FindSession(id)
+		p := s.Info().Prescription
+		p.MainExercises[0].TargetWeight, p.MainExercises[0].TargetReps = 105, 12
+		if err := s.RewritePrescription(p, s.Info().TargetMuscleGroups, s.Info().Reasoning, weekOneEnd()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := newMemRepo()
+	_ = repo.Save(context.Background(), rm)
+	clock := &fakeClock{t: weekOneEnd().Add(8 * time.Hour)}
+	adapt := NewApplyAdaptiveCycleHandler(fakeTx{}, repo, &adaptingAgent{rm: rm},
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), weighedProfiles{kg: 70}, &captureOutbox{}, clock, nil,
+		barbellCatalog(), nil)
+
+	if _, err := NewReviewWeeksHandler(fakeTx{}, repo, adapt, clock).Handle(context.Background(), "rm-r"); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	s, _ := rm.FindSession("w2-s0")
+	if m := s.Info().Prescription.MainExercises[0]; m.TargetWeight != 105 {
+		t.Errorf("load %.1f kg, want held at 105 kg (1.5 x 70 kg)", m.TargetWeight)
+	}
+}
+
+// weighedProfiles reports a profile with the given bodyweight.
+type weighedProfiles struct{ kg float64 }
+
+func (p weighedProfiles) GetProfile(_ context.Context, userID string) (port.Profile, error) {
+	return port.Profile{UserID: userID, Location: time.UTC, WeightKg: p.kg}, nil
+}
+
+// A failed personal-record read holds the loads (reps still climb): without
+// the record ceiling a load step could be refused by the guardrail, whose own
+// read may succeed, failing the whole adaptation.
+func TestReviewWeeks_ProgressionHoldsLoadsWhenRecordsAreUnavailable(t *testing.T) {
+	rm := reviewFixture(t)
+	complete(t, rm, 100, 0, "w1-s0", "w1-s1", "w1-s2")
+	for _, id := range []string{"w2-s0", "w2-s1", "w2-s2"} {
+		s, _ := rm.FindSession(id)
+		p := s.Info().Prescription
+		p.MainExercises[0].TargetReps = 12 // top of the range: next is a load step
+		if err := s.RewritePrescription(p, s.Info().TargetMuscleGroups, s.Info().Reasoning, weekOneEnd()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := newMemRepo()
+	_ = repo.Save(context.Background(), rm)
+	clock := &fakeClock{t: weekOneEnd().Add(8 * time.Hour)}
+	unavailable := func(context.Context, string) map[string]float64 { return nil }
+	adapt := NewApplyAdaptiveCycleHandler(fakeTx{}, repo, &adaptingAgent{rm: rm},
+		guardrail.NewEngine(service.NewOverloadValidator(), nil, nil), zoneProfiles{loc: time.UTC}, &captureOutbox{}, clock, nil,
+		barbellCatalog(), unavailable)
+
+	if _, err := NewReviewWeeksHandler(fakeTx{}, repo, adapt, clock).Handle(context.Background(), "rm-r"); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	s, _ := rm.FindSession("w2-s0")
+	if m := s.Info().Prescription.MainExercises[0]; m.TargetWeight != 60 || m.TargetReps != 12 {
+		t.Errorf("%dx%d at %.1f kg, want held at 3x12 60 kg", m.TargetSets, m.TargetReps, m.TargetWeight)
+	}
+}

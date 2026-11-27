@@ -54,6 +54,9 @@ func TestProgressLine(t *testing.T) {
 		{"bodyweight capped at 20", line(3, 19, 0, 0), 0, hypertrophy, 0, line(3, 20, 0, 0)},
 		{"hold: +5 s", line(3, 0, 0, 40), 0, hypertrophy, 0, line(3, 0, 0, 45)},
 		{"hold capped at 90 s", line(3, 0, 0, 88), 0, hypertrophy, 0, line(3, 0, 0, 90)},
+		// Reproduces the review finding: the 300 kg hard limit (BR-AC-13) was
+		// not checked, so the guardrail refused the whole adaptation.
+		{"never past the 300 kg limit", line(3, 12, 299, 0), 2.5, hypertrophy, 0, line(3, 12, 299, 0)},
 	}
 	for _, tt := range tests {
 		if got := ProgressLine(&tt.in, tt.step, tt.rng, tt.ceil); got != tt.want {

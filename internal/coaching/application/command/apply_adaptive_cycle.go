@@ -232,8 +232,9 @@ func unloadVolume(ctx context.Context, rm *roadmap.Roadmap, before map[string]in
 
 // progress applies progressive overload (BR-AC-04 case 1) to the rewritten
 // sessions: double progression in the goal's rep range, one real load step at
-// the top of it, never past 30% above the athlete's record. An exercise the
-// catalog cannot describe, or that an injury limits, keeps its numbers.
+// the top of it, never past 30% above the athlete's record, nor past
+// UnrecordedLoadFactor x bodyweight without a record. An exercise the catalog
+// cannot describe, or that an injury limits, keeps its numbers.
 func (h *ApplyAdaptiveCycleHandler) progress(
 	ctx context.Context, rm *roadmap.Roadmap, profile *port.Profile,
 	linesBefore map[string][]roadmap.PrescribedExercise, now time.Time,
@@ -242,6 +243,10 @@ func (h *ApplyAdaptiveCycleHandler) progress(
 	if h.records != nil {
 		records = h.records(ctx, rm.UserID())
 	}
+	// A failed read (nil, unlike an athlete with no record) leaves no ceiling
+	// to check a load step against, and the guardrail's own read may succeed
+	// and refuse the step: hold the loads, progress reps only.
+	loadsHeld := h.records != nil && records == nil
 	injuries := profile.Athlete().Injuries
 	ceiling := service.NewOverloadValidator()
 
@@ -263,8 +268,14 @@ func (h *ApplyAdaptiveCycleHandler) progress(
 				continue // an injury limits it: hold the load
 			}
 			rule := roadmap.LineProgression{LoadStep: roadmap.LoadStep(ex.Equipment)}
-			if record := records[id]; record > 0 {
+			if loadsHeld {
+				rule.LoadStep = 0
+			}
+			switch record := records[id]; {
+			case record > 0:
 				rule.CeilingKg = float32(ceiling.Ceiling(record))
+			case profile.WeightKg > 0: // no record: the bound generation uses
+				rule.CeilingKg = float32(profile.WeightKg * roadmap.UnrecordedLoadFactor)
 			}
 			rules[id] = rule
 		}
