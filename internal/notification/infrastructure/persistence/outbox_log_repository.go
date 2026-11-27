@@ -33,25 +33,30 @@ func (r *OutboxLogRepository) LogProcessed(
 	}
 
 	if eventID != "" {
+		// 1. Atomic Compare-And-Swap: Nếu trạng thái hiện tại là FAILED (đây là retry),
+		// thực hiện cập nhật nguyên tử WHERE event_id = ? AND status = 'FAILED'.
+		// Chỉ duy nhất 1 worker có RowsAffected > 0 để claim quyền retry, loại bỏ hoàn toàn race condition.
+		res := GetDB(ctx, r.db).Model(&OutboxLogModel{}).
+			Where("event_id = ? AND status = ?", eventID, "FAILED").
+			Updates(map[string]interface{}{
+				"status":        status,
+				"processed_at":  time.Now().UTC(),
+				"error_message": errMsg,
+			})
+		if res.Error != nil {
+			return false, fmt.Errorf("atomic update retry status in notification outbox_log: %w", res.Error)
+		}
+		if res.RowsAffected > 0 {
+			return true, nil
+		}
+
+		// 2. Nếu không cập nhật được (RowsAffected == 0), kiểm tra xem bản ghi đã tồn tại chưa
 		var existing OutboxLogModel
 		err := GetDB(ctx, r.db).
 			Where("event_id = ?", eventID).
 			First(&existing).Error
 		if err == nil {
-			// 1. Nếu trạng thái trước là FAILED -> Đây là RETRY! Cho phép tiếp tục xử lý.
-			if existing.Status == "FAILED" {
-				updates := map[string]interface{}{
-					"status":        status,
-					"processed_at":  time.Now().UTC(),
-					"error_message": errMsg,
-				}
-				if updErr := GetDB(ctx, r.db).Model(&existing).Updates(updates).Error; updErr != nil {
-					return false, fmt.Errorf("update retry status in notification outbox_log: %w", updErr)
-				}
-				return true, nil
-			}
-
-			// 2. Nếu đã từng SUCCESS/PROCESSED hoặc đang PROCESSING -> Duplicate, bỏ qua.
+			// Đã tồn tại với trạng thái khác FAILED (e.g. PROCESSING, SUCCESS, PROCESSED) -> Duplicate, bỏ qua an toàn.
 			return false, nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, fmt.Errorf("check duplicate event in notification outbox_log: %w", err)
