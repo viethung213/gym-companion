@@ -329,3 +329,29 @@ func TestAbortSession_KeepsOnlyTheReasonCategory(t *testing.T) {
 		t.Errorf("event %+v, want reason workout_session_aborted:pain", outbox.events[0])
 	}
 }
+
+// A workout that was aborted and then finished counts as completed, and an
+// abort arriving after the completion changes nothing and announces nothing.
+func TestSession_CompletionWinsOverAbort(t *testing.T) {
+	repo := newMemRepo()
+	seedRoadmap(t, repo)
+	clock := &fakeClock{t: time.Now()}
+	outbox := &captureOutbox{}
+	abort := NewAbortSessionHandler(fakeTx{}, repo, outbox, clock)
+	complete := NewCompleteSessionHandler(fakeTx{}, repo, service.NewSCRCalculator(), outbox, clock)
+
+	if err := abort.Handle(context.Background(), AbortSessionCommand{SessionPlanID: "sp-1", Reason: "pain"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := complete.Handle(context.Background(), CompleteSessionCommand{SessionPlanID: "sp-1", TotalActualSets: 3, AverageActualRPE: 7}); err != nil {
+		t.Fatalf("complete after abort: %v", err)
+	}
+	events := len(outbox.events)
+	if err := abort.Handle(context.Background(), AbortSessionCommand{SessionPlanID: "sp-1", Reason: "timeout"}); err != nil {
+		t.Fatalf("abort after complete: %v", err)
+	}
+	sp, _ := repo.byID["rm-1"].FindSession("sp-1")
+	if sp.Status() != roadmap.SessionPlanStatusCompleted || len(outbox.events) != events {
+		t.Errorf("status %s, %d new events; want COMPLETED and none", sp.Status(), len(outbox.events)-events)
+	}
+}

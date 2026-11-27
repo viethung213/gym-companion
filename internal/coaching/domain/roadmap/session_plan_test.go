@@ -218,11 +218,7 @@ func TestSessionPlan_MarkAborted_Idempotent(t *testing.T) {
 		t.Errorf("expected no-op on second MarkAborted, got %v", err)
 	}
 
-	// Cannot complete or skip after aborted
-	if err := sp.MarkCompleted(90, 0, now); !errors.Is(err, ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition on MarkCompleted, got %v", err)
-	}
-
+	// Cannot skip after aborted (completing is allowed: CompletionWinsOverAbort)
 	if err := sp.MarkSkipped(); !errors.Is(err, ErrInvalidTransition) {
 		t.Errorf("expected ErrInvalidTransition on MarkSkipped, got %v", err)
 	}
@@ -407,8 +403,8 @@ func TestSessionPlan_MarkAborted_AfterSkip(t *testing.T) {
 
 	done, _ := NewSessionPlan(&info, now)
 	_ = done.MarkCompleted(100, 0, now)
-	if err := done.MarkAborted(""); !errors.Is(err, ErrInvalidTransition) {
-		t.Errorf("abort after completion: err %v, want ErrInvalidTransition", err)
+	if err := done.MarkAborted(""); err != nil || done.Status() != SessionPlanStatusCompleted {
+		t.Errorf("abort after completion: err %v status %s, want ignored", err, done.Status())
 	}
 }
 
@@ -469,5 +465,30 @@ func TestSessionPlan_AbortReasonCategories(t *testing.T) {
 	}
 	if got := sp.Info().AbortReason; got != "other" {
 		t.Errorf("free text stored as %q, want other", got)
+	}
+}
+
+// Reproduces the review finding: the workout's completion arriving after its
+// abort (the athlete resumed and finished it) was refused, so the session
+// stayed ABORTED and its sets never reached the weekly review. A completion
+// wins; an abort arriving after it is ignored.
+func TestSessionPlan_CompletionWinsOverAbort(t *testing.T) {
+	now := time.Date(2026, 3, 9, 18, 0, 0, 0, time.UTC)
+	sp := newPendingSession(t)
+	if err := sp.MarkAborted("pain: đau gối"); err != nil {
+		t.Fatal(err)
+	}
+	if err := sp.MarkCompleted(90, 0.5, now); err != nil {
+		t.Fatalf("complete after abort: %v", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().AbortReason != "" || sp.StoppedForPain() {
+		t.Errorf("status %s reason %q, want COMPLETED with no abort reason", sp.Status(), sp.Info().AbortReason)
+	}
+
+	if err := sp.MarkAborted("timeout"); err != nil {
+		t.Fatalf("abort after complete: %v, want ignored", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().AbortReason != "" {
+		t.Errorf("abort after complete changed it: %s %q", sp.Status(), sp.Info().AbortReason)
 	}
 }

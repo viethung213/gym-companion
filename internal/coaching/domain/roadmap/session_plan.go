@@ -178,11 +178,16 @@ func (s *SessionPlan) complete(scr float32, deltaRPE *float32, now time.Time) er
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending && s.info.Status != SessionPlanStatusSkipped {
+	// An aborted workout the athlete resumed and finished is completed: its
+	// sets count, and it no longer reads as a stop.
+	switch s.info.Status {
+	case SessionPlanStatusPending, SessionPlanStatusSkipped, SessionPlanStatusAborted:
+	default:
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusCompleted)
 	}
 
 	s.info.Status = SessionPlanStatusCompleted
+	s.info.AbortReason = ""
 
 	completedAt := now
 
@@ -223,7 +228,8 @@ func (s *SessionPlan) MarkSkipped() error {
 // session may be aborted too: the week was closed before the late event came.
 // Idempotent: calling on an already-ABORTED session is a no-op.
 func (s *SessionPlan) MarkAborted(reason string) error {
-	if s.info.Status == SessionPlanStatusAborted {
+	// Already stopped, or completed (the completion wins): nothing changes.
+	if s.info.Status == SessionPlanStatusAborted || s.info.Status == SessionPlanStatusCompleted {
 		return nil
 	}
 

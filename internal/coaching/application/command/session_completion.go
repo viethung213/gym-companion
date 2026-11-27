@@ -227,8 +227,11 @@ func (h *AbortSessionHandler) Handle(ctx context.Context, cmd AbortSessionComman
 			return roadmap.ErrSessionNotFound
 		}
 
-		if session.Status() == roadmap.SessionPlanStatusAborted {
+		switch session.Status() {
+		case roadmap.SessionPlanStatusAborted:
 			return nil // redelivered: already applied and announced
+		case roadmap.SessionPlanStatusCompleted:
+			return nil // the workout was finished after all: the completion wins
 		}
 		if err := session.MarkAborted(cmd.Reason); err != nil {
 			return err
