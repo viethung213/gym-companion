@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
@@ -491,6 +492,14 @@ func (s *WorkoutSession) RecordBodyMetricUpdate(weightKg float32) {
 	})
 }
 
+// reasonCategory is the category of an abort reason ("pain: <note>" is
+// "pain"). The abort event leaves the service, so the athlete's own words,
+// which are health data, stay out of it.
+func reasonCategory(reason string) string {
+	category, _, _ := strings.Cut(reason, ":")
+	return strings.ToLower(strings.TrimSpace(category))
+}
+
 // Abort transitions status to ABORTED.
 func (s *WorkoutSession) Abort(reason string) error {
 	if s.status == StatusCompleted || s.status == StatusAborted || s.status == StatusAnomalous {
@@ -506,7 +515,7 @@ func (s *WorkoutSession) Abort(reason string) error {
 		SessionID:   s.id,
 		UserID:      s.userID,
 		PlanID:      s.planID,
-		Reason:      reason,
+		Reason:      reasonCategory(reason),
 		IsAnomalous: false,
 		AbortedAt:   now,
 	})
@@ -529,7 +538,7 @@ func (s *WorkoutSession) AbortAnomalous(reason string) error {
 		SessionID:   s.id,
 		UserID:      s.userID,
 		PlanID:      s.planID,
-		Reason:      reason,
+		Reason:      reasonCategory(reason),
 		IsAnomalous: true,
 		AbortedAt:   now,
 	})

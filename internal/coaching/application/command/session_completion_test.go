@@ -309,3 +309,23 @@ func TestSessionEvents_RedeliveryAnnouncesOnce(t *testing.T) {
 		}
 	})
 }
+
+// The athlete's note does not travel on: the session keeps the reason's
+// category, and so does the RoadmapAdjusted event.
+func TestAbortSession_KeepsOnlyTheReasonCategory(t *testing.T) {
+	repo := newMemRepo()
+	seedRoadmap(t, repo)
+	outbox := &captureOutbox{}
+	h := NewAbortSessionHandler(fakeTx{}, repo, outbox, &fakeClock{t: time.Now()})
+	if err := h.Handle(context.Background(), AbortSessionCommand{SessionPlanID: "sp-1", Reason: "pain: Đau nhói lưng dưới"}); err != nil {
+		t.Fatal(err)
+	}
+	sp, _ := repo.byID["rm-1"].FindSession("sp-1")
+	if got := sp.Info().AbortReason; got != "pain" {
+		t.Errorf("stored reason %q, want pain", got)
+	}
+	evt, ok := outbox.events[0].(*domainevent.RoadmapAdjusted)
+	if !ok || evt.Reason != "workout_session_aborted:pain" {
+		t.Errorf("event %+v, want reason workout_session_aborted:pain", outbox.events[0])
+	}
+}

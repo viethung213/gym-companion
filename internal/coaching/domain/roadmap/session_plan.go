@@ -48,8 +48,8 @@ type SessionPlanInfo struct {
 	CompletedAt              *time.Time
 	SessionSCR               *float32
 	SessionDeltaRPE          *float32
-	// AbortReason is why an ABORTED session was stopped, as the workout
-	// service reported it ("pain: ...", "out-of-time", "timeout").
+	// AbortReason is the category of why an ABORTED session was stopped
+	// ("pain", "out-of-time", "timeout"). The athlete's note is not kept.
 	AbortReason string
 }
 
@@ -236,7 +236,7 @@ func (s *SessionPlan) MarkAborted(reason string) error {
 	}
 
 	s.info.Status = SessionPlanStatusAborted
-	s.info.AbortReason = truncateRunes(reason, maxAbortReasonLen)
+	s.info.AbortReason = abortCategory(reason)
 
 	return nil
 }
@@ -248,8 +248,7 @@ func (s *SessionPlan) StoppedForPain() bool {
 	if s.info.Status != SessionPlanStatusAborted {
 		return false
 	}
-	r := strings.ToLower(strings.TrimSpace(s.info.AbortReason))
-	return r == "pain" || strings.HasPrefix(r, "pain:")
+	return s.info.AbortReason == "pain"
 }
 
 // RewritePrescription replaces the prescription content in-place while the
@@ -370,6 +369,14 @@ func copyStringSlice(in []string) []string {
 	copy(out, in)
 
 	return out
+}
+
+// abortCategory is the category of an abort reason ("pain: <note>" is "pain"),
+// bounded for storage. Events from before the workout service sent the
+// category only still carry the note, which must not be kept here.
+func abortCategory(reason string) string {
+	category, _, _ := strings.Cut(reason, ":")
+	return truncateRunes(strings.ToLower(strings.TrimSpace(category)), maxAbortReasonLen)
 }
 
 // truncateRunes shortens s to at most maxBytes bytes without splitting a

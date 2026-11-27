@@ -243,7 +243,7 @@ func (h *AbortSessionHandler) Handle(ctx context.Context, cmd AbortSessionComman
 		evt := &domainevent.RoadmapAdjusted{
 			RoadmapID:  rm.ID(),
 			UserID:     rm.UserID(),
-			Reason:     "workout_session_aborted:" + cmd.Reason,
+			Reason:     "workout_session_aborted:" + session.Info().AbortReason,
 			AdjustedAt: h.clock.Now(),
 		}
 

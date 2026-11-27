@@ -681,3 +681,22 @@ func TestWorkoutSession_AverageRPECountsRatedSetsOnly(t *testing.T) {
 		t.Errorf("unrated session AverageRPE = %v, want 0", got)
 	}
 }
+
+// The abort event leaves the service on Kafka, so it carries the reason's
+// category only: the athlete's own words ("pain: <note>") are health data,
+// kept with the injury they report, not broadcast with every stopped workout.
+func TestWorkoutSession_AbortEventCarriesTheReasonCategoryOnly(t *testing.T) {
+	for reason, want := range map[string]string{
+		"pain: Đau nhói lưng dưới": "pain", "out-of-time": "out-of-time", " Pain ": "pain", "": "",
+	} {
+		session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
+		session.PopEvents()
+		if err := session.Abort(reason); err != nil {
+			t.Fatal(err)
+		}
+		ev, ok := session.PopEvents()[0].(*event.WorkoutSessionAborted)
+		if !ok || ev.Reason != want {
+			t.Errorf("Abort(%q) event reason %q, want %q", reason, ev.Reason, want)
+		}
+	}
+}
