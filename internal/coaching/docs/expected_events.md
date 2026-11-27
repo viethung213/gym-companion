@@ -177,5 +177,5 @@ publishes them to Kafka.
 | Type | Trigger | Payload fields |
 |---|---|---|
 | `contracts.core.coaching.v1.event.RoadmapInitiated` | UC-02.1 success | `roadmap_id`, `user_id`, `initiated_at` |
-| `contracts.core.coaching.v1.event.RoadmapAdjusted` | UC-02.3, Trigger A, Signal B*, injury handling, WorkoutSessionAborted | `roadmap_id`, `user_id`, `reason`, `adjusted_at` |
+| `contracts.core.coaching.v1.event.RoadmapAdjusted` | UC-02.3, Trigger A, Signal B*, injury handling, WorkoutSessionAborted | `roadmap_id`, `user_id`, `reason`, `adjusted_at` (an abort's `reason` is `workout_session_aborted:<category>`, the category one of `pain`, `out-of-time`, `uncomfortable`, `user_cancelled`, `timeout`, `new_solo_match_started` or `other`; never the athlete's note) |
 | `contracts.core.coaching.v1.event.SessionPlanExecuted` | WorkoutSessionCompleted → CompleteSession | `session_plan_id`, `roadmap_id`, `user_id`, `executed_at`, `session_scr`, `session_delta_rpe` |

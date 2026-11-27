@@ -119,29 +119,23 @@ func (c *ProfileCompletedConsumer) HandleMessage(ctx context.Context, rawValue [
 		return errors.New("missing event id")
 	}
 
-	// D9: idempotency check via coaching.outbox_log.
-	fresh, err := c.outbox.LogProcessed(ctx, env.ID, env.Type, "", rawValue)
-	if err != nil {
-		return fmt.Errorf("log processed: %w", err)
-	}
+	return handleOnce(ctx, c.outbox, &env, rawValue, func() error { return c.dispatch(ctx, &env) })
+}
 
-	if !fresh {
-		slog.DebugContext(ctx, "Duplicate profile event skipped", slog.String("event_id", env.ID))
-		return nil
-	}
-
+// dispatch routes one decoded profile event to its handler.
+func (c *ProfileCompletedConsumer) dispatch(ctx context.Context, env *cloudEventEnvelope) error {
 	switch env.Type {
 	case profileCompletedEventType, profileCompletedEventTypeShort:
 		return c.handleProfileCompleted(ctx, env.Data)
 
 	case profileUpdatedEventType, profileUpdatedEventTypeShort:
-		return c.handleProfileUpdated(ctx, env.Data)
+		return c.regenerateOn(ctx, env, "profile_updated")
 
 	case injuryReportedEventType, injuryReportedEventTypeShort:
-		return c.handleInjuryReported(ctx, env.Data)
+		return c.regenerateOn(ctx, env, "injury_reported")
 
 	case injuryRecoveredEventType, injuryRecoveredEventTypeShort:
-		return c.handleInjuryRecovered(ctx, env.Data)
+		return c.regenerateOn(ctx, env, "injury_recovered")
 
 	default:
 		slog.DebugContext(ctx, "ProfileCompletedConsumer ignoring event type", slog.String("event_type", env.Type))
@@ -180,77 +174,32 @@ func (c *ProfileCompletedConsumer) handleProfileCompleted(ctx context.Context, d
 	return nil
 }
 
-func (c *ProfileCompletedConsumer) handleProfileUpdated(ctx context.Context, data []byte) error {
+// regenerateOn rewrites the athlete's pending sessions after a profile change.
+// The event time travels with the command: a change made before the active
+// roadmap was planned (an injury entered at onboarding) is already in it.
+func (c *ProfileCompletedConsumer) regenerateOn(ctx context.Context, env *cloudEventEnvelope, reason string) error {
 	if c.regenerate == nil {
 		return nil
 	}
 
 	var p ProfileEventPayload
-	if err := json.Unmarshal(data, &p); err != nil {
-		return fmt.Errorf("decode ProfileUpdated payload: %w", err)
+	if err := json.Unmarshal(env.Data, &p); err != nil {
+		return fmt.Errorf("decode %s payload: %w", env.Type, err)
 	}
 
 	if p.UserID == "" {
 		return nil
 	}
 
-	slog.InfoContext(ctx, "ProfileUpdated received, regenerating pending schedule", slog.String("user_id", p.UserID))
+	slog.InfoContext(ctx, "Profile change received, regenerating pending schedule",
+		slog.String("user_id", p.UserID), slog.String("reason", reason))
 	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
-		UserID: p.UserID,
-		Reason: "profile_updated",
+		UserID:    p.UserID,
+		Reason:    reason,
+		ChangedAt: env.occurredAt(),
 	})
 	if err != nil && !errors.Is(err, roadmap.ErrRoadmapNotFound) {
-		return fmt.Errorf("regenerate schedule on profile updated for user %s: %w", p.UserID, err)
-	}
-	return nil
-}
-
-func (c *ProfileCompletedConsumer) handleInjuryReported(ctx context.Context, data []byte) error {
-	if c.regenerate == nil {
-		return nil
-	}
-
-	var p ProfileEventPayload
-	if err := json.Unmarshal(data, &p); err != nil {
-		return fmt.Errorf("decode InjuryReported payload: %w", err)
-	}
-
-	if p.UserID == "" {
-		return nil
-	}
-
-	slog.InfoContext(ctx, "InjuryReported received, regenerating schedule", slog.String("user_id", p.UserID))
-	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
-		UserID: p.UserID,
-		Reason: "injury_reported",
-	})
-	if err != nil && !errors.Is(err, roadmap.ErrRoadmapNotFound) {
-		return fmt.Errorf("regenerate schedule on injury reported for user %s: %w", p.UserID, err)
-	}
-	return nil
-}
-
-func (c *ProfileCompletedConsumer) handleInjuryRecovered(ctx context.Context, data []byte) error {
-	if c.regenerate == nil {
-		return nil
-	}
-
-	var p ProfileEventPayload
-	if err := json.Unmarshal(data, &p); err != nil {
-		return fmt.Errorf("decode InjuryRecovered payload: %w", err)
-	}
-
-	if p.UserID == "" {
-		return nil
-	}
-
-	slog.InfoContext(ctx, "InjuryRecovered received, regenerating schedule", slog.String("user_id", p.UserID))
-	_, err := c.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
-		UserID: p.UserID,
-		Reason: "injury_recovered",
-	})
-	if err != nil && !errors.Is(err, roadmap.ErrRoadmapNotFound) {
-		return fmt.Errorf("regenerate schedule on injury recovered for user %s: %w", p.UserID, err)
+		return fmt.Errorf("regenerate schedule on %s for user %s: %w", reason, p.UserID, err)
 	}
 	return nil
 }

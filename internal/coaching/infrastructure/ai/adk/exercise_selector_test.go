@@ -283,3 +283,18 @@ func TestSearchExercises_HonoursEquipmentLevelAndInjuries(t *testing.T) {
 		t.Errorf("got %v, want %v (no machine/cable/other, no expert, no elbow load)", gotIDs, want)
 	}
 }
+
+// An exercise kept despite an injury carries its max RPE in the tuple, beside
+// its name, so the cap is in view when the model picks it. Others stay 6 long.
+func TestBuildExerciseTuple_CarriesTheInjuryCap(t *testing.T) {
+	ex := exerciseOf("squat", taxonomy.MuscleGroupQuadriceps, taxonomy.EquipmentBarbell, taxonomy.CategoryStrength)
+	limited := candidate{exercise: ex, verdict: service.Verdict{MaxRPE: 7}}
+	free := candidate{exercise: ex}
+
+	if got := buildExerciseTuple(&limited, movementTypeCompound); len(got) != 7 || got[6] != "max RPE 7" {
+		t.Errorf("limited tuple = %v, want a 7th element \"max RPE 7\"", got)
+	}
+	if got := buildExerciseTuple(&free, movementTypeCompound); len(got) != 6 {
+		t.Errorf("free tuple = %v, want 6 elements", got)
+	}
+}

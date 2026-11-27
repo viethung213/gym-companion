@@ -113,8 +113,9 @@ func TestMapToDomainRoadmap_SetsAllIdentityFields(t *testing.T) {
 	if info.SlotTime != "06:00-07:30" {
 		t.Errorf("got SlotTime %q, want 06:00-07:30", info.SlotTime)
 	}
-	if info.EstimatedDurationMinutes != 60 {
-		t.Errorf("got EstimatedDurationMinutes %d, want 60", info.EstimatedDurationMinutes)
+	// The length follows the prescription, not the model's own figure (60).
+	if want := info.Prescription.EstimatedMinutes(); info.EstimatedDurationMinutes != want {
+		t.Errorf("got EstimatedDurationMinutes %d, want %d from the prescription", info.EstimatedDurationMinutes, want)
 	}
 }
 
@@ -422,5 +423,22 @@ func TestMapping_MissingValidatedDataIsAnError(t *testing.T) {
 	}
 	if _, err := c.mapToRegeneratedSessions(context.Background(), plan, nil, nil, "user-1", getMapNow()); !errors.Is(err, ErrPlanGenerationFailed) {
 		t.Errorf("regenerate: got %v, want ErrPlanGenerationFailed", err)
+	}
+}
+
+// A rewrite can span several phases: each TRAINING entry carries its own RPE
+// window so the model never borrows the first entry's. Recovery has none.
+func TestWithRPEWindows(t *testing.T) {
+	got := withRPEWindows([]SessionToRevise{
+		{SessionKind: "TRAINING", Phase: "ACCUMULATION"},
+		{SessionKind: "TRAINING", Phase: "OVERLOAD"},
+		{SessionKind: kindRecovery, Phase: "OVERLOAD"},
+		{SessionKind: "TRAINING"},
+	})
+	want := [][2]float32{{6, 7}, {7, 8}, {0, 0}, {0, 0}}
+	for i, w := range want {
+		if got[i].TargetRPEMin != w[0] || got[i].TargetRPEMax != w[1] {
+			t.Errorf("entry %d window %.1f-%.1f, want %.1f-%.1f", i, got[i].TargetRPEMin, got[i].TargetRPEMax, w[0], w[1])
+		}
 	}
 }

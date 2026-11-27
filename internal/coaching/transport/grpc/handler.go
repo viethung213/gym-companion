@@ -4,6 +4,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"unicode/utf8"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -146,6 +147,9 @@ func (s *Server) RegenerateSchedule(ctx context.Context, req *pbmsg.RegenerateSc
 		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
+	if utf8.RuneCountInString(req.GetReason()) > roadmap.MaxRegenerationReasonLen {
+		return nil, status.Errorf(codes.InvalidArgument, "reason exceeds %d characters", roadmap.MaxRegenerationReasonLen)
+	}
 	res, err := s.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
 		UserID: actor.UserID,
 		Reason: req.GetReason(),
@@ -168,8 +172,9 @@ func (s *Server) CreateAdhocSessionPlan(
 	}
 
 	res, err := s.createAdhoc.Handle(ctx, command.CreateAdhocSessionCommand{
-		UserID:      actor.UserID,
-		ExerciseIDs: req.GetExerciseIds(),
+		UserID:       actor.UserID,
+		ExerciseIDs:  req.GetExerciseIds(),
+		Prescription: fromPBPrescription(req.GetPrescription()),
 	})
 	if err != nil {
 		return nil, mapDomainErr(err)
@@ -232,6 +237,10 @@ func mapDomainErr(err error) error {
 	case errors.Is(err, roadmap.ErrActiveRoadmapExists):
 		return status.Error(codes.AlreadyExists, err.Error())
 
+	// Another writer saved the roadmap first: re-read and retry.
+	case errors.Is(err, roadmap.ErrRoadmapChanged):
+		return status.Error(codes.Aborted, err.Error())
+
 	case errors.Is(err, roadmap.ErrInvalidRoadmap),
 
 		errors.Is(err, roadmap.ErrInvalidStatus),
@@ -242,8 +251,15 @@ func mapDomainErr(err error) error {
 
 		errors.Is(err, roadmap.ErrWeeklyCapExceeded),
 
-		errors.Is(err, roadmap.ErrSessionAlreadyFinal):
+		errors.Is(err, roadmap.ErrSessionAlreadyFinal),
+
+		errors.Is(err, roadmap.ErrDateOutsideRoadmap),
+
+		errors.Is(err, command.ErrExerciseExcludedByInjury):
 		return status.Error(codes.FailedPrecondition, err.Error())
+
+	case errors.Is(err, command.ErrInvalidAdhocPrescription):
+		return status.Error(codes.InvalidArgument, err.Error())
 
 	default:
 		return status.Error(codes.Internal, err.Error())
@@ -361,6 +377,35 @@ func toPBSession(s *roadmap.SessionPlan) *pbmsg.SessionPlan {
 	return pb
 }
 
+// fromPBPrescription maps a request prescription; nil when none was sent.
+func fromPBPrescription(p *pbmsg.WorkoutPrescription) *roadmap.WorkoutPrescription {
+	if p == nil {
+		return nil
+	}
+	lines := func(in []*pbmsg.PrescribedExercise) []roadmap.PrescribedExercise {
+		out := make([]roadmap.PrescribedExercise, 0, len(in))
+		for _, e := range in {
+			out = append(out, roadmap.PrescribedExercise{
+				ExerciseID:      e.GetExerciseId(),
+				TargetSets:      e.GetTargetSets(),
+				TargetReps:      e.GetTargetReps(),
+				TargetWeight:    e.GetTargetWeight(),
+				DurationSeconds: e.GetDurationSeconds(),
+				Notes:           e.GetNotes(),
+				RestSetSec:      e.GetRestSetSec(),
+				RestExerciseSec: e.GetRestExerciseSec(),
+				TargetRPE:       e.GetTargetRpe(),
+			})
+		}
+		return out
+	}
+	return &roadmap.WorkoutPrescription{
+		WarmUps:       lines(p.GetWarmUps()),
+		MainExercises: lines(p.GetMainExercises()),
+		CoolDowns:     lines(p.GetCoolDowns()),
+	}
+}
+
 func toPBPrescription(p roadmap.WorkoutPrescription) *pbmsg.WorkoutPrescription {
 	out := &pbmsg.WorkoutPrescription{
 		WarmUps:       make([]*pbmsg.PrescribedExercise, 0, len(p.WarmUps)),
@@ -414,6 +459,9 @@ func domainStatusToPB(s roadmap.Status) pbmsg.RoadmapStatus {
 	case roadmap.StatusCompleted:
 		return pbmsg.RoadmapStatus_ROADMAP_STATUS_COMPLETED
 
+	case roadmap.StatusPlanned:
+		return pbmsg.RoadmapStatus_ROADMAP_STATUS_PLANNED
+
 	default:
 		return pbmsg.RoadmapStatus_ROADMAP_STATUS_UNSPECIFIED
 	}
@@ -464,6 +512,9 @@ func pbStatusToDomain(s pbmsg.RoadmapStatus) roadmap.Status {
 
 	case pbmsg.RoadmapStatus_ROADMAP_STATUS_COMPLETED:
 		return roadmap.StatusCompleted
+
+	case pbmsg.RoadmapStatus_ROADMAP_STATUS_PLANNED:
+		return roadmap.StatusPlanned
 
 	default:
 		return "" // no filter

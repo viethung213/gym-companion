@@ -1,6 +1,7 @@
 package guardrail
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestCharacterization_F2_GuardrailUsesUserInjuries(t *testing.T) {
 	guard := NewEngine(service.NewOverloadValidator(), benchCatalog(), nil)
 
 	athlete := profile.Athlete()
-	got := guard.Check(r, athlete.Injuries, time.Time{})
+	got := guard.Check(context.Background(), r, athlete.Injuries, time.Time{})
 
 	assertViolation(t, got, "BR-AC-09")
 }

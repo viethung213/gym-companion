@@ -2,6 +2,7 @@ package roadmap
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,6 +40,34 @@ func TestNewSessionPlan_DefaultsToPending(t *testing.T) {
 
 	if sp.Info().CompletedAt != nil {
 		t.Errorf("expected CompletedAt nil, got %v", sp.Info().CompletedAt)
+	}
+}
+
+// Seen live: an ad-hoc session was saved as 0 minutes because nothing gave it
+// a length. A session without one takes its prescription's.
+func TestNewSessionPlan_LengthFollowsThePrescription(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	info := newTestSessionInfo()
+	info.Prescription = WorkoutPrescription{MainExercises: []PrescribedExercise{
+		{TargetSets: 3, TargetReps: 10, RestSetSec: 90, RestExerciseSec: 120},
+		{TargetSets: 3, TargetReps: 10, RestSetSec: 90, RestExerciseSec: 120},
+	}}
+
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sp.Info().EstimatedDurationMinutes, info.Prescription.EstimatedMinutes(); got != want || got <= 0 {
+		t.Errorf("length %d, want %d from the prescription", got, want)
+	}
+
+	info.EstimatedDurationMinutes = 45
+	sp, err = NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Info().EstimatedDurationMinutes; got != 45 {
+		t.Errorf("length %d, want the given 45 kept", got)
 	}
 }
 
@@ -159,10 +188,13 @@ func TestSessionPlan_MarkSkipped_Idempotent(t *testing.T) {
 		t.Errorf("expected no-op on second MarkSkipped, got %v", err)
 	}
 
-	// Cannot complete after skipped
+	// A workout reported after its week closed still completes the session.
 
-	if err := sp.MarkCompleted(90, 0, now); !errors.Is(err, ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	if err := sp.MarkCompleted(90, 0, now); err != nil {
+		t.Fatalf("late completion of a skipped session: %v", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().SessionSCR == nil {
+		t.Errorf("status %s, SCR %v: want COMPLETED with metrics", sp.Status(), sp.Info().SessionSCR)
 	}
 }
 
@@ -173,7 +205,7 @@ func TestSessionPlan_MarkAborted_Idempotent(t *testing.T) {
 
 	sp, _ := NewSessionPlan(&info, now)
 
-	if err := sp.MarkAborted(); err != nil {
+	if err := sp.MarkAborted(""); err != nil {
 		t.Fatalf("MarkAborted: %v", err)
 	}
 
@@ -182,15 +214,11 @@ func TestSessionPlan_MarkAborted_Idempotent(t *testing.T) {
 	}
 
 	// Idempotent
-	if err := sp.MarkAborted(); err != nil {
+	if err := sp.MarkAborted(""); err != nil {
 		t.Errorf("expected no-op on second MarkAborted, got %v", err)
 	}
 
-	// Cannot complete or skip after aborted
-	if err := sp.MarkCompleted(90, 0, now); !errors.Is(err, ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition on MarkCompleted, got %v", err)
-	}
-
+	// Cannot skip after aborted (completing is allowed: CompletionWinsOverAbort)
 	if err := sp.MarkSkipped(); !errors.Is(err, ErrInvalidTransition) {
 		t.Errorf("expected ErrInvalidTransition on MarkSkipped, got %v", err)
 	}
@@ -333,5 +361,134 @@ func TestNewSessionPlan_SoloMatchSource(t *testing.T) {
 
 	if got := rehydrated.Info().Source; got != SessionPlanSourceSoloMatch {
 		t.Errorf("got rehydrated source %s, want %s", got, SessionPlanSourceSoloMatch)
+	}
+}
+
+// A rewritten session takes the length of what it now prescribes: a session
+// the adaptive cycle shortens must show its new length, and a length stored
+// out of bounds by an older plan is corrected rather than kept.
+func TestSessionPlan_RewritePrescription_UpdatesLength(t *testing.T) {
+	now := time.Now()
+	info := newTestSessionInfo()
+	info.EstimatedDurationMinutes = 240 // out of bounds, stored by an older plan
+	sp, err := NewSessionPlan(&info, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	short := WorkoutPrescription{MainExercises: []PrescribedExercise{
+		{ExerciseID: "ex-1", TargetSets: 2, TargetReps: 8, RestSetSec: 90, RestExerciseSec: 90},
+		{ExerciseID: "ex-2", TargetSets: 2, TargetReps: 8, RestSetSec: 90, RestExerciseSec: 90},
+	}}
+	if err := sp.RewritePrescription(short, []string{"chest"}, "express", now); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sp.Info().EstimatedDurationMinutes, short.EstimatedMinutes(); got != want {
+		t.Errorf("EstimatedDurationMinutes = %d, want %d from the new prescription", got, want)
+	}
+}
+
+// An abort reported after the week was closed still lands; a completed
+// session is never turned into an aborted one.
+func TestSessionPlan_MarkAborted_AfterSkip(t *testing.T) {
+	now := time.Now()
+	info := newTestSessionInfo()
+	sp, _ := NewSessionPlan(&info, now)
+	if err := sp.MarkSkipped(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sp.MarkAborted(""); err != nil || sp.Status() != SessionPlanStatusAborted {
+		t.Fatalf("abort after skip: err %v, status %s", err, sp.Status())
+	}
+
+	done, _ := NewSessionPlan(&info, now)
+	_ = done.MarkCompleted(100, 0, now)
+	if err := done.MarkAborted(""); err != nil || done.Status() != SessionPlanStatusCompleted {
+		t.Errorf("abort after completion: err %v status %s, want ignored", err, done.Status())
+	}
+}
+
+func newPendingSession(t *testing.T) *SessionPlan {
+	t.Helper()
+	info := newTestSessionInfo()
+	sp, err := NewSessionPlan(&info, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sp
+}
+
+func TestSessionPlan_StoppedForPain(t *testing.T) {
+	for reason, want := range map[string]bool{"pain": true, "Pain: knee": true, "painful-music": false, "out-of-time": false, "": false} {
+		sp := newPendingSession(t)
+		if err := sp.MarkAborted(reason); err != nil {
+			t.Fatal(err)
+		}
+		if got := sp.StoppedForPain(); got != want {
+			t.Errorf("%q: StoppedForPain = %v, want %v", reason, got, want)
+		}
+	}
+	if newPendingSession(t).StoppedForPain() {
+		t.Error("a pending session reported a pain stop")
+	}
+}
+
+// A long Vietnamese note is not kept: the session stores the category.
+func TestSessionPlan_AbortReasonKeepsTheCategoryOnly(t *testing.T) {
+	sp := newPendingSession(t)
+	if err := sp.MarkAborted("pain: " + strings.Repeat("đau lưng dưới ", 60)); err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Info().AbortReason; got != "pain" || !sp.StoppedForPain() {
+		t.Errorf("reason %q, want pain and a pain stop", got)
+	}
+}
+
+// Reproduces the review finding: a session aborted before the category-only
+// change still holds "pain: <note>" and stopped counting as a pain stop; free
+// text without a colon was kept whole. Stored or new, the reason reads as its
+// category, and an unknown one as "other".
+func TestSessionPlan_AbortReasonCategories(t *testing.T) {
+	info := newTestSessionInfo()
+	info.Status, info.AbortReason = SessionPlanStatusAborted, "pain: đau gối"
+	legacy, err := RehydrateSessionPlan(&info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !legacy.StoppedForPain() {
+		t.Error(`a stored "pain: <note>" is not a pain stop`)
+	}
+
+	sp := newPendingSession(t)
+	if err := sp.MarkAborted("Đau lưng dưới khi deadlift"); err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Info().AbortReason; got != "other" {
+		t.Errorf("free text stored as %q, want other", got)
+	}
+}
+
+// Reproduces the review finding: the workout's completion arriving after its
+// abort (the athlete resumed and finished it) was refused, so the session
+// stayed ABORTED and its sets never reached the weekly review. A completion
+// wins; an abort arriving after it is ignored.
+func TestSessionPlan_CompletionWinsOverAbort(t *testing.T) {
+	now := time.Date(2026, 3, 9, 18, 0, 0, 0, time.UTC)
+	sp := newPendingSession(t)
+	if err := sp.MarkAborted("pain: đau gối"); err != nil {
+		t.Fatal(err)
+	}
+	if err := sp.MarkCompleted(90, 0.5, now); err != nil {
+		t.Fatalf("complete after abort: %v", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().AbortReason != "" || sp.StoppedForPain() {
+		t.Errorf("status %s reason %q, want COMPLETED with no abort reason", sp.Status(), sp.Info().AbortReason)
+	}
+
+	if err := sp.MarkAborted("timeout"); err != nil {
+		t.Fatalf("abort after complete: %v, want ignored", err)
+	}
+	if sp.Status() != SessionPlanStatusCompleted || sp.Info().AbortReason != "" {
+		t.Errorf("abort after complete changed it: %s %q", sp.Status(), sp.Info().AbortReason)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
 // userSlots mirrors the reported profile:
@@ -188,8 +190,38 @@ func TestPlanValidator_Schedule_FullCoveragePasses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("validate returned error: %v", err)
 	}
-	if len(got.Issues) != 0 {
-		t.Errorf("got issues %v, want none", got.Issues)
+	if n := issuesContaining(got.Issues, "week 1"); n != 0 {
+		t.Errorf("got issues %v, want none for week 1", got.Issues)
+	}
+}
+
+// Before weeks were numbered by the backend, a plan holding only week 1 passed
+// validation and failed later as a roadmap with too few weeks, unretried.
+func TestPlanValidator_Schedule_MissingWeeksAreRetryable(t *testing.T) {
+	plan := planOf(fullWeekOne()...)
+
+	strict, err := scheduledValidator().validate(context.Background(), plan, false)
+	if err != nil {
+		t.Fatalf("validate returned error: %v", err)
+	}
+	if n := issuesContaining(strict.Issues, "is missing"); n != 3 {
+		t.Errorf("got issues %v, want weeks 2-4 reported missing", strict.Issues)
+	}
+
+	salvaged, err := scheduledValidator().validate(context.Background(), plan, true)
+	if err != nil {
+		t.Fatalf("validate returned error: %v", err)
+	}
+	if len(salvaged.Plan.Weeks) != 4 {
+		t.Fatalf("salvage kept %d weeks, want 4", len(salvaged.Plan.Weeks))
+	}
+	for i, wp := range salvaged.Plan.Weeks {
+		if wp.WeekNumber != i+1 || wp.Phase != string(roadmap.PhaseForWeek(i+1)) {
+			t.Errorf("week %d = number %d phase %s", i+1, wp.WeekNumber, wp.Phase)
+		}
+	}
+	if !salvaged.Degraded {
+		t.Error("got Degraded=false, want true after adding missing weeks")
 	}
 }
 
@@ -253,7 +285,7 @@ func TestPlanValidator_Schedule_PastSessionRejectedThenDropped(t *testing.T) {
 	if !salvaged.Degraded {
 		t.Error("got Degraded=false, want true after dropping a session")
 	}
-	if n := issuesContaining(salvaged.Issues, "expects"); n != 0 {
+	if n := issuesContaining(salvaged.Issues, "week 1: has"); n != 0 {
 		t.Errorf("got shortfall %v, want none: the remaining sessions cover week 1", salvaged.Issues)
 	}
 }

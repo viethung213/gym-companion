@@ -27,7 +27,7 @@ func (m *mockRoadmapRepo) FindByID(ctx context.Context, id string) (*roadmap.Roa
 func (m *mockRoadmapRepo) FindActiveByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error) {
 	return nil, nil
 }
-func (m *mockRoadmapRepo) ListByUser(ctx context.Context, userID string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
+func (m *mockRoadmapRepo) ListByUser(ctx context.Context, userID string, statuses []roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 func (m *mockRoadmapRepo) FindSessionByID(ctx context.Context, sessionPlanID string) (*roadmap.Roadmap, error) {

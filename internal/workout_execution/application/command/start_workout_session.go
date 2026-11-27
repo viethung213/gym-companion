@@ -78,6 +78,12 @@ func (h *StartWorkoutSessionHandler) Handle(
 			return fmt.Errorf("failed to query active sessions: %w", err)
 		}
 		if activeSession != nil {
+			// Re-opening the workout already running (a reload, a second tab)
+			// resumes it; only a different plan is a conflict.
+			if activeSession.PlanID() == cmd.PlanID {
+				session = activeSession
+				return nil
+			}
 			return derror.ErrActiveSessionAlreadyExists
 		}
 

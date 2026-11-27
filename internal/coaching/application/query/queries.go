@@ -76,7 +76,17 @@ func (h *Handlers) ListRoadmaps(ctx context.Context, q ListRoadmapsQuery) ([]*ro
 		return nil, errors.New("user_id required")
 	}
 
-	return h.repo.ListByUser(ctx, q.UserID, q.Status, q.Limit, q.Offset)
+	return h.repo.ListByUser(ctx, q.UserID, listedStatuses(q.Status), q.Limit, q.Offset)
+}
+
+// listedStatuses is what a roadmap list shows: the requested status, or by
+// default the athlete's history (ACTIVE and COMPLETED). The next block
+// planned ahead is not history; it is listed only when asked for by status.
+func listedStatuses(s roadmap.Status) []roadmap.Status {
+	if s != "" {
+		return []roadmap.Status{s}
+	}
+	return []roadmap.Status{roadmap.StatusActive, roadmap.StatusCompleted}
 }
 
 // GetSessionPlan returns the session by id (with ownership check via parent roadmap).

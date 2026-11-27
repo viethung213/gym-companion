@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
-	"github.com/viethung213/gym-companion/internal/coaching/domain/service"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	"github.com/viethung213/gym-companion/internal/coaching/infrastructure/adapters"
 	workoutexecutionmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/workout_execution/v1/message"
@@ -349,57 +348,6 @@ func TestConnectWorkoutSessionReader_GetRecentSessions(t *testing.T) {
 	assert.Error(t, errEmpty)
 }
 
-func TestConnectWorkoutSessionReader_GetSetLogs(t *testing.T) {
-	now := time.Now()
-
-	mockHandler := &mockWorkoutHandler{
-		prFn: func(_ context.Context, req *workoutexecutionmsg.AdminGetPersonalRecordsRequest) (*workoutexecutionmsg.AdminGetPersonalRecordsResponse, error) {
-			assert.Equal(t, "user-456", req.GetUserId())
-			if len(req.GetExerciseIds()) > 0 && req.GetExerciseIds()[0] == "bench-press" {
-				return &workoutexecutionmsg.AdminGetPersonalRecordsResponse{
-					Records: []*workoutexecutionmsg.PersonalRecord{
-						{
-							ExerciseId: "bench-press",
-							Weight:     100.0,
-							Reps:       5,
-							AchievedAt: timestamppb.New(now),
-						},
-					},
-				}, nil
-			}
-			return &workoutexecutionmsg.AdminGetPersonalRecordsResponse{
-				Records: []*workoutexecutionmsg.PersonalRecord{},
-			}, nil
-		},
-	}
-
-	mux := http.NewServeMux()
-	connServer := connect.NewServer()
-	workoutexecutionv1serviceconnect.RegisterAdminWorkoutExecutionServiceHandler(connServer, mockHandler)
-	connecthttp.Mount(mux, connServer)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	reader := adapters.NewConnectWorkoutSessionReader(server.URL, "test-secret", server.Client())
-
-	// Found PR
-	logs, err := reader.GetSetLogs(context.Background(), "user-456", "bench-press", 10)
-	require.NoError(t, err)
-	require.Len(t, logs, 1)
-	assert.Equal(t, 100.0, logs[0].Weight)
-	assert.Equal(t, 5, logs[0].Reps)
-
-	// No PR found -> returns empty slice, not error
-	emptyLogs, errEmpty := reader.GetSetLogs(context.Background(), "user-456", "squat", 10)
-	require.NoError(t, errEmpty)
-	assert.Empty(t, emptyLogs)
-
-	// Empty params
-	emptyParamLogs, errParam := reader.GetSetLogs(context.Background(), "", "", 10)
-	require.NoError(t, errParam)
-	assert.Empty(t, emptyParamLogs)
-}
-
 func TestConnectReaders_ConstructorsAndErrors(t *testing.T) {
 	ctx := context.Background()
 
@@ -423,9 +371,6 @@ func TestConnectReaders_ConstructorsAndErrors(t *testing.T) {
 
 	_, errW := wr.GetRecentSessions(ctx, "user-err", time.Time{})
 	assert.Error(t, errW)
-
-	_, errW2 := wr.GetSetLogs(ctx, "user-err", "bench", 5)
-	assert.Error(t, errW2)
 }
 
 func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
@@ -453,13 +398,15 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 	pReader := adapters.NewConnectUserProfileReader(pServer.URL, "secret", pServer.Client())
 	p, err := pReader.GetProfile(ctx, "u-defaults")
 	require.NoError(t, err)
-	assert.Equal(t, 75.0, p.WeightKg)
-	assert.Equal(t, 170.0, p.HeightCm)
-	assert.Greater(t, p.Age, 20)
-	assert.Equal(t, "hypertrophy", p.PrimaryGoal)
-	assert.Equal(t, service.DefaultGymEquipment(), p.AvailableEquipment)
-	assert.Empty(t, p.PreferredMuscleGroups, "no preference means no emphasis")
-	assert.NotEmpty(t, p.AvailableSlots)
+	// The adapter reports only what the profile holds: empty stays empty, and
+	// port.WithProfileDefaults decides what coaching assumes (tested there).
+	assert.Zero(t, p.WeightKg)
+	assert.Zero(t, p.HeightCm)
+	assert.Zero(t, p.Age, "age is reported as the profile gives it")
+	assert.Empty(t, p.PrimaryGoal)
+	assert.Empty(t, p.AvailableEquipment)
+	assert.Empty(t, p.PreferredMuscleGroups)
+	assert.Empty(t, p.AvailableSlots)
 
 	// 3. WorkoutSessionReader CodeNotFound returns empty slices
 	workoutHandler := &mockWorkoutHandler{
@@ -481,8 +428,4 @@ func TestConnectReaders_EdgeCasesAndFallbacks(t *testing.T) {
 	sessions, err := wReader.GetRecentSessions(ctx, "user-404", time.Time{})
 	require.NoError(t, err)
 	assert.Empty(t, sessions)
-
-	logs, err := wReader.GetSetLogs(ctx, "user-404", "bench", 5)
-	require.NoError(t, err)
-	assert.Empty(t, logs)
 }

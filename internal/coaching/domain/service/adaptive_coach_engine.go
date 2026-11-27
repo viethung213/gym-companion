@@ -8,7 +8,9 @@ type AdaptationKind int
 const (
 	// AdaptationNoOp indicates no action is needed.
 	AdaptationNoOp AdaptationKind = iota
-	// AdaptationIncreaseLoad applies +2.5..5% weight next week (BR-AC-04 case 1).
+	// AdaptationIncreaseLoad progresses the remaining sessions (BR-AC-04 case
+	// 1). The backend sets the numbers by double progression
+	// (roadmap.ProgressUpcoming), so the decision carries no percentage.
 	AdaptationIncreaseLoad
 	// AdaptationTriggerDeload converts next week to Deload phase (BR-AC-04 case 2).
 	AdaptationTriggerDeload
@@ -35,7 +37,7 @@ type AdaptationDecision struct {
 // AdaptationParams carries per-kind numeric knobs. Only the fields relevant to
 // Kind are meaningful; the rest are zero.
 type AdaptationParams struct {
-	WeightPctChange float64      // e.g. +0.025 → +5%
+	WeightPctChange float64      // e.g. -0.10 for Deload
 	VolumePctChange float64      // e.g. -0.30 for Deload
 	SessionsToDrop  int          // for Express/reduce recommendation
 	StaleWeekday    time.Weekday // for B2 mismatch
@@ -49,8 +51,12 @@ type WeeklyMetrics struct {
 	SCR             float64 // Session Completion Rate (0..100)
 	AvgDeltaRPE     float64 // ΔRPE averaged across sessions
 	MaxActualRPE    float64 // Highest RPE observed
-	HighRPESessions int     // sessions with RPE ≥ 9.0
+	HighRPESessions int     // sessions felt ≥ 1 RPE above their highest target (or at 10)
 	TotalSessions   int
+	// EffortUnreported is set when no completed session reported an RPE: the
+	// ΔRPE figures are then empty, not "on target", and the rules that read
+	// them stay silent rather than act on a missing signal.
+	EffortUnreported bool
 }
 
 // AdaptiveCoachEngine is a stateless domain service. All inputs are passed
@@ -78,12 +84,17 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 			}
 		}
 	}
+	// Cases 1 and 2 read the athlete's reported effort; without it there is
+	// nothing to judge fatigue or progress by, so the plan is held.
+	if last.EffortUnreported {
+		return AdaptationDecision{Kind: AdaptationNoOp, Reason: "no effort (RPE) reported"}
+	}
 	// Case 2: Excessive fatigue → Deload.
-	// Trigger if 3+ sessions with RPE ≥ 9.0 OR avgΔRPE ≥ +2.0.
+	// Trigger if 3+ sessions felt ≥ 1 RPE above plan OR avgΔRPE ≥ +2.0.
 	if last.HighRPESessions >= 3 || last.AvgDeltaRPE >= 2.0 {
 		return AdaptationDecision{
 			Kind:   AdaptationTriggerDeload,
-			Reason: "excessive fatigue (RPE≥9 x3 or ΔRPE≥+2)",
+			Reason: "excessive fatigue (3 sessions ≥1 RPE above plan or ΔRPE≥+2)",
 			Params: AdaptationParams{
 				VolumePctChange: -0.30,
 				WeightPctChange: -0.10,
@@ -93,15 +104,9 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 	// Case 1: Progressive overload.
 	// SCR ≥ 80% AND -1 ≤ ΔRPE ≤ +1.
 	if last.SCR >= 80.0 && last.AvgDeltaRPE >= -1.0 && last.AvgDeltaRPE <= 1.0 {
-		// Pick +2.5% if ΔRPE ≥ 0 (already borderline hard), else +5%.
-		pct := 0.05
-		if last.AvgDeltaRPE >= 0 {
-			pct = 0.025
-		}
 		return AdaptationDecision{
 			Kind:   AdaptationIncreaseLoad,
 			Reason: "SCR ≥ 80% and ΔRPE in [-1, +1]",
-			Params: AdaptationParams{WeightPctChange: pct},
 		}
 	}
 

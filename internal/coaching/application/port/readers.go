@@ -97,15 +97,6 @@ type WorkoutSession struct {
 	AbortReason      string
 }
 
-// SetLog is a minimal set-level record used by 1RM estimation.
-type SetLog struct {
-	ExerciseID  string
-	Weight      float64
-	Reps        int
-	RPE         float64
-	CompletedAt time.Time
-}
-
 // PersonalRecordSummary is a compact PR record for one exercise.
 type PersonalRecordSummary struct {
 	ExerciseID string
@@ -148,6 +139,9 @@ type Exercise struct {
 	Mechanic         taxonomy.Mechanic
 	MeasurementType  string // "REPS" | "DURATION"
 }
+
+// IsTimed reports whether the exercise is held or timed rather than counted.
+func (e *Exercise) IsTimed() bool { return e.MeasurementType == "DURATION" }
 
 // Traits returns the eligibility view of the exercise.
 func (e *Exercise) Traits() service.ExerciseTraits {

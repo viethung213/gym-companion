@@ -1,6 +1,10 @@
 package adk
 
-import "time"
+import (
+	"time"
+
+	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+)
 
 // InjuryStatus is one active injury, or an ad-hoc avoid, as taxonomy codes.
 type InjuryStatus struct {
@@ -30,6 +34,8 @@ type DatedSlot struct {
 	ScheduledDate string `json:"scheduled_date"` // YYYY-MM-DD
 	SlotTime      string `json:"slot_time"`      // as in preferred_workout_times
 	SessionKind   string `json:"session_kind"`   // "TRAINING" | "RECOVERY", assigned by the backend
+	// Phase is the roadmap phase of the week the slot falls in; rewrites only.
+	Phase string `json:"-"`
 }
 
 // UserProfile aggregates user metrics, preferences, equipment and active injuries.
@@ -63,9 +69,9 @@ type CoachInput struct {
 	RecentSessions []string            `json:"recent_sessions"`
 	MusclePRs      map[string][]string `json:"muscle_prs,omitempty"`
 	CurrentRoadmap *RoadmapSnapshot    `json:"current_roadmap,omitempty"`
-	// AvailableExercises groups compact 6-element main exercise tuples by
-	// primary MuscleGroup code:
-	// [exercise_id, name, equipment, level, movement_type, measurement_type].
+	// AvailableExercises groups compact main exercise tuples by primary
+	// MuscleGroup code: [exercise_id, name, equipment, level, movement_type,
+	// measurement_type], plus "max RPE n" for an exercise kept despite an injury.
 	AvailableExercises map[string][][]string `json:"available_exercises,omitempty"`
 	// RecoveryExercises groups STRETCHING exercises, used for both warm-ups and
 	// cool-downs, by primary MuscleGroup code (+ "General").
@@ -113,9 +119,16 @@ type AdHocHintInput struct {
 
 // SessionToRevise carries no id; results are matched back by position.
 type SessionToRevise struct {
-	ScheduledDate            string              `json:"scheduled_date"` // YYYY-MM-DD
-	SlotTime                 string              `json:"slot_time"`
-	SessionKind              string              `json:"session_kind"`
+	ScheduledDate string `json:"scheduled_date"` // YYYY-MM-DD
+	SlotTime      string `json:"slot_time"`
+	SessionKind   string `json:"session_kind"`
+	// Phase is the phase of the roadmap week the session falls in: its TRAINING
+	// main work must sit in that phase's RPE window.
+	Phase string `json:"phase,omitempty"`
+	// TargetRPEMin and TargetRPEMax are that phase's window for a TRAINING
+	// entry, written out so the model never looks it up from another entry.
+	TargetRPEMin             float32             `json:"target_rpe_min,omitempty"`
+	TargetRPEMax             float32             `json:"target_rpe_max,omitempty"`
 	EstimatedDurationMinutes int32               `json:"estimated_duration_minutes"`
 	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
 	CurrentPrescription      WorkoutPrescription `json:"current_prescription"`
@@ -151,6 +164,11 @@ type SessionPlan struct {
 	TargetMuscleGroups       []string            `json:"target_muscle_groups"`
 	Prescription             WorkoutPrescription `json:"prescription"`
 	Reasoning                string              `json:"reasoning,omitempty"`
+
+	// phase is pinned by the backend before validation (the week's phase, or
+	// the revised session's); empty for flows without periodization (ad-hoc).
+	// Unexported, so it never reaches or comes from the model.
+	phase roadmap.Phase
 }
 
 // WeekPlan defines a single week inside the 4-week block.

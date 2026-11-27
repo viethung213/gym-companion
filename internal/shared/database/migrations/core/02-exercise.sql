@@ -150,3 +150,25 @@ CREATE TABLE IF NOT EXISTS exercise.exercise_stats (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Standing hip hinges load the lower back holding the torso, which free-exercise-db
+-- does not list; injury screening needs it (seeder/data/stabilizer_muscles.json).
+UPDATE exercise.exercises
+SET secondary_muscles = array_append(secondary_muscles, 'LOWER_BACK'), updated_at = now()
+WHERE slug IN (
+    'Bent_Over_Barbell_Row',
+    'Bent_Over_Two-Arm_Long_Bar_Row',
+    'Bent_Over_Two-Dumbbell_Row',
+    'Bent_Over_Two-Dumbbell_Row_With_Palms_In',
+    'Reverse_Grip_Bent-Over_Rows',
+    'Smith_Machine_Bent_Over_Row',
+    'T-Bar_Row_with_Handle',
+    'Standing_Bent-Over_One-Arm_Dumbbell_Triceps_Extension',
+    'Standing_Bent-Over_Two-Arm_Dumbbell_Triceps_Extension',
+    'Trap_Bar_Deadlift',
+    'Leverage_Deadlift',
+    'Clean_from_Blocks',
+    'Power_Clean_from_Blocks',
+    'Vertical_Swing',
+    'Double_Kettlebell_Snatch',
+    'One-Arm_Kettlebell_Split_Snatch'
+) AND primary_muscle <> 'LOWER_BACK' AND NOT ('LOWER_BACK' = ANY(secondary_muscles));

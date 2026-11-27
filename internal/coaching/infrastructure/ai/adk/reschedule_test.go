@@ -172,3 +172,58 @@ func TestPinRewriteSlots(t *testing.T) {
 		t.Errorf("session 1 should be pinned but keep its own duration: %+v", s[1])
 	}
 }
+
+// Reproduces what the UI test saw: Monday's 17:30 session was trained early,
+// at 10:00 the same day, and the slots did not change. Its slot is still ahead
+// at 10:00, so it counted as open, the open slots no longer matched the
+// pending sessions, and a regenerate rescheduled every upcoming session under
+// new IDs instead of rewriting them in place.
+func TestRescheduleTargets_NilAfterASessionTrainedBeforeItsSlot(t *testing.T) {
+	rm := rescheduleRoadmap(t, remainingMonThu()...)              // Mon 23rd 17:30 is COMPLETED
+	trainedEarly := time.Date(2026, 11, 23, 3, 0, 0, 0, time.UTC) // Mon 10:00 ICT
+	if got := rescheduleTargets(rm, mondayThursday(), trainedEarly); got != nil {
+		t.Fatalf("got %d targets, want nil: the slots did not change", len(got))
+	}
+}
+
+// Reproduces the review finding: the athlete's own ad-hoc workout counted as
+// a kept training session, so in a full week (6 slots, Mon-Sat 17:30) one slot
+// came back as recovery, the open slots no longer matched the pending
+// sessions, and a regenerate rescheduled every upcoming session under new IDs.
+func TestRescheduleTargets_NilWithAnAdHocWorkoutInAFullWeek(t *testing.T) {
+	var slots []WorkoutSlot
+	var pending []string
+	for d := time.Monday; d <= time.Saturday; d++ {
+		slots = append(slots, WorkoutSlot{DayOfWeek: int(d), StartTime: "17:30", EndTime: "19:00"})
+	}
+	start := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+	for day := 1; day < 28; day++ {
+		if d := start.AddDate(0, 0, day); d.Weekday() != time.Sunday {
+			pending = append(pending, d.Format(time.DateOnly)+" 17:30-19:00")
+		}
+	}
+	rm := rescheduleRoadmap(t, pending...) // Mon 23rd 17:30 is COMPLETED
+	if got := rescheduleTargets(rm, slots, rescheduleNow()); got != nil {
+		t.Fatalf("control: got %d targets before the ad-hoc workout, want nil", len(got))
+	}
+
+	tue := time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+	day, err := rm.DayOn(tue, func() string { return "adhoc-day" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	adhoc, err := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
+		SessionPlanID: "adhoc", DayPlanID: day.ID(), WeekPlanID: day.Info().WeekPlanID, RoadmapID: "rm", UserID: "u",
+		ScheduledDate: tue, Source: roadmap.SessionPlanSourceAdHoc,
+	}, tue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := day.AddSession(adhoc); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := rescheduleTargets(rm, slots, rescheduleNow()); got != nil {
+		t.Fatalf("got %d targets, want nil: the slots did not change", len(got))
+	}
+}

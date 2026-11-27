@@ -17,6 +17,9 @@ type WeekPlanInfo struct {
 	StartDate       time.Time
 	EndDate         time.Time
 	MuscleSplitType string
+	// ReviewedAt is when the week was closed and its results fed to the
+	// adaptive cycle (BR-AC-04); nil while it is open.
+	ReviewedAt *time.Time
 }
 
 // WeekPlan is an entity holding 7 DayPlans for one training week.
@@ -98,12 +101,13 @@ func (w *WeekPlan) AddDay(day *DayPlan) error {
 	return nil
 }
 
-// TrainingSessions counts the TRAINING sessions, the ones BR-AC-01 caps.
+// TrainingSessions counts the scheduled TRAINING sessions, the ones BR-AC-01
+// caps: the athlete's own ad-hoc or solo workouts are not the coach's plan.
 func (w *WeekPlan) TrainingSessions() int {
 	total := 0
 	for _, d := range w.days {
 		for _, s := range d.sessions {
-			if s.Kind() == SessionKindTraining {
+			if s.IsTrainingVolume() {
 				total++
 			}
 		}

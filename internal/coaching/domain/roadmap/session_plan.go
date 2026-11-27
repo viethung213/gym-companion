@@ -47,6 +47,9 @@ type SessionPlanInfo struct {
 	CompletedAt              *time.Time
 	SessionSCR               *float32
 	SessionDeltaRPE          *float32
+	// AbortReason is the category of why an ABORTED session was stopped
+	// ("pain", "out-of-time", "timeout"). The athlete's note is not kept.
+	AbortReason string
 }
 
 // SessionPlan is an entity nested under DayPlan.
@@ -54,7 +57,8 @@ type SessionPlan struct {
 	info SessionPlanInfo
 }
 
-// NewSessionPlan constructs a SessionPlan in PENDING status.
+// NewSessionPlan constructs a SessionPlan in PENDING status. A session built
+// without a length (an ad-hoc pick) takes the one its prescription needs.
 func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) {
 	if info == nil {
 		return nil, fmt.Errorf("%w: nil SessionPlanInfo", ErrInvalidRoadmap)
@@ -63,6 +67,10 @@ func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) 
 	normInfo := normalizeSessionInfo(info)
 
 	normInfo.Status = SessionPlanStatusPending
+
+	if normInfo.EstimatedDurationMinutes <= 0 {
+		normInfo.EstimatedDurationMinutes = normInfo.Prescription.EstimatedMinutes()
+	}
 
 	if normInfo.Source == "" {
 		normInfo.Source = SessionPlanSourceScheduled
@@ -75,6 +83,8 @@ func NewSessionPlan(info *SessionPlanInfo, now time.Time) (*SessionPlan, error) 
 	normInfo.SessionSCR = nil
 
 	normInfo.SessionDeltaRPE = nil
+
+	normInfo.AbortReason = ""
 
 	sp := &SessionPlan{info: *normInfo}
 
@@ -150,17 +160,34 @@ func (s *SessionPlan) ScheduledDate() time.Time { return s.info.ScheduledDate }
 
 // MarkCompleted transitions PENDING → COMPLETED and records execution metrics.
 // scr is Session Completion Rate (0-100); deltaRPE is scalar per D7.
+// A SKIPPED session may still complete: a workout reported after its week was
+// closed did happen, and dropping the report would lose it.
 // Idempotent: calling on an already-COMPLETED session is a no-op.
 func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error {
+	return s.complete(scr, &deltaRPE, now)
+}
+
+// MarkCompletedUnrated completes a session whose effort was not reported: its
+// ΔRPE stays unmeasured instead of reading as "far too easy".
+func (s *SessionPlan) MarkCompletedUnrated(scr float32, now time.Time) error {
+	return s.complete(scr, nil, now)
+}
+
+func (s *SessionPlan) complete(scr float32, deltaRPE *float32, now time.Time) error {
 	if s.info.Status == SessionPlanStatusCompleted {
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending {
+	// An aborted workout the athlete resumed and finished is completed: its
+	// sets count, and it no longer reads as a stop.
+	switch s.info.Status {
+	case SessionPlanStatusPending, SessionPlanStatusSkipped, SessionPlanStatusAborted:
+	default:
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusCompleted)
 	}
 
 	s.info.Status = SessionPlanStatusCompleted
+	s.info.AbortReason = ""
 
 	completedAt := now
 
@@ -168,11 +195,13 @@ func (s *SessionPlan) MarkCompleted(scr, deltaRPE float32, now time.Time) error 
 
 	scrCopy := scr
 
-	deltaCopy := deltaRPE
-
 	s.info.SessionSCR = &scrCopy
 
-	s.info.SessionDeltaRPE = &deltaCopy
+	s.info.SessionDeltaRPE = nil
+	if deltaRPE != nil {
+		deltaCopy := *deltaRPE
+		s.info.SessionDeltaRPE = &deltaCopy
+	}
 
 	return nil
 }
@@ -195,30 +224,45 @@ func (s *SessionPlan) MarkSkipped() error {
 }
 
 // MarkAborted transitions PENDING → ABORTED for mid-workout cancellations
-// or 4-hour inactivity timeouts (WorkoutSessionAborted event).
+// or 4-hour inactivity timeouts (WorkoutSessionAborted event). A SKIPPED
+// session may be aborted too: the week was closed before the late event came.
 // Idempotent: calling on an already-ABORTED session is a no-op.
-func (s *SessionPlan) MarkAborted() error {
-	if s.info.Status == SessionPlanStatusAborted {
+func (s *SessionPlan) MarkAborted(reason string) error {
+	// Already stopped, or completed (the completion wins): nothing changes.
+	if s.info.Status == SessionPlanStatusAborted || s.info.Status == SessionPlanStatusCompleted {
 		return nil
 	}
 
-	if s.info.Status != SessionPlanStatusPending {
+	if s.info.Status != SessionPlanStatusPending && s.info.Status != SessionPlanStatusSkipped {
 		return fmt.Errorf("%w: %s to %s", ErrInvalidTransition, s.info.Status, SessionPlanStatusAborted)
 	}
 
 	s.info.Status = SessionPlanStatusAborted
+	s.info.AbortReason = abortCategory(reason)
 
 	return nil
 }
 
+// StoppedForPain reports whether the athlete stopped this session because
+// something hurt. The app promises such a stop does not count against the
+// athlete's load, so the weekly review leaves it out (BR-AC-04).
+func (s *SessionPlan) StoppedForPain() bool {
+	if s.info.Status != SessionPlanStatusAborted {
+		return false
+	}
+	return abortCategory(s.info.AbortReason) == "pain"
+}
+
 // RewritePrescription replaces the prescription content in-place while the
 // session is still PENDING (D3: Regenerate touches only PENDING sessions).
+// The session's length follows the new prescription.
 func (s *SessionPlan) RewritePrescription(p WorkoutPrescription, muscleGroups []string, reasoning string, now time.Time) error {
 	if s.info.Status != SessionPlanStatusPending {
 		return fmt.Errorf("%w: cannot rewrite session in status %s", ErrSessionAlreadyFinal, s.info.Status)
 	}
 
 	s.info.Prescription = copyPrescription(p)
+	s.info.EstimatedDurationMinutes = p.EstimatedMinutes()
 
 	s.info.TargetMuscleGroups = copyStringSlice(muscleGroups)
 
@@ -327,4 +371,26 @@ func copyStringSlice(in []string) []string {
 	copy(out, in)
 
 	return out
+}
+
+// knownAbortCategory reports whether a session keeps the category; anything
+// else is "other", so no free text from the athlete is stored here.
+func knownAbortCategory(category string) bool {
+	switch category {
+	case "pain", "out-of-time", "uncomfortable", "user_cancelled", "timeout", "new_solo_match_started":
+		return true
+	default:
+		return false
+	}
+}
+
+// abortCategory is the category of an abort reason: "pain: <note>" is "pain",
+// and an unknown reason is "other". It also reads rows stored before only the
+// category was kept.
+func abortCategory(reason string) string {
+	category, _, _ := strings.Cut(reason, ":")
+	if category = strings.ToLower(strings.TrimSpace(category)); knownAbortCategory(category) {
+		return category
+	}
+	return "other"
 }

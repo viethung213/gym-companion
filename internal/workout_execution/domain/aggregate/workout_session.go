@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/workout_execution/domain/derror"
@@ -415,20 +416,30 @@ func (s *WorkoutSession) CalculateSummary() vo.SessionSummary {
 
 	var totalVolume float32
 	var totalRPE float32
+	var ratedSets int
 	var totalFormScore float32
 	var aiSetCount int
 
 	for i := range s.sets {
 		set := &s.sets[i]
 		totalVolume += set.Weight * float32(set.ActualReps)
-		totalRPE += set.RPE
+		// An unrated set (a warm-up, or one the athlete did not score) says
+		// nothing about effort: counting it as RPE 0 reads a session trained
+		// as prescribed as far too easy.
+		if set.RPE > 0 {
+			totalRPE += set.RPE
+			ratedSets++
+		}
 		if set.FormScore != nil {
 			totalFormScore += *set.FormScore
 			aiSetCount++
 		}
 	}
 
-	avgRPE := totalRPE / float32(totalSets)
+	var avgRPE float32 // 0 = no set was rated
+	if ratedSets > 0 {
+		avgRPE = totalRPE / float32(ratedSets)
+	}
 	var avgFormScore *float32
 	if aiSetCount > 0 {
 		score := totalFormScore / float32(aiSetCount)
@@ -481,6 +492,28 @@ func (s *WorkoutSession) RecordBodyMetricUpdate(weightKg float32) {
 	})
 }
 
+// knownAbortCategory reports whether the event may carry the category;
+// anything else goes out as "other". The event leaves the service, so free
+// text (the athlete's own words, health data) never goes out with it.
+func knownAbortCategory(category string) bool {
+	switch category {
+	case "pain", "out-of-time", "uncomfortable", "user_cancelled", "timeout", "new_solo_match_started":
+		return true
+	default:
+		return false
+	}
+}
+
+// reasonCategory is the category of an abort reason: "pain: <note>" is
+// "pain", and an unknown reason is "other".
+func reasonCategory(reason string) string {
+	category, _, _ := strings.Cut(reason, ":")
+	if category = strings.ToLower(strings.TrimSpace(category)); knownAbortCategory(category) {
+		return category
+	}
+	return "other"
+}
+
 // Abort transitions status to ABORTED.
 func (s *WorkoutSession) Abort(reason string) error {
 	if s.status == StatusCompleted || s.status == StatusAborted || s.status == StatusAnomalous {
@@ -496,7 +529,7 @@ func (s *WorkoutSession) Abort(reason string) error {
 		SessionID:   s.id,
 		UserID:      s.userID,
 		PlanID:      s.planID,
-		Reason:      reason,
+		Reason:      reasonCategory(reason),
 		IsAnomalous: false,
 		AbortedAt:   now,
 	})
@@ -519,7 +552,7 @@ func (s *WorkoutSession) AbortAnomalous(reason string) error {
 		SessionID:   s.id,
 		UserID:      s.userID,
 		PlanID:      s.planID,
-		Reason:      reason,
+		Reason:      reasonCategory(reason),
 		IsAnomalous: true,
 		AbortedAt:   now,
 	})

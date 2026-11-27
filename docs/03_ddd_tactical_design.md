@@ -45,7 +45,7 @@
 - **Entities & Value Objects**:
   - `WeekPlan` (Entity): Đại diện cho 1 tuần tập (chứa các `DayPlan` ngày tập và `muscle_split_type`).
   - `DayPlan` (Entity): Quản lý 1 ngày tập trên lịch (`scheduled_date`, `available_slots`). Các ngày không có `DayPlan` được ngầm hiểu là ngày nghỉ.
-  - `SessionPlan` (Entity): Kế hoạch buổi tập gắn theo khung giờ rảnh trong ngày (`slot_time`, `status`: `PENDING`, `COMPLETED`, `SKIPPED`, `ABORTED`, `prescription` JSONB).
+  - `SessionPlan` (Entity): Kế hoạch buổi tập gắn theo khung giờ rảnh trong ngày (`slot_time`, `status`: `PENDING`, `COMPLETED`, `SKIPPED`, `ABORTED`, `prescription` JSONB). Buổi `ABORTED` vẫn được chuyển sang `COMPLETED` nếu sau đó nhận `WorkoutSessionCompleted` (vận động viên tập tiếp và hoàn thành); lệnh hủy đến sau khi đã `COMPLETED` bị bỏ qua.
   - `RoadmapPhase`: Giai đoạn hiện tại (`Accumulation`, `Overload`, `Peak`, `Deload`) và RPE target.
 - **Repository**: `RoadmapRepository`
 - **Domain Events**:

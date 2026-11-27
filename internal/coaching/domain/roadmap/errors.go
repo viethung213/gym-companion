@@ -23,4 +23,11 @@ var (
 	ErrActiveRoadmapExists = errors.New("user already has an active roadmap")
 	// ErrInvalidWeekCount is returned when the roadmap doesn't contain exactly 4 weeks.
 	ErrInvalidWeekCount = errors.New("roadmap must contain exactly 4 week plans")
+	// ErrRoadmapChanged is returned when saving a roadmap another writer changed
+	// since it was read; reload and apply the change again.
+	ErrRoadmapChanged = errors.New("roadmap changed since it was read")
+	// ErrDateOutsideRoadmap is returned when a date falls in none of the roadmap's weeks.
+	ErrDateOutsideRoadmap = errors.New("date is outside the roadmap")
+	// ErrPlannedRoadmapExists is returned when the user already has a next block planned.
+	ErrPlannedRoadmapExists = errors.New("user already has a planned roadmap")
 )

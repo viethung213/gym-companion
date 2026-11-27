@@ -47,13 +47,32 @@ CREATE TABLE IF NOT EXISTS coaching.roadmaps (
     end_date    DATE         NOT NULL,
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_roadmap_status CHECK (status IN ('ACTIVE', 'COMPLETED'))
+    CONSTRAINT chk_roadmap_status CHECK (status IN ('PLANNED', 'ACTIVE', 'COMPLETED'))
 );
+
+-- PLANNED is the next block, drafted during the last week of the active one.
+-- Databases created before it existed get the wider constraint too.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_roadmap_status'
+               AND conrelid = 'coaching.roadmaps'::regclass
+               AND pg_get_constraintdef(oid) NOT LIKE '%PLANNED%') THEN
+        ALTER TABLE coaching.roadmaps DROP CONSTRAINT chk_roadmap_status;
+        ALTER TABLE coaching.roadmaps ADD CONSTRAINT chk_roadmap_status CHECK (status IN ('PLANNED', 'ACTIVE', 'COMPLETED'));
+    END IF;
+END $$;
 
 -- IANA zone the schedule's scheduled_date / slot_time wall clock is in.
 ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
+-- Optimistic lock: a save must start from the stored version (see Roadmap.Version).
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+-- A profile change the schedule could not absorb yet (the model unavailable);
+-- the lifecycle worker retries it until RegenerationGiveUpAfter.
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS regenerate_due_since TIMESTAMP WITH TIME ZONE;
+ALTER TABLE coaching.roadmaps ADD COLUMN IF NOT EXISTS regenerate_reason VARCHAR(64) NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_roadmaps_regenerate_due ON coaching.roadmaps(regenerate_due_since) WHERE regenerate_due_since IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON coaching.roadmaps(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_active ON coaching.roadmaps(user_id) WHERE status = 'ACTIVE';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_roadmaps_user_planned ON coaching.roadmaps(user_id) WHERE status = 'PLANNED';
 
 -- 3. WEEK PLANS (4 per roadmap, one per phase)
 CREATE TABLE IF NOT EXISTS coaching.week_plans (
@@ -73,6 +92,9 @@ CREATE TABLE IF NOT EXISTS coaching.week_plans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_week_plans_roadmap_id ON coaching.week_plans(roadmap_id);
+-- When the week was closed for the adaptive cycle (BR-AC-04); NULL while open.
+ALTER TABLE coaching.week_plans ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITH TIME ZONE;
+CREATE INDEX IF NOT EXISTS idx_week_plans_open_end ON coaching.week_plans(end_date) WHERE reviewed_at IS NULL;
 
 -- 4. DAY PLANS (7 per week)
 CREATE TABLE IF NOT EXISTS coaching.day_plans (
@@ -114,6 +136,20 @@ CREATE TABLE IF NOT EXISTS coaching.session_plans (
 CREATE INDEX IF NOT EXISTS idx_session_plans_day_plan_id  ON coaching.session_plans(day_plan_id);
 CREATE INDEX IF NOT EXISTS idx_session_plans_user_date    ON coaching.session_plans(user_id, scheduled_date);
 CREATE INDEX IF NOT EXISTS ix_session_plans_pending       ON coaching.session_plans(user_id, scheduled_date) WHERE status = 'PENDING';
+
+-- Why an ABORTED session was stopped; a stop for pain is left out of the weekly review.
+ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS abort_reason VARCHAR(500) NOT NULL DEFAULT '';
+-- Only the reason's category is kept: rows saved with the athlete's note
+-- ("pain: <note>") or free text become their category, or "other".
+UPDATE coaching.session_plans
+SET abort_reason = CASE
+    WHEN lower(trim(split_part(abort_reason, ':', 1))) IN
+        ('pain', 'out-of-time', 'uncomfortable', 'user_cancelled', 'timeout', 'new_solo_match_started')
+    THEN lower(trim(split_part(abort_reason, ':', 1)))
+    ELSE 'other'
+END
+WHERE abort_reason <> '' AND abort_reason NOT IN
+    ('pain', 'out-of-time', 'uncomfortable', 'user_cancelled', 'timeout', 'new_solo_match_started', 'other');
 
 -- TRAINING sessions count toward the weekly cap (BR-AC-01); RECOVERY ones are active recovery.
 ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS session_kind VARCHAR(20) NOT NULL DEFAULT 'TRAINING';

@@ -18,7 +18,17 @@ func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
 
 	info := r.Info()
 
+	var dueSince sql.NullTime
+	var dueReason string
+	if d := info.RegenerationDue; d != nil {
+		dueSince, dueReason = sql.NullTime{Time: d.ChangedAt, Valid: true}, d.Reason
+	}
+
 	return roadmapRecord{
+		RegenerateDueSince: dueSince,
+
+		RegenerateReason: dueReason,
+
 		RoadmapID: info.RoadmapID,
 
 		UserID: info.UserID,
@@ -34,6 +44,8 @@ func toRoadmapRecord(r *roadmap.Roadmap) roadmapRecord {
 		UpdatedAt: info.UpdatedAt,
 
 		Timezone: cmp.Or(info.Timezone, roadmap.DefaultTimezone),
+
+		Version: info.Version,
 	}
 }
 
@@ -43,15 +55,25 @@ func fromRoadmapRecord(rec *roadmapRecord, weeks []*roadmap.WeekPlan) (*roadmap.
 	}
 
 	return roadmap.RehydrateRoadmap(&roadmap.Info{
-		RoadmapID: rec.RoadmapID,
-		UserID:    rec.UserID,
-		Status:    roadmap.Status(rec.Status),
-		StartDate: rec.StartDate,
-		EndDate:   rec.EndDate,
-		CreatedAt: rec.CreatedAt,
-		UpdatedAt: rec.UpdatedAt,
-		Timezone:  rec.Timezone,
+		RoadmapID:       rec.RoadmapID,
+		UserID:          rec.UserID,
+		Status:          roadmap.Status(rec.Status),
+		StartDate:       rec.StartDate,
+		EndDate:         rec.EndDate,
+		CreatedAt:       rec.CreatedAt,
+		UpdatedAt:       rec.UpdatedAt,
+		Timezone:        rec.Timezone,
+		Version:         rec.Version,
+		RegenerationDue: regenerationDueFrom(rec),
 	}, weeks)
+}
+
+// regenerationDueFrom reads the waiting profile change, nil when none.
+func regenerationDueFrom(rec *roadmapRecord) *roadmap.RegenerationDue {
+	if !rec.RegenerateDueSince.Valid {
+		return nil
+	}
+	return &roadmap.RegenerationDue{ChangedAt: rec.RegenerateDueSince.Time, Reason: rec.RegenerateReason}
 }
 
 // ---------- WeekPlan ----------
@@ -80,6 +102,8 @@ func toWeekPlanRecord(w *roadmap.WeekPlan) weekPlanRecord {
 		EndDate: info.EndDate,
 
 		MuscleSplitType: info.MuscleSplitType,
+
+		ReviewedAt: info.ReviewedAt,
 	}
 }
 
@@ -98,6 +122,7 @@ func fromWeekPlanRecord(rec *weekPlanRecord, days []*roadmap.DayPlan) (*roadmap.
 		StartDate:       rec.StartDate,
 		EndDate:         rec.EndDate,
 		MuscleSplitType: rec.MuscleSplitType,
+		ReviewedAt:      rec.ReviewedAt,
 	}, days)
 }
 
@@ -200,6 +225,8 @@ func toSessionPlanRecord(s *roadmap.SessionPlan) (sessionPlanRecord, error) {
 		rec.SessionDeltaRPE = sql.NullFloat64{Float64: float64(*info.SessionDeltaRPE), Valid: true}
 	}
 
+	rec.AbortReason = info.AbortReason
+
 	return rec, nil
 }
 
@@ -272,6 +299,8 @@ func fromSessionPlanRecord(rec *sessionPlanRecord) (*roadmap.SessionPlan, error)
 
 		info.SessionDeltaRPE = &v
 	}
+
+	info.AbortReason = rec.AbortReason
 
 	return roadmap.RehydrateSessionPlan(&info)
 }

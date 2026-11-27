@@ -106,15 +106,11 @@ func buildRoadmap(t *testing.T, weekRPE [4]float32, weekSets [4]int32) *roadmap.
 func TestGuardrail_Approved_Baseline(t *testing.T) {
 	r := buildValidRoadmap(t)
 
-	e := NewEngine(nil, nil, func(id string) float64 {
-		if id == "ex-bench" {
-			return 60.0
-		}
-
-		return 0
+	e := NewEngine(nil, nil, func(context.Context, string) map[string]float64 {
+		return map[string]float64{"ex-bench": 60.0}
 	})
 
-	got := e.Check(r, nil, time.Time{})
+	got := e.Check(context.Background(), r, nil, time.Time{})
 
 	if got.Status != StatusApproved {
 		t.Errorf("status = %s, violations = %+v", got.Status, got.Violations)
@@ -126,15 +122,11 @@ func TestGuardrail_RejectsWeightOverBand(t *testing.T) {
 
 	// Baseline PR 40 → 60kg exceeds +30% (52kg cap).
 
-	e := NewEngine(nil, nil, func(id string) float64 {
-		if id == "ex-bench" {
-			return 40.0
-		}
-
-		return 0
+	e := NewEngine(nil, nil, func(context.Context, string) map[string]float64 {
+		return map[string]float64{"ex-bench": 40.0}
 	})
 
-	got := e.Check(r, nil, time.Time{})
+	got := e.Check(context.Background(), r, nil, time.Time{})
 
 	if got.Status != StatusRejected {
 		t.Fatalf("expected rejected")
@@ -203,7 +195,7 @@ func TestGuardrail_InjuryExclusion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewEngine(nil, benchCatalog(), nil).Check(buildValidRoadmap(t), tt.injuries, time.Time{})
+			got := NewEngine(nil, benchCatalog(), nil).Check(context.Background(), buildValidRoadmap(t), tt.injuries, time.Time{})
 			assertViolation(t, got, tt.want)
 		})
 	}
@@ -225,7 +217,7 @@ func TestGuardrail_InjuryCapLowersPhaseBand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewEngine(nil, benchCatalog(), nil).Check(buildRoadmap(t, tt.give, validSets()), mildChest, time.Time{})
+			got := NewEngine(nil, benchCatalog(), nil).Check(context.Background(), buildRoadmap(t, tt.give, validSets()), mildChest, time.Time{})
 			assertViolation(t, got, tt.want)
 		})
 	}
@@ -234,7 +226,7 @@ func TestGuardrail_InjuryCapLowersPhaseBand(t *testing.T) {
 func TestGuardrail_NilRoadmapRejected(t *testing.T) {
 	e := NewEngine(nil, nil, nil)
 
-	got := e.Check(nil, nil, time.Time{})
+	got := e.Check(context.Background(), nil, nil, time.Time{})
 
 	if got.Status != StatusRejected {
 		t.Errorf("nil roadmap should reject")
@@ -252,7 +244,7 @@ func TestGuardrail_PhaseRPEBand(t *testing.T) {
 		{name: "peak too easy", give: [4]float32{6.5, 7.5, 7.0, 5.5}, want: "BR-AC-10"},
 		{name: "deload at peak intensity", give: [4]float32{6.5, 7.5, 8.5, 8.5}, want: "BR-AC-10"},
 		{name: "band edges are inclusive", give: [4]float32{6.0, 8.0, 8.0, 6.0}},
-		{name: "unset rpe is not this rule's defect", give: [4]float32{0, 0, 0, 0}},
+		{name: "unset rpe is incomplete, not unsafe", give: [4]float32{0, 0, 0, 0}},
 	}
 
 	for _, tt := range tests {
@@ -261,7 +253,7 @@ func TestGuardrail_PhaseRPEBand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, tt.give, validSets()), nil, time.Time{})
+			got := NewEngine(nil, nil, nil).Check(context.Background(), buildRoadmap(t, tt.give, validSets()), nil, time.Time{})
 
 			assertViolation(t, got, tt.want)
 		})
@@ -288,7 +280,7 @@ func TestGuardrail_DeloadVolume(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewEngine(nil, nil, nil).Check(buildRoadmap(t, validRPE(), tt.give), nil, time.Time{})
+			got := NewEngine(nil, nil, nil).Check(context.Background(), buildRoadmap(t, validRPE(), tt.give), nil, time.Time{})
 
 			assertViolation(t, got, tt.want)
 		})
@@ -340,7 +332,7 @@ func TestGuardrail_RejectsInvalidCatalogExerciseID(t *testing.T) {
 	cat := &fakeCatalogReader{validIDs: map[string]bool{}} // "ex-bench" is NOT in validIDs
 
 	e := NewEngine(nil, cat, nil)
-	got := e.Check(r, nil, time.Time{})
+	got := e.Check(context.Background(), r, nil, time.Time{})
 
 	if got.Status != StatusRejected {
 		t.Fatalf("expected status REJECTED for non-existent exercise ID")
@@ -417,7 +409,7 @@ func TestGuardrail_InjuryRulesOnlyApplyToRewritableSessions(t *testing.T) {
 					}
 				}
 			}
-			got := NewEngine(nil, benchCatalog(), nil).Check(r, tt.injuries, tt.from)
+			got := NewEngine(nil, benchCatalog(), nil).Check(context.Background(), r, tt.injuries, tt.from)
 			assertViolation(t, got, tt.want)
 		})
 	}

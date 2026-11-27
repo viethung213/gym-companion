@@ -28,12 +28,24 @@ func TestStartWorkoutSessionHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("active session already exists", func(t *testing.T) {
+	t.Run("active session of another plan conflicts", func(t *testing.T) {
 		active, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
 		h := command.NewStartWorkoutSessionHandler(&mockSessionRepo{activeSession: active}, nil, nil, &mockTxManager{})
-		_, err := h.Handle(context.Background(), command.StartWorkoutSessionCommand{UserID: "u1", PlanID: "p1"})
+		_, err := h.Handle(context.Background(), command.StartWorkoutSessionCommand{UserID: "u1", PlanID: "p2"})
 		if !errors.Is(err, derror.ErrActiveSessionAlreadyExists) {
 			t.Errorf("got %v, want %v", err, derror.ErrActiveSessionAlreadyExists)
+		}
+	})
+
+	// A reload of the live screen starts the same plan again: it resumes the
+	// running session instead of locking the athlete out of it.
+	t.Run("active session of the same plan resumes", func(t *testing.T) {
+		active, _ := aggregate.NewWorkoutSession("s1", "u1", "p1")
+		repo := &mockSessionRepo{activeSession: active}
+		h := command.NewStartWorkoutSessionHandler(repo, &mockPlanClient{exists: true}, &mockOutboxWriter{}, &mockTxManager{})
+		res, err := h.Handle(context.Background(), command.StartWorkoutSessionCommand{UserID: "u1", PlanID: "p1"})
+		if err != nil || res.SessionID != "s1" {
+			t.Fatalf("got %+v, %v; want session s1 resumed", res, err)
 		}
 	})
 

@@ -39,6 +39,12 @@ func (r *RoadmapRepository) getDB(ctx context.Context) *gorm.DB {
 // activeRoadmapConstraint is the unique index allowing one ACTIVE roadmap per user.
 const activeRoadmapConstraint = "ux_roadmaps_user_active"
 
+// plannedRoadmapConstraint is the unique index allowing one PLANNED roadmap per user.
+const plannedRoadmapConstraint = "ux_roadmaps_user_planned"
+
+// uniqueViolation is the Postgres SQLSTATE for a duplicate key.
+const uniqueViolation = "23505"
+
 func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error {
 	if rm == nil {
 		return errors.New("nil roadmap")
@@ -46,17 +52,40 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 
 	db := r.getDB(ctx)
 
-	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "roadmap_id"}},
-
-		DoUpdates: clause.AssignmentColumns([]string{"status", "start_date", "end_date", "updated_at", "timezone"}),
-	}).Create(toRoadmapRecordPtr(rm)).Error; err != nil {
+	// Optimistic lock: a roadmap never saved is inserted; a copy read from the
+	// store is written only over the row it read, at the version it read. A
+	// writer working from a stale copy (one that waited on the model, say)
+	// cannot erase what others saved meanwhile, nor bring back a roadmap that
+	// was deleted since (a discarded PLANNED block).
+	rec := toRoadmapRecordPtr(rm)
+	rec.Version = rm.Version() + 1
+	var res *gorm.DB
+	if rm.Version() == 0 {
+		res = db.Create(rec)
+	} else {
+		res = db.Model(&roadmapRecord{}).
+			Where("roadmap_id = ? AND version = ?", rm.ID(), rm.Version()).
+			Select("status", "start_date", "end_date", "updated_at", "timezone", "version",
+				"regenerate_due_since", "regenerate_reason").
+			Updates(rec)
+	}
+	if err := res.Error; err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Constraint == activeRoadmapConstraint {
 			// Another node initiated this user's roadmap first.
 			return fmt.Errorf("%w: %s", roadmap.ErrActiveRoadmapExists, rm.UserID())
 		}
-		return fmt.Errorf("upsert roadmap: %w", err)
+		if errors.As(err, &pqErr) && pqErr.Constraint == plannedRoadmapConstraint {
+			return fmt.Errorf("%w: %s", roadmap.ErrPlannedRoadmapExists, rm.UserID())
+		}
+		if errors.As(err, &pqErr) && pqErr.Code == uniqueViolation {
+			// The roadmap was created by another writer from a copy never saved.
+			return fmt.Errorf("%w: %s already exists", roadmap.ErrRoadmapChanged, rm.ID())
+		}
+		return fmt.Errorf("save roadmap: %w", err)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("%w: %s at version %d", roadmap.ErrRoadmapChanged, rm.ID(), rm.Version())
 	}
 
 	// Delete what a reschedule dropped before upserting its replacements: a new
@@ -71,7 +100,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 		if err := db.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "week_plan_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"phase", "target_rpe", "start_date", "end_date", "muscle_split_type",
+				"phase", "target_rpe", "start_date", "end_date", "muscle_split_type", "reviewed_at",
 			}),
 		}).Create(&wr).Error; err != nil {
 			return fmt.Errorf("upsert week plan %s: %w", wr.WeekPlanID, err)
@@ -98,7 +127,7 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 					Columns: []clause.Column{{Name: "session_plan_id"}},
 					DoUpdates: clause.AssignmentColumns([]string{
 						"slot_time", "estimated_duration_minutes", "status", "session_kind", "target_muscle_groups", "prescription",
-						"reasoning", "generated_at", "completed_at", "session_scr", "session_delta_rpe",
+						"reasoning", "generated_at", "completed_at", "session_scr", "session_delta_rpe", "abort_reason",
 					}),
 				}).Create(&sr).Error; err != nil {
 					return fmt.Errorf("upsert session plan %s: %w", sr.SessionPlanID, err)
@@ -106,6 +135,8 @@ func (r *RoadmapRepository) Save(ctx context.Context, rm *roadmap.Roadmap) error
 			}
 		}
 	}
+
+	rm.MarkSaved(rec.Version)
 
 	return nil
 }
@@ -144,14 +175,19 @@ func (r *RoadmapRepository) FindActiveByUser(ctx context.Context, userID string)
 	return r.loadTree(ctx, &rec)
 }
 
-// ListByUser returns roadmaps for a user with optional status filter.
-func (r *RoadmapRepository) ListByUser(ctx context.Context, userID string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
+// ListByUser returns a user's roadmaps whose status is one of statuses (all
+// when empty), newest first.
+func (r *RoadmapRepository) ListByUser(ctx context.Context, userID string, statuses []roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
 	db := r.getDB(ctx)
 
 	q := db.Where("user_id = ?", userID)
 
-	if status != "" {
-		q = q.Where("status = ?", string(status))
+	if len(statuses) > 0 {
+		names := make([]string, len(statuses))
+		for i, s := range statuses {
+			names[i] = string(s)
+		}
+		q = q.Where("status IN ?", names)
 	}
 
 	if limit <= 0 {
@@ -360,4 +396,77 @@ func (r *RoadmapRepository) FindPendingSessionsStarting(ctx context.Context, fro
 		out = append(out, port.ScheduledSession{Info: sp.Info(), StartsAt: at, Location: loc})
 	}
 	return out, nil
+}
+
+var _ port.WeekReviewQueue = (*RoadmapRepository)(nil)
+
+// RoadmapIDsWithOpenWeekEndingBy lists ACTIVE roadmaps with an unreviewed week
+// whose end_date is on or before date.
+func (r *RoadmapRepository) RoadmapIDsWithOpenWeekEndingBy(ctx context.Context, date time.Time) ([]string, error) {
+	var ids []string
+	err := r.getDB(ctx).Table("coaching.week_plans AS w").
+		Distinct("w.roadmap_id").
+		Joins("JOIN coaching.roadmaps AS r ON r.roadmap_id = w.roadmap_id").
+		Where("r.status = ? AND w.reviewed_at IS NULL AND w.end_date <= ?",
+			string(roadmap.StatusActive), roadmap.CalendarDate(date, time.UTC)).
+		Pluck("w.roadmap_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("find roadmaps with an open week ending by %s: %w", date.Format(time.DateOnly), err)
+	}
+	return ids, nil
+}
+
+var _ port.RegenerationQueue = (*RoadmapRepository)(nil)
+
+// UsersWithRegenerationDue lists the users whose ACTIVE roadmap holds a
+// profile change still to absorb.
+func (r *RoadmapRepository) UsersWithRegenerationDue(ctx context.Context) ([]string, error) {
+	var ids []string
+	err := r.getDB(ctx).Model(&roadmapRecord{}).
+		Where("status = ? AND regenerate_due_since IS NOT NULL", string(roadmap.StatusActive)).
+		Pluck("user_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("find users with a regeneration due: %w", err)
+	}
+	return ids, nil
+}
+
+var _ port.RoadmapRotation = (*RoadmapRepository)(nil)
+
+// FindPlannedByUser returns the user's PLANNED roadmap.
+func (r *RoadmapRepository) FindPlannedByUser(ctx context.Context, userID string) (*roadmap.Roadmap, error) {
+	var rec roadmapRecord
+	err := r.getDB(ctx).Where("user_id = ? AND status = ?", userID, string(roadmap.StatusPlanned)).First(&rec).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, roadmap.ErrRoadmapNotFound
+		}
+		return nil, fmt.Errorf("find planned roadmap: %w", err)
+	}
+	return r.loadTree(ctx, &rec)
+}
+
+// DeletePlannedRoadmap removes a PLANNED roadmap; weeks, days and sessions go
+// with it (ON DELETE CASCADE). The status condition makes it a no-op on a
+// roadmap a roll-over activated in between, so a live plan is never lost.
+func (r *RoadmapRepository) DeletePlannedRoadmap(ctx context.Context, roadmapID string) error {
+	err := r.getDB(ctx).Where("roadmap_id = ? AND status = ?", roadmapID, string(roadmap.StatusPlanned)).
+		Delete(&roadmapRecord{}).Error
+	if err != nil {
+		return fmt.Errorf("delete planned roadmap %s: %w", roadmapID, err)
+	}
+	return nil
+}
+
+// ActiveRoadmapsEndingBy lists ACTIVE roadmaps whose end_date is on or before
+// date.
+func (r *RoadmapRepository) ActiveRoadmapsEndingBy(ctx context.Context, date time.Time) ([]port.RoadmapRef, error) {
+	var refs []port.RoadmapRef
+	err := r.getDB(ctx).Table("coaching.roadmaps").Select("roadmap_id, user_id").
+		Where("status = ? AND end_date <= ?", string(roadmap.StatusActive), roadmap.CalendarDate(date, time.UTC)).
+		Scan(&refs).Error
+	if err != nil {
+		return nil, fmt.Errorf("find active roadmaps ending by %s: %w", date.Format(time.DateOnly), err)
+	}
+	return refs, nil
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/viethung213/gym-companion/internal/coaching/application/athlete"
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/application/query"
@@ -27,6 +28,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// lifecycleInterval is how often roadmaps are checked for ended blocks,
+// finished weeks and blocks to plan ahead.
+const lifecycleInterval = 30 * time.Minute
+
 // realClock returns time.Now().UTC() for production use.
 type realClock struct{}
 
@@ -43,8 +48,12 @@ type ModuleDeps struct {
 	SessionReader  port.WorkoutSessionReader
 	CatalogReader  port.ExerciseCatalogReader
 	RoadmapRepo    port.RoadmapRepository
-	OutboxWriter   port.OutboxWriter
-	IDGenerator    port.IDGenerator
+	// Lifecycle stores the roadmap lifecycle (week reviews, block rotation).
+	// It defaults to the roadmap repository built from the database; without
+	// it the lifecycle worker does not run.
+	Lifecycle    port.RoadmapLifecycleStore
+	OutboxWriter port.OutboxWriter
+	IDGenerator  port.IDGenerator
 }
 
 // Initialize sets up the coaching module (coaching context agent, gRPC services, etc).
@@ -67,6 +76,8 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	if deps.ProfileReader == nil {
 		deps.ProfileReader = adapters.NewConnectUserProfileReader(deps.GatewayURL, deps.InternalSecret, nil)
 	}
+	// Every flow sees the same assumptions for fields a profile leaves empty.
+	deps.ProfileReader = athlete.WithProfileDefaults(deps.ProfileReader)
 
 	if deps.SessionReader == nil {
 		deps.SessionReader = adapters.NewConnectWorkoutSessionReader(deps.GatewayURL, deps.InternalSecret, nil)
@@ -77,7 +88,11 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	if deps.RoadmapRepo == nil && gormDB != nil {
-		deps.RoadmapRepo = persistence.NewRoadmapRepository(gormDB)
+		repo := persistence.NewRoadmapRepository(gormDB)
+		deps.RoadmapRepo = repo
+		if deps.Lifecycle == nil {
+			deps.Lifecycle = repo
+		}
 	}
 
 	var outboxRepo port.OutboxRepository
@@ -108,7 +123,7 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 	}
 
 	// One engine for all users: each Check receives the user's injuries.
-	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, nil)
+	guard := guardrail.NewEngine(service.NewOverloadValidator(), deps.CatalogReader, athlete.PRBaselines(deps.SessionReader))
 	clock := realClock{}
 
 	// Wire gRPC Command & Query Handlers
@@ -145,9 +160,31 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 			txMgr,
 			deps.RoadmapRepo,
 			deps.CatalogReader,
+			deps.ProfileReader,
 			deps.IDGenerator,
 			clock,
 		)
+	}
+
+	// Wiring rule: a handler's required collaborators are constructor
+	// parameters; an optional one that switches a behaviour on is a WithX setter.
+	//
+	// Roadmap rotation (command/plan_next_block.go, command/roll_over.go): the
+	// next 4-week block is planned during the final week and swapped in when
+	// the active one ends.
+	lifecycle := deps.Lifecycle
+	var rollOverHandler *command.RollOverHandler
+	if lifecycle != nil && deps.OutboxWriter != nil && txMgr != nil {
+		rollOverHandler = command.NewRollOverHandler(txMgr, deps.RoadmapRepo, lifecycle, deps.OutboxWriter, clock)
+		if regenerateHandler != nil {
+			regenerateHandler.WithPlannedBlocks(lifecycle)
+		}
+		if createAdhocHandler != nil {
+			createAdhocHandler.WithRollover(rollOverHandler)
+			if initiateHandler != nil {
+				createAdhocHandler.WithFreshStart(initiateHandler)
+			}
+		}
 	}
 
 	var queriesHandler *query.Handlers
@@ -196,6 +233,31 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		slog.Warn("Coaching UpcomingWorkoutReminderWorker not started (missing RoadmapRepo or OutboxWriter)")
 	}
 
+	// Keep roadmaps moving: roll over ended blocks, review finished weeks and
+	// adapt to them (BR-AC-04), plan the next block during the final week.
+	var lifecycleWorker *worker.RoadmapLifecycleWorker
+	if rollOverHandler != nil {
+		adaptHandler := command.NewApplyAdaptiveCycleHandler(
+			txMgr, deps.RoadmapRepo, coachAgent, guard, deps.ProfileReader, deps.OutboxWriter, clock,
+			nil, // engine: the default AdaptiveCoachEngine
+			deps.CatalogReader, athlete.PRBaselines(deps.SessionReader),
+		)
+		reviewHandler := command.NewReviewWeeksHandler(txMgr, deps.RoadmapRepo, adaptHandler, clock)
+		planHandler := command.NewPlanNextBlockHandler(
+			txMgr, deps.RoadmapRepo, lifecycle, coachAgent, guard, deps.ProfileReader, clock,
+		)
+		lifecycleWorker = worker.NewRoadmapLifecycleWorker(lifecycle, rollOverHandler, reviewHandler, planHandler, lifecycleInterval)
+		if initiateHandler != nil {
+			lifecycleWorker.WithInitiator(initiateHandler)
+		}
+		if regenerateHandler != nil {
+			lifecycleWorker.WithRegenerator(regenerateHandler)
+		}
+		lifecycleWorker.Start(ctx)
+	} else {
+		slog.Warn("Coaching RoadmapLifecycleWorker not started (no Lifecycle store, OutboxWriter or database)")
+	}
+
 	var outboxWorker *worker.OutboxWorker
 	var consumerMgr *consumer.ConsumerManager
 
@@ -232,6 +294,9 @@ func Initialize(ctx context.Context, deps *ModuleDeps) (*coachingGrpc.Server, po
 		}
 		if reminderWorker != nil {
 			reminderWorker.Stop()
+		}
+		if lifecycleWorker != nil {
+			lifecycleWorker.Stop()
 		}
 	}
 

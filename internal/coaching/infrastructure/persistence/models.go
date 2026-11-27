@@ -15,22 +15,28 @@ type roadmapRecord struct {
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 	Timezone  string    `gorm:"column:timezone;not null"`
+	Version   int64     `gorm:"column:version;not null"`
+	// RegenerateDueSince / RegenerateReason hold a profile change the
+	// schedule has yet to absorb (roadmap.RegenerationDue).
+	RegenerateDueSince sql.NullTime `gorm:"column:regenerate_due_since"`
+	RegenerateReason   string       `gorm:"column:regenerate_reason;not null"`
 }
 
 func (roadmapRecord) TableName() string { return "coaching.roadmaps" }
 
 // weekPlanRecord maps coaching.week_plans.
 type weekPlanRecord struct {
-	WeekPlanID      string    `gorm:"column:week_plan_id;primaryKey"`
-	RoadmapID       string    `gorm:"column:roadmap_id;not null"`
-	UserID          string    `gorm:"column:user_id;not null"`
-	WeekNumber      int16     `gorm:"column:week_number;not null"`
-	Phase           string    `gorm:"column:phase;not null"`
-	TargetRPE       float32   `gorm:"column:target_rpe;not null"`
-	StartDate       time.Time `gorm:"column:start_date;not null;type:date"`
-	EndDate         time.Time `gorm:"column:end_date;not null;type:date"`
-	MuscleSplitType string    `gorm:"column:muscle_split_type"`
-	CreatedAt       time.Time `gorm:"column:created_at"`
+	WeekPlanID      string     `gorm:"column:week_plan_id;primaryKey"`
+	RoadmapID       string     `gorm:"column:roadmap_id;not null"`
+	UserID          string     `gorm:"column:user_id;not null"`
+	WeekNumber      int16      `gorm:"column:week_number;not null"`
+	Phase           string     `gorm:"column:phase;not null"`
+	TargetRPE       float32    `gorm:"column:target_rpe;not null"`
+	StartDate       time.Time  `gorm:"column:start_date;not null;type:date"`
+	EndDate         time.Time  `gorm:"column:end_date;not null;type:date"`
+	MuscleSplitType string     `gorm:"column:muscle_split_type"`
+	ReviewedAt      *time.Time `gorm:"column:reviewed_at"`
+	CreatedAt       time.Time  `gorm:"column:created_at"`
 }
 
 func (weekPlanRecord) TableName() string { return "coaching.week_plans" }
@@ -68,6 +74,7 @@ type sessionPlanRecord struct {
 	CompletedAt              sql.NullTime    `gorm:"column:completed_at"`
 	SessionSCR               sql.NullFloat64 `gorm:"column:session_scr"`
 	SessionDeltaRPE          sql.NullFloat64 `gorm:"column:session_delta_rpe"`
+	AbortReason              string          `gorm:"column:abort_reason"`
 }
 
 func (sessionPlanRecord) TableName() string { return "coaching.session_plans" }

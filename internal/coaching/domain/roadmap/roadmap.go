@@ -17,6 +17,13 @@ type Info struct {
 	UpdatedAt time.Time
 	// Timezone is the IANA zone the schedule's wall clock is in (see Location).
 	Timezone string
+	// Version counts the saves of this roadmap. A save that does not start
+	// from the stored version is refused (ErrRoadmapChanged): it was built on a
+	// copy that another writer has since changed. 0 for a roadmap never saved.
+	Version int64
+	// RegenerationDue, when set, is a profile change the schedule has yet to
+	// absorb (see MarkRegenerationDue).
+	RegenerationDue *RegenerationDue
 }
 
 // Roadmap is the aggregate root managing a 4-week training program.
@@ -180,4 +187,24 @@ func normalizeRoadmapInfo(info *Info) *Info {
 	cp.UserID = strings.TrimSpace(cp.UserID)
 
 	return &cp
+}
+
+// Version is the stored version this copy was read at (see Info.Version).
+func (r *Roadmap) Version() int64 { return r.info.Version }
+
+// MarkSaved records that this copy was stored as the given version, so it can
+// be saved again.
+func (r *Roadmap) MarkSaved(version int64) { r.info.Version = version }
+
+// StampPlannedAt dates a fresh draft by when its planning started, before the
+// athlete's profile was read. Every profile change made before that instant is
+// reflected in the plan (see RegenerateScheduleCommand.ChangedAt). Only a
+// draft never saved can be stamped.
+func (r *Roadmap) StampPlannedAt(t time.Time) error {
+	if r.info.Version != 0 {
+		return fmt.Errorf("%w: roadmap %s is already saved", ErrInvalidTransition, r.info.RoadmapID)
+	}
+	r.info.CreatedAt = t
+	r.info.UpdatedAt = t
+	return nil
 }

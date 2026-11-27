@@ -30,13 +30,18 @@ func rescheduleTargets(rm *roadmap.Roadmap, slots []WorkoutSlot, now time.Time) 
 	var targets []DatedSlot
 	for _, w := range rm.Weeks() {
 		kept, keptTraining := 0, 0
+		taken := make(map[string]bool) // slots a kept session already holds
 		for _, d := range w.Days() {
 			for _, s := range d.Sessions() {
-				if _, ok := moving[s.ID()]; !ok {
+				// The athlete's own ad-hoc or solo workouts are not the plan:
+				// they take no slot and no training session from it.
+				if _, ok := moving[s.ID()]; !ok && s.Info().Source == roadmap.SessionPlanSourceScheduled {
 					kept++
-					if s.Kind() == roadmap.SessionKindTraining {
+					if s.IsTrainingVolume() {
 						keptTraining++
 					}
+					info := s.Info()
+					taken[info.ScheduledDate.Format(scheduledDateISO)+" "+slotStartClock(info.SlotTime)] = true
 				}
 			}
 		}
@@ -47,8 +52,18 @@ func rescheduleTargets(rm *roadmap.Roadmap, slots []WorkoutSlot, now time.Time) 
 		info := w.Info()
 		open := slotOccurrences(slots,
 			roadmap.CalendarDate(info.StartDate, time.UTC), roadmap.CalendarDate(info.EndDate, time.UTC), now, loc)
+		// A slot whose session was trained early (or stopped) is not open: it
+		// is still ahead on the clock, and counting it made unchanged slots look
+		// changed, rescheduling every upcoming session under new IDs.
+		open = slices.DeleteFunc(open, func(o DatedSlot) bool {
+			return taken[o.ScheduledDate+" "+slotStartClock(o.SlotTime)]
+		})
 		trainingBudget := max(0, roadmap.MaxSessionsPerWeek-keptTraining)
-		targets = append(targets, assignKinds(open[:min(budget, len(open))], trainingBudget)...)
+		weekTargets := assignKinds(open[:min(budget, len(open))], trainingBudget)
+		for i := range weekTargets {
+			weekTargets[i].Phase = string(w.Phase())
+		}
+		targets = append(targets, weekTargets...)
 	}
 
 	current := make([]string, 0, len(upcoming))
@@ -74,6 +89,7 @@ func rescheduledSessions(targets []DatedSlot) []SessionToRevise {
 			ScheduledDate:            t.ScheduledDate,
 			SlotTime:                 t.SlotTime,
 			SessionKind:              t.SessionKind,
+			Phase:                    t.Phase,
 			EstimatedDurationMinutes: slotMinutes(t.SlotTime),
 		})
 	}
@@ -118,6 +134,7 @@ func pinRewriteSlots(plan *GeneratedPlan, revise []SessionToRevise) {
 			sp.ScheduledDate = revise[i].ScheduledDate
 			sp.SlotTime = revise[i].SlotTime
 			sp.SessionKind = revise[i].SessionKind
+			sp.phase = roadmap.Phase(revise[i].Phase)
 			if sp.SessionKind == "" {
 				sp.SessionKind = kindTraining
 			}

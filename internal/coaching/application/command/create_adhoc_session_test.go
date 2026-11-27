@@ -101,6 +101,7 @@ func TestCreateAdhocSessionHandler_Success(t *testing.T) {
 		mockTx,
 		mockRepo,
 		mockExercises,
+		zoneProfiles{loc: time.UTC},
 		mockIDGen,
 		mockClock,
 	)
@@ -134,6 +135,10 @@ func TestCreateAdhocSessionHandler_Success(t *testing.T) {
 	if spInfo.Status != roadmap.SessionPlanStatusPending {
 		t.Errorf("expected status PENDING, got %s", spInfo.Status)
 	}
+
+	if want := spInfo.Prescription.EstimatedMinutes(); spInfo.EstimatedDurationMinutes != want {
+		t.Errorf("length %d min, want %d from the prescription", spInfo.EstimatedDurationMinutes, want)
+	}
 }
 
 func TestCreateAdhocSessionHandler_NoActiveRoadmap(t *testing.T) {
@@ -154,7 +159,8 @@ func TestCreateAdhocSessionHandler_NoActiveRoadmap(t *testing.T) {
 	handler := NewCreateAdhocSessionHandler(
 		mockTx,
 		mockRepo,
-		nil,
+		benchOnly(),
+		zoneProfiles{loc: time.UTC},
 		nil,
 		mockClock,
 	)
@@ -182,6 +188,7 @@ func TestCreateAdhocSessionHandler_NoExerciseIDs(t *testing.T) {
 		mockTx,
 		nil,
 		nil,
+		zoneProfiles{loc: time.UTC},
 		nil,
 		mockClock,
 	)
@@ -239,7 +246,7 @@ func (m *roadmapRepositoryMock) FindByID(ctx context.Context, rid string) (*road
 	return nil, nil
 }
 
-func (m *roadmapRepositoryMock) ListByUser(ctx context.Context, uid string, status roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
+func (m *roadmapRepositoryMock) ListByUser(ctx context.Context, uid string, statuses []roadmap.Status, limit, offset int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 

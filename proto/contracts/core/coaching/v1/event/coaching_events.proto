@@ -29,4 +29,6 @@ message SessionPlanExecuted {
   google.protobuf.Timestamp executed_at = 4;
   float session_scr = 5;
   float session_delta_rpe = 6;
+  // false when the athlete reported no RPE: session_delta_rpe is then unmeasured, not on target.
+  bool effort_reported = 7;
 }

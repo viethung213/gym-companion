@@ -61,12 +61,12 @@ func TestWorkoutExecution_FullLifecycle_E2E(t *testing.T) {
 		t.Fatalf("StartWorkoutSession returned empty SessionId")
 	}
 
-	// 5. Duplicate Start Workout Session (should fail)
-	_, err = suite.Client.StartWorkoutSession(ctx, &workoutexecutionv1message.StartWorkoutSessionRequest{
+	// 5. Starting the same plan again (a reload) resumes the running session
+	resumed, err := suite.Client.StartWorkoutSession(ctx, &workoutexecutionv1message.StartWorkoutSessionRequest{
 		PlanId: planID,
 	})
-	if err == nil {
-		t.Fatalf("Expected error when starting duplicate active session, got nil")
+	if err != nil || resumed.GetSessionId() != sessionID {
+		t.Fatalf("restarting the same plan: got %v, %v; want session %s resumed", resumed.GetSessionId(), err, sessionID)
 	}
 
 	// 6. Log Set 1 (AI Set with RepLogs)

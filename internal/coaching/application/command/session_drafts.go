@@ -1,10 +1,13 @@
 package command
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
 )
 
@@ -21,6 +24,38 @@ func draftKey(date time.Time, slotTime string, kind roadmap.SessionKind) string 
 	}
 	start, _, _ := strings.Cut(slotTime, "-")
 	return date.Format(time.DateOnly) + " " + strings.TrimSpace(start) + " " + string(kind)
+}
+
+// dropFinished removes the drafts of sessions that were pending when the
+// generation started (before) but no longer are (pending): the athlete trained
+// or started them meanwhile, and a finished session is never rewritten. Kept,
+// such a draft matched nothing and failed the whole rewrite.
+func dropFinished(before, pending []*roadmap.SessionPlan, drafts []*roadmap.SessionPlanInfo) []*roadmap.SessionPlanInfo {
+	keyOf := func(s *roadmap.SessionPlan) string {
+		info := s.Info()
+		return draftKey(info.ScheduledDate, info.SlotTime, info.Kind)
+	}
+	still := make(map[string]bool, len(pending))
+	for _, s := range pending {
+		still[keyOf(s)] = true
+	}
+	gone := make(map[string]bool)
+	for _, s := range before {
+		if k := keyOf(s); !still[k] {
+			gone[k] = true
+		}
+	}
+	if len(gone) == 0 {
+		return drafts
+	}
+	out := make([]*roadmap.SessionPlanInfo, 0, len(drafts))
+	for _, d := range drafts {
+		if d != nil && gone[draftKey(d.ScheduledDate, d.SlotTime, d.Kind)] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 // alignDrafts pairs each pending session with the draft that rewrites it:
@@ -67,4 +102,35 @@ func rewriteInPlace(pending []*roadmap.SessionPlan, aligned []*roadmap.SessionPl
 		applied++
 	}
 	return applied, nil
+}
+
+// reloadForRewrite reads the roadmap again once the model has answered, so the
+// drafts land on what is stored now rather than on the copy read before the
+// generation: workouts completed, weeks reviewed or a roll-over saved in the
+// meantime are kept. A roadmap no longer ACTIVE is not rewritten.
+func reloadForRewrite(ctx context.Context, repo port.RoadmapRepository, rm *roadmap.Roadmap, zone string) (*roadmap.Roadmap, error) {
+	fresh, err := repo.FindByID(ctx, rm.ID())
+	if err != nil {
+		return nil, fmt.Errorf("reload roadmap %s: %w", rm.ID(), err)
+	}
+	if fresh.Status() != roadmap.StatusActive {
+		return nil, fmt.Errorf("%w: roadmap %s is %s now", roadmap.ErrRoadmapChanged, rm.ID(), fresh.Status())
+	}
+	fresh.SetTimezone(zone)
+	return fresh, nil
+}
+
+// fitDeloadVolume cuts the upcoming DELOAD sessions down to BR-AC-11 before
+// the guardrail checks the roadmap: the model is not told the week's budget,
+// and a rewrite of earlier weeks can shrink the PEAK volume it is measured by.
+func fitDeloadVolume(ctx context.Context, rm *roadmap.Roadmap, now time.Time) error {
+	changed, err := rm.FitDeloadVolume(now)
+	if err != nil {
+		return err
+	}
+	if changed {
+		slog.InfoContext(ctx, "DELOAD week cut to its volume allowance (BR-AC-11)",
+			slog.String("roadmap_id", rm.ID()), slog.Int("deload_sets", rm.WorkingSets(roadmap.PhaseDeload)))
+	}
+	return nil
 }

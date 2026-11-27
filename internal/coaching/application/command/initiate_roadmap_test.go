@@ -66,7 +66,7 @@ func (m *memRepo) FindActiveByUser(_ context.Context, userID string) (*roadmap.R
 	return nil, roadmap.ErrRoadmapNotFound
 }
 
-func (m *memRepo) ListByUser(_ context.Context, _ string, _ roadmap.Status, _, _ int) ([]*roadmap.Roadmap, error) {
+func (m *memRepo) ListByUser(_ context.Context, _ string, _ []roadmap.Status, _, _ int) ([]*roadmap.Roadmap, error) {
 	return nil, nil
 }
 
@@ -94,6 +94,9 @@ func (c *captureOutbox) Enqueue(_ context.Context, _ string, events ...domaineve
 
 type fakeCoachAgent struct {
 	t time.Time
+	// sets, when set, gives week N one training session whose single main
+	// exercise carries sets[N] sets.
+	sets map[int32]int32
 }
 
 func (f *fakeCoachAgent) GenerateRoadmap(_ context.Context, userID string) (*roadmap.Roadmap, error) {
@@ -127,16 +130,43 @@ func (f *fakeCoachAgent) GenerateRoadmap(_ context.Context, userID string) (*roa
 			EndDate:    f.t.AddDate(0, 0, i*7),
 		}
 		wp, _ := roadmap.NewWeekPlan(weekInfo)
+		if n, ok := f.sets[weekInfo.WeekNumber]; ok {
+			f.addSession(wp, weekInfo, userID, n)
+		}
 		weeks = append(weeks, wp)
 	}
 	return roadmap.NewRoadmap(info, weeks, f.t)
+}
+
+// phaseRPE is a target inside each phase's window.
+func phaseRPE(p roadmap.Phase) float32 {
+	return map[roadmap.Phase]float32{
+		roadmap.PhaseAccumulation: 6.5, roadmap.PhaseOverload: 7.5, roadmap.PhasePeak: 8.5, roadmap.PhaseDeload: 5.5,
+	}[p]
+}
+
+func (f *fakeCoachAgent) addSession(wp *roadmap.WeekPlan, w *roadmap.WeekPlanInfo, userID string, sets int32) {
+	date := w.StartDate.AddDate(0, 0, 1)
+	dayID := w.WeekPlanID + "-day"
+	dp, _ := roadmap.NewDayPlan(&roadmap.DayPlanInfo{
+		DayPlanID: dayID, WeekPlanID: w.WeekPlanID, RoadmapID: w.RoadmapID, UserID: userID, ScheduledDate: date,
+	})
+	sp, _ := roadmap.NewSessionPlan(&roadmap.SessionPlanInfo{
+		SessionPlanID: w.WeekPlanID + "-session", DayPlanID: dayID, WeekPlanID: w.WeekPlanID,
+		RoadmapID: w.RoadmapID, UserID: userID, ScheduledDate: date, SlotTime: "17:30-19:00",
+		Prescription: roadmap.WorkoutPrescription{MainExercises: []roadmap.PrescribedExercise{{
+			ExerciseID: "squat", ExerciseName: "Squat", TargetSets: sets, TargetReps: 8, TargetRPE: phaseRPE(w.Phase),
+		}}},
+	}, f.t)
+	_ = dp.AddSession(sp)
+	_ = wp.AddDay(dp)
 }
 
 func (f *fakeCoachAgent) RegeneratePending(_ context.Context, _ string, _ []string) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
 }
 
-func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ string) ([]*roadmap.SessionPlanInfo, error) {
+func (f *fakeCoachAgent) Adapt(_ context.Context, _ string, _ *service.AdaptationDecision) ([]*roadmap.SessionPlanInfo, error) {
 	return nil, nil
 }
 
@@ -191,6 +221,24 @@ func TestInitiateRoadmap_HappyPath(t *testing.T) {
 
 	if _, ok := outbox.events[0].(*domainevent.RoadmapInitiated); !ok {
 		t.Errorf("expected RoadmapInitiated, got %T", outbox.events[0])
+	}
+}
+
+// A DELOAD week drafted at PEAK volume is cut to BR-AC-11 by the domain and
+// saved: the model is not asked again and the guardrail does not block it.
+func TestInitiateRoadmap_FitsAHeavyDeloadWeek(t *testing.T) {
+	h, repo, _ := buildHandler(t)
+	h.agent = &fakeCoachAgent{t: h.clock.Now(), sets: map[int32]int32{1: 4, 2: 4, 3: 4, 4: 4}}
+
+	if _, err := h.Handle(context.Background(), InitiateRoadmapCommand{UserID: "user-1"}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	saved, err := repo.FindActiveByUser(context.Background(), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := saved.WorkingSets(roadmap.PhaseDeload), 2; got != want {
+		t.Errorf("DELOAD sets = %d, want %d (70%% of PEAK's 4)", got, want)
 	}
 }
 

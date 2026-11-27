@@ -81,28 +81,49 @@ func (c *CoachingContextAgent) buildLLMNodes(_ context.Context, geminiModel mode
 		maxReviewerTokens = maxGeneratorTokens
 	}
 
-	generatorAgent, err := llmagent.New(llmagent.Config{
-		Name:        "CoachGeneratorAgent",
-		Description: "Fitness expert generator agent generating structured roadmaps.",
-		Model:       geminiModel,
-		Instruction: string(generatorInstruction),
-		Tools:       nil,
-		Toolsets:    nil,
-		OutputKey:   "generated_plan_text",
-		GenerateContentConfig: &genai.GenerateContentConfig{
-			MaxOutputTokens: maxGeneratorTokens,
-		},
-		BeforeModelCallbacks: beforeModelCallbacks("CoachGeneratorAgent", validateInputSafety),
-		AfterModelCallbacks:  afterModelCallbacks("CoachGeneratorAgent"),
-		BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
-	})
-	if err != nil {
-		return fmt.Errorf("new generator agent: %w", err)
+	// Two generators share the prompt and differ in the output schema: a
+	// whole roadmap must hold exactly weeks 1 to 4, a rewrite only the
+	// sessions it changes.
+	newGenerator := func(name string, wholeRoadmap bool) (*workflow.AgentNode, error) {
+		generatorAgent, newErr := llmagent.New(llmagent.Config{
+			Name:        name,
+			Description: "Fitness expert generator agent generating structured roadmaps.",
+			Model:       geminiModel,
+			Instruction: string(generatorInstruction),
+			Tools:       nil,
+			Toolsets:    nil,
+			OutputKey:   "generated_plan_text",
+			// Structured output on the model call, not ADK's OutputSchema:
+			// that turns the node's output into a map, and the parse node
+			// reads the plan as text. The plan is still always well-formed
+			// JSON with only the fields the backend reads. The ad-hoc agent
+			// below keeps free text: Gemini does not combine a response schema
+			// with its search tool.
+			GenerateContentConfig: &genai.GenerateContentConfig{
+				MaxOutputTokens:  maxGeneratorTokens,
+				ResponseMIMEType: "application/json",
+				ResponseSchema:   buildGeneratedPlanSchema(wholeRoadmap),
+			},
+			BeforeModelCallbacks: beforeModelCallbacks(name, validateInputSafety),
+			AfterModelCallbacks:  afterModelCallbacks(name),
+			BeforeToolCallbacks:  []llmagent.BeforeToolCallback{validateToolExecution},
+		})
+		if newErr != nil {
+			return nil, fmt.Errorf("new %s: %w", name, newErr)
+		}
+		node, nodeErr := workflow.NewAgentNode(generatorAgent, workflow.NodeConfig{})
+		if nodeErr != nil {
+			return nil, fmt.Errorf("new %s node: %w", name, nodeErr)
+		}
+		return node, nil
 	}
-
-	generatorNode, err := workflow.NewAgentNode(generatorAgent, workflow.NodeConfig{})
+	generatorNode, err := newGenerator("CoachGeneratorAgent", false)
 	if err != nil {
-		return fmt.Errorf("new generator node: %w", err)
+		return err
+	}
+	roadmapGeneratorNode, err := newGenerator("CoachRoadmapGeneratorAgent", true)
+	if err != nil {
+		return err
 	}
 
 	searchTool, err := makeSearchExercisesTool(c.catalog)
@@ -179,6 +200,7 @@ AD-HOC SESSION TOOL GUIDANCE (Flow = SUGGEST_AD_HOC_SESSION):
 	}
 
 	c.generatorNode = generatorNode
+	c.roadmapGeneratorNode = roadmapGeneratorNode
 	c.reviewerNode = reviewerNode
 	return nil
 }

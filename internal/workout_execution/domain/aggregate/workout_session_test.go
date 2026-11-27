@@ -407,8 +407,8 @@ func TestWorkoutSession_AbortAndAbortAnomalous_Detailed(t *testing.T) {
 		if ev.IsAnomalous {
 			t.Error("want IsAnomalous = false for Abort()")
 		}
-		if ev.Reason != "user stopped early" {
-			t.Errorf("got Reason = %q, want 'user stopped early'", ev.Reason)
+		if ev.Reason != "other" { // free text leaves as its category
+			t.Errorf("got Reason = %q, want 'other'", ev.Reason)
 		}
 	})
 
@@ -438,8 +438,8 @@ func TestWorkoutSession_AbortAndAbortAnomalous_Detailed(t *testing.T) {
 		if !ev.IsAnomalous {
 			t.Error("want IsAnomalous = true for AbortAnomalous()")
 		}
-		if ev.Reason != "critical fall detected" {
-			t.Errorf("got Reason = %q, want 'critical fall detected'", ev.Reason)
+		if ev.Reason != "other" { // free text leaves as its category
+			t.Errorf("got Reason = %q, want 'other'", ev.Reason)
 		}
 	})
 
@@ -647,4 +647,59 @@ func TestWorkoutSession_Share(t *testing.T) {
 			t.Error("want IsShared = true")
 		}
 	})
+}
+
+// Seen live: 9 main sets at RPE 8 plus 4 unrated warm-up and cool-down sets
+// averaged to about 5.5, so coaching read a session trained exactly as
+// prescribed as far too easy. The average covers rated sets only, and is 0
+// (unrated) when no set carries an RPE.
+func TestWorkoutSession_AverageRPECountsRatedSetsOnly(t *testing.T) {
+	session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
+	logSet := func(n int, rpe float32) {
+		if err := session.LogSet(aggregate.WorkoutSetLog{
+			SetNumber: n, ExerciseID: "ex-1", TargetReps: 10, ActualReps: 10, Weight: 50, RPE: rpe,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logSet(1, 0) // warm-up, unrated
+	logSet(2, 8)
+	logSet(3, 9)
+	logSet(4, 0) // cool-down, unrated
+
+	summary := session.CalculateSummary()
+	if summary.AverageRPE != 8.5 {
+		t.Errorf("AverageRPE = %v, want 8.5 over the 2 rated sets", summary.AverageRPE)
+	}
+	if summary.TotalSets != 4 {
+		t.Errorf("TotalSets = %d, want every logged set (4)", summary.TotalSets)
+	}
+
+	unrated, _ := aggregate.NewWorkoutSession("sess-2", "user-1", "plan-1")
+	_ = unrated.LogSet(aggregate.WorkoutSetLog{SetNumber: 1, ExerciseID: "ex-1", TargetReps: 10, ActualReps: 10})
+	if got := unrated.CalculateSummary().AverageRPE; got != 0 {
+		t.Errorf("unrated session AverageRPE = %v, want 0", got)
+	}
+}
+
+// The abort event leaves the service on Kafka, so it carries the reason's
+// category only: the athlete's own words ("pain: <note>") are health data,
+// kept with the injury they report, not broadcast with every stopped workout.
+func TestWorkoutSession_AbortEventCarriesTheReasonCategoryOnly(t *testing.T) {
+	for reason, want := range map[string]string{
+		"pain: Đau nhói lưng dưới": "pain", "out-of-time": "out-of-time", " Pain ": "pain",
+		"NEW_SOLO_MATCH_STARTED": "new_solo_match_started", "": "other",
+		// Reproduces the review finding: free text without a colon went out whole.
+		"Đau lưng dưới khi deadlift": "other",
+	} {
+		session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
+		session.PopEvents()
+		if err := session.Abort(reason); err != nil {
+			t.Fatal(err)
+		}
+		ev, ok := session.PopEvents()[0].(*event.WorkoutSessionAborted)
+		if !ok || ev.Reason != want {
+			t.Errorf("Abort(%q) event reason %q, want %q", reason, ev.Reason, want)
+		}
+	}
 }
