@@ -159,8 +159,8 @@ func TestReviewWeeks_CompletedWeekProgressesLoad(t *testing.T) {
 	if res.Adaptation == nil || res.Adaptation.Decision.Kind != service.AdaptationIncreaseLoad {
 		t.Fatalf("adaptation = %+v, want IncreaseLoad", res.Adaptation)
 	}
-	if agent.decision == nil || agent.decision.Params.WeightPctChange != 0.025 {
-		t.Errorf("decision %+v, want the +2.5%% load change passed to the agent", agent.decision)
+	if agent.decision == nil || agent.decision.Kind != service.AdaptationIncreaseLoad {
+		t.Errorf("decision %+v, want the progression passed to the agent", agent.decision)
 	}
 	if s, _ := rm.FindSession("w2-s0"); s.Info().Reasoning != "adapted" {
 		t.Error("week 2 was not rewritten")

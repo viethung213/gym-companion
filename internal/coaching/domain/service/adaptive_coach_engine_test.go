@@ -1,6 +1,7 @@
 package service
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -18,8 +19,9 @@ func TestEvaluateTriggerA_ProgressiveOverload(t *testing.T) {
 		t.Fatalf("kind=%v, want IncreaseLoad", d.Kind)
 	}
 
-	if d.Params.WeightPctChange <= 0 {
-		t.Errorf("expected positive weight change, got %v", d.Params.WeightPctChange)
+	// The numbers come from the backend's progression rules, not a percentage.
+	if !reflect.DeepEqual(d.Params, AdaptationParams{}) {
+		t.Errorf("params %+v, want none for a progression", d.Params)
 	}
 }
 

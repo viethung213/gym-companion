@@ -8,7 +8,9 @@ type AdaptationKind int
 const (
 	// AdaptationNoOp indicates no action is needed.
 	AdaptationNoOp AdaptationKind = iota
-	// AdaptationIncreaseLoad applies +2.5..5% weight next week (BR-AC-04 case 1).
+	// AdaptationIncreaseLoad progresses the remaining sessions (BR-AC-04 case
+	// 1). The backend sets the numbers by double progression
+	// (roadmap.ProgressUpcoming), so the decision carries no percentage.
 	AdaptationIncreaseLoad
 	// AdaptationTriggerDeload converts next week to Deload phase (BR-AC-04 case 2).
 	AdaptationTriggerDeload
@@ -35,7 +37,7 @@ type AdaptationDecision struct {
 // AdaptationParams carries per-kind numeric knobs. Only the fields relevant to
 // Kind are meaningful; the rest are zero.
 type AdaptationParams struct {
-	WeightPctChange float64      // e.g. +0.025 → +5%
+	WeightPctChange float64      // e.g. -0.10 for Deload
 	VolumePctChange float64      // e.g. -0.30 for Deload
 	SessionsToDrop  int          // for Express/reduce recommendation
 	StaleWeekday    time.Weekday // for B2 mismatch
@@ -102,15 +104,9 @@ func (e *AdaptiveCoachEngine) EvaluateTriggerA(weeks []WeeklyMetrics) Adaptation
 	// Case 1: Progressive overload.
 	// SCR ≥ 80% AND -1 ≤ ΔRPE ≤ +1.
 	if last.SCR >= 80.0 && last.AvgDeltaRPE >= -1.0 && last.AvgDeltaRPE <= 1.0 {
-		// Pick +2.5% if ΔRPE ≥ 0 (already borderline hard), else +5%.
-		pct := 0.05
-		if last.AvgDeltaRPE >= 0 {
-			pct = 0.025
-		}
 		return AdaptationDecision{
 			Kind:   AdaptationIncreaseLoad,
 			Reason: "SCR ≥ 80% and ΔRPE in [-1, +1]",
-			Params: AdaptationParams{WeightPctChange: pct},
 		}
 	}
 

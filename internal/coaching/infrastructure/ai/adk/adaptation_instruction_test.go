@@ -15,8 +15,7 @@ func TestAdaptationInstruction(t *testing.T) {
 		decision service.AdaptationDecision
 		want     string
 	}{
-		{service.AdaptationDecision{Kind: service.AdaptationIncreaseLoad, Reason: "r",
-			Params: service.AdaptationParams{WeightPctChange: 0.025}}, "target_weight_kg as they are; the backend progresses them"},
+		{service.AdaptationDecision{Kind: service.AdaptationIncreaseLoad, Reason: "r"}, "target_weight_kg as they are; the backend progresses them"},
 		{service.AdaptationDecision{Kind: service.AdaptationTriggerDeload, Reason: "r",
 			Params: service.AdaptationParams{VolumePctChange: -0.30, WeightPctChange: -0.10}}, "sets by about 30% and target_weight_kg by about 10%"},
 		{service.AdaptationDecision{Kind: service.AdaptationProposeExpressFormat, Reason: "r"}, "about 30 minutes"},
