@@ -16,6 +16,10 @@ const (
 
 	MinSessionMinutes = 10
 	MaxSessionMinutes = 180
+
+	// MaxLinesPerSession bounds a session's exercise lines, warm-ups and
+	// cool-downs included: a real session holds about a dozen.
+	MaxLinesPerSession = 20
 )
 
 // UnrecordedLoadFactor caps the load of an exercise the athlete has no
@@ -46,6 +50,19 @@ func (e *PrescribedExercise) LimitIssue() string {
 	default:
 		return ""
 	}
+}
+
+// SizeIssue describes why a whole session asks too much (too many lines, or
+// longer than MaxSessionMinutes to perform), or "" when it fits. A built
+// session, unlike a generated one, has nothing else bounding its size.
+func (p WorkoutPrescription) SizeIssue() string {
+	if n := len(p.WarmUps) + len(p.MainExercises) + len(p.CoolDowns); n > MaxLinesPerSession {
+		return fmt.Sprintf("%d exercise lines, at most %d", n, MaxLinesPerSession)
+	}
+	if minutes := (p.performSeconds() + 59) / 60; minutes > MaxSessionMinutes {
+		return fmt.Sprintf("about %d minutes to perform, at most %d", minutes, MaxSessionMinutes)
+	}
+	return ""
 }
 
 // SessionDurationIssue describes why a session length is out of bounds, or "".

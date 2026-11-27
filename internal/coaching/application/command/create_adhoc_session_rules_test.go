@@ -262,3 +262,58 @@ func TestCreateAdhoc_ByIDsTimedExerciseGetsAHold(t *testing.T) {
 		t.Errorf("timed line %+v, want a 45 s hold", m)
 	}
 }
+
+// Reproduces the review finding: a built session had no bound on its lines,
+// so 1,000 lines of 10 sets were stored (showing 180 min, the length cap) after
+// 1,000 catalog calls. Too many lines, or a session longer than
+// MaxSessionMinutes, is refused before any catalog call.
+func TestCreateAdhoc_BuiltPrescriptionIsBounded(t *testing.T) {
+	start := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	calls := 0
+	catalog := &exerciseCatalogMock{fn: func(_ context.Context, id string) (port.Exercise, error) {
+		calls++
+		return port.Exercise{ExerciseID: id, Name: id, PrimaryMuscle: taxonomy.MuscleGroupChest,
+			Equipment: taxonomy.EquipmentBarbell, Level: taxonomy.LevelIntermediate, MeasurementType: "REPS"}, nil
+	}}
+	handler := func() *CreateAdhocSessionHandler {
+		n := 0
+		return NewCreateAdhocSessionHandler(
+			&transactionManagerMock{fn: func(ctx context.Context, f func(context.Context) error) error { return f(ctx) }},
+			&roadmapRepositoryMock{
+				findActiveByUserFn: func(context.Context, string) (*roadmap.Roadmap, error) { return oneWeekRoadmap(t, start), nil },
+				saveFn:             func(context.Context, *roadmap.Roadmap) error { return nil },
+			},
+			catalog, injuredProfiles{},
+			&idGeneratorMock{fn: func() string { n++; return "id-" + string(rune('a'+n)) }},
+			&clockMock{now: start.Add(10 * time.Hour)},
+		)
+	}
+	lines := func(n int, sets int32) []roadmap.PrescribedExercise {
+		out := make([]roadmap.PrescribedExercise, n)
+		for i := range out {
+			out[i] = roadmap.PrescribedExercise{ExerciseID: "bench", TargetSets: sets, TargetReps: 10, RestSetSec: 90}
+		}
+		return out
+	}
+
+	_, err := handler().Handle(context.Background(), CreateAdhocSessionCommand{UserID: "user-1",
+		Prescription: &roadmap.WorkoutPrescription{MainExercises: lines(1000, 10)}})
+	if !errors.Is(err, ErrInvalidAdhocPrescription) || calls != 0 {
+		t.Errorf("1000 lines: err %v after %d catalog calls, want ErrInvalidAdhocPrescription before any", err, calls)
+	}
+
+	_, err = handler().Handle(context.Background(), CreateAdhocSessionCommand{UserID: "user-1",
+		Prescription: &roadmap.WorkoutPrescription{MainExercises: lines(12, 10)}}) // ~4 h of work
+	if !errors.Is(err, ErrInvalidAdhocPrescription) {
+		t.Errorf("a 4-hour session: err %v, want ErrInvalidAdhocPrescription", err)
+	}
+
+	calls = 0
+	if _, err = handler().Handle(context.Background(), CreateAdhocSessionCommand{UserID: "user-1",
+		Prescription: &roadmap.WorkoutPrescription{MainExercises: lines(5, 3)}}); err != nil {
+		t.Fatalf("a normal session: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("catalog calls = %d for one exercise on 5 lines, want 1", calls)
+	}
+}

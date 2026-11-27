@@ -16,16 +16,20 @@ const (
 // it is booked in nor from the model's own estimate: a session shortened by
 // the adaptive cycle must show its new length.
 func (p WorkoutPrescription) EstimatedMinutes() int32 {
+	minutes := (p.performSeconds() + 59) / 60
+	minutes = (minutes + minutesRounding - 1) / minutesRounding * minutesRounding
+	return int32(min(max(minutes, MinSessionMinutes), MaxSessionMinutes))
+}
+
+// performSeconds is the time every line takes, rests included, uncapped.
+func (p WorkoutPrescription) performSeconds() int64 {
 	var seconds int64
 	for _, list := range [][]PrescribedExercise{p.WarmUps, p.MainExercises, p.CoolDowns} {
 		for i := range list {
 			seconds += exerciseSeconds(&list[i])
 		}
 	}
-
-	minutes := (seconds + 59) / 60
-	minutes = (minutes + minutesRounding - 1) / minutesRounding * minutesRounding
-	return int32(min(max(minutes, MinSessionMinutes), MaxSessionMinutes))
+	return seconds
 }
 
 func exerciseSeconds(e *PrescribedExercise) int64 {

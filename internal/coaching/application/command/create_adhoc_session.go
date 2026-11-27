@@ -248,16 +248,24 @@ func (h *CreateAdhocSessionHandler) defaultPrescription(
 func (h *CreateAdhocSessionHandler) builtPrescription(
 	ctx context.Context, in *roadmap.WorkoutPrescription, injuries []service.Injury,
 ) (roadmap.WorkoutPrescription, []port.Exercise, error) {
+	if issue := in.SizeIssue(); issue != "" {
+		return roadmap.WorkoutPrescription{}, nil, fmt.Errorf("%w: %s", ErrInvalidAdhocPrescription, issue)
+	}
 	var mainExercises []port.Exercise
+	known := make(map[string]port.Exercise)
 	fit := func(lines []roadmap.PrescribedExercise, main bool) ([]roadmap.PrescribedExercise, error) {
 		out := make([]roadmap.PrescribedExercise, 0, len(lines))
 		for i := range lines {
 			line := lines[i]
-			found, err := h.lookUp(ctx, []string{line.ExerciseID})
-			if err != nil {
-				return nil, err
+			if _, ok := known[line.ExerciseID]; !ok {
+				found, err := h.lookUp(ctx, []string{line.ExerciseID})
+				if err != nil {
+					return nil, err
+				}
+				known[line.ExerciseID] = found[0]
 			}
-			ex := &found[0]
+			exercise := known[line.ExerciseID]
+			ex := &exercise
 			line.ExerciseName = ex.Name
 			if issue := line.LimitIssue(); issue != "" {
 				return nil, fmt.Errorf("%w: %s: %s", ErrInvalidAdhocPrescription, ex.Name, issue)
@@ -292,6 +300,10 @@ func (h *CreateAdhocSessionHandler) builtPrescription(
 	}
 	if out.CoolDowns, err = fit(in.CoolDowns, false); err != nil {
 		return out, nil, err
+	}
+	// The defaults may have lengthened it: check the session as stored.
+	if issue := out.SizeIssue(); issue != "" {
+		return roadmap.WorkoutPrescription{}, nil, fmt.Errorf("%w: %s", ErrInvalidAdhocPrescription, issue)
 	}
 	return out, mainExercises, nil
 }
