@@ -29,6 +29,15 @@ func (m *rollupMockNotifRepo) ListByUserID(_ context.Context, userID string, _, 
 func (m *rollupMockNotifRepo) MarkAsRead(_ context.Context, _, _ string) error { return nil }
 func (m *rollupMockNotifRepo) MarkAllAsRead(_ context.Context, _ string) error { return nil }
 
+func (m *rollupMockNotifRepo) FindByUserAndEventID(_ context.Context, userID, eventID string) (*aggregate.InAppNotification, error) {
+	for _, it := range m.items {
+		if it.UserID() == userID && it.EventID() == eventID {
+			return it, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *rollupMockNotifRepo) FindUnreadReactionByPost(_ context.Context, userID, feedItemID string) (*aggregate.InAppNotification, error) {
 	for i := len(m.items) - 1; i >= 0; i-- {
 		it := m.items[i]
@@ -53,6 +62,9 @@ type noopDeviceRepo struct{}
 
 func (n *noopDeviceRepo) Save(_ context.Context, _ *aggregate.Device) error { return nil }
 func (n *noopDeviceRepo) GetActiveDevicesByUserID(_ context.Context, _ string) ([]*aggregate.Device, error) {
+	return nil, nil
+}
+func (n *noopDeviceRepo) GetAllActiveUserIDs(_ context.Context) ([]string, error) {
 	return nil, nil
 }
 func (n *noopDeviceRepo) DeactivateTokens(_ context.Context, _ []string) error { return nil }

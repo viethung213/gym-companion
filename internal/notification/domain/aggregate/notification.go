@@ -9,6 +9,7 @@ import (
 // InAppNotification represents an in-app notification history record.
 type InAppNotification struct {
 	id        string
+	eventID   string
 	userID    string
 	title     string
 	body      string
@@ -41,8 +42,13 @@ func NewInAppNotification(id, userID, title, body string, data map[string]string
 	}, nil
 }
 
+func (n *InAppNotification) WithEventID(eventID string) *InAppNotification {
+	n.eventID = eventID
+	return n
+}
+
 func ReconstituteInAppNotification(
-	id, userID, title, body string,
+	id, eventID, userID, title, body string,
 	data map[string]string,
 	isRead bool,
 	createdAt time.Time,
@@ -54,6 +60,7 @@ func ReconstituteInAppNotification(
 
 	return &InAppNotification{
 		id:        id,
+		eventID:   eventID,
 		userID:    userID,
 		title:     title,
 		body:      body,
@@ -64,6 +71,7 @@ func ReconstituteInAppNotification(
 }
 
 func (n *InAppNotification) ID() string           { return n.id }
+func (n *InAppNotification) EventID() string      { return n.eventID }
 func (n *InAppNotification) UserID() string       { return n.userID }
 func (n *InAppNotification) Title() string        { return n.title }
 func (n *InAppNotification) Body() string         { return n.body }

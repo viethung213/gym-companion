@@ -132,7 +132,7 @@ func (MotionSpecificationModel) TableName() string {
 // OutboxLogModel maps to workout_execution.outbox_log table.
 type OutboxLogModel struct {
 	ID           string    `gorm:"primaryKey;type:uuid"`
-	EventID      string    `gorm:"column:event_id;type:uuid;not null"`
+	EventID      string    `gorm:"column:event_id;type:uuid;uniqueIndex;not null"`
 	EventType    string    `gorm:"column:event_type;not null"`
 	Payload      []byte    `gorm:"column:payload;type:jsonb;not null"`
 	PartitionKey string    `gorm:"column:partition_key;not null"`

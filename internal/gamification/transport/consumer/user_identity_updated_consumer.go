@@ -8,13 +8,20 @@ import (
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	profilev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type UserIdentityUpdatedConsumer struct {
 	reader        *kafka.Reader
+	dlqWriter     sharedKafka.MessageWriter
 	syncHandler   *command.SyncUserSnapshotHandler
 	outboxLogRepo port.OutboxLogRepository
+}
+
+func (c *UserIdentityUpdatedConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *UserIdentityUpdatedConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 func NewUserIdentityUpdatedConsumer(
@@ -30,7 +37,7 @@ func NewUserIdentityUpdatedConsumer(
 }
 
 func (c *UserIdentityUpdatedConsumer) Start(ctx context.Context) {
-	runConsumerLoop(ctx, "UserIdentityUpdated", c.reader, c.ProcessMessage)
+	runConsumerLoop(ctx, "UserIdentityUpdated", c.reader, c.dlqWriter, c.ProcessMessage)
 }
 
 func (c *UserIdentityUpdatedConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {

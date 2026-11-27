@@ -51,7 +51,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 	getInjuryHistoryHandler := query.NewGetInjuryHistoryHandler(userRepo)
 
 	var kafkaPub *profileKafka.Publisher
-	var userRegisteredConsumer *profileConsumer.UserRegisteredConsumer
+	var consumerMgr *profileConsumer.ConsumerManager
 
 	if deps.KafkaRegistry != nil {
 		writer, wErr := deps.KafkaRegistry.GetWriter("profile.events")
@@ -59,10 +59,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 			kafkaPub = profileKafka.NewPublisher(writer)
 		}
 
-		reader, rErr := deps.KafkaRegistry.GetReader("profile-user-registered-group", "auth.events")
-		if rErr == nil && reader != nil {
-			userRegisteredConsumer = profileConsumer.NewUserRegisteredConsumer(reader, userRepo, outboxLogRepo, txManager)
-		}
+		consumerMgr = profileConsumer.NewConsumerManager(deps.KafkaRegistry, userRepo, outboxLogRepo, txManager)
 	}
 
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
@@ -77,17 +74,16 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*profileGRPC.GRPCHandler,
 		}()
 	}
 
-	if userRegisteredConsumer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			userRegisteredConsumer.Start(workerCtx)
-		}()
+	if consumerMgr != nil {
+		consumerMgr.Start(workerCtx)
 	}
 
 	shutdown := func() {
 		slog.Info("Shutting down Profile Bounded Context background workers...")
 		cancelWorkers()
+		if consumerMgr != nil {
+			consumerMgr.Wait()
+		}
 		wg.Wait()
 		if kafkaPub != nil {
 			_ = kafkaPub.Close()

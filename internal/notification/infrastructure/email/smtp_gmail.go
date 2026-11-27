@@ -84,10 +84,18 @@ func (p *GmailProvider) SendEmail(ctx context.Context, to, subject, body string)
 		return fmt.Errorf("context canceled before sending email: %w", err)
 	}
 
-	err := smtp.SendMail(addr, auth, p.fromEmail, []string{to}, []byte(msgBuilder.String()))
-	if err != nil {
-		return fmt.Errorf("send email via smtp (%s): %w", addr, err)
-	}
+	done := make(chan error, 1)
+	go func() {
+		done <- smtp.SendMail(addr, auth, p.fromEmail, []string{to}, []byte(msgBuilder.String()))
+	}()
 
-	return nil
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("send email via smtp (%s) timed out or canceled: %w", addr, ctx.Err())
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("send email via smtp (%s): %w", addr, err)
+		}
+		return nil
+	}
 }

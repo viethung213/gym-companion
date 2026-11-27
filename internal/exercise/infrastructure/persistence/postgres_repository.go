@@ -221,7 +221,10 @@ func (r *PostgresRepository) SetAISupportedWithOutboxLog(
 				Status:       status,
 				ErrorMessage: logRecord.ErrorMessage,
 			}
-			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rec).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "event_id"}},
+				DoNothing: true,
+			}).Create(&rec).Error; err != nil {
 				return fmt.Errorf("insert outbox_log: %w", err)
 			}
 		}

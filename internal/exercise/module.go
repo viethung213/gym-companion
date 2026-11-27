@@ -3,7 +3,6 @@ package exercise
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -97,54 +96,19 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*exerciseGRPC.ExerciseSer
 		outboxWorker.Start(workerCtx)
 	}()
 
-	// Start MotionSpec event consumer worker (listening to topic 'workout_execution.events')
-	if deps.KafkaRegistry != nil {
-		motionSpecReader, err := deps.KafkaRegistry.GetReader("exercise_motion_spec_consumer", "workout_execution.events")
-		if err == nil && motionSpecReader != nil {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("PANIC RECOVERED in Exercise MotionSpec consumer worker", slog.Any("panic", r))
-					}
-					_ = motionSpecReader.Close()
-				}()
-
-				for {
-					select {
-					case <-workerCtx.Done():
-						return
-					default:
-						msg, err := motionSpecReader.ReadMessage(workerCtx)
-						if err != nil {
-							if errors.Is(err, context.Canceled) {
-								return
-							}
-							time.Sleep(1 * time.Second)
-							continue
-						}
-
-						func() {
-							defer func() {
-								if r := recover(); r != nil {
-									slog.Error("PANIC RECOVERED in Exercise MotionSpec event handling", slog.Any("panic", r))
-								}
-							}()
-							if err := motionSpecConsumer.ConsumeMotionSpecReady(workerCtx, msg.Value); err != nil {
-								slog.Error("Exercise failed to process MotionSpec event", slog.String("error", err.Error()))
-							}
-						}()
-					}
-				}
-			}()
-		}
+	// Initialize and start Kafka Consumer Manager
+	consumerMgr := exerciseConsumer.NewConsumerManager(deps.KafkaRegistry, motionSpecConsumer)
+	if consumerMgr != nil {
+		consumerMgr.Start(workerCtx)
 	}
 
 	// Shutdown callback function
 	shutdown := func() {
 		slog.Info("Shutting down Exercise Bounded Context background workers...")
 		cancelWorkers()
+		if consumerMgr != nil {
+			consumerMgr.Wait()
+		}
 		wg.Wait()
 		slog.Info("Exercise Bounded Context background workers stopped, closing Kafka publisher...")
 		if err := kafkaPub.Close(); err != nil {

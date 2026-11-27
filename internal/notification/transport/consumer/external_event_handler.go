@@ -179,12 +179,15 @@ func (h *ExternalEventHandler) Handle(
 	slog.InfoContext(ctx, "Targeted Event matched for user, dispatching push", slog.String("event_type", env.Type), slog.String("user_id", payload.UserID))
 	var sendErr error
 	if h.sendPushHandler != nil {
-		_, sendErr = h.sendPushHandler.Handle(ctx, command.SendPushNotificationCommand{
-			UserID: payload.UserID,
-			Title:  title,
-			Body:   body,
-			Data:   dataMap,
+		dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
+		_, sendErr = h.sendPushHandler.Handle(dispatchCtx, command.SendPushNotificationCommand{
+			EventID: env.ID,
+			UserID:  payload.UserID,
+			Title:   title,
+			Body:    body,
+			Data:    dataMap,
 		})
+		cancel()
 	}
 
 	if sendErr != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/port"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 type NutritionPayload struct {
@@ -23,8 +24,14 @@ type NutritionActivityHandler interface {
 
 type NutritionEventConsumer struct {
 	reader        *kafka.Reader
+	dlqWriter     sharedKafka.MessageWriter
 	handler       NutritionActivityHandler
 	outboxLogRepo port.OutboxLogRepository
+}
+
+func (c *NutritionEventConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *NutritionEventConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 func NewNutritionEventConsumer(
@@ -40,7 +47,7 @@ func NewNutritionEventConsumer(
 }
 
 func (c *NutritionEventConsumer) Start(ctx context.Context) {
-	runConsumerLoop(ctx, "NutritionEvent", c.reader, c.ProcessMessage)
+	runConsumerLoop(ctx, "NutritionEvent", c.reader, c.dlqWriter, c.ProcessMessage)
 }
 
 func (c *NutritionEventConsumer) ProcessMessage(ctx context.Context, msg *kafka.Message) error {

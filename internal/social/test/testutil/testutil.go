@@ -194,7 +194,7 @@ func NewTestDB(t *testing.T) (*gorm.DB, *Repositories) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS outbox_log (
 			id TEXT PRIMARY KEY,
-			event_id TEXT,
+			event_id TEXT UNIQUE,
 			event_type TEXT,
 			payload BLOB,
 			partition_key TEXT,

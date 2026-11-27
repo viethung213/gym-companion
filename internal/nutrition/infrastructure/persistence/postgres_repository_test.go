@@ -193,7 +193,7 @@ func createTestTables(db *sql.DB) error {
 			locked_until DATETIME, status TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS outbox_log (
-			id TEXT PRIMARY KEY, event_id TEXT, event_type TEXT,
+			id TEXT PRIMARY KEY, event_id TEXT UNIQUE, event_type TEXT,
 			payload TEXT, partition_key TEXT, processed_at DATETIME,
 			status TEXT, error_message TEXT
 		)`,

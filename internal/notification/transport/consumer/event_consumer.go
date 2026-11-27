@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
+	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 type cloudEventEnvelope struct {
@@ -21,13 +24,14 @@ type cloudEventEnvelope struct {
 // NotificationEventConsumer coordinates Kafka message consumption and delegates
 // internal vs external events to specialized handlers.
 type NotificationEventConsumer struct {
-	reader          *kafka.Reader
+	reader          sharedKafka.MessageReader
+	dlqWriter       sharedKafka.MessageWriter
 	selfHandler     *SelfEventHandler
 	externalHandler *ExternalEventHandler
 }
 
 func NewNotificationEventConsumer(
-	reader *kafka.Reader,
+	reader sharedKafka.MessageReader,
 	sendPushHandler *command.SendPushNotificationHandler,
 	sendEmailHandler *command.SendEmailNotificationHandler,
 	sendSMSHandler *command.SendSMSNotificationHandler,
@@ -43,32 +47,47 @@ func NewNotificationEventConsumer(
 	}
 }
 
+// WithDLQWriter attaches an optional dead letter queue writer to route unrecoverable failures.
+func (c *NotificationEventConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *NotificationEventConsumer {
+	c.dlqWriter = writer
+	return c
+}
+
+// WithDeviceRepo attaches an optional device repository to resolve all active users on broadcast.
+func (c *NotificationEventConsumer) WithDeviceRepo(repo repository.DeviceRepository) *NotificationEventConsumer {
+	if c.selfHandler != nil {
+		c.selfHandler.WithDeviceRepo(repo)
+	}
+	return c
+}
+
 // Start begins consuming Kafka messages continuously until the context is canceled.
 func (c *NotificationEventConsumer) Start(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.ErrorContext(ctx, "Panic recovered in NotificationEventConsumer.Start", slog.Any("panic", r))
+		}
+	}()
+
 	if c.reader == nil {
 		slog.InfoContext(ctx, "Notification consumer skipping: Kafka reader is nil")
 		return
 	}
 
 	slog.InfoContext(ctx, "Notification consumer started, listening for events")
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Notification consumer stopped")
-			return
-		default:
-			msg, err := c.reader.ReadMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				slog.ErrorContext(ctx, "Read message error", slog.Any("error", err))
-				continue
-			}
-
-			_ = c.ProcessMessage(ctx, msg.Value)
-		}
-	}
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		c.reader,
+		sharedKafka.ConsumerConfig{
+			Name:        "NotificationEventConsumer",
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   c.dlqWriter,
+		},
+		func(ctx context.Context, msg *kafka.Message) error {
+			return c.ProcessMessage(ctx, msg.Value)
+		},
+	)
 }
 
 // SelfHandler returns the handler for events originating from the Notification service itself.

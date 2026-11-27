@@ -93,6 +93,7 @@ func ensureTablesExist(db *gorm.DB) {
 		status VARCHAR(50) NOT NULL,
 		error_message TEXT
 	);`)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_profile_outbox_log_event_id ON profile.outbox_log (event_id);`)
 }
 
 func truncateTables(db *gorm.DB) {

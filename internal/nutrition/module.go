@@ -44,8 +44,7 @@ type Module struct {
 	CronWorker                *worker.DailyMenuCronWorker
 	WeeklyInsightWorker       *worker.WeeklyInsightCronWorker
 	MealReminderWorker        *worker.UpcomingMealReminderWorker
-	ProfileEventConsumer      *nutritionConsumer.ProfileEventConsumer
-	KafkaConsumer             *nutritionKafka.Consumer
+	ConsumerManager           *nutritionConsumer.ConsumerManager
 	KafkaPub                  *nutritionKafka.Publisher
 	TxManager                 *persistence.SQLTransactionManager
 }
@@ -113,8 +112,7 @@ func NewModule(
 	)
 
 	var kafkaPub *nutritionKafka.Publisher
-	var kafkaConsumer *nutritionKafka.Consumer
-	var profileEventConsumer *nutritionConsumer.ProfileEventConsumer
+	var consumerMgr *nutritionConsumer.ConsumerManager
 
 	if kafkaRegistry != nil {
 		writer, wErr := kafkaRegistry.GetWriter("nutrition.events")
@@ -122,16 +120,14 @@ func NewModule(
 			kafkaPub = nutritionKafka.NewPublisher(writer)
 		}
 
-		reader, rErr := kafkaRegistry.GetReader("nutrition-workout-completed-group", "workout_execution.events")
-		if rErr == nil && reader != nil {
-			kafkaConsumer = nutritionKafka.NewConsumer(reader, rebalanceWorkoutHdlr, outboxLogRepo)
-		}
-
-		profileEventReader, pErr := kafkaRegistry.GetReader("nutrition-profile-updated-group", "profile.events")
-		if pErr == nil && profileEventReader != nil {
-			profileEventConsumer = nutritionConsumer.NewProfileEventConsumer(profileEventReader, planRepo, outboxLogRepo, genPlanHdlr).
-				WithUserAllergyRepository(allergyRepo)
-		}
+		consumerMgr = nutritionConsumer.NewConsumerManager(
+			kafkaRegistry,
+			planRepo,
+			outboxLogRepo,
+			genPlanHdlr,
+			allergyRepo,
+			rebalanceWorkoutHdlr,
+		)
 	}
 
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
@@ -148,8 +144,7 @@ func NewModule(
 		CronWorker:                cronWorker,
 		WeeklyInsightWorker:       weeklyInsightWorker,
 		MealReminderWorker:        mealReminderWorker,
-		ProfileEventConsumer:      profileEventConsumer,
-		KafkaConsumer:             kafkaConsumer,
+		ConsumerManager:           consumerMgr,
 		KafkaPub:                  kafkaPub,
 		TxManager:                 txManager,
 	}
@@ -189,6 +184,9 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*nutritionGRPC.GRPCHandle
 		if mod.MealReminderWorker != nil {
 			mod.MealReminderWorker.Stop()
 		}
+		if mod.ConsumerManager != nil {
+			mod.ConsumerManager.Wait()
+		}
 		if mod.KafkaPub != nil {
 			_ = mod.KafkaPub.Close()
 		}
@@ -225,14 +223,7 @@ func (m *Module) StartWorkers(ctx context.Context) {
 			_ = m.MealReminderWorker.Start(ctx)
 		}()
 	}
-	if m.ProfileEventConsumer != nil {
-		go func() {
-			_ = m.ProfileEventConsumer.Start(ctx)
-		}()
-	}
-	if m.KafkaConsumer != nil {
-		go func() {
-			_ = m.KafkaConsumer.Start(ctx)
-		}()
+	if m.ConsumerManager != nil {
+		m.ConsumerManager.Start(ctx)
 	}
 }

@@ -59,6 +59,18 @@ func (r *DeviceRepository) GetActiveDevicesByUserID(ctx context.Context, userID 
 	return devices, nil
 }
 
+func (r *DeviceRepository) GetAllActiveUserIDs(ctx context.Context) ([]string, error) {
+	var userIDs []string
+	err := GetDB(ctx, r.db).Model(&DeviceModel{}).
+		Where("is_active = ?", true).
+		Distinct("user_id").
+		Pluck("user_id", &userIDs).Error
+	if err != nil {
+		return nil, fmt.Errorf("query all active user ids: %w", err)
+	}
+	return userIDs, nil
+}
+
 func (r *DeviceRepository) DeactivateTokens(ctx context.Context, tokens []string) error {
 	if len(tokens) == 0 {
 		return nil

@@ -139,6 +139,7 @@ func ensureTablesExist(db *gorm.DB) {
 		status VARCHAR(50) NOT NULL,
 		error_message TEXT
 	);`)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_workout_execution_outbox_log_event_id ON workout_execution.outbox_log (event_id);`)
 }
 
 // CleanMockData truncates all tables in workout_execution schema to clean up state.

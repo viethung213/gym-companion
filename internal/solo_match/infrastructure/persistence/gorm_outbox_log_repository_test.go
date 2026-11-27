@@ -30,7 +30,7 @@ func setupOutboxLogRepoTestDB(t *testing.T) *gorm.DB {
 	schemaSQL := `
 		CREATE TABLE IF NOT EXISTS solo_match.outbox_log (
 			id TEXT PRIMARY KEY,
-			event_id TEXT,
+			event_id TEXT UNIQUE,
 			event_type TEXT,
 			payload BLOB,
 			partition_key TEXT,

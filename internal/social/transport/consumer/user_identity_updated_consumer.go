@@ -9,6 +9,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	profilev1event "github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/profile/v1/event"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"github.com/viethung213/gym-companion/internal/social/application/command"
 	"github.com/viethung213/gym-companion/internal/social/application/port"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -16,8 +17,14 @@ import (
 
 type UserIdentityUpdatedConsumer struct {
 	reader        *kafka.Reader
+	dlqWriter     sharedKafka.MessageWriter
 	syncHandler   *command.SyncUserSnapshotHandler
 	outboxLogRepo port.OutboxLogRepository
+}
+
+func (c *UserIdentityUpdatedConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *UserIdentityUpdatedConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 func NewUserIdentityUpdatedConsumer(
@@ -34,27 +41,19 @@ func NewUserIdentityUpdatedConsumer(
 
 func (c *UserIdentityUpdatedConsumer) Start(ctx context.Context) {
 	slog.InfoContext(ctx, "Starting Social UserIdentityUpdated Kafka Consumer")
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Stopping Social UserIdentityUpdated Kafka Consumer due to context cancellation")
-			return
-		default:
-			msg, err := c.reader.ReadMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				slog.ErrorContext(ctx, "Social UserIdentityUpdated consumer read error", slog.String("error", err.Error()))
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-
-			if err := c.ProcessMessage(ctx, msg); err != nil {
-				slog.ErrorContext(ctx, "Social UserIdentityUpdated consumer process error", slog.String("error", err.Error()))
-			}
-		}
-	}
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		c.reader,
+		sharedKafka.ConsumerConfig{
+			Name:        "SocialUserIdentityUpdatedConsumer",
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   c.dlqWriter,
+		},
+		func(ctx context.Context, msg *kafka.Message) error {
+			return c.ProcessMessage(ctx, *msg)
+		},
+	)
 }
 
 //nolint:gocritic // kafka.Message is passed by value matching consumer handler contract

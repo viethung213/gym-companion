@@ -44,7 +44,10 @@ func (r *GormOutboxLogRepository) Save(
 	}
 
 	// Idempotent: bỏ qua nếu đã log event_id này với status trùng khớp
-	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(m).Error
+	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "event_id"}},
+		DoNothing: true,
+	}).Create(m).Error
 	if err != nil {
 		return fmt.Errorf("create outbox log: %w", err)
 	}

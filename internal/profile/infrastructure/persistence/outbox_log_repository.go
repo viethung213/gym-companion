@@ -49,7 +49,10 @@ func (r *GormOutboxLogRepository) SaveLog(ctx context.Context, logRecord *port.O
 		ErrorMessage: logRecord.ErrorMessage,
 	}
 	db := GetDB(ctx, r.db)
-	if err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(m).Error; err != nil {
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "event_id"}},
+		UpdateAll: true,
+	}).Create(m).Error; err != nil {
 		return fmt.Errorf("save outbox log model: %w", err)
 	}
 	return nil

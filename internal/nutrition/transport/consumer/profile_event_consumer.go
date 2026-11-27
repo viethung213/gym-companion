@@ -3,7 +3,6 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/nutrition/application/port"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/repository"
 	"github.com/viethung213/gym-companion/internal/nutrition/domain/service"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -31,6 +31,7 @@ type CloudEventEnvelope struct {
 // ProfileEventConsumer listens to Profile & Auth events to initialize user meal schedules and generate daily plans.
 type ProfileEventConsumer struct {
 	reader              *kafka.Reader
+	dlqWriter           sharedKafka.MessageWriter
 	planRepo            repository.NutritionPlanRepository
 	outboxLogRepo       port.OutboxLogRepository
 	generatePlanHandler *command.GenerateDailyPlanHandler
@@ -39,6 +40,11 @@ type ProfileEventConsumer struct {
 
 func (c *ProfileEventConsumer) WithUserAllergyRepository(repo repository.UserAllergyRepository) *ProfileEventConsumer {
 	c.allergyRepo = repo
+	return c
+}
+
+func (c *ProfileEventConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *ProfileEventConsumer {
+	c.dlqWriter = writer
 	return c
 }
 
@@ -63,27 +69,20 @@ func (c *ProfileEventConsumer) Start(ctx context.Context) error {
 	}
 
 	slog.InfoContext(ctx, "Started listening to Kafka events (UserRegistered & ProfileUpdated >= 80%)")
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Stopping consumer due to context cancellation")
-			return nil
-		default:
-			msg, err := c.reader.ReadMessage(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return nil
-				}
-				slog.ErrorContext(ctx, "Error reading Kafka message", slog.Any("error", err))
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			if err := c.ProcessMessage(ctx, msg); err != nil {
-				slog.ErrorContext(ctx, "Error processing message", slog.Any("error", err))
-			}
-		}
-	}
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		c.reader,
+		sharedKafka.ConsumerConfig{
+			Name:        "NutritionProfileEventConsumer",
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   c.dlqWriter,
+		},
+		func(ctx context.Context, msg *kafka.Message) error {
+			return c.ProcessMessage(ctx, *msg)
+		},
+	)
+	return nil
 }
 
 //nolint:gocritic // kafka.Message is passed by value per kafka consumer library design

@@ -15,6 +15,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
 	"github.com/viethung213/gym-companion/internal/coaching/domain/roadmap"
+	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
 // cloudEventEnvelope is the minimum structure we parse from Kafka message value.
@@ -370,10 +371,17 @@ func (p *SoloTrackingAbortedPayload) UnmarshalJSON(data []byte) error {
 // WorkoutExecutionConsumer routes WorkoutSessionCompleted/Aborted events to
 // the appropriate command handler.
 type WorkoutExecutionConsumer struct {
-	reader   *segmentio.Reader
-	complete *command.CompleteSessionHandler
-	abort    *command.AbortSessionHandler
-	outbox   port.OutboxRepository
+	reader    *segmentio.Reader
+	dlqWriter sharedKafka.MessageWriter
+	complete  *command.CompleteSessionHandler
+	abort     *command.AbortSessionHandler
+	outbox    port.OutboxRepository
+}
+
+// WithDLQWriter attaches an optional dead letter queue writer.
+func (c *WorkoutExecutionConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *WorkoutExecutionConsumer {
+	c.dlqWriter = writer
+	return c
 }
 
 // NewWorkoutExecutionConsumer wires the consumer.
@@ -395,52 +403,19 @@ func NewWorkoutExecutionConsumer(
 func (c *WorkoutExecutionConsumer) Start(ctx context.Context) {
 	slog.InfoContext(ctx, "Starting WorkoutExecutionConsumer on topic workout_execution.events", slog.String("topic", "workout_execution.events"))
 
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "Stopping WorkoutExecutionConsumer due to context cancellation")
-			return
-		default:
-			if c.reader == nil {
-				slog.InfoContext(ctx, "WorkoutExecutionConsumer reader is nil; stopping loop")
-				return
-			}
-
-			msg, err := c.reader.ReadMessage(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-
-				slog.ErrorContext(ctx, "Error reading workout_execution.events", slog.Any("error", err))
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			if processErr := c.processWithRetry(ctx, &msg); processErr != nil {
-				slog.ErrorContext(ctx, "Exhausted retries processing workout execution event", slog.Any("error", processErr))
-			}
-		}
-	}
-}
-
-// processWithRetry attempts to handle the message up to maxRetries times with
-// incremental backoff (100ms per attempt number).
-func (c *WorkoutExecutionConsumer) processWithRetry(ctx context.Context, msg *segmentio.Message) error {
-	const maxRetries = 3
-
-	var lastErr error
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		lastErr = c.HandleMessage(ctx, msg.Value)
-		if lastErr == nil {
-			return nil
-		}
-
-		slog.WarnContext(ctx, "Workout event attempt failed", slog.Int("attempt", attempt), slog.Int("max_retries", maxRetries), slog.Any("error", lastErr))
-		time.Sleep(time.Duration(attempt*100) * time.Millisecond)
-	}
-
-	return fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+	sharedKafka.RunConsumerLoop(
+		ctx,
+		c.reader,
+		sharedKafka.ConsumerConfig{
+			Name:        "WorkoutExecutionConsumer",
+			MaxRetries:  3,
+			BaseBackoff: 100 * time.Millisecond,
+			DLQWriter:   c.dlqWriter,
+		},
+		func(ctx context.Context, msg *segmentio.Message) error {
+			return c.HandleMessage(ctx, msg.Value)
+		},
+	)
 }
 
 // HandleMessage decodes and dispatches one Kafka message. Errors are returned
