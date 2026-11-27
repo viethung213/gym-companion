@@ -14,6 +14,8 @@ import (
 
 var _ port.OutboxLogRepository = (*OutboxLogRepository)(nil)
 
+const defaultProcessingTimeout = 3 * time.Minute
+
 type OutboxLogRepository struct {
 	db *gorm.DB
 }
@@ -33,18 +35,23 @@ func (r *OutboxLogRepository) LogProcessed(
 	}
 
 	if eventID != "" {
-		// 1. Atomic Compare-And-Swap: Nếu trạng thái hiện tại là FAILED (đây là retry),
-		// thực hiện cập nhật nguyên tử WHERE event_id = ? AND status = 'FAILED'.
-		// Chỉ duy nhất 1 worker có RowsAffected > 0 để claim quyền retry, loại bỏ hoàn toàn race condition.
+		now := time.Now().UTC()
+		zombieThreshold := now.Add(-defaultProcessingTimeout)
+
+		// 1. Atomic Compare-And-Swap: Cho phép claim lock nếu:
+		//   a) Trạng thái hiện tại là FAILED (retry sau lỗi)
+		//   b) Trạng thái hiện tại là PROCESSING nhưng đã quá thời hạn timeout (Zombie lock do server crash)
+		// Chỉ duy nhất 1 worker có RowsAffected > 0 để claim quyền xử lý, loại bỏ hoàn toàn race condition.
 		res := GetDB(ctx, r.db).Model(&OutboxLogModel{}).
-			Where("event_id = ? AND status = ?", eventID, "FAILED").
+			Where("event_id = ? AND (status = ? OR (status = ? AND processed_at < ?))",
+				eventID, "FAILED", "PROCESSING", zombieThreshold).
 			Updates(map[string]interface{}{
 				"status":        status,
-				"processed_at":  time.Now().UTC(),
+				"processed_at":  now,
 				"error_message": errMsg,
 			})
 		if res.Error != nil {
-			return false, fmt.Errorf("atomic update retry status in notification outbox_log: %w", res.Error)
+			return false, fmt.Errorf("atomic update retry or zombie status in notification outbox_log: %w", res.Error)
 		}
 		if res.RowsAffected > 0 {
 			return true, nil
@@ -56,7 +63,8 @@ func (r *OutboxLogRepository) LogProcessed(
 			Where("event_id = ?", eventID).
 			First(&existing).Error
 		if err == nil {
-			// Đã tồn tại với trạng thái khác FAILED (e.g. PROCESSING, SUCCESS, PROCESSED) -> Duplicate, bỏ qua an toàn.
+			// Đã tồn tại với trạng thái SUCCESS/PROCESSED hoặc đang PROCESSING còn trong hạn timeout (< 5 phút)
+			// -> Duplicate, bỏ qua an toàn.
 			return false, nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, fmt.Errorf("check duplicate event in notification outbox_log: %w", err)
@@ -160,13 +168,18 @@ func (r *OutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([
 
 	var models []OutboxLogModel
 	now := time.Now().UTC()
+	zombieThreshold := now.Add(-defaultProcessingTimeout)
+
 	err := GetDB(ctx, r.db).
-		Where("status = ? AND retry_count < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", "FAILED", 3, now).
+		Where(
+			"(status = ? AND retry_count < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)) OR (status = ? AND retry_count < ? AND processed_at < ?)",
+			"FAILED", 3, now, "PROCESSING", 3, zombieThreshold,
+		).
 		Order("processed_at ASC").
 		Limit(limit).
 		Find(&models).Error
 	if err != nil {
-		return nil, fmt.Errorf("query failed notification outbox logs: %w", err)
+		return nil, fmt.Errorf("query failed or zombie notification outbox logs: %w", err)
 	}
 
 	records := make([]*port.OutboxLogRecord, 0, len(models))
