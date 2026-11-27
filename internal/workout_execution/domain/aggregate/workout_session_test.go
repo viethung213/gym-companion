@@ -407,8 +407,8 @@ func TestWorkoutSession_AbortAndAbortAnomalous_Detailed(t *testing.T) {
 		if ev.IsAnomalous {
 			t.Error("want IsAnomalous = false for Abort()")
 		}
-		if ev.Reason != "user stopped early" {
-			t.Errorf("got Reason = %q, want 'user stopped early'", ev.Reason)
+		if ev.Reason != "other" { // free text leaves as its category
+			t.Errorf("got Reason = %q, want 'other'", ev.Reason)
 		}
 	})
 
@@ -438,8 +438,8 @@ func TestWorkoutSession_AbortAndAbortAnomalous_Detailed(t *testing.T) {
 		if !ev.IsAnomalous {
 			t.Error("want IsAnomalous = true for AbortAnomalous()")
 		}
-		if ev.Reason != "critical fall detected" {
-			t.Errorf("got Reason = %q, want 'critical fall detected'", ev.Reason)
+		if ev.Reason != "other" { // free text leaves as its category
+			t.Errorf("got Reason = %q, want 'other'", ev.Reason)
 		}
 	})
 
@@ -687,7 +687,10 @@ func TestWorkoutSession_AverageRPECountsRatedSetsOnly(t *testing.T) {
 // kept with the injury they report, not broadcast with every stopped workout.
 func TestWorkoutSession_AbortEventCarriesTheReasonCategoryOnly(t *testing.T) {
 	for reason, want := range map[string]string{
-		"pain: Đau nhói lưng dưới": "pain", "out-of-time": "out-of-time", " Pain ": "pain", "": "",
+		"pain: Đau nhói lưng dưới": "pain", "out-of-time": "out-of-time", " Pain ": "pain",
+		"NEW_SOLO_MATCH_STARTED": "new_solo_match_started", "": "other",
+		// Reproduces the review finding: free text without a colon went out whole.
+		"Đau lưng dưới khi deadlift": "other",
 	} {
 		session, _ := aggregate.NewWorkoutSession("sess-1", "user-1", "plan-1")
 		session.PopEvents()

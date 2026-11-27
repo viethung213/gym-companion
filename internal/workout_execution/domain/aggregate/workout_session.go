@@ -492,12 +492,26 @@ func (s *WorkoutSession) RecordBodyMetricUpdate(weightKg float32) {
 	})
 }
 
-// reasonCategory is the category of an abort reason ("pain: <note>" is
-// "pain"). The abort event leaves the service, so the athlete's own words,
-// which are health data, stay out of it.
+// knownAbortCategory reports whether the event may carry the category;
+// anything else goes out as "other". The event leaves the service, so free
+// text (the athlete's own words, health data) never goes out with it.
+func knownAbortCategory(category string) bool {
+	switch category {
+	case "pain", "out-of-time", "uncomfortable", "user_cancelled", "timeout", "new_solo_match_started":
+		return true
+	default:
+		return false
+	}
+}
+
+// reasonCategory is the category of an abort reason: "pain: <note>" is
+// "pain", and an unknown reason is "other".
 func reasonCategory(reason string) string {
 	category, _, _ := strings.Cut(reason, ":")
-	return strings.ToLower(strings.TrimSpace(category))
+	if category = strings.ToLower(strings.TrimSpace(category)); knownAbortCategory(category) {
+		return category
+	}
+	return "other"
 }
 
 // Abort transitions status to ABORTED.

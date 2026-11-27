@@ -139,6 +139,17 @@ CREATE INDEX IF NOT EXISTS ix_session_plans_pending       ON coaching.session_pl
 
 -- Why an ABORTED session was stopped; a stop for pain is left out of the weekly review.
 ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS abort_reason VARCHAR(500) NOT NULL DEFAULT '';
+-- Only the reason's category is kept: rows saved with the athlete's note
+-- ("pain: <note>") or free text become their category, or "other".
+UPDATE coaching.session_plans
+SET abort_reason = CASE
+    WHEN lower(trim(split_part(abort_reason, ':', 1))) IN
+        ('pain', 'out-of-time', 'uncomfortable', 'user_cancelled', 'timeout', 'new_solo_match_started')
+    THEN lower(trim(split_part(abort_reason, ':', 1)))
+    ELSE 'other'
+END
+WHERE abort_reason <> '' AND abort_reason NOT IN
+    ('pain', 'out-of-time', 'uncomfortable', 'user_cancelled', 'timeout', 'new_solo_match_started', 'other');
 
 -- TRAINING sessions count toward the weekly cap (BR-AC-01); RECOVERY ones are active recovery.
 ALTER TABLE coaching.session_plans ADD COLUMN IF NOT EXISTS session_kind VARCHAR(20) NOT NULL DEFAULT 'TRAINING';

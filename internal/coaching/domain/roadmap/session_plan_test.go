@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 )
 
 func newTestSessionInfo() SessionPlanInfo {
@@ -438,22 +437,37 @@ func TestSessionPlan_StoppedForPain(t *testing.T) {
 	}
 }
 
-// A long Vietnamese note is cut on a character boundary: a byte cut inside a
-// character is invalid UTF-8 and the abort could not be saved.
-func TestSessionPlan_AbortReasonKeepsValidUTF8(t *testing.T) {
+// A long Vietnamese note is not kept: the session stores the category.
+func TestSessionPlan_AbortReasonKeepsTheCategoryOnly(t *testing.T) {
 	sp := newPendingSession(t)
-	note := "pain: " + strings.Repeat("đau lưng dưới ", 60)
-	if err := sp.MarkAborted(note); err != nil {
+	if err := sp.MarkAborted("pain: " + strings.Repeat("đau lưng dưới ", 60)); err != nil {
 		t.Fatal(err)
 	}
-	got := sp.Info().AbortReason
-	if len(got) > maxAbortReasonLen || !utf8.ValidString(got) || !strings.HasPrefix(note, got) {
-		t.Errorf("reason len %d valid %v, want a valid prefix of at most %d bytes", len(got), utf8.ValidString(got), maxAbortReasonLen)
+	if got := sp.Info().AbortReason; got != "pain" || !sp.StoppedForPain() {
+		t.Errorf("reason %q, want pain and a pain stop", got)
 	}
-	if !sp.StoppedForPain() {
-		t.Error("truncated pain reason no longer reads as a pain stop")
+}
+
+// Reproduces the review finding: a session aborted before the category-only
+// change still holds "pain: <note>" and stopped counting as a pain stop; free
+// text without a colon was kept whole. Stored or new, the reason reads as its
+// category, and an unknown one as "other".
+func TestSessionPlan_AbortReasonCategories(t *testing.T) {
+	info := newTestSessionInfo()
+	info.Status, info.AbortReason = SessionPlanStatusAborted, "pain: đau gối"
+	legacy, err := RehydrateSessionPlan(&info)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if truncateRunes("abc", 10) != "abc" || truncateRunes("abcdef", 3) != "abc" {
-		t.Error("ASCII truncation changed")
+	if !legacy.StoppedForPain() {
+		t.Error(`a stored "pain: <note>" is not a pain stop`)
+	}
+
+	sp := newPendingSession(t)
+	if err := sp.MarkAborted("Đau lưng dưới khi deadlift"); err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Info().AbortReason; got != "other" {
+		t.Errorf("free text stored as %q, want other", got)
 	}
 }

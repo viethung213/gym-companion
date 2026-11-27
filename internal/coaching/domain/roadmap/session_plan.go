@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // PrescribedExercise is a single exercise line item within a WorkoutPrescription.
@@ -52,9 +51,6 @@ type SessionPlanInfo struct {
 	// ("pain", "out-of-time", "timeout"). The athlete's note is not kept.
 	AbortReason string
 }
-
-// maxAbortReasonLen bounds the stored reason; it carries the athlete's note.
-const maxAbortReasonLen = 500
 
 // SessionPlan is an entity nested under DayPlan.
 type SessionPlan struct {
@@ -248,7 +244,7 @@ func (s *SessionPlan) StoppedForPain() bool {
 	if s.info.Status != SessionPlanStatusAborted {
 		return false
 	}
-	return s.info.AbortReason == "pain"
+	return abortCategory(s.info.AbortReason) == "pain"
 }
 
 // RewritePrescription replaces the prescription content in-place while the
@@ -371,24 +367,24 @@ func copyStringSlice(in []string) []string {
 	return out
 }
 
-// abortCategory is the category of an abort reason ("pain: <note>" is "pain"),
-// bounded for storage. Events from before the workout service sent the
-// category only still carry the note, which must not be kept here.
-func abortCategory(reason string) string {
-	category, _, _ := strings.Cut(reason, ":")
-	return truncateRunes(strings.ToLower(strings.TrimSpace(category)), maxAbortReasonLen)
+// knownAbortCategory reports whether a session keeps the category; anything
+// else is "other", so no free text from the athlete is stored here.
+func knownAbortCategory(category string) bool {
+	switch category {
+	case "pain", "out-of-time", "uncomfortable", "user_cancelled", "timeout", "new_solo_match_started":
+		return true
+	default:
+		return false
+	}
 }
 
-// truncateRunes shortens s to at most maxBytes bytes without splitting a
-// character: the reason carries the athlete's note, often Vietnamese, and a
-// cut mid-character is invalid UTF-8 the database refuses.
-func truncateRunes(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return s
+// abortCategory is the category of an abort reason: "pain: <note>" is "pain",
+// and an unknown reason is "other". It also reads rows stored before only the
+// category was kept.
+func abortCategory(reason string) string {
+	category, _, _ := strings.Cut(reason, ":")
+	if category = strings.ToLower(strings.TrimSpace(category)); knownAbortCategory(category) {
+		return category
 	}
-	end := maxBytes
-	for end > 0 && !utf8.RuneStart(s[end]) {
-		end--
-	}
-	return s[:end]
+	return "other"
 }
