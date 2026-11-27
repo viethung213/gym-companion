@@ -95,6 +95,42 @@ func TestGORMOutboxLogRepository_Save(t *testing.T) {
 			t.Fatalf("second save should succeed idempotently: %v", err)
 		}
 	})
+
+	t.Run("updates status and error message on retry", func(t *testing.T) {
+		// Attempt 1 fails
+		err := repo.Save(ctx, "evt_retry_1", "contracts.test.Event", []byte(`{}`), "k4", "FAILED", "initial error")
+		if err != nil {
+			t.Fatalf("first save err: %v", err)
+		}
+
+		// Attempt 2 fails with updated error
+		err = repo.Save(ctx, "evt_retry_1", "contracts.test.Event", []byte(`{}`), "k4", "FAILED", "retry error")
+		if err != nil {
+			t.Fatalf("retry save err: %v", err)
+		}
+
+		var m persistence.OutboxLogModel
+		if err := db.Where("event_id = ?", "evt_retry_1").First(&m).Error; err != nil {
+			t.Fatalf("query outbox log err: %v", err)
+		}
+		if m.ErrorMessage != "retry error" {
+			t.Errorf("got error_message %q, want %q", m.ErrorMessage, "retry error")
+		}
+
+		// Attempt 3 succeeds
+		err = repo.Save(ctx, "evt_retry_1", "contracts.test.Event", []byte(`{}`), "k4", "PROCESSED", "")
+		if err != nil {
+			t.Fatalf("success save err: %v", err)
+		}
+
+		processed, err := repo.IsProcessed(ctx, "evt_retry_1")
+		if err != nil {
+			t.Fatalf("IsProcessed err: %v", err)
+		}
+		if !processed {
+			t.Errorf("expected evt_retry_1 to be processed after successful retry")
+		}
+	})
 }
 
 func TestGORMOutboxLogRepository_IsProcessed(t *testing.T) {

@@ -65,7 +65,7 @@ func (r *PostgresOutboxLogRepository) SaveLog(ctx context.Context, record *port.
 
 	if err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "event_id"}},
-		DoNothing: true,
+		DoUpdates: clause.AssignmentColumns([]string{"status", "error_message", "processed_at"}),
 	}).Create(model).Error; err != nil {
 		return fmt.Errorf("failed to save outbox_log record: %w", err)
 	}
