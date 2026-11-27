@@ -105,12 +105,13 @@ func (h *RegenerateScheduleHandler) Handle(ctx context.Context, cmd RegenerateSc
 	if !errors.Is(err, errRegenerationFailed) {
 		return res, err
 	}
-	if deferErr := h.deferRegeneration(ctx, cmd); deferErr != nil {
+	rm, deferErr := h.deferRegeneration(ctx, cmd)
+	if deferErr != nil {
 		return nil, errors.Join(err, deferErr)
 	}
 	slog.WarnContext(ctx, "Schedule regeneration deferred; the lifecycle worker retries it",
 		slog.String("user_id", cmd.UserID), slog.String("reason", cmd.Reason), slog.Any("error", err))
-	return &RegenerateScheduleResult{Deferred: true}, nil
+	return &RegenerateScheduleResult{Roadmap: rm, Deferred: true}, nil
 }
 
 // RetryDue retries the profile change waiting on the athlete's active
@@ -246,21 +247,28 @@ func (h *RegenerateScheduleHandler) regenerate(ctx context.Context, cmd Regenera
 // deferRegeneration keeps the change on the athlete's active roadmap for the
 // lifecycle worker. It reads the roadmap again: the generation that failed may
 // have taken minutes, and the save must start from the stored version. An
-// unknown change time is taken as now, as Handle does.
-func (h *RegenerateScheduleHandler) deferRegeneration(ctx context.Context, cmd RegenerateScheduleCommand) error {
+// unknown change time is taken as now, as Handle does. It returns the roadmap
+// as saved, its schedule unchanged.
+func (h *RegenerateScheduleHandler) deferRegeneration(ctx context.Context, cmd RegenerateScheduleCommand) (*roadmap.Roadmap, error) {
 	changedAt := cmd.ChangedAt
 	if changedAt.IsZero() {
 		changedAt = h.clock.Now()
 	}
-	return h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	var saved *roadmap.Roadmap
+	err := h.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		rm, err := h.repo.FindActiveByUser(txCtx, cmd.UserID)
 		if err != nil {
 			return fmt.Errorf("load roadmap to defer regeneration: %w", err)
 		}
 		rm.MarkRegenerationDue(changedAt, cmd.Reason)
 		rm.Touch(h.clock.Now())
-		return h.repo.Save(txCtx, rm)
+		if err := h.repo.Save(txCtx, rm); err != nil {
+			return err
+		}
+		saved = rm
+		return nil
 	})
+	return saved, err
 }
 
 // dueReflectedBy reports whether a schedule planned at plannedAt already

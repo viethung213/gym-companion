@@ -4,6 +4,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"unicode/utf8"
 
 	"github.com/viethung213/gym-companion/internal/coaching/application/command"
 	"github.com/viethung213/gym-companion/internal/coaching/application/port"
@@ -146,6 +147,9 @@ func (s *Server) RegenerateSchedule(ctx context.Context, req *pbmsg.RegenerateSc
 		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
 
+	if utf8.RuneCountInString(req.GetReason()) > roadmap.MaxRegenerationReasonLen {
+		return nil, status.Errorf(codes.InvalidArgument, "reason exceeds %d characters", roadmap.MaxRegenerationReasonLen)
+	}
 	res, err := s.regenerate.Handle(ctx, command.RegenerateScheduleCommand{
 		UserID: actor.UserID,
 		Reason: req.GetReason(),

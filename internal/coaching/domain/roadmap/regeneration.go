@@ -10,6 +10,10 @@ import (
 // retried before it is dropped.
 const RegenerationGiveUpAfter = 24 * time.Hour
 
+// MaxRegenerationReasonLen bounds a regeneration reason, in characters (the
+// stored column is VARCHAR(64)).
+const MaxRegenerationReasonLen = 64
+
 // ErrNoRegenerationDue is returned when no profile change is waiting.
 var ErrNoRegenerationDue = errors.New("no regeneration is due")
 

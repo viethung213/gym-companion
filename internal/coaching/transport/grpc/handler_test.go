@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/viethung213/gym-companion/internal/coaching/domain/taxonomy"
 	pbmsg "github.com/viethung213/gym-companion/internal/gen/go/contracts/core/coaching/v1/message"
 	"github.com/viethung213/gym-companion/internal/shared/middleware"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestServer_CreateAdhocSessionPlan(t *testing.T) {
@@ -386,4 +389,15 @@ type testProfiles struct{}
 
 func (testProfiles) GetProfile(_ context.Context, userID string) (port.Profile, error) {
 	return port.Profile{UserID: userID}, nil
+}
+
+// Reproduces the review finding: a reason longer than the stored column
+// reached the model and then failed to save (Internal). It is refused first.
+func TestServer_RegenerateSchedule_RejectsAnOverlongReason(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil) // a call past validation would panic
+	ctx := middleware.WithActor(context.Background(), "user-1", "User")
+	_, err := server.RegenerateSchedule(ctx, &pbmsg.RegenerateScheduleRequest{Reason: strings.Repeat("đ", 65)})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("err = %v, want InvalidArgument", err)
+	}
 }

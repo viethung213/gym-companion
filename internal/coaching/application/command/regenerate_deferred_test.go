@@ -56,6 +56,11 @@ func TestRegenerate_ModelDownKeepsTheChangeForALaterRetry(t *testing.T) {
 	if err != nil || !res.Deferred {
 		t.Fatalf("got %+v, %v; want Deferred and no error (the event is consumed)", res, err)
 	}
+	// Reproduces the review finding: a deferred call returned no roadmap, and
+	// the RPC answered OK with an empty one. The unchanged roadmap is returned.
+	if res.Roadmap == nil || res.Roadmap.ID() != "rm-1" {
+		t.Errorf("deferred result roadmap = %v, want the current roadmap", res.Roadmap)
+	}
 	rm, _ := repo.FindActiveByUser(context.Background(), "u-1")
 	due, err := rm.PendingRegeneration()
 	if err != nil || !due.ChangedAt.Equal(changedAt) || due.Reason != "injury_reported" {
