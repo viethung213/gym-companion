@@ -765,4 +765,3 @@ func TestPushChannelDispatcher_GroupPrivacySettings(t *testing.T) {
 		t.Fatalf("expected push call for high priority, got %d", pushProv.callCount)
 	}
 }
-
