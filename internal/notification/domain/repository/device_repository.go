@@ -9,6 +9,6 @@ import (
 type DeviceRepository interface {
 	Save(ctx context.Context, device *aggregate.Device) error
 	GetActiveDevicesByUserID(ctx context.Context, userID string) ([]*aggregate.Device, error)
-	GetAllActiveUserIDs(ctx context.Context) ([]string, error)
+	GetActiveDevicesByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Device, error)
 	DeactivateTokens(ctx context.Context, tokens []string) error
 }

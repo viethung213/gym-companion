@@ -209,10 +209,34 @@ type OutboxLogModel struct {
 	ErrorMessage string    `gorm:"column:error_message"`
 	RetryCount   int       `gorm:"column:retry_count;default:0"`
 	NextRetryAt  time.Time `gorm:"column:next_retry_at"`
+	Metadata     []byte    `gorm:"column:metadata;type:jsonb"`
 }
 
 func (OutboxLogModel) TableName() string {
 	return "notification.outbox_log"
+}
+
+type SystemAnnouncementModel struct {
+	ID        string    `gorm:"primaryKey;column:id"`
+	EventID   string    `gorm:"column:event_id;uniqueIndex"`
+	Title     string    `gorm:"column:title"`
+	Body      string    `gorm:"column:body"`
+	Data      []byte    `gorm:"column:data;type:jsonb"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (SystemAnnouncementModel) TableName() string {
+	return "notification.system_announcements"
+}
+
+type SystemAnnouncementReadModel struct {
+	AnnouncementID string    `gorm:"primaryKey;column:announcement_id"`
+	UserID         string    `gorm:"primaryKey;column:user_id"`
+	ReadAt         time.Time `gorm:"column:read_at"`
+}
+
+func (SystemAnnouncementReadModel) TableName() string {
+	return "notification.system_announcement_reads"
 }
 
 var _ = sql.ErrNoRows

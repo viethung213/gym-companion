@@ -7,11 +7,22 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"github.com/viethung213/gym-companion/internal/notification/application/command"
-	"github.com/viethung213/gym-companion/internal/notification/application/port"
-	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
+
+const maxInboundRetries = 3
+
+// calculateRetryProgression computes next retry count, target status, and scheduled next retry time.
+func calculateRetryProgression(currentRetry int) (nextCount int, status string, nextRetryAt time.Time) {
+	nextCount = currentRetry + 1
+	if nextCount >= maxInboundRetries {
+		return nextCount, "DEAD_LETTER", time.Time{}
+	}
+	if nextCount == 1 {
+		return nextCount, "FAILED", time.Now().UTC().Add(10 * time.Second)
+	}
+	return nextCount, "FAILED", time.Now().UTC().Add(30 * time.Second)
+}
 
 type cloudEventEnvelope struct {
 	ID     string          `json:"id"`
@@ -32,14 +43,9 @@ type NotificationEventConsumer struct {
 
 func NewNotificationEventConsumer(
 	reader sharedKafka.MessageReader,
-	sendPushHandler *command.SendPushNotificationHandler,
-	sendEmailHandler *command.SendEmailNotificationHandler,
-	sendSMSHandler *command.SendSMSNotificationHandler,
-	outboxLogRepo port.OutboxLogRepository,
+	selfHandler *SelfEventHandler,
+	externalHandler *ExternalEventHandler,
 ) *NotificationEventConsumer {
-	selfHandler := NewSelfEventHandler(sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo)
-	externalHandler := NewExternalEventHandler(sendPushHandler, outboxLogRepo)
-
 	return &NotificationEventConsumer{
 		reader:          reader,
 		selfHandler:     selfHandler,
@@ -50,14 +56,6 @@ func NewNotificationEventConsumer(
 // WithDLQWriter attaches an optional dead letter queue writer to route unrecoverable failures.
 func (c *NotificationEventConsumer) WithDLQWriter(writer sharedKafka.MessageWriter) *NotificationEventConsumer {
 	c.dlqWriter = writer
-	return c
-}
-
-// WithDeviceRepo attaches an optional device repository to resolve all active users on broadcast.
-func (c *NotificationEventConsumer) WithDeviceRepo(repo repository.DeviceRepository) *NotificationEventConsumer {
-	if c.selfHandler != nil {
-		c.selfHandler.WithDeviceRepo(repo)
-	}
 	return c
 }
 

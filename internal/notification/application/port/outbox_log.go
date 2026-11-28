@@ -16,12 +16,17 @@ type OutboxLogRecord struct {
 	ErrorMessage string
 	RetryCount   int
 	NextRetryAt  time.Time
+	Metadata     []byte
+}
+
+type OutboxLogMetadata struct {
+	ChannelsDispatched []string `json:"channels_dispatched,omitempty"`
 }
 
 type OutboxLogRepository interface {
-	// LogProcessed records an inbound event in notification.outbox_log. Returns (fresh=true, nil) on first record, (fresh=false, nil) on duplicate event_id.
-	LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte, status, errMsg string) (bool, error)
-	// SaveLog records an outbound worker log entry in notification.outbox_log.
+	// LogProcessed records an inbound event in notification.outbox_log. Returns non-nil record on successful claim lock, (nil, nil) on duplicate event_id.
+	LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte) (*OutboxLogRecord, error)
+	// SaveLog updates the processing outcome (status, error message, metadata) of an inbound event in notification.outbox_log.
 	SaveLog(ctx context.Context, record *OutboxLogRecord) error
 	// FetchFailedLogs fetches inbound failed event logs for retry.
 	FetchFailedLogs(ctx context.Context, limit int) ([]*OutboxLogRecord, error)

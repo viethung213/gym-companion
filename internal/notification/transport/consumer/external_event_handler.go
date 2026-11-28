@@ -3,45 +3,78 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 )
 
 type externalEventData struct {
-	UserID      string `json:"userId"`
-	Title       string `json:"title"`
-	Message     string `json:"message"`
-	Body        string `json:"body"`
-	MealName    string `json:"mealName"`
-	MealType    string `json:"mealType"`
-	WorkoutName string `json:"workoutName"`
+	UserID      string  `json:"userId"`
+	Title       string  `json:"title"`
+	Message     string  `json:"message"`
+	Body        string  `json:"body"`
+	MealName    string  `json:"mealName"`
+	MealType    string  `json:"mealType"`
+	WorkoutName string  `json:"workoutName"`
+	ExerciseID  string  `json:"exerciseId"`
+	OneRepMax   float32 `json:"oneRepMax"`
+	Weight      float32 `json:"weight"`
+	Reps        int32   `json:"reps"`
 }
 
 type ExternalEventRule struct {
 	DefaultTitle string
 	DefaultBody  string
-	// Formatter optionally customizes title and body based on the parsed event data
-	Formatter func(data *externalEventData) (title, body string)
+	Formatter    func(data *externalEventData) (title, body string, dataMap map[string]string)
+}
+
+func (r ExternalEventRule) Format(data *externalEventData) (title, body string, dataMap map[string]string) {
+	if r.Formatter != nil {
+		title, body, dataMap = r.Formatter(data)
+	}
+	if title == "" {
+		if data != nil && data.Title != "" {
+			title = data.Title
+		} else {
+			title = r.DefaultTitle
+		}
+	}
+	if body == "" {
+		switch {
+		case data != nil && data.Body != "":
+			body = data.Body
+		case data != nil && data.Message != "":
+			body = data.Message
+		default:
+			body = r.DefaultBody
+		}
+	}
+	if dataMap == nil {
+		dataMap = make(map[string]string)
+	}
+	return title, body, dataMap
 }
 
 // ExternalEventHandler handles domain events published by external services (e.g. workout_execution, nutrition, coaching).
 type ExternalEventHandler struct {
-	sendPushHandler *command.SendPushNotificationHandler
-	outboxLogRepo   port.OutboxLogRepository
-	rules           map[string]ExternalEventRule
+	sendNotificationHandler *command.SendNotificationHandler
+	outboxLogRepo           port.OutboxLogRepository
+	rules                   map[string]ExternalEventRule
 }
 
 func NewExternalEventHandler(
-	sendPushHandler *command.SendPushNotificationHandler,
+	sendNotificationHandler *command.SendNotificationHandler,
 	outboxLogRepo port.OutboxLogRepository,
 ) *ExternalEventHandler {
 	handler := &ExternalEventHandler{
-		sendPushHandler: sendPushHandler,
-		outboxLogRepo:   outboxLogRepo,
-		rules:           make(map[string]ExternalEventRule),
+		sendNotificationHandler: sendNotificationHandler,
+		outboxLogRepo:           outboxLogRepo,
+		rules:                   make(map[string]ExternalEventRule),
 	}
 
 	handler.registerDefaultRules()
@@ -55,9 +88,43 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 	prRule := ExternalEventRule{
 		DefaultTitle: "Kỷ lục cá nhân mới! 🏆",
 		DefaultBody:  "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!",
+		Formatter: func(data *externalEventData) (string, string, map[string]string) {
+			title := "Kỷ lục cá nhân mới! 🏆"
+			body := "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!"
+			switch {
+			case data.Weight > 0 && data.Reps > 0 && data.OneRepMax > 0:
+				body = fmt.Sprintf("Chúc mừng bạn vừa đạt PR mới: %.1f kg x %d reps (1RM ước tính: %.1f kg)!", data.Weight, data.Reps, data.OneRepMax)
+			case data.Weight > 0 && data.Reps > 0:
+				body = fmt.Sprintf("Chúc mừng bạn vừa đạt PR mới: %.1f kg x %d reps!", data.Weight, data.Reps)
+			case data.OneRepMax > 0:
+				body = fmt.Sprintf("Chúc mừng bạn vừa đạt mức 1RM kỷ lục mới: %.1f kg!", data.OneRepMax)
+			case data.Body != "":
+				body = data.Body
+			case data.Message != "":
+				body = data.Message
+			}
+
+			if data.Title != "" {
+				title = data.Title
+			}
+
+			m := make(map[string]string)
+			if data.ExerciseID != "" {
+				m["exerciseId"] = data.ExerciseID
+			}
+			if data.OneRepMax > 0 {
+				m["oneRepMax"] = fmt.Sprintf("%.1f", data.OneRepMax)
+			}
+			if data.Weight > 0 {
+				m["weight"] = fmt.Sprintf("%.1f", data.Weight)
+			}
+			if data.Reps > 0 {
+				m["reps"] = strconv.Itoa(int(data.Reps))
+			}
+			return title, body, m
+		},
 	}
 	h.RegisterRule("contracts.core.workout_execution.v1.event.NewPersonalRecordAchieved", prRule)
-	h.RegisterRule("contracts.core.workout_execution.v1.newPersonalRecordAchieved", prRule)
 
 	// ==========================================
 	// 2. SERVICE: NUTRITION
@@ -65,22 +132,38 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 	mealRule := ExternalEventRule{
 		DefaultTitle: "Nhắc nhở bữa ăn 🥗",
 		DefaultBody:  "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!",
-		Formatter: func(data *externalEventData) (string, string) {
-			if data.MealName == "" {
-				return "", ""
+		Formatter: func(data *externalEventData) (string, string, map[string]string) {
+			title := "Nhắc nhở bữa ăn 🥗"
+			body := "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!"
+			switch {
+			case data.MealName != "":
+				title = "Nhắc nhở bữa ăn 🥗: " + data.MealName
+				if data.MealType != "" {
+					body = fmt.Sprintf("Sắp đến giờ ăn %s (%s). Nhớ chuẩn bị bữa ăn nhé!", data.MealName, data.MealType)
+				} else {
+					body = fmt.Sprintf("Sắp đến giờ ăn %s. Nhớ chuẩn bị bữa ăn nhé!", data.MealName)
+				}
+			case data.Body != "":
+				body = data.Body
+			case data.Message != "":
+				body = data.Message
 			}
-			title := "Nhắc nhở bữa ăn 🥗: " + data.MealName
-			var body string
+
+			if data.Title != "" {
+				title = data.Title
+			}
+
+			m := make(map[string]string)
+			if data.MealName != "" {
+				m["mealName"] = data.MealName
+			}
 			if data.MealType != "" {
-				body = fmt.Sprintf("Sắp đến giờ ăn %s (%s). Nhớ chuẩn bị bữa ăn nhé!", data.MealName, data.MealType)
-			} else {
-				body = fmt.Sprintf("Sắp đến giờ ăn %s. Nhớ chuẩn bị bữa ăn nhé!", data.MealName)
+				m["mealType"] = data.MealType
 			}
-			return title, body
+			return title, body, m
 		},
 	}
 	h.RegisterRule("contracts.core.nutrition.v1.event.UpcomingMealReminder", mealRule)
-	h.RegisterRule("contracts.core.nutrition.v1.upcomingMealReminder", mealRule)
 
 	// ==========================================
 	// 3. SERVICE: COACHING
@@ -88,17 +171,31 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 	coachingRule := ExternalEventRule{
 		DefaultTitle: "Nhắc nhở buổi tập ⏰",
 		DefaultBody:  "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!",
-		Formatter: func(data *externalEventData) (string, string) {
-			if data.WorkoutName == "" {
-				return "", ""
+		Formatter: func(data *externalEventData) (string, string, map[string]string) {
+			title := "Nhắc nhở buổi tập ⏰"
+			body := "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!"
+			switch {
+			case data.WorkoutName != "":
+				title = "Nhắc nhở buổi tập ⏰: " + data.WorkoutName
+				body = fmt.Sprintf("Sắp đến giờ tập %s. Chuẩn bị sẵn sàng nhé!", data.WorkoutName)
+			case data.Body != "":
+				body = data.Body
+			case data.Message != "":
+				body = data.Message
 			}
-			title := "Nhắc nhở buổi tập ⏰: " + data.WorkoutName
-			body := fmt.Sprintf("Sắp đến giờ tập %s. Chuẩn bị sẵn sàng nhé!", data.WorkoutName)
-			return title, body
+
+			if data.Title != "" {
+				title = data.Title
+			}
+
+			m := make(map[string]string)
+			if data.WorkoutName != "" {
+				m["workoutName"] = data.WorkoutName
+			}
+			return title, body, m
 		},
 	}
 	h.RegisterRule("contracts.core.coaching.v1.event.UpcomingWorkoutReminder", coachingRule)
-	h.RegisterRule("contracts.core.coaching.v1.upcomingWorkoutReminder", coachingRule)
 }
 
 // RegisterRule allows easily registering event rules for new external services in the future.
@@ -121,6 +218,13 @@ func (h *ExternalEventHandler) Handle(
 		return nil
 	}
 
+	if env.ID == "" {
+		return fmt.Errorf("cloudevent missing required event id for type: %s", env.Type)
+	}
+	if h.outboxLogRepo == nil {
+		return errors.New("outbox log repository is required for external event handler")
+	}
+
 	var payload externalEventData
 	if err := json.Unmarshal(env.Data, &payload); err != nil {
 		slog.ErrorContext(ctx, "Unmarshal CloudEvent data failed", slog.String("event_type", env.Type), slog.Any("error", err))
@@ -131,90 +235,106 @@ func (h *ExternalEventHandler) Handle(
 		return nil
 	}
 
-	if h.outboxLogRepo != nil && env.ID != "" {
-		fresh, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, payload.UserID, msgValue, "PROCESSING", "")
-		if logErr != nil {
-			slog.ErrorContext(ctx, "LogProcessed error for event", slog.String("event_id", env.ID), slog.Any("error", logErr))
-		} else if !fresh {
-			slog.DebugContext(ctx, "Duplicate event already recorded in outbox_log, skipping", slog.String("event_type", env.Type), slog.String("event_id", env.ID))
-			return nil
-		}
+	logRec, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, payload.UserID, msgValue)
+	if logErr != nil {
+		slog.ErrorContext(ctx, "LogProcessed error for event", slog.String("event_id", env.ID), slog.Any("error", logErr))
+	} else if logRec == nil {
+		slog.DebugContext(ctx, "Duplicate event already recorded in outbox_log, skipping", slog.String("event_type", env.Type), slog.String("event_id", env.ID))
+		return nil
 	}
 
-	title := payload.Title
-	body := payload.Body
-	if body == "" {
-		body = payload.Message
-	}
+	title, body, dataMap := rule.Format(&payload)
+	dataMap["eventId"] = env.ID
+	dataMap["eventType"] = env.Type
+	dataMap["source"] = env.Source
 
-	if rule.Formatter != nil {
-		customTitle, customBody := rule.Formatter(&payload)
-		if customTitle != "" {
-			title = customTitle
-		}
-		if customBody != "" {
-			body = customBody
-		}
-	}
+	slog.InfoContext(ctx, "Targeted Event matched for user, dispatching notification",
+		slog.String("event_type", env.Type),
+		slog.String("user_id", payload.UserID),
+	)
 
-	if title == "" {
-		title = rule.DefaultTitle
-	}
-	if body == "" {
-		body = rule.DefaultBody
-	}
-
-	dataMap := map[string]string{
-		"eventId":   env.ID,
-		"eventType": env.Type,
-		"source":    env.Source,
-	}
-	if payload.MealName != "" {
-		dataMap["mealName"] = payload.MealName
-	}
-	if payload.WorkoutName != "" {
-		dataMap["workoutName"] = payload.WorkoutName
-	}
-
-	slog.InfoContext(ctx, "Targeted Event matched for user, dispatching push", slog.String("event_type", env.Type), slog.String("user_id", payload.UserID))
 	var sendErr error
-	if h.sendPushHandler != nil {
-		dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
-		_, sendErr = h.sendPushHandler.Handle(dispatchCtx, command.SendPushNotificationCommand{
+	if h.sendNotificationHandler != nil {
+		target := port.NotificationTarget{
+			Scope:  port.ScopeDirect,
+			UserID: payload.UserID,
+		}
+		resp, nErr := h.sendNotificationHandler.Handle(ctx, &command.SendNotificationCommand{
+			Target:  target,
 			EventID: env.ID,
-			UserID:  payload.UserID,
 			Title:   title,
 			Body:    body,
 			Data:    dataMap,
 		})
-		cancel()
+
+		inAppSucceeded := false
+		if resp != nil {
+			for _, ch := range resp.Dispatched {
+				if ch == "IN_APP" {
+					inAppSucceeded = true
+					break
+				}
+			}
+		}
+
+		if inAppSucceeded {
+			if nErr != nil {
+				slog.WarnContext(ctx, "External event push dispatch failed, but in-app saved successfully",
+					slog.String("event_id", env.ID),
+					slog.String("event_type", env.Type),
+					slog.Any("error", nErr),
+				)
+			}
+			sendErr = nil
+		} else {
+			sendErr = nErr
+		}
 	}
 
 	if sendErr != nil {
-		slog.ErrorContext(ctx, "Error sending push notification for event", slog.String("event_id", env.ID), slog.Any("error", sendErr))
-		if h.outboxLogRepo != nil && env.ID != "" {
-			_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
-				EventID:      env.ID,
-				EventType:    env.Type,
-				Payload:      msgValue,
-				PartitionKey: payload.UserID,
-				Status:       "FAILED",
-				ErrorMessage: sendErr.Error(),
-			})
+		slog.ErrorContext(ctx, "Error sending notification for event", slog.String("event_id", env.ID), slog.Any("error", sendErr))
+	}
+
+	status := "SUCCESS"
+	errMsg := ""
+	retryCount := 0
+	var nextRetryAt time.Time
+
+	if sendErr != nil {
+		errMsg = sendErr.Error()
+		currentRetry := 0
+		if logRec != nil {
+			currentRetry = logRec.RetryCount
 		}
-		return sendErr
+		retryCount, status, nextRetryAt = calculateRetryProgression(currentRetry)
+		if status == "DEAD_LETTER" {
+			slog.ErrorContext(ctx, "External event reached max retry attempts (3), moved to DEAD_LETTER",
+				slog.String("event_id", env.ID),
+				slog.String("event_type", env.Type),
+				slog.Int("attempts", retryCount),
+				slog.Any("error", sendErr),
+			)
+		} else {
+			slog.WarnContext(ctx, "External event dispatch failed, scheduled for retry",
+				slog.String("event_id", env.ID),
+				slog.String("event_type", env.Type),
+				slog.Int("attempt", retryCount),
+				slog.Time("next_retry_at", nextRetryAt),
+				slog.Any("error", sendErr),
+			)
+		}
 	}
 
-	if h.outboxLogRepo != nil && env.ID != "" {
-		_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
-			EventID:      env.ID,
-			EventType:    env.Type,
-			Payload:      msgValue,
-			PartitionKey: payload.UserID,
-			Status:       "SUCCESS",
-			ErrorMessage: "",
-		})
-	}
+	_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      env.ID,
+		EventType:    env.Type,
+		Payload:      msgValue,
+		PartitionKey: payload.UserID,
+		Status:       status,
+		ErrorMessage: errMsg,
+		RetryCount:   retryCount,
+		NextRetryAt:  nextRetryAt,
+	})
 
-	return nil
+	return sendErr
 }

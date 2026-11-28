@@ -10,7 +10,7 @@ import (
 )
 
 func TestConsumerManager_NilRegistry(t *testing.T) {
-	mgr := consumer.NewConsumerManager(nil, nil, nil, nil, nil, nil)
+	mgr := consumer.NewConsumerManager(nil, nil, nil)
 	if mgr != nil {
 		t.Fatal("expected nil ConsumerManager when registry is nil")
 	}
@@ -26,7 +26,7 @@ func TestConsumerManager_NilRegistry(t *testing.T) {
 
 func TestConsumerManager_WithRegistry(t *testing.T) {
 	registry := sharedKafka.GetRegistry()
-	mgr := consumer.NewConsumerManager(registry, nil, nil, nil, nil, nil)
+	mgr := consumer.NewConsumerManager(registry, nil, nil)
 	if mgr == nil {
 		t.Fatal("expected non-nil ConsumerManager when registry is provided")
 	}

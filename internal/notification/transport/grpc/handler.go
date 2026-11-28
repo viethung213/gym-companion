@@ -20,7 +20,6 @@ var _ notificationv1service.NotificationServiceServer = (*GRPCHandler)(nil)
 //nolint:revive // GRPCHandler name is consistent across bounded contexts
 type GRPCHandler struct {
 	notificationv1service.UnimplementedNotificationServiceServer
-	sendPushHandler       *command.SendPushNotificationHandler
 	registerDeviceHandler *command.RegisterDeviceTokenHandler
 	updateSettingsHandler *command.UpdateNotificationSettingsHandler
 	markAsReadHandler     *command.MarkNotificationAsReadHandler
@@ -29,7 +28,6 @@ type GRPCHandler struct {
 }
 
 func NewGRPCHandler(
-	sendPushHandler *command.SendPushNotificationHandler,
 	registerDeviceHandler *command.RegisterDeviceTokenHandler,
 	updateSettingsHandler *command.UpdateNotificationSettingsHandler,
 	markAsReadHandler *command.MarkNotificationAsReadHandler,
@@ -37,7 +35,6 @@ func NewGRPCHandler(
 	listNotifsHandler *query.ListNotificationsHandler,
 ) *GRPCHandler {
 	return &GRPCHandler{
-		sendPushHandler:       sendPushHandler,
 		registerDeviceHandler: registerDeviceHandler,
 		updateSettingsHandler: updateSettingsHandler,
 		markAsReadHandler:     markAsReadHandler,
@@ -66,27 +63,6 @@ func toGRPCError(err error) error {
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}
-}
-
-func (h *GRPCHandler) SendPushNotification(
-	ctx context.Context,
-	req *notificationv1message.SendPushNotificationRequest,
-) (*notificationv1message.SendPushNotificationResponse, error) {
-	resp, err := h.sendPushHandler.Handle(ctx, command.SendPushNotificationCommand{
-		UserID: req.GetUserId(),
-		Title:  req.GetTitle(),
-		Body:   req.GetBody(),
-		Data:   req.GetData(),
-	})
-	if err != nil {
-		return nil, toGRPCError(err)
-	}
-
-	return &notificationv1message.SendPushNotificationResponse{
-		NotificationId: resp.NotificationID,
-		Status:         resp.Status,
-		Message:        resp.Message,
-	}, nil
 }
 
 func (h *GRPCHandler) RegisterDeviceToken(
@@ -235,17 +211,6 @@ var _ notificationv1serviceconnect.NotificationServiceHandler = (*ConnectNotific
 
 func NewConnectNotificationHandler(grpcHandler *GRPCHandler) notificationv1serviceconnect.NotificationServiceHandler {
 	return &ConnectNotificationHandler{grpcHandler: grpcHandler}
-}
-
-func (c *ConnectNotificationHandler) SendPushNotification(
-	ctx context.Context,
-	req *notificationv1message.SendPushNotificationRequest,
-) (*notificationv1message.SendPushNotificationResponse, error) {
-	res, err := c.grpcHandler.SendPushNotification(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
 }
 
 func (c *ConnectNotificationHandler) RegisterDeviceToken(

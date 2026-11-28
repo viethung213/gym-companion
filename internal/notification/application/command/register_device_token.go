@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/domain/aggregate"
 	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	"github.com/viethung213/gym-companion/internal/notification/domain/vo"
@@ -17,11 +18,18 @@ type RegisterDeviceTokenCommand struct {
 }
 
 type RegisterDeviceTokenHandler struct {
-	deviceRepo repository.DeviceRepository
+	deviceRepo   repository.DeviceRepository
+	pushProvider port.PushProvider
 }
 
-func NewRegisterDeviceTokenHandler(deviceRepo repository.DeviceRepository) *RegisterDeviceTokenHandler {
-	return &RegisterDeviceTokenHandler{deviceRepo: deviceRepo}
+func NewRegisterDeviceTokenHandler(
+	deviceRepo repository.DeviceRepository,
+	pushProvider port.PushProvider,
+) *RegisterDeviceTokenHandler {
+	return &RegisterDeviceTokenHandler{
+		deviceRepo:   deviceRepo,
+		pushProvider: pushProvider,
+	}
 }
 
 func (h *RegisterDeviceTokenHandler) Handle(ctx context.Context, cmd RegisterDeviceTokenCommand) error {
@@ -34,6 +42,12 @@ func (h *RegisterDeviceTokenHandler) Handle(ctx context.Context, cmd RegisterDev
 	device, err := aggregate.NewDevice(id, cmd.UserID, cmd.DeviceToken, dt)
 	if err != nil {
 		return fmt.Errorf("create device aggregate: %w", err)
+	}
+
+	if h.pushProvider != nil && cmd.DeviceToken != "" {
+		if err := h.pushProvider.SubscribeToTopic(ctx, []string{cmd.DeviceToken}, "all_users"); err != nil {
+			return fmt.Errorf("subscribe device token to all_users topic: %w", err)
+		}
 	}
 
 	if err := h.deviceRepo.Save(ctx, device); err != nil {

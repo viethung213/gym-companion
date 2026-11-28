@@ -8,5 +8,6 @@ import (
 
 type SettingRepository interface {
 	GetByUserID(ctx context.Context, userID string) (*aggregate.Setting, error)
+	GetByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Setting, error)
 	Save(ctx context.Context, setting *aggregate.Setting) error
 }

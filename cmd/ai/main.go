@@ -173,6 +173,7 @@ func run() error {
 	notificationGRPCHandler, shutdownNotification, err := notification.Initialize(ctx, notification.ModuleDeps{
 		DB:            notificationDB,
 		KafkaRegistry: kafkaRegistry,
+		RedisClient:   redisClient,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize notification module: %w", err)

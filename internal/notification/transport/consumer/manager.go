@@ -8,7 +8,6 @@ import (
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
-	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
@@ -25,11 +24,8 @@ type ConsumerManager struct {
 // and isolated core domain inbound topics.
 func NewConsumerManager(
 	registry *sharedKafka.Registry,
-	sendPushHandler *command.SendPushNotificationHandler,
-	sendEmailHandler *command.SendEmailNotificationHandler,
-	sendSMSHandler *command.SendSMSNotificationHandler,
+	sendNotificationHandler *command.SendNotificationHandler,
 	outboxLogRepo port.OutboxLogRepository,
-	deviceRepo repository.DeviceRepository,
 ) *ConsumerManager {
 	if registry == nil {
 		return nil
@@ -45,16 +41,16 @@ func NewConsumerManager(
 	}
 
 	createConsumer := func(reader sharedKafka.MessageReader) *NotificationEventConsumer {
-		c := NewNotificationEventConsumer(
-			reader, sendPushHandler, sendEmailHandler, sendSMSHandler, outboxLogRepo,
-		).WithDLQWriter(dlqWriter).WithDeviceRepo(deviceRepo)
+		selfHandler := NewSelfEventHandler(sendNotificationHandler, outboxLogRepo)
+		externalHandler := NewExternalEventHandler(sendNotificationHandler, outboxLogRepo)
+		c := NewNotificationEventConsumer(reader, selfHandler, externalHandler).WithDLQWriter(dlqWriter)
 		if mgr.primaryConsumer == nil {
 			mgr.primaryConsumer = c
 		}
 		return c
 	}
 
-	// 1. HIGH-PRIORITY Notification Consumers: 3 independent Readers for 3 Partitions (Option B)
+	// 1. HIGH-PRIORITY Notification Consumers: 3 independent Readers for 3 Partitions
 	highTopic := "notification.events.high-priority"
 	const highWorkers = 3
 	for i := 1; i <= highWorkers; i++ {

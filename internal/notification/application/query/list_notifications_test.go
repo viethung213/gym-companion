@@ -17,6 +17,19 @@ func (m *mockNotificationRepo) Save(ctx context.Context, item *aggregate.InAppNo
 	return nil
 }
 
+func (m *mockNotificationRepo) BatchSave(ctx context.Context, items []*aggregate.InAppNotification) error {
+	m.items = append(m.items, items...)
+	return nil
+}
+
+func (m *mockNotificationRepo) SaveSystemAnnouncement(ctx context.Context, announcement *aggregate.SystemAnnouncement) error {
+	return nil
+}
+
+func (m *mockNotificationRepo) MarkAnnouncementAsRead(ctx context.Context, announcementID, userID string) error {
+	return nil
+}
+
 func (m *mockNotificationRepo) ListByUserID(ctx context.Context, userID string, limit, offset int32) ([]*aggregate.InAppNotification, int32, error) {
 	return m.items, int32(len(m.items)), nil
 }

@@ -3,13 +3,14 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
-	"github.com/viethung213/gym-companion/internal/notification/domain/repository"
 )
 
 const defaultDispatchTimeout = 5 * time.Second
@@ -39,30 +40,18 @@ type selfEventRule struct {
 
 // SelfEventHandler handles notification events originated from the Notification Service itself (e.g. multi-channel dispatch).
 type SelfEventHandler struct {
-	sendPushHandler  *command.SendPushNotificationHandler
-	sendEmailHandler *command.SendEmailNotificationHandler
-	sendSMSHandler   *command.SendSMSNotificationHandler
-	deviceRepo       repository.DeviceRepository
-	outboxLogRepo    port.OutboxLogRepository
-	rules            map[string]selfEventRule
-}
-
-func (h *SelfEventHandler) WithDeviceRepo(repo repository.DeviceRepository) *SelfEventHandler {
-	h.deviceRepo = repo
-	return h
+	sendNotificationHandler *command.SendNotificationHandler
+	outboxLogRepo           port.OutboxLogRepository
+	rules                   map[string]selfEventRule
 }
 
 func NewSelfEventHandler(
-	sendPushHandler *command.SendPushNotificationHandler,
-	sendEmailHandler *command.SendEmailNotificationHandler,
-	sendSMSHandler *command.SendSMSNotificationHandler,
+	sendNotificationHandler *command.SendNotificationHandler,
 	outboxLogRepo port.OutboxLogRepository,
 ) *SelfEventHandler {
 	return &SelfEventHandler{
-		sendPushHandler:  sendPushHandler,
-		sendEmailHandler: sendEmailHandler,
-		sendSMSHandler:   sendSMSHandler,
-		outboxLogRepo:    outboxLogRepo,
+		sendNotificationHandler: sendNotificationHandler,
+		outboxLogRepo:           outboxLogRepo,
 		rules: map[string]selfEventRule{
 			// 1. NORMAL PRIORITY NOTIFICATION REQUEST EVENT
 			"contracts.generic.notification.v1.event.NormalPriorityNotificationRequested": {
@@ -70,19 +59,9 @@ func NewSelfEventHandler(
 				DefaultBody:    "Bạn có thông báo mới từ ứng dụng.",
 				IsHighPriority: false,
 			},
-			"contracts.generic.notification.v1.normalPriorityNotificationRequested": {
-				DefaultTitle:   "Gym Companion Thông Báo",
-				DefaultBody:    "Bạn có thông báo mới từ ứng dụng.",
-				IsHighPriority: false,
-			},
 
-			// 3. HIGH PRIORITY NOTIFICATION REQUEST EVENT
+			// 2. HIGH PRIORITY NOTIFICATION REQUEST EVENT
 			"contracts.generic.notification.v1.event.HighPriorityNotificationRequested": {
-				DefaultTitle:   "Thông Báo Quan Trọng ⚠️",
-				DefaultBody:    "Bạn có thông báo quan trọng từ ứng dụng.",
-				IsHighPriority: true,
-			},
-			"contracts.generic.notification.v1.highPriorityNotificationRequested": {
 				DefaultTitle:   "Thông Báo Quan Trọng ⚠️",
 				DefaultBody:    "Bạn có thông báo quan trọng từ ứng dụng.",
 				IsHighPriority: true,
@@ -106,51 +85,17 @@ func (h *SelfEventHandler) Handle(
 		return nil
 	}
 
+	if env.ID == "" {
+		return fmt.Errorf("cloudevent missing required event id for type: %s", env.Type)
+	}
+	if h.outboxLogRepo == nil {
+		return errors.New("outbox log repository is required for self event handler")
+	}
+
 	var payload genericNotificationPayload
 	if err := json.Unmarshal(env.Data, &payload); err != nil {
 		slog.ErrorContext(ctx, "Unmarshal generic notification data failed", slog.String("event_type", env.Type), slog.Any("error", err))
 		return err
-	}
-
-	var userIDs []string
-	if payload.Target != nil {
-		switch {
-		case payload.Target.UserID != "":
-			userIDs = append(userIDs, payload.Target.UserID)
-		case payload.Target.UserList != nil:
-			userIDs = append(userIDs, payload.Target.UserList.UserIDs...)
-		case payload.Target.AllUsers && h.deviceRepo != nil:
-			allUIDs, err := h.deviceRepo.GetAllActiveUserIDs(ctx)
-			if err != nil {
-				slog.ErrorContext(ctx, "Fetch all active users for broadcast failed", slog.Any("error", err))
-			} else {
-				userIDs = append(userIDs, allUIDs...)
-			}
-		}
-	}
-	if len(userIDs) == 0 && payload.UserID != "" {
-		userIDs = append(userIDs, payload.UserID)
-	}
-
-	partitionKey := "broadcast"
-	if len(userIDs) > 0 {
-		partitionKey = userIDs[0]
-	} else if payload.Data != nil {
-		if email, ok := payload.Data["email"]; ok {
-			partitionKey = email
-		} else if phone, ok := payload.Data["phone"]; ok {
-			partitionKey = phone
-		}
-	}
-
-	if h.outboxLogRepo != nil && env.ID != "" {
-		fresh, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, partitionKey, msgValue, "PROCESSING", "")
-		if logErr != nil {
-			slog.ErrorContext(ctx, "LogProcessed error for event", slog.String("event_id", env.ID), slog.Any("error", logErr))
-		} else if !fresh {
-			slog.DebugContext(ctx, "Duplicate event already processed, skipping", slog.String("event_type", env.Type), slog.String("event_id", env.ID))
-			return nil
-		}
 	}
 
 	title := payload.Title
@@ -164,161 +109,167 @@ func (h *SelfEventHandler) Handle(
 
 	channels := payload.Channels
 	if len(channels) == 0 {
-		channels = []string{"PUSH"}
+		channels = []string{"IN_APP", "PUSH"}
 	}
 
 	isHighPriority := rule.IsHighPriority
 
-	var lastErr error
-	for _, ch := range channels {
-		switch strings.ToUpper(strings.TrimSpace(ch)) {
-		case "PUSH":
-			if h.sendPushHandler != nil {
-				for _, uid := range userIDs {
-					dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
-					_, err := h.sendPushHandler.Handle(dispatchCtx, command.SendPushNotificationCommand{
-						EventID:        env.ID,
-						UserID:         uid,
-						Title:          title,
-						Body:           body,
-						Data:           payload.Data,
-						IsHighPriority: isHighPriority,
-					})
-					cancel()
-					if err != nil {
-						lastErr = err
-						slog.ErrorContext(ctx, "Push dispatch error", slog.String("user_id", uid), slog.Any("error", err))
-					}
-				}
-			}
+	// 1. Resolve Target & Determine Partition Key
+	target, partitionKey := resolveTarget(&payload)
 
-		case "EMAIL":
-			if h.sendEmailHandler != nil {
-				emailAddr := ""
-				if payload.Data != nil {
-					emailAddr = payload.Data["email"]
-					if emailAddr == "" {
-						emailAddr = payload.Data["recipient_email"]
-					}
-					if emailAddr == "" {
-						emailAddr = payload.Data["to_email"]
-					}
-				}
+	// 2. Idempotency Check & Atomic Claim Lock
+	logRec, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, partitionKey, msgValue)
+	if logErr != nil {
+		slog.ErrorContext(ctx, "LogProcessed error for event", slog.String("event_id", env.ID), slog.Any("error", logErr))
+	} else if logRec == nil {
+		slog.DebugContext(ctx, "Duplicate event already processed, skipping", slog.String("event_type", env.Type), slog.String("event_id", env.ID))
+		return nil
+	}
 
-				if emailAddr != "" {
-					if len(userIDs) > 0 {
-						for _, uid := range userIDs {
-							dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
-							_, err := h.sendEmailHandler.Handle(dispatchCtx, command.SendEmailNotificationCommand{
-								UserID:         uid,
-								To:             emailAddr,
-								Subject:        title,
-								Body:           body,
-								IsHighPriority: isHighPriority,
-							})
-							cancel()
-							if err != nil {
-								lastErr = err
-								slog.ErrorContext(ctx, "Email dispatch error", slog.String("to", emailAddr), slog.Any("error", err))
-							}
-						}
-					} else {
-						dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
-						_, err := h.sendEmailHandler.Handle(dispatchCtx, command.SendEmailNotificationCommand{
-							UserID:         "",
-							To:             emailAddr,
-							Subject:        title,
-							Body:           body,
-							IsHighPriority: isHighPriority,
-						})
-						cancel()
-						if err != nil {
-							lastErr = err
-							slog.ErrorContext(ctx, "Email dispatch error", slog.String("to", emailAddr), slog.Any("error", err))
-						}
-					}
-				} else {
-					slog.WarnContext(ctx, "EMAIL requested but no recipient email in data", slog.String("event_id", env.ID))
-				}
-			}
-
-		case "SMS":
-			if h.sendSMSHandler != nil {
-				phoneNum := ""
-				if payload.Data != nil {
-					phoneNum = payload.Data["phone"]
-					if phoneNum == "" {
-						phoneNum = payload.Data["phone_number"]
-					}
-					if phoneNum == "" {
-						phoneNum = payload.Data["recipient_phone"]
-					}
-					if phoneNum == "" {
-						phoneNum = payload.Data["to_phone"]
-					}
-				}
-
-				if phoneNum != "" {
-					if len(userIDs) > 0 {
-						for _, uid := range userIDs {
-							dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
-							_, err := h.sendSMSHandler.Handle(dispatchCtx, command.SendSMSNotificationCommand{
-								UserID:         uid,
-								PhoneNumber:    phoneNum,
-								Message:        body,
-								IsHighPriority: isHighPriority,
-							})
-							cancel()
-							if err != nil {
-								lastErr = err
-								slog.ErrorContext(ctx, "SMS dispatch error", slog.String("to", phoneNum), slog.Any("error", err))
-							}
-						}
-					} else {
-						dispatchCtx, cancel := context.WithTimeout(ctx, defaultDispatchTimeout)
-						_, err := h.sendSMSHandler.Handle(dispatchCtx, command.SendSMSNotificationCommand{
-							UserID:         "",
-							PhoneNumber:    phoneNum,
-							Message:        body,
-							IsHighPriority: isHighPriority,
-						})
-						cancel()
-						if err != nil {
-							lastErr = err
-							slog.ErrorContext(ctx, "SMS dispatch error", slog.String("to", phoneNum), slog.Any("error", err))
-						}
-					}
-				} else {
-					slog.WarnContext(ctx, "SMS requested but no recipient phone in data", slog.String("event_id", env.ID))
-				}
-			}
+	// 3. Check previously dispatched channels for Multi-Channel retry
+	var dispatchedChannels []string
+	if logRec != nil && len(logRec.Metadata) > 0 {
+		var meta port.OutboxLogMetadata
+		if err := json.Unmarshal(logRec.Metadata, &meta); err == nil {
+			dispatchedChannels = meta.ChannelsDispatched
 		}
 	}
+
+	dispatchedSet := make(map[string]bool, len(dispatchedChannels))
+	for _, ch := range dispatchedChannels {
+		dispatchedSet[strings.ToUpper(strings.TrimSpace(ch))] = true
+	}
+
+	// Filter channels that haven't been dispatched yet
+	var finalDispatched []string
+	channelsToDispatch := make([]string, 0, len(channels))
+	for _, ch := range channels {
+		chUpper := strings.ToUpper(strings.TrimSpace(ch))
+		if dispatchedSet[chUpper] {
+			slog.InfoContext(ctx, "Channel already dispatched, skipping",
+				slog.String("event_id", env.ID),
+				slog.String("channel", chUpper),
+			)
+			finalDispatched = append(finalDispatched, chUpper)
+		} else {
+			channelsToDispatch = append(channelsToDispatch, chUpper)
+		}
+	}
+
+	// 4. Dispatch via SendNotificationHandler (Strategy Pattern across channels)
+	var lastErr error
+	if len(channelsToDispatch) > 0 && h.sendNotificationHandler != nil {
+		resp, nErr := h.sendNotificationHandler.Handle(ctx, &command.SendNotificationCommand{
+			Target:         target,
+			EventID:        env.ID,
+			Title:          title,
+			Body:           body,
+			Data:           payload.Data,
+			Channels:       channelsToDispatch,
+			IsHighPriority: isHighPriority,
+		})
+		lastErr = nErr
+		if resp != nil {
+			finalDispatched = append(finalDispatched, resp.Dispatched...)
+		}
+	}
+
+	// 5. Persist final dispatch progress to outbox log
+	status := "SUCCESS"
+	errMsg := ""
+	retryCount := 0
+	var nextRetryAt time.Time
 
 	if lastErr != nil {
-		if h.outboxLogRepo != nil && env.ID != "" {
-			_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
-				EventID:      env.ID,
-				EventType:    env.Type,
-				Payload:      msgValue,
-				PartitionKey: partitionKey,
-				Status:       "FAILED",
-				ErrorMessage: lastErr.Error(),
-			})
+		errMsg = lastErr.Error()
+		currentRetry := 0
+		if logRec != nil {
+			currentRetry = logRec.RetryCount
 		}
-		return lastErr
+		retryCount, status, nextRetryAt = calculateRetryProgression(currentRetry)
+		if status == "DEAD_LETTER" {
+			slog.ErrorContext(ctx, "Event processing reached max retry attempts (3), moved to DEAD_LETTER",
+				slog.String("event_id", env.ID),
+				slog.String("event_type", env.Type),
+				slog.Int("attempts", retryCount),
+				slog.Any("error", lastErr),
+			)
+		} else {
+			slog.WarnContext(ctx, "Event dispatch failed, scheduled for retry",
+				slog.String("event_id", env.ID),
+				slog.String("event_type", env.Type),
+				slog.Int("attempt", retryCount),
+				slog.Time("next_retry_at", nextRetryAt),
+				slog.Any("error", lastErr),
+			)
+		}
 	}
 
-	if h.outboxLogRepo != nil && env.ID != "" {
-		_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
-			EventID:      env.ID,
-			EventType:    env.Type,
-			Payload:      msgValue,
-			PartitionKey: partitionKey,
-			Status:       "SUCCESS",
-			ErrorMessage: "",
+	var metadataBytes []byte
+	if len(finalDispatched) > 0 {
+		metadataBytes, _ = json.Marshal(port.OutboxLogMetadata{
+			ChannelsDispatched: finalDispatched,
 		})
 	}
 
-	return nil
+	_ = h.outboxLogRepo.SaveLog(ctx, &port.OutboxLogRecord{
+		EventID:      env.ID,
+		EventType:    env.Type,
+		Payload:      msgValue,
+		PartitionKey: partitionKey,
+		Status:       status,
+		ErrorMessage: errMsg,
+		RetryCount:   retryCount,
+		NextRetryAt:  nextRetryAt,
+		Metadata:     metadataBytes,
+	})
+
+	return lastErr
+}
+
+func resolveTarget(payload *genericNotificationPayload) (target port.NotificationTarget, partitionKey string) {
+	if payload != nil && payload.Target != nil {
+		if payload.Target.AllUsers {
+			return port.NotificationTarget{
+				Scope: port.ScopeBroadcast,
+			}, "broadcast"
+		}
+
+		if payload.Target.GroupID != "" || payload.Target.UserList != nil {
+			var userIDs []string
+			if payload.Target.UserList != nil {
+				userIDs = payload.Target.UserList.UserIDs
+			}
+			partitionKey = payload.Target.GroupID
+			if partitionKey == "" {
+				partitionKey = "group"
+			}
+			return port.NotificationTarget{
+				Scope:   port.ScopeGroup,
+				GroupID: payload.Target.GroupID,
+				UserIDs: userIDs,
+			}, partitionKey
+		}
+
+		if payload.Target.UserID != "" {
+			return port.NotificationTarget{
+				Scope:  port.ScopeDirect,
+				UserID: payload.Target.UserID,
+			}, payload.Target.UserID
+		}
+	}
+
+	// Fallback for tests or legacy payloads
+	userID := payload.UserID
+	if userID == "" && payload.Data != nil {
+		userID = payload.Data["userId"]
+	}
+	partitionKey = userID
+	if partitionKey == "" {
+		partitionKey = "direct"
+	}
+	return port.NotificationTarget{
+		Scope:  port.ScopeDirect,
+		UserID: userID,
+	}, partitionKey
 }

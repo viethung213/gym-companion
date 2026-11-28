@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -38,7 +39,10 @@ func buildServiceAccountJSON(cfg *config.Config) ([]byte, error) {
 		return nil, errors.New("missing FCM client email or private key")
 	}
 
-	privateKey := strings.ReplaceAll(cfg.FCMPrivateKey, "\\n", "\n")
+	privateKey := strings.Trim(cfg.FCMPrivateKey, "\"'\r\n ")
+	privateKey = strings.ReplaceAll(privateKey, "\\n", "\n")
+	privateKey = strings.ReplaceAll(privateKey, "\r", "")
+	privateKey = strings.TrimSpace(privateKey)
 
 	sa := serviceAccountJSON{
 		Type:                    "service_account",
@@ -117,13 +121,31 @@ func (c *Client) SendPush(ctx context.Context, tokens []string, title, body stri
 		}, nil
 	}
 
+	fcmData := make(map[string]string, len(data)+4)
+	for k, v := range data {
+		fcmData[k] = v
+	}
+	fcmData["title"] = title
+	fcmData["body"] = body
+	if _, ok := fcmData["url"]; !ok {
+		fcmData["url"] = "/notifications"
+	}
+
 	message := &messaging.MulticastMessage{
 		Tokens: tokens,
 		Notification: &messaging.Notification{
 			Title: title,
 			Body:  body,
 		},
-		Data: data,
+		Data: fcmData,
+		Webpush: &messaging.WebpushConfig{
+			Notification: &messaging.WebpushNotification{
+				Title: title,
+				Body:  body,
+				Icon:  "/icons/icon-192.png",
+			},
+			Data: fcmData,
+		},
 	}
 
 	br, err := c.messagingClient.SendEachForMulticast(ctx, message)
@@ -147,4 +169,95 @@ func (c *Client) SendPush(ctx context.Context, tokens []string, title, body stri
 		FailureCount:  br.FailureCount,
 		InvalidTokens: invalidTokens,
 	}, nil
+}
+
+func (c *Client) SendPushToTopic(ctx context.Context, topic, title, body string, data map[string]string) error {
+	if topic == "" {
+		return errors.New("empty topic")
+	}
+
+	if c.messagingClient == nil {
+		slog.InfoContext(ctx, "FCM Push SDK disabled (dry run), skip SendPushToTopic",
+			slog.String("topic", topic),
+			slog.String("title", title),
+			slog.String("body", body),
+		)
+		return nil
+	}
+
+	fcmData := make(map[string]string, len(data)+4)
+	for k, v := range data {
+		fcmData[k] = v
+	}
+	fcmData["title"] = title
+	fcmData["body"] = body
+	if _, ok := fcmData["url"]; !ok {
+		fcmData["url"] = "/notifications"
+	}
+
+	msg := &messaging.Message{
+		Topic: topic,
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  body,
+		},
+		Data: fcmData,
+		Webpush: &messaging.WebpushConfig{
+			Notification: &messaging.WebpushNotification{
+				Title: title,
+				Body:  body,
+				Icon:  "/icons/icon-192.png",
+			},
+			Data: fcmData,
+		},
+	}
+
+	_, err := c.messagingClient.Send(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("fcm send push to topic %s: %w", topic, err)
+	}
+
+	return nil
+}
+
+func (c *Client) SubscribeToTopic(ctx context.Context, tokens []string, topic string) error {
+	if len(tokens) == 0 || topic == "" {
+		return nil
+	}
+
+	if c.messagingClient == nil {
+		slog.InfoContext(ctx, "FCM Push SDK disabled (dry run), skip SubscribeToTopic",
+			slog.Int("tokens_count", len(tokens)),
+			slog.String("topic", topic),
+		)
+		return nil
+	}
+
+	_, err := c.messagingClient.SubscribeToTopic(ctx, tokens, topic)
+	if err != nil {
+		return fmt.Errorf("fcm subscribe to topic %s: %w", topic, err)
+	}
+
+	return nil
+}
+
+func (c *Client) UnsubscribeFromTopic(ctx context.Context, tokens []string, topic string) error {
+	if len(tokens) == 0 || topic == "" {
+		return nil
+	}
+
+	if c.messagingClient == nil {
+		slog.InfoContext(ctx, "FCM Push SDK disabled (dry run), skip UnsubscribeFromTopic",
+			slog.Int("tokens_count", len(tokens)),
+			slog.String("topic", topic),
+		)
+		return nil
+	}
+
+	_, err := c.messagingClient.UnsubscribeFromTopic(ctx, tokens, topic)
+	if err != nil {
+		return fmt.Errorf("fcm unsubscribe from topic %s: %w", topic, err)
+	}
+
+	return nil
 }

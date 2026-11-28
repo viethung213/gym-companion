@@ -34,17 +34,6 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service NotificationService {
-  // Gửi thông báo đẩy đến thiết bị (Chỉ sử dụng nội bộ bởi hệ thống hoặc Background workers)
-  rpc SendPushNotification (contracts.generic.notification.v1.message.SendPushNotificationRequest) returns (contracts.generic.notification.v1.message.SendPushNotificationResponse) {
-    option (google.api.http) = {
-      post: "/api/v1/notifications/push"
-      body: "*"
-    };
-    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      security: {} // Hệ thống gọi, bỏ qua BearerAuth người dùng
-    };
-  }
-
   // Đăng ký FCM / APNs device token của thiết bị người dùng
   rpc RegisterDeviceToken (contracts.generic.notification.v1.message.RegisterDeviceTokenRequest) returns (contracts.generic.notification.v1.message.RegisterDeviceTokenResponse) {
     option (google.api.http) = {

@@ -10,15 +10,17 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service/notificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
+	"github.com/viethung213/gym-companion/internal/notification/application/port"
 	"github.com/viethung213/gym-companion/internal/notification/application/query"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/config"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/email"
-	notificationEvent "github.com/viethung213/gym-companion/internal/notification/infrastructure/event"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence"
+	notificationRedis "github.com/viethung213/gym-companion/internal/notification/infrastructure/redis"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/sms"
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
 	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
@@ -30,6 +32,7 @@ import (
 type ModuleDeps struct {
 	DB            *sql.DB
 	KafkaRegistry *sharedKafka.Registry
+	RedisClient   *goredis.Client
 }
 
 func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHandler, func(), error) {
@@ -54,19 +57,25 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	notificationRepo := persistence.NewNotificationRepository(gormDB)
 	outboxRepo := persistence.NewOutboxRepository(gormDB)
 	outboxLogRepo := persistence.NewOutboxLogRepository(gormDB)
-	txManager := persistence.NewSQLTransactionManager(gormDB)
 	fcmClient := fcm.NewClient(&cfg)
 	emailProvider := email.NewEmailProvider(&cfg)
 	smsProvider := sms.NewSMSProvider(&cfg)
-	eventRecorder := notificationEvent.NewOutboxWriter(outboxRepo)
 
 	// 2. Command Handlers
-	registerDeviceHandler := command.NewRegisterDeviceTokenHandler(deviceRepo)
-	sendPushHandler := command.NewSendPushNotificationHandler(deviceRepo, notificationRepo, settingRepo, fcmClient, txManager, eventRecorder)
-	sendEmailHandler := command.NewSendEmailNotificationHandler(settingRepo, emailProvider)
-	sendSMSHandler := command.NewSendSMSNotificationHandler(settingRepo, smsProvider)
+	registerDeviceHandler := command.NewRegisterDeviceTokenHandler(deviceRepo, fcmClient)
 	updateSettingsHandler := command.NewUpdateNotificationSettingsHandler(settingRepo)
 	markAsReadHandler := command.NewMarkNotificationAsReadHandler(notificationRepo)
+
+	// 3. Channel Dispatchers (Strategy Pattern - Approach 3)
+	var pushCooldown port.PushCooldownService
+	if deps.RedisClient != nil {
+		pushCooldown = notificationRedis.NewPushCooldownService(deps.RedisClient)
+	}
+	pushChannel := command.NewPushChannelDispatcher(deviceRepo, fcmClient, settingRepo, pushCooldown)
+	inAppChannel := command.NewInAppChannelDispatcher(notificationRepo)
+	emailChannel := command.NewEmailChannelDispatcher(emailProvider, settingRepo)
+	smsChannel := command.NewSMSChannelDispatcher(smsProvider, settingRepo)
+	sendNotificationHandler := command.NewSendNotificationHandler(pushChannel, inAppChannel, emailChannel, smsChannel)
 
 	// 3. Query Handlers
 	getSettingsHandler := query.NewGetNotificationSettingsHandler(settingRepo)
@@ -74,7 +83,6 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 
 	// 4. gRPC Transport Handler
 	grpcHandler := notificationGRPC.NewGRPCHandler(
-		sendPushHandler,
 		registerDeviceHandler,
 		updateSettingsHandler,
 		markAsReadHandler,
@@ -96,7 +104,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		writer, wErr := deps.KafkaRegistry.GetWriter("notification.events")
 		if wErr == nil && writer != nil {
 			kafkaPub = notificationKafka.NewPublisher(writer)
-			outboxWorker := notificationWorker.NewOutboxWorker(outboxRepo, outboxLogRepo, kafkaPub, 2*time.Second)
+			outboxWorker := notificationWorker.NewOutboxWorker(outboxRepo, kafkaPub, 2*time.Second)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -109,11 +117,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 		// Inbound Event Consumers managed by ConsumerManager
 		consumerMgr = notificationConsumer.NewConsumerManager(
 			deps.KafkaRegistry,
-			sendPushHandler,
-			sendEmailHandler,
-			sendSMSHandler,
+			sendNotificationHandler,
 			outboxLogRepo,
-			deviceRepo,
 		)
 		if consumerMgr != nil {
 			consumerMgr.Start(ctxWorkers)
