@@ -212,6 +212,7 @@ Lý do: test 1 triệu user cho thấy truy vấn `user_snapshots WHERE user_id 
 | Parity (mặc định) | SQLite testutil hiện có + miniredis | Seed dataset có hòa điểm (khác giây) → rebuild → `GetGlobalTop`/`GetUserRank` của Redis == Gorm |
 | **Parity (Postgres thật)** | `//go:build integration` + `TEST_DATABASE_URL`, theo mẫu `internal/exercise/infrastructure/persistence/postgres_repository_integration_test.go` | Cùng kịch bản trên Postgres thật — kiểm tra thứ tự `uuid` và `timestamptz`. CI hiện không có Postgres ⇒ test này chạy local (`go test -tags integration`) |
 | Fallback | mock | Redis lỗi → kết quả Gorm; not-ready → tín hiệu rebuild |
+| Luồng đầu-cuối | repo Gorm thật (SQLite) + miniredis | cộng XP qua coordinator → điểm trên Redis bằng đúng điểm Postgres vừa commit; Redis lạnh (chưa có key) và Redis sập → `Fallback` trả đúng kết quả Postgres, Redis lạnh gửi tín hiệu rebuild; user mới đăng ký lên bảng ngay |
 | Profile cache | miniredis + fake Postgres đếm lượt nạp | miss nạp 1 lần rồi cache (TTL 24h); hit một phần chỉ nạp phần thiếu; user không có snapshot không cache; avatar rỗng; key không phân biệt hoa thường; Redis sập → Postgres; lỗi Postgres → error; save write-through; save khi Redis sập vẫn thành công; save lỗi giữ nguyên cache; **reader cũ không ghi đè được tên mới**; **write-through lỗi ⇒ flush toàn bộ profile khi Redis hồi phục, rồi nạp lại**; flush chưa được ⇒ đọc Postgres |
 | Quy mô | `LEADERBOARD_SCALE_USERS` + Postgres/Redis thật | seed N user (rollback), rebuild, bộ nhớ, p50/p95/p99 Redis vs Postgres, so khớp 1000 hạng |
 
