@@ -16,9 +16,9 @@ internal/gamification/docs/
     │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-01 -> T-12)
     ├── leaderboards/                  # 2. Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (Đã triển khai)
     │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Acceptance Criteria
-    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
+    │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001 → ADR-0003)
     │   ├── 02-design.md               # Thiết kế kỹ thuật Hexagonal & DDL
-    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-07)
+    │   └── 04-tasks.md                # Danh sách đầu việc chi tiết theo chuẩn TDD (T-LB-01 -> T-LB-17)
     ├── streaks-and-habits/            # 3. Chuỗi Ngày Kỷ Luật (Streaks Engine) (Đã triển khai)
     │   ├── 01-spec.md                 # Đặc tả nghiệp vụ & Thói quen kép
     │   ├── adr/                       # Các bản ghi quyết định kiến trúc (ADR-0001, ADR-0002)
@@ -80,8 +80,8 @@ Module **Gamification** đóng vai trò là phân hệ bổ trợ (**Supporting 
   * Hiển thị danh sách **Top 50** gymer có điểm tích lũy cao nhất toàn nền tảng.
   * Hiển thị chính xác **Vị trí cá nhân (My Standing)** và khoảng cách điểm số, bất kể người dùng nằm trong hay ngoài Top 50.
 * **Hiệu năng & Thời gian thực (The 3 AM Test)**:
-  * Không sử dụng cron job ngầm hay worker chốt giải đấu; thứ hạng cập nhật tức thì theo thời gian thực mỗi khi có buổi tập mới.
-  * Tối ưu hóa bằng index B-tree `(xp DESC, updated_at ASC, user_id ASC)` trên bảng `gamification.user_xp`, đảm bảo thời gian truy vấn $< 5\text{ ms}$.
+  * Không chốt giải đấu; thứ hạng cập nhật ngay sau khi XP được ghi nhận.
+  * Phục vụ từ **Redis Sorted Set** (read model, `ZRANGE`/`ZRANK` $O(\log N)$); PostgreSQL `gamification.user_xp` vẫn là nguồn sự thật và là đường dự phòng tự động khi Redis lỗi hoặc chưa sẵn sàng. Xem [ADR-0003](./features/leaderboards/adr/ADR-0003-redis-zset-leaderboard-read-model.md).
 * Chi tiết đặc tả: xem [features/leaderboards/01-spec.md](./features/leaderboards/01-spec.md).
 
 ---

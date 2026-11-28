@@ -1,48 +1,76 @@
 # Thiết Kế Kỹ Thuật: Bảng Xếp Hạng Toàn Hệ Thống Theo Điểm XP (XP Leaderboard)
 
-## 1. Kiến Trúc Hexagonal (Ports & Adapters)
+> Từ 2026-11-27 bảng xếp hạng được phục vụ từ **Redis Sorted Set (read model)**; PostgreSQL vẫn là nguồn sự thật và là đường dự phòng. Quyết định và phân tích rủi ro: [ADR-0003](./adr/ADR-0003-redis-zset-leaderboard-read-model.md) (thay thế ADR-0001).
 
-Tính năng **Bảng Xếp Hạng Toàn Hệ Thống (XP Leaderboard)** là một Use Case thuần đọc (**Read-Only Query Use Case**), tuân thủ nghiêm ngặt mô hình Ports & Adapters:
+## 1. Kiến Trúc Hexagonal (Ports & Adapters)
 
 ```mermaid
 flowchart TD
-    subgraph DrivingAdapters["Transport Layer (Driving)"]
-        GRPC["LeaderboardGrpcHandler<br/>(ConnectRPC)"]
+    subgraph Driving["Transport Layer (Driving)"]
+        GRPC["GamificationService.GetGlobalLeaderboard<br/>(ConnectRPC)"]
         K_IDENT["UserIdentityUpdated Consumer<br/>(profile.events)"]
+        K_XP["LeaderboardXpEarned Consumer<br/>(gamification.events)"]
     end
 
-    subgraph ApplicationLayer["Application Layer (Use Case)"]
-        HANDLER["GetGlobalLeaderboardQueryHandler"]
-        PORT_REPO["LeaderboardRepository (Output Port)"]
-        CMD_SNAPSHOT["SyncUserSnapshotCommandHandler"]
+    subgraph App["Application Layer"]
+        Q["GetGlobalLeaderboardHandler"]
+        CMD_SNAP["SyncUserSnapshotHandler"]
+        CMD_PROJ["ProjectLeaderboardScoreHandler"]
+        CMD_REF["RefreshLeaderboardScoreHandler<br/>(đọc lại user_xp)"]
+        CMD_REB["RebuildLeaderboardHandler"]
+        COORD["ActivityIngestionCoordinator /<br/>InitUserGamificationHandler<br/>(post-commit fast path)"]
     end
 
-    subgraph DrivenAdapters["Infrastructure Layer (Driven)"]
-        REPO_IMPL["PostgresLeaderboardRepository<br/>(Index Scan JOIN user_snapshots)"]
-        SNAPSHOT_REPO["PostgresUserSnapshotRepository"]
+    subgraph Driven["Infrastructure Layer (Driven)"]
+        FB["FallbackLeaderboardRepository"]
+        RREPO["redis.LeaderboardRepository<br/>(ZRANGE / ZRANK + read-repair)"]
+        RPROJ["redis.LeaderboardProjection<br/>(ZADD LT, sentinel, lock)"]
+        GORM["GormLeaderboardRepository<br/>(SQL ranking + LeaderboardScoreSource)"]
+        SNAP["GormUserSnapshotRepository"]
+        CACHE["redis.CachedUserSnapshotRepository<br/>(Hash read-through, TTL 24h)"]
+        WORKER["LeaderboardReconcileWorker<br/>(startup reset + 15m)"]
     end
 
-    subgraph Storage["Database Storage (Schema gamification.*)"]
-        DB[(PostgreSQL<br/>gamification.user_xp<br/>gamification.user_snapshots)]
-    end
+    REDIS[(Redis<br/>gamification:leaderboard:xp)]
+    PG[(PostgreSQL<br/>user_xp, user_snapshots)]
 
-    GRPC -->|Dispatch Query| HANDLER
-    K_IDENT -->|Sync Identity Event| CMD_SNAPSHOT
-    HANDLER -->|Query Top 50 & Rank| PORT_REPO
-    CMD_SNAPSHOT --> SNAPSHOT_REPO
-    PORT_REPO -.->|Implement| REPO_IMPL
-    SNAPSHOT_REPO -.->|Write| DB
-    REPO_IMPL -->|Single Local Query| DB
+    GRPC --> Q --> FB
+    FB -->|primary| RREPO
+    FB -->|lỗi / not ready| GORM
+    RREPO --> REDIS
+    RREPO --> CACHE
+    CACHE -->|miss| SNAP
+    CACHE --> REDIS
+    RREPO -.read-repair.-> GORM
+    K_IDENT --> CMD_SNAP --> CACHE
+    K_XP --> CMD_REF
+    CMD_REF --> GORM
+    CMD_REF --> RPROJ
+    COORD --> CMD_PROJ
+    CMD_PROJ --> RPROJ --> REDIS
+    WORKER --> CMD_REB
+    CMD_REB --> GORM
+    CMD_REB --> RPROJ
+    GORM --> PG
+    SNAP --> PG
 ```
 
 ### Ranh giới trách nhiệm giữa các tầng:
 1. **Transport Layer**:
-   - `LeaderboardGrpcHandler`: Tiếp nhận request ConnectRPC `GetGlobalLeaderboard`, xác thực Bearer Token, trích xuất `user_id` và chuyển giao cho Application Query Handler.
-   - `UserIdentityUpdated Consumer`: Lắng nghe sự kiện đổi tên/ảnh đại diện từ `profile.events` để cập nhật bảng `user_snapshots` bất đồng bộ.
+   - gRPC handler chỉ ánh xạ request/response, gọi `GetGlobalLeaderboardHandler`.
+   - `UserIdentityUpdated Consumer` đồng bộ tên/avatar vào `user_snapshots`.
+   - `LeaderboardXpEarned Consumer` (group `gamification-leaderboard-group`) chỉ parse `user_id` của `XpEarned` → `RefreshLeaderboardScoreCommand` (điểm đọc lại từ `user_xp`, user không còn tồn tại bị bỏ qua).
 2. **Application Layer**:
-   - `GetGlobalLeaderboardQueryHandler`: Thực thi use case tra cứu Top 50 và thứ hạng cá nhân thuần túy qua `LeaderboardRepository`. Hoàn toàn không phụ thuộc thời gian chạy (Zero Runtime Coupling) vào module `profile`.
+   - `GetGlobalLeaderboardHandler`: use case đọc thuần qua port `LeaderboardRepository` (không biết Redis tồn tại).
+   - `ProjectLeaderboardScoreHandler`: chiếu `(user_id, xp tuyệt đối, updated_at)` vào read model; `ProjectBestEffort` dùng cho đường nhanh sau commit (lỗi chỉ log WARN).
+   - `RebuildLeaderboardHandler`: khóa → (Reset) → duyệt `user_xp` theo keyset → `UpsertScores` → `MarkReady`.
+   - Ports: `repository.LeaderboardRepository`, `repository.UserSnapshotRepository`, `port.LeaderboardProjection`, `port.LeaderboardScoreSource`.
 3. **Infrastructure Layer**:
-   - `PostgresLeaderboardRepository`: Thực thi câu lệnh SQL tối ưu hóa `user_xp LEFT JOIN user_snapshots` bằng Index Scan trong $< 2\text{ ms}$.
+   - `infrastructure/redis`: codec score, projection, read repository, fallback decorator.
+   - `infrastructure/persistence`: SQL ranking (nguồn sự thật, dự phòng), score source cho rebuild/read-repair, snapshot repository.
+   - `infrastructure/worker/LeaderboardReconcileWorker`: reset khi khởi động (thử lại tới khi thành công), reconcile định kỳ, chạy sớm khi đọc thấy not-ready.
+
+Chế độ Redis chỉ bật khi có **cả** Redis client và Kafka reader; thiếu một trong hai → module chạy PostgreSQL-only như trước (log `Leaderboard read model: postgres only`).
 
 ---
 
@@ -96,43 +124,82 @@ WHERE xp > :my_xp
 * **Kế hoạch thực thi**: Nhờ index trên `(xp DESC, updated_at ASC)`, engine thực hiện **Index Only Scan** để đếm số lượng bản ghi thỏa mãn điều kiện.
 * **Thời gian thực thi**: P99 $< 20\text{ ms}$ (áp dụng trong giai đoạn MVP $< 50,000$ users theo ADR-0001).
 
-### 2.3 Chiến Lược Hiệu Năng Phân Tầng Theo Quy Mô (Tiered Scaling Strategy)
-Nhằm kiểm soát rủi ro "The 3 AM Test" khi số lượng người dùng vượt mốc MVP:
-* **Giai đoạn 1 (MVP, $< 50,000$ users)**: Truy vấn trực tiếp PostgreSQL `COUNT(*) + 1` qua B-tree index `idx_user_xp_leaderboard`.
-* **Giai đoạn 2 (Growth, $50,000\text{–}500,000$ users)**: Top 50 vẫn quét B-tree index ($< 2\text{ ms}$). Vị trí ngoài Top 50 (`my_rank`) chuyển sang đọc từ **Materialized View** (`leaderboard_ranks_mv`) được refresh định kỳ mỗi 5–15 phút.
-* **Giai đoạn 3 (Scale, $> 500,000$ users)**: Chuyển `LeaderboardRepository` sang **Redis Sorted Set (`ZREVRANK`)**, đồng bộ bất đồng bộ qua Transactional Outbox Worker.
+### 2.3 Redis Read Model (ADR-0003)
+
+Các truy vấn SQL ở trên vẫn được giữ nguyên làm **nguồn sự thật** và **đường dự phòng**. Đường chính:
+
+| Key | Kiểu | Nội dung |
+| :--- | :--- | :--- |
+| `gamification:leaderboard:xp` | ZSET | member = `user_id`; score = `-(xp << 31 \| (2^31-1 - giây kể từ 2020-01-01Z))`; thêm member `__ready__` score `+inf` khi rebuild xong |
+| `gamification:leaderboard:xp:rebuild_lock` | STRING | node ID, `SET NX EX 120`, gia hạn mỗi batch và giải phóng bằng Lua compare-and-delete; marker `__building__:<node>` + MarkReady có fencing |
+| `gamification:profile:{user_id}` | HASH | `display_name`, `avatar_url`, `updated_at`; đọc xuyên + TTL 24h; đổi tên ghi đè (write-through), reader chỉ ghi khi key chưa có; write-through lỗi ⇒ flush toàn bộ profile khi Redis hồi phục |
+
+* **Top N**: `ZSCORE __ready__` + `ZRANGE offset offset+N-1 WITHSCORES` (1 pipeline) → lọc sentinel → giải mã xp/updated_at → `GetSnapshots` (1 query `IN`).
+* **My rank**: `ZSCORE __ready__` + `ZRANK` + `ZSCORE` (1 pipeline). Thiếu member → read-repair từ `user_xp`.
+* **Thứ tự**: score âm + `ZRANGE` tăng dần ⇒ `xp DESC, updated_at ASC (giây), user_id ASC` — trùng thứ tự SQL (sai khác duy nhất: hòa XP trong cùng một giây).
+* **Ghi**: luôn `ZADD LT` với XP tuyệt đối ⇒ idempotent, không bao giờ lùi điểm.
+* **Đồng bộ ba lớp**: đường nhanh sau commit → Kafka consumer → reconcile 15 phút (`LEADERBOARD_RECONCILE_INTERVAL`).
 
 ---
 
 ## 3. Luồng Xử Lý Nghiệp Vụ (Sequence Diagram)
 
-### Luồng Tra Cứu Bảng Xếp Hạng (Leaderboard Query Sequence):
+### 3.1 Tra cứu bảng xếp hạng
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Gym Mobile App
-    participant Grpc as LeaderboardGrpcHandler
-    participant App as GetGlobalLeaderboardQueryHandler
-    participant Repo as PostgresLeaderboardRepository
-    participant DB as PostgreSQL (gamification.*)
+    actor Client as Gym App
+    participant Grpc as gRPC Handler
+    participant App as GetGlobalLeaderboardHandler
+    participant FB as FallbackLeaderboardRepository
+    participant R as Redis ZSET
+    participant PG as PostgreSQL
 
-    Client->>Grpc: GetGlobalLeaderboard(limit = 50) [Bearer Token]
-    Grpc->>App: Handle(ctx, Query{UserID: myID, Limit: 50})
-    
-    Note over App, DB: Truy vấn đơn lẻ Top 50 & Rank nội bộ trong schema (< 2 ms)
-    App->>Repo: GetTopRankedUsers(ctx, 50)
-    Repo->>DB: SELECT xp.*, s.display_name, s.avatar_url FROM user_xp LEFT JOIN user_snapshots ... LIMIT 50
-    DB-->>Repo: Return 50 rows (đầy đủ điểm số, tên, avatar)
-    Repo-->>App: top50Entries
-    
-    App->>Repo: GetUserRank(ctx, myID, myXp, myUpdatedAt)
-    Repo->>DB: SELECT COUNT(*) + 1 WHERE ...
-    DB-->>Repo: Return myRank
-    Repo-->>App: myRank
+    Client->>Grpc: GetGlobalLeaderboard(limit=50)
+    Grpc->>App: Handle(UserID, Limit)
+    App->>FB: GetGlobalTop(50, 0)
+    FB->>R: ZSCORE __ready__ + ZRANGE 0 49 WITHSCORES
+    alt ready
+        R-->>FB: members + scores
+        FB->>R: HMGET gamification:profile:{id} (pipeline 50)
+        opt profile thiếu
+            FB->>PG: SELECT user_snapshots WHERE user_id IN (thiếu)
+            FB->>R: Lua: HSET nếu key chưa có + PEXPIRE 24h
+        end
+    else not ready / Redis lỗi
+        FB->>PG: SQL ORDER BY xp DESC, updated_at ASC, user_id ASC LIMIT 50
+        FB-->>FB: RequestRebuild() (nếu not ready)
+    end
+    App->>FB: GetUserRank(myID)
+    FB->>R: ZSCORE __ready__ + ZRANK + ZSCORE
+    opt member thiếu
+        FB->>PG: SELECT xp, updated_at FROM user_xp (read-repair)
+        FB->>R: ZADD LT + ZRANK
+    end
+    App-->>Grpc: TopUsers + MyStanding
+    Grpc-->>Client: GetGlobalLeaderboardResponse
+```
 
-    App-->>Grpc: QueryResult{Items: []LeaderboardEntry, MyStanding: LeaderboardEntry}
-    Grpc-->>Client: 200 OK (GetGlobalLeaderboardResponse)
+### 3.2 Cập nhật điểm
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Coordinator / InitUser
+    participant PG as PostgreSQL (tx)
+    participant P as ProjectLeaderboardScoreHandler
+    participant R as Redis ZSET
+    participant K as Kafka gamification.events
+    participant LC as LeaderboardXpEarned Consumer
+
+    C->>PG: UserXp + outbox (XpEarned) — COMMIT
+    C->>P: ProjectBestEffort(NewXp, EarnedAt)
+    P->>R: ZADD LT (lỗi → WARN, không fail command)
+    PG-->>K: OutboxWorker publish (≤ 5s)
+    K->>LC: XpEarned
+    LC->>PG: Refresh: SELECT xp, updated_at FROM user_xp WHERE user_id = ?
+    LC->>R: ZADD LT (idempotent; bỏ qua nếu user không tồn tại)
 ```
 
 ---
@@ -203,25 +270,39 @@ message GetGlobalLeaderboardResponse {
 
 ## 5. Cấu Trúc Mã Nguồn (Code Organization)
 
-> Leaderboard là một **CQRS Read Model / Query Service** của phân hệ XP, truy vấn trực tiếp trên bảng `gamification.user_xp` và `gamification.user_snapshots`. Cấu trúc tổng thể của toàn module xem tại [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters).
+> Cấu trúc tổng thể của toàn module xem tại [architecture.md#2](../../architecture.md#2-kiến-trúc-hexagonal-ports--adapters).
 
 ```text
 internal/gamification/
+├── leaderboard_read_model.go                     # Wiring: Redis mode khi có Redis + Kafka, ngược lại PostgreSQL-only
+├── domain/
+│   ├── entity/leaderboard.go                     # LeaderboardUser, LeaderboardScore, UserSnapshot, DisplayNameOrDefault
+│   └── repository/
+│       ├── leaderboard_repository.go             # Port xếp hạng (GetGlobalTop, GetUserRank)
+│       └── user_snapshot_repository.go           # Port snapshot (SaveSnapshot, GetSnapshot, GetSnapshots)
 ├── application/
-│   ├── port/
-│   │   ├── leaderboard_repository.go         # Output Port truy vấn DB user_xp & user_snapshots
-│   │   └── user_snapshot_repository.go       # Output Port lưu trữ user snapshot
-│   └── query/
-│       ├── get_global_leaderboard.go         # Query DTO & Handler chính
-│       └── get_global_leaderboard_test.go    # Unit tests với mock repository
+│   ├── port/leaderboard.go                       # LeaderboardProjection, LeaderboardScoreSource
+│   ├── command/
+│   │   ├── project_leaderboard_score.go          # Chiếu điểm + ProjectBestEffort + XpEarnedProjections
+│   │   ├── rebuild_leaderboard.go                # Rebuild/reconcile từ nguồn sự thật
+│   │   ├── init_user_gamification.go             # Lưu snapshot + chiếu điểm sau commit
+│   │   └── sync_user_snapshot.go
+│   ├── service/activity_ingestion_coordinator.go # Chiếu XpEarned sau commit (đường nhanh)
+│   └── query/get_global_leaderboard.go
 ├── infrastructure/
-│   └── persistence/
-│       ├── leaderboard_repository.go         # GORM implementation đọc user_xp LEFT JOIN user_snapshots
-│       └── user_snapshot_repository.go       # GORM implementation lưu user_snapshots
-└── transport/
-    ├── grpc/
-    │   └── leaderboard_handler.go            # ConnectRPC Server Handler
-    └── consumer/
-        ├── user_registered_consumer.go       # Khởi tạo snapshot và tài khoản khi đăng ký
-        └── user_identity_updated_consumer.go # Đồng bộ tên/avatar từ profile.events
+│   ├── persistence/
+│   │   ├── leaderboard_repository.go             # SQL ranking + ListScores/GetScore
+│   │   └── user_snapshot_repository.go
+│   ├── redis/
+│   │   ├── keys.go                               # Key, sentinel, lock TTL
+│   │   ├── score_codec.go                        # Mã hóa/giải mã score 53 bit
+│   │   ├── leaderboard_projection.go             # ZADD LT, Reset, MarkReady, lock
+│   │   ├── leaderboard_repository.go             # Đọc ZSET + read-repair
+│   │   ├── fallback_leaderboard_repository.go    # Redis → PostgreSQL khi lỗi/not ready
+│   │   └── cached_user_snapshot_repository.go    # Cache tên/avatar (Hash, read-through, write-through)
+│   └── worker/leaderboard_reconcile_worker.go
+├── transport/consumer/leaderboard_xp_earned_consumer.go
+└── test/
+    ├── leaderboard_parity_test.go                # Redis == PostgreSQL (SQLite + miniredis)
+    └── leaderboard_parity_postgres_integration_test.go # `-tags integration`, TEST_DATABASE_URL [, TEST_REDIS_ADDR]
 ```

@@ -78,14 +78,6 @@ func (m *mockLeaderboardRepo) GetUserRank(ctx context.Context, userID string) (i
 	return m.rank, m.entry, nil
 }
 
-func (m *mockLeaderboardRepo) SaveSnapshot(ctx context.Context, snapshot *entity.UserSnapshot) error {
-	return nil
-}
-
-func (m *mockLeaderboardRepo) GetSnapshot(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
-	return nil, nil
-}
-
 type mockBadgeRepo struct {
 	badges []*aggregate.UserBadge
 }

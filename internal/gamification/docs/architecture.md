@@ -58,13 +58,14 @@ internal/gamification/
 │   ├── command/                 # Xử lý các tác vụ ghi (XP, Streak, EvaluateBadges, AwardCoins, SpendCoins, AdminAdjustCoins)
 │   ├── query/                   # Xử lý các tác vụ đọc (XP, Streak, Leaderboard, Badges, Wallet, LedgerTransactions)
 │   ├── service/                 # ActivityIngestionCoordinator điều phối nguyên tử In-Memory Event Pipeline
-│   └── port/                    # Ports giao tiếp (TransactionManager, OutboxWriter, WalletRewarder)
+│   └── port/                    # Ports giao tiếp (TransactionManager, OutboxWriter, WalletRewarder, LeaderboardProjection, LeaderboardScoreSource)
 │
 ├── infrastructure/              # TẦNG KỸ THUẬT (Driven Adapters)
 │   ├── event/                   # OutboxWriter đóng gói CloudEvents 1.0 Protobuf JSON (+1µs monotonic offset)
 │   ├── kafka/                   # Kafka Publisher
 │   ├── persistence/             # Hiện thực hóa lưu trữ (PostgreSQL GORM)
-│   └── worker/                  # Outbox Worker quét đẩy sự kiện ra Kafka (Dead-Letter Poison Pill Guard)
+│   ├── redis/                   # Leaderboard read model (ZSET projection, read repository, fallback PostgreSQL)
+│   └── worker/                  # Outbox Worker (Dead-Letter Poison Pill Guard) & Leaderboard Reconcile Worker
 │
 └── transport/                   # TẦNG GIAO DIỆN (Driving Adapters)
     ├── grpc/                    # ConnectRPC Service Handlers (GamificationServiceHandler)
@@ -74,7 +75,8 @@ internal/gamification/
         ├── workout_event_consumer.go           # Consumer hoàn thành buổi tập (gọi Coordinator)
         ├── personal_record_consumer.go         # Consumer phá kỷ lục cá nhân (PR)
         ├── nutrition_event_consumer.go         # Consumer đạt mục tiêu dinh dưỡng
-        └── user_identity_updated_consumer.go   # Đồng bộ tên/ảnh đại diện cho Leaderboard
+        ├── user_identity_updated_consumer.go   # Đồng bộ tên/ảnh đại diện cho Leaderboard
+        └── leaderboard_xp_earned_consumer.go   # Chiếu XpEarned (gamification.events) vào Redis leaderboard
 ```
 
 ---

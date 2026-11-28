@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	goredis "github.com/redis/go-redis/v9"
+	"github.com/segmentio/kafka-go"
 	"github.com/viethung213/gym-companion/internal/gamification/application/command"
 	"github.com/viethung213/gym-companion/internal/gamification/application/query"
 	appService "github.com/viethung213/gym-companion/internal/gamification/application/service"
@@ -21,6 +23,7 @@ import (
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/supporting/gamification/v1/service/gamificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
+	sharedRedis "github.com/viethung213/gym-companion/internal/shared/redis"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -51,10 +54,19 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	userXpRepo := persistence.NewGormUserXpRepository(gormDB)
 	userStreakRepo := persistence.NewGormUserStreakRepository(gormDB)
 	leaderboardRepo := persistence.NewGormLeaderboardRepository(gormDB)
+	userSnapshotRepo := persistence.NewGormUserSnapshotRepository(gormDB)
 	badgeRepo := persistence.NewGormBadgeRepository(gormDB)
 	userWalletRepo := persistence.NewGormUserWalletRepository(gormDB)
 
 	outboxWriter := infraEvent.NewOutboxWriter(outboxRepo)
+
+	leaderboard := newLeaderboardReadModel(
+		leaderboardRepo,
+		userSnapshotRepo,
+		connectLeaderboardRedis(),
+		func() *kafka.Reader { return leaderboardEventsReader(deps.KafkaRegistry) },
+		leaderboardReconcileInterval(),
+	)
 
 	// 2. Application Commands
 	awardCoinsHandler := command.NewAwardCoinsHandler(userWalletRepo, txManager, outboxWriter)
@@ -65,9 +77,12 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	processWorkoutXpHandler := command.NewProcessWorkoutXpHandler(userXpRepo, txManager, outboxWriter)
 	processNutritionXpHandler := command.NewProcessNutritionXpHandler(userXpRepo, txManager, outboxWriter)
 	recordStreakHandler := command.NewRecordStreakActivityHandler(userStreakRepo, txManager, outboxWriter)
-	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(leaderboardRepo)
-	initUserGamificationHandler := command.NewInitUserGamificationHandler(userXpRepo, userStreakRepo, leaderboardRepo, txManager).
-		WithWalletRepository(userWalletRepo)
+	syncUserSnapshotHandler := command.NewSyncUserSnapshotHandler(leaderboard.snapshots)
+	initUserGamificationHandler := command.NewInitUserGamificationHandler(
+		userXpRepo, userStreakRepo, leaderboard.snapshots, txManager,
+	).
+		WithWalletRepository(userWalletRepo).
+		WithLeaderboardProjector(leaderboard.projector)
 	processPersonalRecordHandler := command.NewProcessPersonalRecordHandler(userXpRepo, txManager, outboxWriter)
 
 	// 3. Coordinator
@@ -79,14 +94,15 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		outboxWriter,
 	).WithBadgeHandler(evaluateBadgesHandler).
 		WithWalletRewarder(awardCoinsHandler).
-		WithNutritionAndPRHandlers(processNutritionXpHandler, processPersonalRecordHandler)
+		WithNutritionAndPRHandlers(processNutritionXpHandler, processPersonalRecordHandler).
+		WithLeaderboardProjector(leaderboard.projector)
 
 	// 4. Application Queries
 	getMyXpHandler := query.NewGetMyXpHandler(userXpRepo)
 	getXpHistoryHandler := query.NewGetXpHistoryHandler(userXpRepo)
 	getStreakHandler := query.NewGetStreakHandler(userStreakRepo)
 	getStreakHistoryHandler := query.NewGetStreakHistoryHandler(userStreakRepo)
-	getGlobalLeaderboardHandler := query.NewGetGlobalLeaderboardHandler(leaderboardRepo)
+	getGlobalLeaderboardHandler := query.NewGetGlobalLeaderboardHandler(leaderboard.repository)
 	getMyBadgesHandler := query.NewGetMyBadgesHandler(badgeRepo)
 	getWalletHandler := query.NewGetWalletHandler(userWalletRepo)
 	listTransactionsHandler := query.NewListTransactionsHandler(userWalletRepo)
@@ -146,6 +162,8 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 		consumerMgr.Start(workerCtx)
 	}
 
+	leaderboard.start(workerCtx, &wg)
+
 	shutdown = func() {
 		slog.Info("Shutting down background workers...", slog.String("module", "gamification"))
 		cancelWorkers()
@@ -157,6 +175,35 @@ func Initialize(ctx context.Context, deps ModuleDeps) (handler *gamificationGRPC
 	}
 
 	return grpcHandler, shutdown, nil
+}
+
+// connectLeaderboardRedis returns the shared Redis client, or nil (PostgreSQL-only leaderboard)
+// when Redis is unavailable.
+func connectLeaderboardRedis() *goredis.Client {
+	client, err := sharedRedis.GetRegistry().GetClient()
+	if err != nil {
+		slog.Warn("Leaderboard read model: postgres only (redis unavailable)",
+			slog.String("module", "gamification"), slog.String("error", err.Error()))
+		return nil
+	}
+	return client
+}
+
+// leaderboardEventsReader returns the reader feeding XpEarned into the leaderboard, or nil when
+// Kafka is unavailable.
+func leaderboardEventsReader(registry *sharedKafka.Registry) *kafka.Reader {
+	if registry == nil {
+		slog.Warn("Leaderboard read model: postgres only (kafka not configured)",
+			slog.String("module", "gamification"))
+		return nil
+	}
+	reader, err := registry.GetReader(leaderboardConsumerGroup, gamificationEventsTopic)
+	if err != nil {
+		slog.Warn("Leaderboard read model: postgres only (kafka reader unavailable)",
+			slog.String("module", "gamification"), slog.String("error", err.Error()))
+		return nil
+	}
+	return reader
 }
 
 type nutritionCoordinatorAdapter struct {

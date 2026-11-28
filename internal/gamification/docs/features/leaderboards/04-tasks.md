@@ -17,6 +17,15 @@
 - [x] **[T-LB-06] [INFRA]**: Hiện Thực Hóa Postgres Repositories & Consumer Đồng Bộ Snapshot
 - [x] **[T-LB-07] [TEST]**: Integration Test Với PostgreSQL Thật
 - [x] **[T-LB-08] [TRANSPORT]**: Triển Khai ConnectRPC Server Handler & Module Wiring
+- [x] **[T-LB-09] [PORTS]**: Tách `UserSnapshotRepository` khỏi `LeaderboardRepository`; thêm `LeaderboardScoreSource` trên Gorm
+- [x] **[T-LB-10] [INFRA]**: Score codec 53 bit (XP 22 bit + thời gian 31 bit)
+- [x] **[T-LB-11] [INFRA]**: Redis projection (`ZADD LT`, sentinel `__ready__`, rebuild lock)
+- [x] **[T-LB-12] [INFRA]**: Redis read repository (read-repair) + Fallback PostgreSQL
+- [x] **[T-LB-13] [APP]**: `ProjectLeaderboardScoreHandler` & `RebuildLeaderboardHandler`
+- [x] **[T-LB-14] [APP]**: Đường nhanh sau commit (Coordinator & InitUserGamification)
+- [x] **[T-LB-15] [TRANSPORT/INFRA]**: `LeaderboardXpEarnedConsumer` & `LeaderboardReconcileWorker`
+- [x] **[T-LB-16] [WIRING/TEST]**: Module wiring + Parity tests Redis == PostgreSQL
+- [x] **[T-LB-17] [INFRA]**: Cache tên/avatar bằng Redis Hash (`CachedUserSnapshotRepository`, read-through + write-through, TTL 24h) + test quy mô 100k/1M user
 
 ---
 
@@ -130,3 +139,15 @@
   3. Khởi tạo module trong `cmd/api/main.go` (không sử dụng Google Wire).
 - **Tiêu chí hoàn thành (DoD)**:
   - Gọi API ConnectRPC qua `curl` / `buf curl` trả về đúng danh sách Top 50 và `my_standing` kèm `display_name`, `avatar_url`.
+
+---
+
+### [x] [T-LB-09 → T-LB-16] Redis ZSET Read Model ([ADR-0003](./adr/ADR-0003-redis-zset-leaderboard-read-model.md))
+- **Kế hoạch chi tiết**: `docs/superpowers/plans/2026-11-27-leaderboard-redis.md`.
+- **Kiểm thử bắt buộc**:
+  - `go test ./internal/gamification/...` — codec (thứ tự, clamp, số nguyên chính xác), projection (không lùi điểm, lock compare-and-delete), read repo (lọc sentinel, mất key ⇒ not ready, read-repair), fallback, rebuild (phân trang, không MarkReady khi lỗi), đường nhanh (chỉ sau commit, lỗi không làm hỏng command), consumer, worker, wiring.
+  - `TestLeaderboardParity_SQLite`: kết quả Redis == SQL trên dataset có đủ các trường hợp hòa điểm.
+  - `TEST_DATABASE_URL=... [TEST_REDIS_ADDR=localhost:6379] go test -tags integration ./internal/gamification/test/ -run Parity` — so sánh trên PostgreSQL thật (transaction rollback; Redis DB 15).
+- **Tiêu chí hoàn thành (DoD)**:
+  - Log khởi động `Leaderboard read model: redis` và `Leaderboard reconcile completed` với `reset=true`.
+  - Xóa key hoặc tắt Redis ⇒ API vẫn trả đúng từ PostgreSQL (log WARN fallback), tự dựng lại khi Redis trở lại.
