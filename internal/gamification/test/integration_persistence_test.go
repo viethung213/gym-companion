@@ -150,10 +150,10 @@ func TestIntegration_Leaderboard_AndUserSnapshots(t *testing.T) {
 
 	now := time.Now().UTC()
 	snap := entity.NewUserSnapshot("user-300", "Son Goku", "https://img/avatar.png", now)
-	err := repos.LeaderboardRepo.SaveSnapshot(ctx, snap)
+	err := repos.UserSnapshotRepo.SaveSnapshot(ctx, snap)
 	require.NoError(t, err)
 
-	fetchedSnap, err := repos.LeaderboardRepo.GetSnapshot(ctx, "user-300")
+	fetchedSnap, err := repos.UserSnapshotRepo.GetSnapshot(ctx, "user-300")
 	require.NoError(t, err)
 	require.NotNil(t, fetchedSnap)
 	assert.Equal(t, "Son Goku", fetchedSnap.DisplayName)

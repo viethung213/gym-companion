@@ -6,19 +6,23 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/viethung213/gym-companion/internal/gamification/application/port"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/entity"
 	"github.com/viethung213/gym-companion/internal/gamification/domain/repository"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-// GormLeaderboardRepository implements repository.LeaderboardRepository.
+// GormLeaderboardRepository serves the XP leaderboard straight from gamification.user_xp
+// and is the source of truth the Redis read model is rebuilt from.
 type GormLeaderboardRepository struct {
 	db *gorm.DB
 }
 
-// Compile-time interface check.
-var _ repository.LeaderboardRepository = (*GormLeaderboardRepository)(nil)
+// Compile-time interface checks.
+var (
+	_ repository.LeaderboardRepository = (*GormLeaderboardRepository)(nil)
+	_ port.LeaderboardScoreSource      = (*GormLeaderboardRepository)(nil)
+)
 
 // NewGormLeaderboardRepository constructs a new GormLeaderboardRepository.
 func NewGormLeaderboardRepository(db *gorm.DB) *GormLeaderboardRepository {
@@ -34,6 +38,31 @@ type leaderboardRow struct {
 	UpdatedAt   time.Time `gorm:"column:updated_at"`
 }
 
+func (row *leaderboardRow) toEntity(rank int64) *entity.LeaderboardUser {
+	return &entity.LeaderboardUser{
+		Rank:        rank,
+		UserID:      row.UserID,
+		DisplayName: entity.DisplayNameOrDefault(derefString(row.DisplayName)),
+		AvatarURL:   derefString(row.AvatarURL),
+		Xp:          row.Xp,
+		Level:       row.Level,
+		UpdatedAt:   row.UpdatedAt,
+	}
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func (r *GormLeaderboardRepository) leaderboardQuery(ctx context.Context) *gorm.DB {
+	return GetDB(ctx, r.db).Table("gamification.user_xp u").
+		Select("u.user_id, u.xp, u.level, u.updated_at, s.display_name, s.avatar_url").
+		Joins("LEFT JOIN gamification.user_snapshots s ON u.user_id = s.user_id")
+}
+
 // GetGlobalTop queries the Top users ordered by (xp DESC, updated_at ASC, user_id ASC)
 // joined with local snapshots to avoid cross-schema joins.
 func (r *GormLeaderboardRepository) GetGlobalTop(
@@ -47,12 +76,8 @@ func (r *GormLeaderboardRepository) GetGlobalTop(
 		offset = 0
 	}
 
-	db := GetDB(ctx, r.db)
-
 	var rows []leaderboardRow
-	err := db.Table("gamification.user_xp u").
-		Select("u.user_id, u.xp, u.level, u.updated_at, s.display_name, s.avatar_url").
-		Joins("LEFT JOIN gamification.user_snapshots s ON u.user_id = s.user_id").
+	err := r.leaderboardQuery(ctx).
 		Order("u.xp DESC, u.updated_at ASC, u.user_id ASC").
 		Limit(limit).
 		Offset(offset).
@@ -62,25 +87,8 @@ func (r *GormLeaderboardRepository) GetGlobalTop(
 	}
 
 	result := make([]*entity.LeaderboardUser, 0, len(rows))
-	for i, row := range rows {
-		displayName := "Gymer"
-		if row.DisplayName != nil && *row.DisplayName != "" {
-			displayName = *row.DisplayName
-		}
-		avatarURL := ""
-		if row.AvatarURL != nil {
-			avatarURL = *row.AvatarURL
-		}
-
-		result = append(result, &entity.LeaderboardUser{
-			Rank:        int64(offset + i + 1),
-			UserID:      row.UserID,
-			DisplayName: displayName,
-			AvatarURL:   avatarURL,
-			Xp:          row.Xp,
-			Level:       row.Level,
-			UpdatedAt:   row.UpdatedAt,
-		})
+	for i := range rows {
+		result = append(result, rows[i].toEntity(int64(offset+i+1)))
 	}
 
 	return result, int64(len(result)), nil
@@ -91,12 +99,8 @@ func (r *GormLeaderboardRepository) GetUserRank(
 	ctx context.Context,
 	userID string,
 ) (int64, *entity.LeaderboardUser, error) {
-	db := GetDB(ctx, r.db)
-
 	var userRow leaderboardRow
-	err := db.Table("gamification.user_xp u").
-		Select("u.user_id, u.xp, u.level, u.updated_at, s.display_name, s.avatar_url").
-		Joins("LEFT JOIN gamification.user_snapshots s ON u.user_id = s.user_id").
+	err := r.leaderboardQuery(ctx).
 		Where("u.user_id = ?", userID).
 		Take(&userRow).Error
 	if err != nil {
@@ -114,7 +118,7 @@ func (r *GormLeaderboardRepository) GetUserRank(
 		   OR (xp = ? AND updated_at < ?)
 		   OR (xp = ? AND updated_at = ? AND user_id < ?)
 	`
-	err = db.Raw(
+	err = GetDB(ctx, r.db).Raw(
 		rankQuery,
 		userRow.Xp,
 		userRow.Xp, userRow.UpdatedAt,
@@ -125,69 +129,65 @@ func (r *GormLeaderboardRepository) GetUserRank(
 	}
 
 	rank := higherCount + 1
-
-	displayName := "Gymer"
-	if userRow.DisplayName != nil && *userRow.DisplayName != "" {
-		displayName = *userRow.DisplayName
-	}
-	avatarURL := ""
-	if userRow.AvatarURL != nil {
-		avatarURL = *userRow.AvatarURL
-	}
-
-	leaderboardUser := &entity.LeaderboardUser{
-		Rank:        rank,
-		UserID:      userRow.UserID,
-		DisplayName: displayName,
-		AvatarURL:   avatarURL,
-		Xp:          userRow.Xp,
-		Level:       userRow.Level,
-		UpdatedAt:   userRow.UpdatedAt,
-	}
-
-	return rank, leaderboardUser, nil
+	return rank, userRow.toEntity(rank), nil
 }
 
-// SaveSnapshot upserts user display information into gamification.user_snapshots.
-func (r *GormLeaderboardRepository) SaveSnapshot(ctx context.Context, snapshot *entity.UserSnapshot) error {
-	if snapshot == nil {
-		return errors.New("nil user snapshot")
+type leaderboardScoreRow struct {
+	UserID    string    `gorm:"column:user_id"`
+	Xp        int64     `gorm:"column:xp"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (row leaderboardScoreRow) toEntity() entity.LeaderboardScore {
+	return entity.LeaderboardScore{UserID: row.UserID, Xp: row.Xp, UpdatedAt: row.UpdatedAt}
+}
+
+// ListScores pages through user_xp by user_id (keyset pagination) for read model rebuilds.
+func (r *GormLeaderboardRepository) ListScores(
+	ctx context.Context,
+	afterUserID string,
+	limit int,
+) ([]entity.LeaderboardScore, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list leaderboard scores: limit must be positive, got %d", limit)
 	}
 
-	model := &UserSnapshotModel{
-		UserID:      snapshot.UserID,
-		DisplayName: snapshot.DisplayName,
-		AvatarURL:   snapshot.AvatarURL,
-		UpdatedAt:   snapshot.UpdatedAt,
+	query := GetDB(ctx, r.db).Table("gamification.user_xp").Select("user_id, xp, updated_at")
+	if afterUserID != "" {
+		// Only filter after the first page: "" is not a valid uuid literal in PostgreSQL.
+		query = query.Where("user_id > ?", afterUserID)
 	}
 
-	db := GetDB(ctx, r.db)
-	err := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}},
-		UpdateAll: true,
-	}).Create(model).Error
+	var rows []leaderboardScoreRow
+	err := query.Order("user_id ASC").Limit(limit).Scan(&rows).Error
 	if err != nil {
-		return fmt.Errorf("save user snapshot: %w", err)
+		return nil, fmt.Errorf("list leaderboard scores: %w", err)
 	}
-	return nil
+
+	scores := make([]entity.LeaderboardScore, 0, len(rows))
+	for _, row := range rows {
+		scores = append(scores, row.toEntity())
+	}
+	return scores, nil
 }
 
-// GetSnapshot retrieves the local snapshot for a user.
-func (r *GormLeaderboardRepository) GetSnapshot(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
-	db := GetDB(ctx, r.db)
-	var model UserSnapshotModel
-	err := db.Where("user_id = ?", userID).First(&model).Error
+// GetScore returns a single user's leaderboard score, or nil when the user has no XP record.
+func (r *GormLeaderboardRepository) GetScore(
+	ctx context.Context,
+	userID string,
+) (*entity.LeaderboardScore, error) {
+	var row leaderboardScoreRow
+	err := GetDB(ctx, r.db).Table("gamification.user_xp").
+		Select("user_id, xp, updated_at").
+		Where("user_id = ?", userID).
+		Take(&row).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("find user snapshot: %w", err)
+		return nil, fmt.Errorf("get leaderboard score: %w", err)
 	}
 
-	return &entity.UserSnapshot{
-		UserID:      model.UserID,
-		DisplayName: model.DisplayName,
-		AvatarURL:   model.AvatarURL,
-		UpdatedAt:   model.UpdatedAt,
-	}, nil
+	score := row.toEntity()
+	return &score, nil
 }

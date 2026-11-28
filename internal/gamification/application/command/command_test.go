@@ -102,31 +102,33 @@ func (m *mockUserStreakRepo) GetHistory(ctx context.Context, userID string, limi
 	return m.history, int64(len(m.history)), nil
 }
 
-type mockLeaderboardRepo struct {
+type mockSnapshotRepo struct {
 	snapshots map[string]*entity.UserSnapshot
 }
 
-func newMockLeaderboardRepo() *mockLeaderboardRepo {
-	return &mockLeaderboardRepo{
+func newMockSnapshotRepo() *mockSnapshotRepo {
+	return &mockSnapshotRepo{
 		snapshots: make(map[string]*entity.UserSnapshot),
 	}
 }
 
-func (m *mockLeaderboardRepo) GetGlobalTop(ctx context.Context, limit, offset int) ([]*entity.LeaderboardUser, int64, error) {
-	return nil, 0, nil
-}
-
-func (m *mockLeaderboardRepo) GetUserRank(ctx context.Context, userID string) (int64, *entity.LeaderboardUser, error) {
-	return 0, nil, nil
-}
-
-func (m *mockLeaderboardRepo) SaveSnapshot(ctx context.Context, snapshot *entity.UserSnapshot) error {
+func (m *mockSnapshotRepo) SaveSnapshot(ctx context.Context, snapshot *entity.UserSnapshot) error {
 	m.snapshots[snapshot.UserID] = snapshot
 	return nil
 }
 
-func (m *mockLeaderboardRepo) GetSnapshot(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
+func (m *mockSnapshotRepo) GetSnapshot(ctx context.Context, userID string) (*entity.UserSnapshot, error) {
 	return m.snapshots[userID], nil
+}
+
+func (m *mockSnapshotRepo) GetSnapshots(ctx context.Context, userIDs []string) (map[string]*entity.UserSnapshot, error) {
+	result := make(map[string]*entity.UserSnapshot, len(userIDs))
+	for _, id := range userIDs {
+		if snap, ok := m.snapshots[id]; ok {
+			result[id] = snap
+		}
+	}
+	return result, nil
 }
 
 func TestProcessWorkoutXpHandler(t *testing.T) {
@@ -283,7 +285,7 @@ func TestRecordStreakActivityHandler(t *testing.T) {
 }
 
 func TestSyncUserSnapshotHandler(t *testing.T) {
-	repo := newMockLeaderboardRepo()
+	repo := newMockSnapshotRepo()
 	handler := command.NewSyncUserSnapshotHandler(repo)
 
 	err := handler.Handle(context.Background(), command.SyncUserSnapshotCommand{
@@ -302,10 +304,10 @@ func TestSyncUserSnapshotHandler(t *testing.T) {
 func TestInitUserGamificationHandler(t *testing.T) {
 	xpRepo := newMockUserXpRepo()
 	streakRepo := newMockUserStreakRepo()
-	lbRepo := newMockLeaderboardRepo()
+	snapshotRepo := newMockSnapshotRepo()
 	tx := &mockTxManager{}
 
-	handler := command.NewInitUserGamificationHandler(xpRepo, streakRepo, lbRepo, tx)
+	handler := command.NewInitUserGamificationHandler(xpRepo, streakRepo, snapshotRepo, tx)
 
 	err := handler.Handle(context.Background(), command.InitUserGamificationCommand{
 		UserID:      "u-fresh",
@@ -322,7 +324,7 @@ func TestInitUserGamificationHandler(t *testing.T) {
 	if streakRepo.streaks["u-fresh"] == nil || streakRepo.streaks["u-fresh"].CurrentStreak() != 0 {
 		t.Errorf("expected baseline user_streak with 0 days")
 	}
-	if lbRepo.snapshots["u-fresh"] == nil || lbRepo.snapshots["u-fresh"].DisplayName != "New Gymer" {
+	if snapshotRepo.snapshots["u-fresh"] == nil || snapshotRepo.snapshots["u-fresh"].DisplayName != "New Gymer" {
 		t.Errorf("expected baseline user_snapshot")
 	}
 }

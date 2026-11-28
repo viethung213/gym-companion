@@ -88,14 +88,15 @@ func (p *SchemaTxPool) PrepareContext(ctx context.Context, query string) (*sql.S
 
 // Repositories contains all GORM repository implementations wired to the in-memory SQLite DB.
 type Repositories struct {
-	DB              *gorm.DB
-	UserXpRepo      repository.UserXpRepository
-	UserStreakRepo  repository.UserStreakRepository
-	LeaderboardRepo repository.LeaderboardRepository
-	BadgeRepo       repository.BadgeRepository
-	OutboxRepo      port.OutboxRepository
-	OutboxLogRepo   port.OutboxLogRepository
-	TxManager       port.TransactionManager
+	DB               *gorm.DB
+	UserXpRepo       repository.UserXpRepository
+	UserStreakRepo   repository.UserStreakRepository
+	LeaderboardRepo  repository.LeaderboardRepository
+	UserSnapshotRepo repository.UserSnapshotRepository
+	BadgeRepo        repository.BadgeRepository
+	OutboxRepo       port.OutboxRepository
+	OutboxLogRepo    port.OutboxLogRepository
+	TxManager        port.TransactionManager
 }
 
 // NewTestDB boots in-memory SQLite and creates tables matching 13-create-gamification-tables.sql.
@@ -203,14 +204,15 @@ func NewTestDB(t *testing.T) (*gorm.DB, *Repositories) {
 	}
 
 	repos := &Repositories{
-		DB:              gormDB,
-		UserXpRepo:      persistence.NewGormUserXpRepository(gormDB),
-		UserStreakRepo:  persistence.NewGormUserStreakRepository(gormDB),
-		LeaderboardRepo: persistence.NewGormLeaderboardRepository(gormDB),
-		BadgeRepo:       persistence.NewGormBadgeRepository(gormDB),
-		OutboxRepo:      persistence.NewGormOutboxRepository(gormDB),
-		OutboxLogRepo:   persistence.NewGormOutboxLogRepository(gormDB),
-		TxManager:       persistence.NewSQLTransactionManager(gormDB),
+		DB:               gormDB,
+		UserXpRepo:       persistence.NewGormUserXpRepository(gormDB),
+		UserStreakRepo:   persistence.NewGormUserStreakRepository(gormDB),
+		LeaderboardRepo:  persistence.NewGormLeaderboardRepository(gormDB),
+		UserSnapshotRepo: persistence.NewGormUserSnapshotRepository(gormDB),
+		BadgeRepo:        persistence.NewGormBadgeRepository(gormDB),
+		OutboxRepo:       persistence.NewGormOutboxRepository(gormDB),
+		OutboxLogRepo:    persistence.NewGormOutboxLogRepository(gormDB),
+		TxManager:        persistence.NewSQLTransactionManager(gormDB),
 	}
 
 	return gormDB, repos

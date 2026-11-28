@@ -12,6 +12,11 @@ import (
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
 )
 
+const (
+	consumerMaxRetries  = 3
+	consumerBaseBackoff = 100 * time.Millisecond
+)
+
 type CloudEvent struct {
 	SpecVersion     string          `json:"specversion"`
 	ID              string          `json:"id"`
@@ -34,8 +39,8 @@ func runConsumerLoop(
 		reader,
 		sharedKafka.ConsumerConfig{
 			Name:        name,
-			MaxRetries:  3,
-			BaseBackoff: 100 * time.Millisecond,
+			MaxRetries:  consumerMaxRetries,
+			BaseBackoff: consumerBaseBackoff,
 			DLQWriter:   dlqWriter,
 		},
 		processFn,

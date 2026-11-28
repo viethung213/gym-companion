@@ -2,7 +2,7 @@
 
 - **Feature**: leaderboards
 - **Date**: 2026-10-11
-- **Status**: Accepted
+- **Status**: Superseded by [ADR-0003](./ADR-0003-redis-zset-leaderboard-read-model.md) (2026-11-27)
 - **Deciders**: Maintainer (User), AI Assistant
 
 ## Context and Problem Statement

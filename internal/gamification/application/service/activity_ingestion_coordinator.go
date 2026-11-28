@@ -20,6 +20,7 @@ type ActivityIngestionCoordinator struct {
 	badgeHandler     *command.EvaluateBadgesHandler
 	txManager        port.TransactionManager
 	walletRewarder   port.WalletRewarder
+	leaderboard      *command.ProjectLeaderboardScoreHandler
 }
 
 func NewActivityIngestionCoordinator(
@@ -48,6 +49,15 @@ func (c *ActivityIngestionCoordinator) WithWalletRewarder(
 	walletRewarder port.WalletRewarder,
 ) *ActivityIngestionCoordinator {
 	c.walletRewarder = walletRewarder
+	return c
+}
+
+// WithLeaderboardProjector enables pushing earned XP to the leaderboard read model right after
+// commit.
+func (c *ActivityIngestionCoordinator) WithLeaderboardProjector(
+	projector *command.ProjectLeaderboardScoreHandler,
+) *ActivityIngestionCoordinator {
+	c.leaderboard = projector
 	return c
 }
 
@@ -172,7 +182,8 @@ func (c *ActivityIngestionCoordinator) runPipeline(
 	seedEvent event.Event,
 	progressionSteps func(txCtx context.Context, events []event.Event) ([]event.Event, error),
 ) error {
-	return c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+	var committedEvents []event.Event
+	err := c.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		pipelineEvents, err := progressionSteps(txCtx, []event.Event{seedEvent})
 		if err != nil {
 			return err
@@ -192,6 +203,13 @@ func (c *ActivityIngestionCoordinator) runPipeline(
 			}
 		}
 
+		committedEvents = pipelineEvents
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	c.leaderboard.ProjectBestEffort(ctx, command.XpEarnedProjections(committedEvents)...)
+	return nil
 }
