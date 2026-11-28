@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -70,8 +71,11 @@ func (h *SendNotificationHandler) RegisterDispatcher(d ChannelDispatcher) {
 // Handle executes the notification dispatch across all specified channels.
 func (h *SendNotificationHandler) Handle(
 	ctx context.Context,
-	cmd SendNotificationCommand,
+	cmd *SendNotificationCommand,
 ) (*SendNotificationResponse, error) {
+	if cmd == nil {
+		return nil, errors.New("command is required")
+	}
 	var dispatched []string
 	var lastErr error
 	var mu sync.Mutex

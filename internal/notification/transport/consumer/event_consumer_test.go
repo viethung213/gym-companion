@@ -63,7 +63,7 @@ func (m *mockDeviceRepo) GetActiveDevicesByUserID(ctx context.Context, userID st
 	return []*aggregate.Device{dev}, nil
 }
 func (m *mockDeviceRepo) GetActiveDevicesByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Device, error) {
-	var result []*aggregate.Device
+	result := make([]*aggregate.Device, 0, len(userIDs))
 	for _, uid := range userIDs {
 		dt, _ := vo.NewDeviceType("IOS")
 		dev := aggregate.ReconstituteDevice("dev-"+uid, uid, "token-"+uid, dt, true, time.Now(), time.Now(), time.Now())

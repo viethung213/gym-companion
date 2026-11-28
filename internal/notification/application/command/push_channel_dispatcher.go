@@ -62,7 +62,7 @@ func (d *PushChannelDispatcher) applyCooldownPolicy(
 	ctx context.Context,
 	msg NotificationMessage,
 	target port.NotificationTarget,
-) ([]string, func(ctx context.Context)) {
+) (allowedRecipients []string, releaseCooldown func(ctx context.Context)) {
 	recipients := targetRecipients(target)
 	noRelease := func(context.Context) {}
 

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	goredis "github.com/redis/go-redis/v9"
+
 	"github.com/viethung213/gym-companion/internal/gen/go/contracts/generic/notification/v1/service/notificationv1serviceconnect"
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
@@ -19,14 +21,13 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/fcm"
 	notificationKafka "github.com/viethung213/gym-companion/internal/notification/infrastructure/kafka"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/persistence"
+	notificationRedis "github.com/viethung213/gym-companion/internal/notification/infrastructure/redis"
 	"github.com/viethung213/gym-companion/internal/notification/infrastructure/sms"
 	notificationWorker "github.com/viethung213/gym-companion/internal/notification/infrastructure/worker"
 	notificationConsumer "github.com/viethung213/gym-companion/internal/notification/transport/consumer"
 	notificationGRPC "github.com/viethung213/gym-companion/internal/notification/transport/grpc"
-	notificationRedis "github.com/viethung213/gym-companion/internal/notification/infrastructure/redis"
 	"github.com/viethung213/gym-companion/internal/shared/database"
 	sharedKafka "github.com/viethung213/gym-companion/internal/shared/kafka"
-	goredis "github.com/redis/go-redis/v9"
 )
 
 type ModuleDeps struct {
@@ -69,7 +70,7 @@ func Initialize(ctx context.Context, deps ModuleDeps) (*notificationGRPC.GRPCHan
 	// 3. Channel Dispatchers (Strategy Pattern - Approach 3)
 	var pushCooldown port.PushCooldownService
 	if deps.RedisClient != nil {
-		pushCooldown = notificationRedis.NewRedisPushCooldownService(deps.RedisClient)
+		pushCooldown = notificationRedis.NewPushCooldownService(deps.RedisClient)
 	}
 	pushChannel := command.NewPushChannelDispatcher(deviceRepo, fcmClient, settingRepo, pushCooldown)
 	inAppChannel := command.NewInAppChannelDispatcher(notificationRepo)

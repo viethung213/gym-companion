@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -88,7 +89,7 @@ func (h *SelfEventHandler) Handle(
 		return fmt.Errorf("cloudevent missing required event id for type: %s", env.Type)
 	}
 	if h.outboxLogRepo == nil {
-		return fmt.Errorf("outbox log repository is required for self event handler")
+		return errors.New("outbox log repository is required for self event handler")
 	}
 
 	var payload genericNotificationPayload
@@ -114,7 +115,7 @@ func (h *SelfEventHandler) Handle(
 	isHighPriority := rule.IsHighPriority
 
 	// 1. Resolve Target & Determine Partition Key
-	target, partitionKey := resolveTarget(payload)
+	target, partitionKey := resolveTarget(&payload)
 
 	// 2. Idempotency Check & Atomic Claim Lock
 	logRec, logErr := h.outboxLogRepo.LogProcessed(ctx, env.ID, env.Type, partitionKey, msgValue)
@@ -158,7 +159,7 @@ func (h *SelfEventHandler) Handle(
 	// 4. Dispatch via SendNotificationHandler (Strategy Pattern across channels)
 	var lastErr error
 	if len(channelsToDispatch) > 0 && h.sendNotificationHandler != nil {
-		resp, nErr := h.sendNotificationHandler.Handle(ctx, command.SendNotificationCommand{
+		resp, nErr := h.sendNotificationHandler.Handle(ctx, &command.SendNotificationCommand{
 			Target:         target,
 			EventID:        env.ID,
 			Title:          title,
@@ -226,8 +227,8 @@ func (h *SelfEventHandler) Handle(
 	return lastErr
 }
 
-func resolveTarget(payload genericNotificationPayload) (port.NotificationTarget, string) {
-	if payload.Target != nil {
+func resolveTarget(payload *genericNotificationPayload) (port.NotificationTarget, string) {
+	if payload != nil && payload.Target != nil {
 		if payload.Target.AllUsers {
 			return port.NotificationTarget{
 				Scope: port.ScopeBroadcast,

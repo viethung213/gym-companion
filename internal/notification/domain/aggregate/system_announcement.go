@@ -56,11 +56,16 @@ func ReconstituteSystemAnnouncement(
 	}
 }
 
-func (a *SystemAnnouncement) ID() string                { return a.id }
-func (a *SystemAnnouncement) EventID() string           { return a.eventID }
-func (a *SystemAnnouncement) Title() string             { return a.title }
-func (a *SystemAnnouncement) Body() string              { return a.body }
-func (a *SystemAnnouncement) CreatedAt() time.Time      { return a.createdAt }
+func (a *SystemAnnouncement) ID() string { return a.id }
+
+func (a *SystemAnnouncement) EventID() string { return a.eventID }
+
+func (a *SystemAnnouncement) Title() string { return a.title }
+
+func (a *SystemAnnouncement) Body() string { return a.body }
+
+func (a *SystemAnnouncement) CreatedAt() time.Time { return a.createdAt }
+
 func (a *SystemAnnouncement) Data() map[string]string {
 	copied := make(map[string]string, len(a.data))
 	for k, v := range a.data {

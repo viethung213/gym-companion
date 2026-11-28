@@ -3,8 +3,10 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/viethung213/gym-companion/internal/notification/application/command"
@@ -28,7 +30,7 @@ type externalEventData struct {
 type ExternalEventRule struct {
 	DefaultTitle string
 	DefaultBody  string
-	Formatter func(data *externalEventData) (title, body string, dataMap map[string]string)
+	Formatter    func(data *externalEventData) (title, body string, dataMap map[string]string)
 }
 
 func (r ExternalEventRule) Format(data *externalEventData) (title, body string, dataMap map[string]string) {
@@ -43,11 +45,12 @@ func (r ExternalEventRule) Format(data *externalEventData) (title, body string, 
 		}
 	}
 	if body == "" {
-		if data != nil && data.Body != "" {
+		switch {
+		case data != nil && data.Body != "":
 			body = data.Body
-		} else if data != nil && data.Message != "" {
+		case data != nil && data.Message != "":
 			body = data.Message
-		} else {
+		default:
 			body = r.DefaultBody
 		}
 	}
@@ -88,15 +91,16 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 		Formatter: func(data *externalEventData) (string, string, map[string]string) {
 			title := "Kỷ lục cá nhân mới! 🏆"
 			body := "Chúc mừng bạn vừa xác lập một kỷ lục cá nhân (PR) mới!"
-			if data.Weight > 0 && data.Reps > 0 && data.OneRepMax > 0 {
+			switch {
+			case data.Weight > 0 && data.Reps > 0 && data.OneRepMax > 0:
 				body = fmt.Sprintf("Chúc mừng bạn vừa đạt PR mới: %.1f kg x %d reps (1RM ước tính: %.1f kg)!", data.Weight, data.Reps, data.OneRepMax)
-			} else if data.Weight > 0 && data.Reps > 0 {
+			case data.Weight > 0 && data.Reps > 0:
 				body = fmt.Sprintf("Chúc mừng bạn vừa đạt PR mới: %.1f kg x %d reps!", data.Weight, data.Reps)
-			} else if data.OneRepMax > 0 {
+			case data.OneRepMax > 0:
 				body = fmt.Sprintf("Chúc mừng bạn vừa đạt mức 1RM kỷ lục mới: %.1f kg!", data.OneRepMax)
-			} else if data.Body != "" {
+			case data.Body != "":
 				body = data.Body
-			} else if data.Message != "" {
+			case data.Message != "":
 				body = data.Message
 			}
 
@@ -115,7 +119,7 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 				m["weight"] = fmt.Sprintf("%.1f", data.Weight)
 			}
 			if data.Reps > 0 {
-				m["reps"] = fmt.Sprintf("%d", data.Reps)
+				m["reps"] = strconv.Itoa(int(data.Reps))
 			}
 			return title, body, m
 		},
@@ -131,16 +135,17 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 		Formatter: func(data *externalEventData) (string, string, map[string]string) {
 			title := "Nhắc nhở bữa ăn 🥗"
 			body := "Sắp đến giờ ăn theo lịch dinh dưỡng (trước 30 phút). Nhớ chuẩn bị bữa ăn nhé!"
-			if data.MealName != "" {
+			switch {
+			case data.MealName != "":
 				title = "Nhắc nhở bữa ăn 🥗: " + data.MealName
 				if data.MealType != "" {
 					body = fmt.Sprintf("Sắp đến giờ ăn %s (%s). Nhớ chuẩn bị bữa ăn nhé!", data.MealName, data.MealType)
 				} else {
 					body = fmt.Sprintf("Sắp đến giờ ăn %s. Nhớ chuẩn bị bữa ăn nhé!", data.MealName)
 				}
-			} else if data.Body != "" {
+			case data.Body != "":
 				body = data.Body
-			} else if data.Message != "" {
+			case data.Message != "":
 				body = data.Message
 			}
 
@@ -216,7 +221,7 @@ func (h *ExternalEventHandler) Handle(
 		return fmt.Errorf("cloudevent missing required event id for type: %s", env.Type)
 	}
 	if h.outboxLogRepo == nil {
-		return fmt.Errorf("outbox log repository is required for external event handler")
+		return errors.New("outbox log repository is required for external event handler")
 	}
 
 	var payload externalEventData
@@ -253,7 +258,7 @@ func (h *ExternalEventHandler) Handle(
 			Scope:  port.ScopeDirect,
 			UserID: payload.UserID,
 		}
-		resp, nErr := h.sendNotificationHandler.Handle(ctx, command.SendNotificationCommand{
+		resp, nErr := h.sendNotificationHandler.Handle(ctx, &command.SendNotificationCommand{
 			Target:  target,
 			EventID: env.ID,
 			Title:   title,

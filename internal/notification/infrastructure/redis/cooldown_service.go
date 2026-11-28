@@ -9,25 +9,25 @@ import (
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 )
 
-var _ port.PushCooldownService = (*RedisPushCooldownService)(nil)
+var _ port.PushCooldownService = (*PushCooldownService)(nil)
 
-// RedisPushCooldownService provides Redis-backed distributed cooldown locking for push notifications.
-type RedisPushCooldownService struct {
+// PushCooldownService provides Redis-backed distributed cooldown locking for push notifications.
+type PushCooldownService struct {
 	client *goredis.Client
 }
 
-// NewRedisPushCooldownService creates a new RedisPushCooldownService.
-func NewRedisPushCooldownService(client *goredis.Client) *RedisPushCooldownService {
-	return &RedisPushCooldownService{client: client}
+// NewPushCooldownService creates a new PushCooldownService.
+func NewPushCooldownService(client *goredis.Client) *PushCooldownService {
+	return &PushCooldownService{client: client}
 }
 
-func (s *RedisPushCooldownService) key(feedID, recipientID string) string {
+func (s *PushCooldownService) key(feedID, recipientID string) string {
 	return fmt.Sprintf("push_cooldown:%s:%s", feedID, recipientID)
 }
 
 // CheckAndLock returns true if push is allowed (key was not present and has now been locked for ttl).
 // If Redis is unavailable or unconfigured, it gracefully fails open (returns true) so critical pushes aren't blocked.
-func (s *RedisPushCooldownService) CheckAndLock(ctx context.Context, feedID, recipientID string, ttl time.Duration) (bool, error) {
+func (s *PushCooldownService) CheckAndLock(ctx context.Context, feedID, recipientID string, ttl time.Duration) (bool, error) {
 	if s.client == nil {
 		return true, nil
 	}
@@ -41,7 +41,7 @@ func (s *RedisPushCooldownService) CheckAndLock(ctx context.Context, feedID, rec
 
 // CheckAndLockBatch checks and acquires cooldown locks for multiple recipients in a single Redis round-trip via pipeline.
 // If Redis is unavailable or fails, it gracefully fails open (returns all recipientIDs) so notifications are not dropped.
-func (s *RedisPushCooldownService) CheckAndLockBatch(
+func (s *PushCooldownService) CheckAndLockBatch(
 	ctx context.Context,
 	feedID string,
 	recipientIDs []string,
@@ -73,7 +73,7 @@ func (s *RedisPushCooldownService) CheckAndLockBatch(
 }
 
 // ReleaseLock deletes the cooldown key immediately if push delivery fails, allowing subsequent events to retry.
-func (s *RedisPushCooldownService) ReleaseLock(ctx context.Context, feedID, recipientID string) error {
+func (s *PushCooldownService) ReleaseLock(ctx context.Context, feedID, recipientID string) error {
 	if s.client == nil {
 		return nil
 	}
@@ -85,7 +85,7 @@ func (s *RedisPushCooldownService) ReleaseLock(ctx context.Context, feedID, reci
 }
 
 // ReleaseLockBatch deletes cooldown keys for multiple recipients in a single Redis DEL command.
-func (s *RedisPushCooldownService) ReleaseLockBatch(ctx context.Context, feedID string, recipientIDs []string) error {
+func (s *PushCooldownService) ReleaseLockBatch(ctx context.Context, feedID string, recipientIDs []string) error {
 	if s.client == nil || len(recipientIDs) == 0 {
 		return nil
 	}

@@ -15,7 +15,7 @@ func TestRedisPushCooldownService(t *testing.T) {
 	client := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
 	defer client.Close()
 
-	svc := infraRedis.NewRedisPushCooldownService(client)
+	svc := infraRedis.NewPushCooldownService(client)
 	ctx := context.Background()
 
 	feedID := "feed-100"
@@ -70,7 +70,7 @@ func TestRedisPushCooldownService_Batch(t *testing.T) {
 	client := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
 	defer client.Close()
 
-	svc := infraRedis.NewRedisPushCooldownService(client)
+	svc := infraRedis.NewPushCooldownService(client)
 	ctx := context.Background()
 
 	feedID := "feed-batch-1"
@@ -126,7 +126,7 @@ func TestRedisPushCooldownService_Batch(t *testing.T) {
 }
 
 func TestRedisPushCooldownService_NilClientFailsOpen(t *testing.T) {
-	svc := infraRedis.NewRedisPushCooldownService(nil)
+	svc := infraRedis.NewPushCooldownService(nil)
 	ctx := context.Background()
 
 	allowed, err := svc.CheckAndLock(ctx, "feed-1", "user-1", time.Minute)

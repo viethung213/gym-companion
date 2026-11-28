@@ -268,7 +268,11 @@ func (r *NotificationRepository) FindUnreadReactionByPost(ctx context.Context, u
 	return model.ToDomain()
 }
 
-func (r *NotificationRepository) FindUnreadReactionsByPostAndUsers(ctx context.Context, userIDs []string, feedItemID string) ([]*aggregate.InAppNotification, error) {
+func (r *NotificationRepository) FindUnreadReactionsByPostAndUsers(
+	ctx context.Context,
+	userIDs []string,
+	feedItemID string,
+) ([]*aggregate.InAppNotification, error) {
 	if len(userIDs) == 0 || feedItemID == "" {
 		return nil, nil
 	}

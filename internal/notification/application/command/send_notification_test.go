@@ -60,7 +60,7 @@ func TestSendNotificationHandler_MultiChannelSuccess(t *testing.T) {
 		Channels: []string{"PUSH", "IN_APP", "EMAIL", "SMS"},
 	}
 
-	resp, err := handler.Handle(ctx, cmd)
+	resp, err := handler.Handle(ctx, &cmd)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -92,7 +92,7 @@ func TestSendNotificationHandler_DefaultChannels(t *testing.T) {
 		Channels: nil, // empty -> defaults to PUSH and IN_APP
 	}
 
-	resp, err := handler.Handle(ctx, cmd)
+	resp, err := handler.Handle(ctx, &cmd)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -120,7 +120,7 @@ func TestSendNotificationHandler_PartialChannelFailure(t *testing.T) {
 		Channels: []string{"PUSH", "EMAIL"},
 	}
 
-	resp, err := handler.Handle(ctx, cmd)
+	resp, err := handler.Handle(ctx, &cmd)
 	if err == nil {
 		t.Fatalf("expected error from email failure, got nil")
 	}
@@ -433,7 +433,7 @@ func TestSendNotificationHandler_Pipeline_EnrichmentInRAM(t *testing.T) {
 		Channels: []string{"IN_APP", "PUSH"},
 	}
 
-	resp, err := handler.Handle(ctx, cmd)
+	resp, err := handler.Handle(ctx, &cmd)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -572,7 +572,7 @@ func TestSendNotificationHandler_InAppFailureSkipsPushButDispatchesSMSAndEmail(t
 		Channels: []string{"IN_APP", "PUSH", "SMS", "EMAIL"},
 	}
 
-	resp, err := handler.Handle(ctx, cmd)
+	resp, err := handler.Handle(ctx, &cmd)
 	if err == nil {
 		t.Fatalf("expected error from IN_APP failure, got nil")
 	}

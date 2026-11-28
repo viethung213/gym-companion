@@ -171,7 +171,7 @@ func (c *Client) SendPush(ctx context.Context, tokens []string, title, body stri
 	}, nil
 }
 
-func (c *Client) SendPushToTopic(ctx context.Context, topic string, title, body string, data map[string]string) error {
+func (c *Client) SendPushToTopic(ctx context.Context, topic, title, body string, data map[string]string) error {
 	if topic == "" {
 		return errors.New("empty topic")
 	}
