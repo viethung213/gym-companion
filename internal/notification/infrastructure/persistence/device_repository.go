@@ -59,16 +59,28 @@ func (r *DeviceRepository) GetActiveDevicesByUserID(ctx context.Context, userID 
 	return devices, nil
 }
 
-func (r *DeviceRepository) GetAllActiveUserIDs(ctx context.Context) ([]string, error) {
-	var userIDs []string
-	err := GetDB(ctx, r.db).Model(&DeviceModel{}).
-		Where("is_active = ?", true).
-		Distinct("user_id").
-		Pluck("user_id", &userIDs).Error
-	if err != nil {
-		return nil, fmt.Errorf("query all active user ids: %w", err)
+func (r *DeviceRepository) GetActiveDevicesByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Device, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
 	}
-	return userIDs, nil
+	var models []DeviceModel
+	err := GetDB(ctx, r.db).
+		Where("user_id IN ? AND is_active = ?", userIDs, true).
+		Order("last_used_at DESC").
+		Find(&models).Error
+	if err != nil {
+		return nil, fmt.Errorf("query active devices by user ids: %w", err)
+	}
+
+	devices := make([]*aggregate.Device, 0, len(models))
+	for i := range models {
+		dev, err := models[i].ToDomain()
+		if err != nil {
+			return nil, fmt.Errorf("convert device model to domain: %w", err)
+		}
+		devices = append(devices, dev)
+	}
+	return devices, nil
 }
 
 func (r *DeviceRepository) DeactivateTokens(ctx context.Context, tokens []string) error {

@@ -6,20 +6,17 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/viethung213/gym-companion/internal/notification/application/port"
 )
 
 type OutboxWorker struct {
-	outboxRepo    port.OutboxRepository
-	outboxLogRepo port.OutboxLogRepository
-	publisher     port.BrokerPublisher
-	interval      time.Duration
+	outboxRepo port.OutboxRepository
+	publisher  port.BrokerPublisher
+	interval   time.Duration
 }
 
 func NewOutboxWorker(
 	outboxRepo port.OutboxRepository,
-	outboxLogRepo port.OutboxLogRepository,
 	publisher port.BrokerPublisher,
 	interval time.Duration,
 ) *OutboxWorker {
@@ -27,10 +24,9 @@ func NewOutboxWorker(
 		interval = 2 * time.Second
 	}
 	return &OutboxWorker{
-		outboxRepo:    outboxRepo,
-		outboxLogRepo: outboxLogRepo,
-		publisher:     publisher,
-		interval:      interval,
+		outboxRepo: outboxRepo,
+		publisher:  publisher,
+		interval:   interval,
 	}
 }
 
@@ -61,36 +57,7 @@ func (w *OutboxWorker) processOutbox(ctx context.Context) error {
 	return w.outboxRepo.ProcessBatch(ctx, 100, func(publishCtx context.Context, records []*port.OutboxRecord) error {
 		if w.publisher != nil {
 			if err := w.publisher.PublishBatch(publishCtx, records); err != nil {
-				for _, rec := range records {
-					if w.outboxLogRepo != nil {
-						_ = w.outboxLogRepo.SaveLog(publishCtx, &port.OutboxLogRecord{
-							ID:           uuid.New().String(),
-							EventID:      rec.EventID,
-							EventType:    rec.EventType,
-							Payload:      rec.Payload,
-							PartitionKey: rec.PartitionKey,
-							ProcessedAt:  time.Now().UTC(),
-							Status:       "FAILED",
-							ErrorMessage: err.Error(),
-						})
-					}
-				}
 				return fmt.Errorf("publish notification outbox batch to kafka: %w", err)
-			}
-		}
-
-		for _, rec := range records {
-			if w.outboxLogRepo != nil {
-				_ = w.outboxLogRepo.SaveLog(publishCtx, &port.OutboxLogRecord{
-					ID:           uuid.New().String(),
-					EventID:      rec.EventID,
-					EventType:    rec.EventType,
-					Payload:      rec.Payload,
-					PartitionKey: rec.PartitionKey,
-					ProcessedAt:  time.Now().UTC(),
-					Status:       "PROCESSED",
-					ErrorMessage: "",
-				})
 			}
 		}
 

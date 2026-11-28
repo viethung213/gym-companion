@@ -27,8 +27,8 @@ type mockFailedOutboxLogRepo struct {
 	failedLogs []*port.OutboxLogRecord
 }
 
-func (m *mockFailedOutboxLogRepo) LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte, status, errMsg string) (bool, error) {
-	return true, nil
+func (m *mockFailedOutboxLogRepo) LogProcessed(ctx context.Context, eventID, eventType, partitionKey string, payload []byte) (*port.OutboxLogRecord, error) {
+	return &port.OutboxLogRecord{EventID: eventID, Status: "PROCESSING"}, nil
 }
 
 func (m *mockFailedOutboxLogRepo) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {

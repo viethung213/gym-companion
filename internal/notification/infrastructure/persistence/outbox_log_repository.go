@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -28,48 +27,20 @@ func (r *OutboxLogRepository) LogProcessed(
 	ctx context.Context,
 	eventID, eventType, partitionKey string,
 	payload []byte,
-	status, errMsg string,
-) (bool, error) {
-	if status == "" {
-		status = "PROCESSING"
+) (*port.OutboxLogRecord, error) {
+	if eventID == "" {
+		return &port.OutboxLogRecord{
+			EventID:      eventID,
+			EventType:    eventType,
+			PartitionKey: partitionKey,
+			Payload:      payload,
+			Status:       "PROCESSING",
+			ProcessedAt:  time.Now().UTC(),
+		}, nil
 	}
 
-	if eventID != "" {
-		now := time.Now().UTC()
-		zombieThreshold := now.Add(-defaultProcessingTimeout)
-
-		// 1. Atomic Compare-And-Swap: Cho phép claim lock nếu:
-		//   a) Trạng thái hiện tại là FAILED (retry sau lỗi)
-		//   b) Trạng thái hiện tại là PROCESSING nhưng đã quá thời hạn timeout (Zombie lock do server crash)
-		// Chỉ duy nhất 1 worker có RowsAffected > 0 để claim quyền xử lý, loại bỏ hoàn toàn race condition.
-		res := GetDB(ctx, r.db).Model(&OutboxLogModel{}).
-			Where("event_id = ? AND (status = ? OR (status = ? AND processed_at < ?))",
-				eventID, "FAILED", "PROCESSING", zombieThreshold).
-			Updates(map[string]interface{}{
-				"status":        status,
-				"processed_at":  now,
-				"error_message": errMsg,
-			})
-		if res.Error != nil {
-			return false, fmt.Errorf("atomic update retry or zombie status in notification outbox_log: %w", res.Error)
-		}
-		if res.RowsAffected > 0 {
-			return true, nil
-		}
-
-		// 2. Nếu không cập nhật được (RowsAffected == 0), kiểm tra xem bản ghi đã tồn tại chưa
-		var existing OutboxLogModel
-		err := GetDB(ctx, r.db).
-			Where("event_id = ?", eventID).
-			First(&existing).Error
-		if err == nil {
-			// Đã tồn tại với trạng thái SUCCESS/PROCESSED hoặc đang PROCESSING còn trong hạn timeout (< 5 phút)
-			// -> Duplicate, bỏ qua an toàn.
-			return false, nil
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, fmt.Errorf("check duplicate event in notification outbox_log: %w", err)
-		}
-	}
+	now := time.Now().UTC()
+	zombieThreshold := now.Add(-defaultProcessingTimeout)
 
 	model := &OutboxLogModel{
 		ID:           uuid.New().String(),
@@ -77,24 +48,51 @@ func (r *OutboxLogRepository) LogProcessed(
 		EventType:    eventType,
 		Payload:      payload,
 		PartitionKey: partitionKey,
-		ProcessedAt:  time.Now().UTC(),
-		Status:       status,
-		ErrorMessage: errMsg,
+		ProcessedAt:  now,
+		Status:       "PROCESSING",
+		ErrorMessage: "",
 	}
 
-	res := GetDB(ctx, r.db).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "event_id"}},
-		DoNothing: true,
+	res := GetDB(ctx, r.db).Clauses(clause.Returning{}, clause.OnConflict{
+		Columns: []clause.Column{{Name: "event_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"status":        "PROCESSING",
+			"processed_at":  now,
+			"error_message": "",
+		}),
+		Where: clause.Where{
+			Exprs: []clause.Expression{
+				clause.Expr{
+					SQL:  "outbox_log.status = ? OR (outbox_log.status = ? AND outbox_log.processed_at < ?)",
+					Vars: []interface{}{"FAILED", "PROCESSING", zombieThreshold},
+				},
+			},
+		},
 	}).Create(model)
 	if res.Error != nil {
-		return false, fmt.Errorf("insert notification outbox_log: %w", res.Error)
+		return nil, fmt.Errorf("upsert notification outbox_log claim lock: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return nil, nil
 	}
 
-	return res.RowsAffected > 0, nil
+	return &port.OutboxLogRecord{
+		ID:           model.ID,
+		EventID:      model.EventID,
+		EventType:    model.EventType,
+		Payload:      model.Payload,
+		PartitionKey: model.PartitionKey,
+		ProcessedAt:  model.ProcessedAt,
+		Status:       model.Status,
+		ErrorMessage: model.ErrorMessage,
+		RetryCount:   model.RetryCount,
+		NextRetryAt:  model.NextRetryAt,
+		Metadata:     model.Metadata,
+	}, nil
 }
 
 func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLogRecord) error {
-	if record == nil {
+	if record == nil || record.EventID == "" {
 		return nil
 	}
 
@@ -103,61 +101,28 @@ func (r *OutboxLogRepository) SaveLog(ctx context.Context, record *port.OutboxLo
 		processedAt = time.Now().UTC()
 	}
 
-	if record.EventID != "" {
-		var existing OutboxLogModel
-		err := GetDB(ctx, r.db).
-			Where("event_id = ?", record.EventID).
-			First(&existing).Error
-		if err == nil {
-			updates := map[string]interface{}{
-				"status":        record.Status,
-				"error_message": record.ErrorMessage,
-				"processed_at":  processedAt,
-			}
-			if record.RetryCount > 0 {
-				updates["retry_count"] = record.RetryCount
-			}
-			if !record.NextRetryAt.IsZero() {
-				updates["next_retry_at"] = record.NextRetryAt
-			}
-			if err := GetDB(ctx, r.db).Model(&existing).Updates(updates).Error; err != nil {
-				return fmt.Errorf("update existing notification outbox_log: %w", err)
-			}
-			return nil
-		}
+	updates := map[string]interface{}{
+		"status":        record.Status,
+		"error_message": record.ErrorMessage,
+		"processed_at":  processedAt,
+	}
+	if record.RetryCount > 0 {
+		updates["retry_count"] = record.RetryCount
+	}
+	if !record.NextRetryAt.IsZero() {
+		updates["next_retry_at"] = record.NextRetryAt
+	}
+	if len(record.Metadata) > 0 {
+		updates["metadata"] = record.Metadata
 	}
 
-	id := record.ID
-	if id == "" {
-		id = uuid.New().String()
-	}
-	eventID := record.EventID
-	if eventID == "" {
-		eventID = uuid.New().String()
+	if err := GetDB(ctx, r.db).
+		Model(&OutboxLogModel{}).
+		Where("event_id = ?", record.EventID).
+		Updates(updates).Error; err != nil {
+		return fmt.Errorf("update notification outbox_log: %w", err)
 	}
 
-	model := &OutboxLogModel{
-		ID:           id,
-		EventID:      eventID,
-		EventType:    record.EventType,
-		Payload:      record.Payload,
-		PartitionKey: record.PartitionKey,
-		ProcessedAt:  processedAt,
-		Status:       record.Status,
-		ErrorMessage: record.ErrorMessage,
-		RetryCount:   record.RetryCount,
-		NextRetryAt:  record.NextRetryAt,
-	}
-
-	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "event_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"status", "error_message", "processed_at", "retry_count", "next_retry_at",
-		}),
-	}).Create(model).Error
-	if err != nil {
-		return fmt.Errorf("save outbound log in notification.outbox_log: %w", err)
-	}
 	return nil
 }
 
@@ -195,6 +160,7 @@ func (r *OutboxLogRepository) FetchFailedLogs(ctx context.Context, limit int) ([
 			ErrorMessage: models[i].ErrorMessage,
 			RetryCount:   models[i].RetryCount,
 			NextRetryAt:  models[i].NextRetryAt,
+			Metadata:     models[i].Metadata,
 		})
 	}
 

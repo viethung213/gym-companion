@@ -56,7 +56,7 @@ func TestOutboxWorker(t *testing.T) {
 	}
 	publisher := &mockPublisher{}
 
-	w := worker.NewOutboxWorker(outboxRepo, nil, publisher, 10*time.Millisecond)
+	w := worker.NewOutboxWorker(outboxRepo, publisher, 10*time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

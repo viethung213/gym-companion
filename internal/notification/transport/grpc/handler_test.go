@@ -29,7 +29,7 @@ func (m *mockDeviceRepo) GetActiveDevicesByUserID(ctx context.Context, userID st
 	return nil, nil
 }
 
-func (m *mockDeviceRepo) GetAllActiveUserIDs(ctx context.Context) ([]string, error) {
+func (m *mockDeviceRepo) GetActiveDevicesByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Device, error) {
 	return nil, nil
 }
 
@@ -43,6 +43,19 @@ type mockNotificationRepo struct {
 
 func (m *mockNotificationRepo) Save(ctx context.Context, item *aggregate.InAppNotification) error {
 	m.items = append(m.items, item)
+	return nil
+}
+
+func (m *mockNotificationRepo) BatchSave(ctx context.Context, items []*aggregate.InAppNotification) error {
+	m.items = append(m.items, items...)
+	return nil
+}
+
+func (m *mockNotificationRepo) SaveSystemAnnouncement(ctx context.Context, announcement *aggregate.SystemAnnouncement) error {
+	return nil
+}
+
+func (m *mockNotificationRepo) MarkAnnouncementAsRead(ctx context.Context, announcementID, userID string) error {
 	return nil
 }
 
@@ -79,6 +92,16 @@ func (m *mockSettingRepo) GetByUserID(ctx context.Context, userID string) (*aggr
 	return s, nil
 }
 
+func (m *mockSettingRepo) GetByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Setting, error) {
+	var list []*aggregate.Setting
+	for _, uid := range userIDs {
+		if s, exists := m.settings[uid]; exists {
+			list = append(list, s)
+		}
+	}
+	return list, nil
+}
+
 func (m *mockSettingRepo) Save(ctx context.Context, setting *aggregate.Setting) error {
 	m.settings[setting.UserID()] = setting
 	return nil
@@ -88,6 +111,18 @@ type mockPushProvider struct{}
 
 func (m *mockPushProvider) SendPush(ctx context.Context, tokens []string, title, body string, data map[string]string) (*port.PushResponse, error) {
 	return &port.PushResponse{SuccessCount: len(tokens)}, nil
+}
+
+func (m *mockPushProvider) SendPushToTopic(ctx context.Context, topic string, title, body string, data map[string]string) error {
+	return nil
+}
+
+func (m *mockPushProvider) SubscribeToTopic(ctx context.Context, tokens []string, topic string) error {
+	return nil
+}
+
+func (m *mockPushProvider) UnsubscribeFromTopic(ctx context.Context, tokens []string, topic string) error {
+	return nil
 }
 
 type mockTxManager struct{}
@@ -104,13 +139,12 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 	t.Parallel()
 
 	devRepo := &mockDeviceRepo{}
-	notifRepo := &mockNotificationRepo{}
+	initNotif, _ := aggregate.NewInAppNotification("notif-1", "usr-grpc-1", "Test Title", "Test Body", nil)
+	notifRepo := &mockNotificationRepo{items: []*aggregate.InAppNotification{initNotif}}
 	settingRepo := &mockSettingRepo{settings: make(map[string]*aggregate.Setting)}
 	provider := &mockPushProvider{}
-	txMgr := &mockTxManager{}
 
-	regDeviceH := command.NewRegisterDeviceTokenHandler(devRepo)
-	sendPushH := command.NewSendPushNotificationHandler(devRepo, notifRepo, settingRepo, provider, txMgr, nil)
+	regDeviceH := command.NewRegisterDeviceTokenHandler(devRepo, provider)
 	updateSetH := command.NewUpdateNotificationSettingsHandler(settingRepo)
 	markReadH := command.NewMarkNotificationAsReadHandler(notifRepo)
 
@@ -118,7 +152,6 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 	listNotifH := query.NewListNotificationsHandler(notifRepo)
 
 	grpcHandler := grpc.NewGRPCHandler(
-		sendPushH,
 		regDeviceH,
 		updateSetH,
 		markReadH,
@@ -173,30 +206,6 @@ func TestGRPCHandlerAndConnectAdapter(t *testing.T) {
 		// Verify user_id was retrieved from token context ("usr-grpc-1"), not from request body
 		if len(devRepo.userIDs) == 0 || devRepo.userIDs[len(devRepo.userIDs)-1] != "usr-grpc-1" {
 			t.Errorf("expected device saved with user_id 'usr-grpc-1' from context, got: %v", devRepo.userIDs)
-		}
-	})
-
-	t.Run("SendPushNotification gRPC & Connect", func(t *testing.T) {
-		req := &notificationv1message.SendPushNotificationRequest{
-			UserId: "usr-grpc-1",
-			Title:  "Title",
-			Body:   "Body",
-		}
-
-		res, err := grpcHandler.SendPushNotification(ctx, req)
-		if err != nil {
-			t.Fatalf("gRPC SendPushNotification error: %v", err)
-		}
-		if res.GetNotificationId() == "" {
-			t.Errorf("got empty NotificationId")
-		}
-
-		connRes, err := connectHandler.SendPushNotification(ctx, req)
-		if err != nil {
-			t.Fatalf("Connect SendPushNotification error: %v", err)
-		}
-		if connRes.GetNotificationId() == "" {
-			t.Errorf("got empty Connect NotificationId")
 		}
 	})
 

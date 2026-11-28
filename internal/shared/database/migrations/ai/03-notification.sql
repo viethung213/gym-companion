@@ -21,9 +21,6 @@ CREATE TABLE IF NOT EXISTS notification.outbox (
     locked_until TIMESTAMP WITH TIME ZONE
 );
 
-ALTER TABLE notification.outbox ADD COLUMN IF NOT EXISTS aggregate_type VARCHAR(255);
-ALTER TABLE notification.outbox ADD COLUMN IF NOT EXISTS aggregate_id VARCHAR(255);
-
 CREATE TABLE IF NOT EXISTS notification.outbox_log (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
@@ -34,7 +31,8 @@ CREATE TABLE IF NOT EXISTS notification.outbox_log (
     status VARCHAR(50) NOT NULL,
     error_message TEXT,
     retry_count INT DEFAULT 0,
-    next_retry_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    next_retry_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    metadata JSONB DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_log_event_status ON notification.outbox_log (event_id, status);
@@ -84,6 +82,27 @@ CREATE TABLE IF NOT EXISTS notification.in_app_notifications (
 CREATE INDEX IF NOT EXISTS idx_notification_in_app_notifications_user_id 
     ON notification.in_app_notifications (user_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_notification_in_app_user_event 
-    ON notification.in_app_notifications (user_id, event_id);
+-- 5. SYSTEM ANNOUNCEMENTS (Broadcast Notifications)
+CREATE TABLE IF NOT EXISTS notification.system_announcements (
+    id UUID PRIMARY KEY,
+    event_id VARCHAR(255) UNIQUE,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    data JSONB DEFAULT '{}'::jsonb NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_system_announcements_created_at 
+    ON notification.system_announcements (created_at DESC);
+
+-- 6. SYSTEM ANNOUNCEMENT READS (Sparse Read Tracking)
+CREATE TABLE IF NOT EXISTS notification.system_announcement_reads (
+    announcement_id UUID NOT NULL REFERENCES notification.system_announcements(id) ON DELETE CASCADE,
+    user_id VARCHAR(255) NOT NULL,
+    read_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (announcement_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_system_announcement_reads_user 
+    ON notification.system_announcement_reads (user_id);
 

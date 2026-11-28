@@ -35,6 +35,23 @@ func (r *SettingRepository) GetByUserID(ctx context.Context, userID string) (*ag
 	return m.ToDomain(), nil
 }
 
+func (r *SettingRepository) GetByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Setting, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+	var models []SettingModel
+	err := GetDB(ctx, r.db).Where("user_id IN ?", userIDs).Find(&models).Error
+	if err != nil {
+		return nil, fmt.Errorf("query notification settings by user ids: %w", err)
+	}
+
+	settings := make([]*aggregate.Setting, 0, len(models))
+	for i := range models {
+		settings = append(settings, models[i].ToDomain())
+	}
+	return settings, nil
+}
+
 func (r *SettingRepository) Save(ctx context.Context, setting *aggregate.Setting) error {
 	m := ToSettingModel(setting)
 	err := GetDB(ctx, r.db).Clauses(clause.OnConflict{

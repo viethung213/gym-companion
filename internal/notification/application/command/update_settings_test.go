@@ -25,6 +25,16 @@ func (m *mockSettingRepo) GetByUserID(ctx context.Context, userID string) (*aggr
 	return s, nil
 }
 
+func (m *mockSettingRepo) GetByUserIDs(ctx context.Context, userIDs []string) ([]*aggregate.Setting, error) {
+	var list []*aggregate.Setting
+	for _, uid := range userIDs {
+		if s, exists := m.settings[uid]; exists {
+			list = append(list, s)
+		}
+	}
+	return list, nil
+}
+
 func (m *mockSettingRepo) Save(ctx context.Context, setting *aggregate.Setting) error {
 	m.settings[setting.UserID()] = setting
 	return nil
