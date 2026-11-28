@@ -766,4 +766,3 @@ func TestPushChannelDispatcher_GroupPrivacySettings(t *testing.T) {
 	}
 }
 
-

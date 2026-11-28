@@ -227,7 +227,7 @@ func (h *SelfEventHandler) Handle(
 	return lastErr
 }
 
-func resolveTarget(payload *genericNotificationPayload) (port.NotificationTarget, string) {
+func resolveTarget(payload *genericNotificationPayload) (target port.NotificationTarget, partitionKey string) {
 	if payload != nil && payload.Target != nil {
 		if payload.Target.AllUsers {
 			return port.NotificationTarget{
@@ -240,7 +240,7 @@ func resolveTarget(payload *genericNotificationPayload) (port.NotificationTarget
 			if payload.Target.UserList != nil {
 				userIDs = payload.Target.UserList.UserIDs
 			}
-			partitionKey := payload.Target.GroupID
+			partitionKey = payload.Target.GroupID
 			if partitionKey == "" {
 				partitionKey = "group"
 			}
@@ -264,7 +264,7 @@ func resolveTarget(payload *genericNotificationPayload) (port.NotificationTarget
 	if userID == "" && payload.Data != nil {
 		userID = payload.Data["userId"]
 	}
-	partitionKey := userID
+	partitionKey = userID
 	if partitionKey == "" {
 		partitionKey = "direct"
 	}

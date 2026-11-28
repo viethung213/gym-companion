@@ -174,12 +174,13 @@ func (h *ExternalEventHandler) registerDefaultRules() {
 		Formatter: func(data *externalEventData) (string, string, map[string]string) {
 			title := "Nhắc nhở buổi tập ⏰"
 			body := "Sắp đến giờ tập luyện theo lịch HLV (trước 1 tiếng). Chuẩn bị sẵn sàng nhé!"
-			if data.WorkoutName != "" {
+			switch {
+			case data.WorkoutName != "":
 				title = "Nhắc nhở buổi tập ⏰: " + data.WorkoutName
 				body = fmt.Sprintf("Sắp đến giờ tập %s. Chuẩn bị sẵn sàng nhé!", data.WorkoutName)
-			} else if data.Body != "" {
+			case data.Body != "":
 				body = data.Body
-			} else if data.Message != "" {
+			case data.Message != "":
 				body = data.Message
 			}
 
